@@ -21,7 +21,7 @@
 
 **测试：183/183 全绿**（`node --test` 无参；156 → 160（K18）→ 164（K19）→ 168（K20）→ 172（K21）→ 175（K22）→ 183（K23））。
 
-**模块**：14 个（src/ 12 + weight/gate 计数 + status 工具）+ demo 新增 `convert-snapshots.js`——职责/契约/状态/测试/最近台账在 dev-process §9 一张表，不复制。本棒层况：契约层（world-step 六组 `agendaCancels`、ssot 可选 `milestones`/`events.closedAt`、prompts v2-agenda-t1-1）；引擎层（closeEvents 闭环三型、EVENT_CAPS、archiveClosedEvents、暗处渲染三处抑制、applyAgendaCancels）；渲染/编排（streams 零改、smoke 归档断言语义、snapshot-replay）；**分层归属全部声明**（铁律 9）。
+**模块**：14 个（src/ 14 文件；§9 模块地图 14 模块行 + demo/status.js 工具 1 行）+ demo 新增 `convert-snapshots.js`——职责/契约/状态/测试/最近台账在 dev-process §9 一张表，不复制。本棒层况：契约层（world-step 六组 `agendaCancels`、ssot 可选 `milestones`/`events.closedAt`、prompts v2-agenda-t1-1）；引擎层（closeEvents 闭环三型、EVENT_CAPS、archiveClosedEvents、暗处渲染三处抑制、applyAgendaCancels）；渲染/编排（streams 零改、smoke 归档断言语义、snapshot-replay）；**分层归属全部声明**（铁律 9）。
 
 **夹具与快照**：夹具不变（8 个）；快照 ×7 在案（原始 jsonl 无损）+ **转制 fixture ×7**（`test/fixtures/snapshots/*.json`，带 `era` 元数据：`post` ×5 可重放 / `pre-weight-fix` ×2 历史文物）。
 
