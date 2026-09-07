@@ -1,0 +1,3 @@
+# story-world-v2 子树行尾规则：仓库与工作树一律 LF（Windows 检出不转 CRLF）
+# 压 git 的 "LF will be replaced by CRLF" 漂移警告；不影响 v1 子树（另立规矩待拍板）。
+* text=auto eol=lf
