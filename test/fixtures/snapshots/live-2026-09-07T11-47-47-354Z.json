@@ -1,0 +1,764 @@
+{
+ "name": "live-2026-09-07T11-47-47-354Z",
+ "sourceWorld": "live-world.json",
+ "meta": {
+  "era": "pre-weight-fix"
+ },
+ "steps": [
+  {
+   "tick": 1,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_xie",
+      "verb": "陈兵列阵封锁谷口",
+      "position": "大盘谷",
+      "note": "切断外界通路以施压"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "遣使催促答复",
+      "position": "江州",
+      "note": "向黄坤施压要求交割地契"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "招募散修与暗桩",
+      "position": "北山",
+      "note": "筹备入谷人手"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "大盘谷封山戒严",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_0"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie",
+       "e_wanfa"
+      ]
+     },
+     {
+      "title": "北山暗流涌动",
+      "source": {
+       "type": "plot",
+       "ref": "a_wanfa"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_xie",
+      "step": "彻底封锁大盘谷，断绝黄坤退路",
+      "stage": "瓮中捉鳖"
+     },
+     {
+      "agendaId": "a_wanfa",
+      "step": "于北山召集散修与门客",
+      "stage": "人手就位"
+     }
+    ],
+    "stateChanges": [],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "探查",
+    "object": "薛铁衣",
+    "location": "大盘谷",
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [],
+    "gate": {
+     "silent": [
+      "e_dayu",
+      "e_wanfa"
+     ],
+     "lifted": [
+      "e_dayu"
+     ]
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 2,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_wanfa",
+      "verb": "悬赏招募散修",
+      "position": "北山",
+      "note": "为入谷做准备"
+     },
+     {
+      "entity": "e_xie",
+      "verb": "催动阵法放出煞气",
+      "position": "大盘谷",
+      "note": "逼迫目标就范"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "万法阁重金悬赏",
+      "source": {
+       "type": "plot",
+       "ref": "a_wanfa"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     },
+     {
+      "title": "谷内修士冲突",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_1_1"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_wanfa",
+      "step": "设下招募榜文",
+      "stage": "人手招募"
+     },
+     {
+      "agendaId": "a_xie",
+      "step": "煞气外泄施压",
+      "stage": "收拢包围"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_wanfa",
+      "attr": "hardPower",
+      "delta": 0.2,
+      "actor": "e_wanfa",
+      "cause": "a_wanfa"
+     },
+     {
+      "entity": "e_xie",
+      "attr": "intel",
+      "delta": 0.1,
+      "actor": "e_xie",
+      "cause": "a_xie"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "询问",
+    "object": "大虞偏将",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 3,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_xie",
+      "verb": "无视盘问并下达最后通牒",
+      "position": "大盘谷",
+      "note": "加速收拢包围圈，逼迫目标现身"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "派遣特使携地契出发",
+      "position": "江州",
+      "note": "趁局势紧张逼迫对方就范"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "集结应募散修",
+      "position": "北山",
+      "note": "准备强冲大盘谷封锁线"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "煞气法阵成型",
+      "source": {
+       "type": "plot",
+       "ref": "a_xie"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie"
+      ]
+     },
+     {
+      "title": "大虞特使出城",
+      "source": {
+       "type": "plot",
+       "ref": "a_dayu"
+      },
+      "position": "江州",
+      "ripples": [
+       "e_dayu"
+      ]
+     },
+     {
+      "title": "大批散修汇聚北山",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_2_1"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_xie",
+      "step": "布下引煞大阵并下达最后通牒",
+      "stage": "绝境逼迫"
+     },
+     {
+      "agendaId": "a_dayu",
+      "step": "派出特使赴黄府交涉",
+      "stage": "强行收编"
+     },
+     {
+      "agendaId": "a_wanfa",
+      "step": "完成首批炮灰散修招募",
+      "stage": "集结破阵"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_xie",
+      "attr": "hardPower",
+      "delta": 0.1,
+      "cause": "a_xie"
+     },
+     {
+      "entity": "e_wanfa",
+      "attr": "network",
+      "delta": 0.1,
+      "cause": "a_wanfa"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "盘问",
+    "object": "薛铁衣",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 4,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_wanfa",
+      "verb": "率领散修炮灰开赴大盘谷",
+      "target": "e_xie",
+      "position": "大盘谷",
+      "note": "准备强行破阵"
+     },
+     {
+      "entity": "e_xie",
+      "verb": "全面催动引煞大阵",
+      "position": "大盘谷",
+      "note": "收网逼迫黄坤入局"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "特使强闯黄府施压",
+      "position": "黄府",
+      "note": "逼迫交割灵脉地契"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "万法阁驱使散修攻阵",
+      "source": {
+       "type": "plot",
+       "ref": "a_wanfa"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_wanfa",
+       "e_xie"
+      ]
+     },
+     {
+      "title": "大盘谷煞气冲天",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_3_1"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie"
+      ]
+     },
+     {
+      "title": "大虞特使抵达黄府",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_3_2"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_wanfa",
+      "step": "率领炮灰散修前往大盘谷破阵",
+      "stage": "破阵夺宝"
+     },
+     {
+      "agendaId": "a_xie",
+      "step": "全面催动引煞大阵收网",
+      "stage": "收网绝杀"
+     },
+     {
+      "agendaId": "a_dayu",
+      "step": "特使抵达黄府强令交割",
+      "stage": "当面施压"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_wanfa",
+      "attr": "hardPower",
+      "delta": -0.1,
+      "cause": "a_wanfa"
+     },
+     {
+      "entity": "e_xie",
+      "attr": "intel",
+      "delta": 0.1,
+      "actor": "e_wanfa",
+      "cause": "a_wanfa"
+     },
+     {
+      "entity": "e_dayu",
+      "attr": "network",
+      "delta": 0.1,
+      "cause": "a_dayu"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "跟随",
+    "object": "万法阁",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 分量比折减 0.944（e_wanfa→e_xie.intel）"
+    ],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 5,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_wanfa",
+      "verb": "强攻煞阵",
+      "target": "e_xie",
+      "position": "大盘谷",
+      "note": "不计伤亡驱使散修推进"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "逼迫交割地契",
+      "position": "黄府",
+      "note": "特使当面下达最后通牒"
+     },
+     {
+      "entity": "e_xie",
+      "verb": "镇压攻阵散修",
+      "target": "e_wanfa",
+      "position": "大盘谷",
+      "note": "依托法阵予以反击"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "散修死伤惨重",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_4_1"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_wanfa",
+       "e_xie"
+      ]
+     },
+     {
+      "title": "黄府内爆发争吵",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_4_3"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_wanfa",
+      "step": "炮灰散修消耗部分煞气",
+      "stage": "深入谷内"
+     },
+     {
+      "agendaId": "a_dayu",
+      "step": "特使限定交割时辰",
+      "stage": "武力威压"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_wanfa",
+      "attr": "hardPower",
+      "delta": -0.1,
+      "actor": "e_xie",
+      "cause": "a_wanfa"
+     },
+     {
+      "entity": "e_dayu",
+      "attr": "intel",
+      "delta": 0.1,
+      "actor": "e_dayu",
+      "cause": "a_dayu"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "图谋",
+    "object": "灵脉",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 6,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_xie",
+      "verb": "催动煞气阵法",
+      "position": "大盘谷",
+      "note": "应对万法阁的试探与攻击"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "强行镇压黄府异议",
+      "position": "黄府",
+      "note": "特使施压以稳固后方"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "全面提高物资售价",
+      "position": "北山",
+      "note": "趁机敛财并冷淡回应外部询价"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "万法阁收缩防线",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_5_1"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     },
+     {
+      "title": "黄府家主被软禁",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_5_2"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu"
+      ]
+     }
+    ],
+    "agendaAdvances": [],
+    "stateChanges": [
+     {
+      "entity": "e_wanfa",
+      "attr": "network",
+      "delta": -0.2,
+      "actor": "e_wanfa",
+      "cause": "ev_5_1"
+     },
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.1,
+      "actor": "e_dayu",
+      "cause": "ev_5_2"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "询价",
+    "object": "万法阁",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）",
+     "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
+     "行动↔盘算不一致: e_wanfa 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 7,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_dayu",
+      "verb": "派兵接管防务",
+      "position": "黄府",
+      "note": "趁黄府内乱夺权"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "全面开启护山大阵",
+      "position": "北山",
+      "note": "应对防线收缩后的安全危机"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "大虞军入驻黄府",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_6_2"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu"
+      ]
+     },
+     {
+      "title": "北山大阵封锁",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_6_1"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.2,
+      "actor": "e_dayu",
+      "cause": "ev_6_2"
+     },
+     {
+      "entity": "e_wanfa",
+      "attr": "network",
+      "delta": -0.2,
+      "actor": "e_wanfa",
+      "cause": "ev_5_1"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "离开",
+    "object": null,
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
+     "行动↔盘算不一致: e_wanfa 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  },
+  {
+   "tick": 8,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_dayu",
+      "verb": "全面接管防务",
+      "position": "黄府",
+      "note": "彻底控制黄府局势"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "全面激发护宗阵法",
+      "position": "北山",
+      "note": "隔绝内外探查"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "黄府资源被强行征用",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_7_1"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu"
+      ]
+     },
+     {
+      "title": "北山周边灵气枯竭",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_7_2"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.2,
+      "actor": "e_dayu",
+      "cause": "ev_7_1"
+     },
+     {
+      "entity": "e_wanfa",
+      "attr": "intel",
+      "delta": -0.1,
+      "actor": "e_wanfa",
+      "cause": "ev_7_2"
+     }
+    ],
+    "newAgendas": [],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "修炼",
+    "object": null,
+    "location": "黄府",
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 属性硬边界（e_dayu.hardPower 0.8999999999999999→1，申请 1.0999999999999999）",
+     "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
+     "行动↔盘算不一致: e_wanfa 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [],
+     "lifted": []
+    },
+    "player": null
+   }
+  }
+ ]
+}

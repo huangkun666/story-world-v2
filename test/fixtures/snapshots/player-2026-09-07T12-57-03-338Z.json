@@ -1,0 +1,1021 @@
+{
+ "name": "player-2026-09-07T12-57-03-338Z",
+ "sourceWorld": "player-world.json",
+ "meta": {
+  "era": "post"
+ },
+ "steps": [
+  {
+   "tick": 1,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_xie",
+      "verb": "收缩防线并伪造布防图",
+      "target": "e_player",
+      "position": "大盘谷",
+      "note": "针对探查设局"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "向黄府派出催收使者",
+      "target": "e_player",
+      "position": "江州",
+      "note": "施压交割地契"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "大盘谷煞气外泄",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_0"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie",
+       "e_wanfa"
+      ]
+     },
+     {
+      "title": "万法阁精锐异动",
+      "source": {
+       "type": "plot",
+       "ref": "a_wanfa"
+      },
+      "position": "北山",
+      "ripples": [
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_xie",
+      "step": "故意暴露残阵破绽",
+      "stage": "请君入瓮"
+     },
+     {
+      "agendaId": "a_wanfa",
+      "step": "调拨阵旗法器至北山边缘",
+      "stage": "物资就位"
+     }
+    ],
+    "newAgendas": [],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "network",
+      "delta": -0.1,
+      "actor": "e_xie",
+      "cause": "a_xie"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "探查",
+    "object": "薛铁衣",
+    "location": "大盘谷",
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 分量比折减 0.966（e_xie→e_dayu.network）"
+    ],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.20400000000000001,
+     "attrs": {
+      "hardPower": 0.15000000000000002,
+      "office": 0.05,
+      "network": 0.3,
+      "intel": 0.4
+     },
+     "affected": [
+      {
+       "tick": 1,
+       "source": "e_xie",
+       "attr": "hardPower",
+       "delta": -0.04999999999999999,
+       "ratio": 1
+      },
+      {
+       "tick": 1,
+       "source": "e_dayu",
+       "attr": "hardPower",
+       "delta": -0.04999999999999999,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "tick": 2,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_wanfa",
+      "verb": "借机潜入",
+      "target": "e_xie",
+      "position": "大盘谷",
+      "note": "趁煞气外泄掩护行动"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "下达通牒",
+      "target": "e_player",
+      "position": "江州",
+      "note": "回应询问并催促交割"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "煞气逼近江州",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_1_1"
+      },
+      "position": "江州",
+      "ripples": [
+       "e_dayu",
+       "e_player"
+      ]
+     },
+     {
+      "title": "万法阁精锐入谷",
+      "source": {
+       "type": "plot",
+       "ref": "a_wanfa"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie",
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_xie",
+      "step": "放任煞气蔓延阻断退路",
+      "stage": "断绝后路"
+     },
+     {
+      "agendaId": "a_dayu",
+      "step": "借回应询问抛出底线",
+      "stage": "限期收编"
+     },
+     {
+      "agendaId": "a_wanfa",
+      "step": "精锐跨过北山进入大盘谷",
+      "stage": "入谷寻骨"
+     }
+    ],
+    "newAgendas": [],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "intel",
+      "delta": 0.1,
+      "actor": "e_player",
+      "cause": "a_dayu"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "询问",
+    "object": "大虞偏将",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 分量比折减 0.228（e_player→e_dayu.intel）"
+    ],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.16574999999999998,
+     "attrs": {
+      "hardPower": 0.08000000000000002,
+      "office": 0.030000000000000002,
+      "network": 0.27999999999999997,
+      "intel": 0.38
+     },
+     "affected": [
+      {
+       "tick": 2,
+       "source": "e_dayu",
+       "attr": "hardPower",
+       "delta": -0.05,
+       "ratio": 1
+      },
+      {
+       "tick": 2,
+       "source": "world",
+       "attr": "hardPower",
+       "delta": -0.020000000000000004,
+       "ratio": 1
+      },
+      {
+       "tick": 2,
+       "source": "world",
+       "attr": "office",
+       "delta": -0.02,
+       "ratio": 1
+      },
+      {
+       "tick": 2,
+       "source": "world",
+       "attr": "network",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      },
+      {
+       "tick": 2,
+       "source": "world",
+       "attr": "intel",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "tick": 3,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_xie",
+      "verb": "传讯冷嘲热讽并抛出煞气失控的威胁",
+      "target": "e_player",
+      "position": "大盘谷",
+      "note": "回应黄坤盘问，借机施压"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "下令开启部分护城阵法",
+      "position": "江州",
+      "note": "应对煞气逼近"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "以法器强行破开煞气屏障",
+      "position": "大盘谷",
+      "note": "深入寻找残骨"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "江州城防阵法亮起",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_2_1"
+      },
+      "position": "江州"
+     },
+     {
+      "title": "大盘谷深处爆发灵力激荡",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_2_2"
+      },
+      "position": "大盘谷"
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_xie",
+      "step": "借回应盘问之机，将黄府周边退路已被煞气封死的情报透露给黄坤",
+      "stage": "请君入瓮"
+     },
+     {
+      "agendaId": "a_wanfa",
+      "step": "精锐小队破开外围煞气，锁定残骨大致方位",
+      "stage": "锁定残骨"
+     }
+    ],
+    "newAgendas": [],
+    "stateChanges": [
+     {
+      "entity": "e_xie",
+      "attr": "intel",
+      "delta": 0.1,
+      "cause": "a_xie"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "盘问",
+    "object": "薛铁衣",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.1479,
+     "attrs": {
+      "hardPower": 0.030000000000000013,
+      "office": 0.030000000000000002,
+      "network": 0.27999999999999997,
+      "intel": 0.38
+     },
+     "affected": [
+      {
+       "tick": 3,
+       "source": "e_xie",
+       "attr": "hardPower",
+       "delta": -0.05,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "tick": 4,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_wanfa",
+      "verb": "强行破阵夺取太岁残骨",
+      "position": "大盘谷",
+      "note": "无视外围煞气，直取核心"
+     },
+     {
+      "entity": "e_xie",
+      "verb": "催动煞气大阵",
+      "target": "e_player",
+      "position": "大盘谷",
+      "note": "彻底封死黄府退路"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "封锁城门并下达最后通牒",
+      "target": "e_player",
+      "position": "江州",
+      "note": "借煞气逼近之机施压"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "太岁残骨出世",
+      "source": {
+       "type": "plot",
+       "ref": "a_wanfa"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie",
+       "e_wanfa"
+      ]
+     },
+     {
+      "title": "煞气彻底合围黄府",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_1_1"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_player",
+       "e_xie"
+      ]
+     },
+     {
+      "title": "江州守军全面戒严",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_3_1"
+      },
+      "position": "江州",
+      "ripples": [
+       "e_dayu"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_wanfa",
+      "step": "强行破开内层阵法，触碰到太岁残骨",
+      "stage": "夺宝"
+     },
+     {
+      "agendaId": "a_xie",
+      "step": "引爆外围煞气，彻底封锁黄府退路，只留大盘谷生门",
+      "stage": "收网"
+     },
+     {
+      "agendaId": "a_dayu",
+      "step": "借煞气围城之机向黄坤发出最后通牒",
+      "stage": "武力威慑"
+     }
+    ],
+    "newAgendas": [],
+    "stateChanges": [
+     {
+      "entity": "e_wanfa",
+      "attr": "hardPower",
+      "delta": 0.2,
+      "cause": "a_wanfa"
+     },
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.1,
+      "cause": "a_dayu"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "跟随",
+    "object": "万法阁",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 属性硬边界（e_player.hardPower 0.030000000000000013→0，申请 -0.01999999999999999）",
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）"
+    ],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.12393,
+     "attrs": {
+      "hardPower": 0,
+      "office": 0.010000000000000002,
+      "network": 0.25999999999999995,
+      "intel": 0.36
+     },
+     "affected": [
+      {
+       "tick": 4,
+       "source": "e_xie",
+       "attr": "hardPower",
+       "delta": -0.030000000000000013,
+       "ratio": 1
+      },
+      {
+       "tick": 4,
+       "source": "e_dayu",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 4,
+       "source": "world",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 4,
+       "source": "world",
+       "attr": "office",
+       "delta": -0.02,
+       "ratio": 1
+      },
+      {
+       "tick": 4,
+       "source": "world",
+       "attr": "network",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      },
+      {
+       "tick": 4,
+       "source": "world",
+       "attr": "intel",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "tick": 5,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_xie",
+      "verb": "猛攻万法阁阵线",
+      "target": "e_wanfa",
+      "position": "大盘谷",
+      "note": "趁乱争夺大盘谷核心控制权"
+     },
+     {
+      "entity": "e_dayu",
+      "verb": "派兵强闯",
+      "target": "e_player",
+      "position": "黄府",
+      "note": "趁煞气合围逼迫黄坤交出地契"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "大虞精锐逼近黄府",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_4_3"
+      },
+      "position": "江州",
+      "ripples": [
+       "e_dayu",
+       "e_player"
+      ]
+     },
+     {
+      "title": "大盘谷混战升级",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_3_2"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_xie",
+       "e_wanfa"
+      ]
+     }
+    ],
+    "agendaAdvances": [
+     {
+      "agendaId": "a_dayu",
+      "step": "察觉黄坤图谋灵脉，失去耐心下令强夺",
+      "stage": "武力强压"
+     }
+    ],
+    "newAgendas": [
+     {
+      "entity": "e_wanfa",
+      "goal": "镇压大盘谷灵力激荡并夺取异宝",
+      "stage": "结阵对抗",
+      "visibility": "known",
+      "maxSteps": 4,
+      "source": {
+       "type": "event",
+       "ref": "ev_3_2"
+      },
+      "note": "精锐入谷后的首要目标"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.1,
+      "actor": "e_dayu",
+      "cause": "a_dayu"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "图谋",
+    "object": "灵脉",
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
+     "裁定: 属性硬边界（e_player.office 0.010000000000000002→0，申请 -0.009999999999999998）",
+     "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.11321999999999999,
+     "attrs": {
+      "hardPower": 0,
+      "office": 0,
+      "network": 0.23999999999999996,
+      "intel": 0.33999999999999997
+     },
+     "affected": [
+      {
+       "tick": 5,
+       "source": "e_dayu",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 5,
+       "source": "world",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 5,
+       "source": "world",
+       "attr": "office",
+       "delta": -0.010000000000000002,
+       "ratio": 1
+      },
+      {
+       "tick": 5,
+       "source": "world",
+       "attr": "network",
+       "delta": -0.01999999999999999,
+       "ratio": 1
+      },
+      {
+       "tick": 5,
+       "source": "world",
+       "attr": "intel",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "tick": 6,
+   "step": null,
+   "moveFact": null,
+   "expect": {
+    "warnings": [
+     "$.stateChanges[0].entity: 模型禁写玩家 \"e_player\"（红线 1 代码化）"
+    ],
+    "gate": null,
+    "player": null
+   }
+  },
+  {
+   "tick": 7,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_dayu",
+      "verb": "结阵封锁外围",
+      "target": "e_player",
+      "position": "黄府",
+      "note": "切断一切逃生路线"
+     },
+     {
+      "entity": "e_xie",
+      "verb": "催动煞气猛攻",
+      "target": "e_wanfa",
+      "position": "大盘谷",
+      "note": "试图强行夺宝突围"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "大虞铁甲军封锁黄府",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_5_1"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu",
+       "e_player"
+      ]
+     },
+     {
+      "title": "万法阁长老祭出镇渊印",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_5_2"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_wanfa",
+       "e_xie"
+      ]
+     }
+    ],
+    "agendaAdvances": [],
+    "newAgendas": [
+     {
+      "entity": "e_dayu",
+      "goal": "彻底镇压黄府异动",
+      "stage": "包围封锁",
+      "visibility": "known",
+      "maxSteps": 3,
+      "source": {
+       "type": "event",
+       "ref": "ev_5_1"
+      },
+      "note": "防止煞气与城内势力勾结"
+     },
+     {
+      "entity": "e_wanfa",
+      "goal": "镇压薛铁衣并夺取太岁残骨",
+      "stage": "法宝强攻",
+      "visibility": "known",
+      "maxSteps": 4,
+      "source": {
+       "type": "event",
+       "ref": "ev_5_2"
+      },
+      "note": "清理大盘谷隐患"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.2,
+      "actor": "e_dayu",
+      "cause": "ev_5_1"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "离开",
+    "object": null,
+    "location": null,
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
+     "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）",
+     "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
+     "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.10505999999999999,
+     "attrs": {
+      "hardPower": 0,
+      "office": 0,
+      "network": 0.21999999999999997,
+      "intel": 0.31999999999999995
+     },
+     "affected": [
+      {
+       "tick": 6,
+       "source": "e_dayu",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 6,
+       "source": "world",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 6,
+       "source": "world",
+       "attr": "office",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 6,
+       "source": "world",
+       "attr": "network",
+       "delta": -0.01999999999999999,
+       "ratio": 1
+      },
+      {
+       "tick": 6,
+       "source": "world",
+       "attr": "intel",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "tick": 8,
+   "step": {
+    "actions": [
+     {
+      "entity": "e_dayu",
+      "verb": "强令黄府内人员接受盘查",
+      "target": "e_player",
+      "position": "黄府",
+      "note": "执行戒严封锁指令"
+     },
+     {
+      "entity": "e_wanfa",
+      "verb": "催动镇渊印向下镇压",
+      "target": "e_xie",
+      "position": "大盘谷",
+      "note": "试图强行封印太岁残骨与煞气"
+     }
+    ],
+    "newEvents": [
+     {
+      "title": "铁甲军强行叩关破门",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_6_1"
+      },
+      "position": "黄府",
+      "ripples": [
+       "e_dayu",
+       "e_player"
+      ]
+     },
+     {
+      "title": "镇渊印与煞气轰然相撞",
+      "source": {
+       "type": "ripple",
+       "ref": "ev_6_2"
+      },
+      "position": "大盘谷",
+      "ripples": [
+       "e_wanfa",
+       "e_xie"
+      ]
+     }
+    ],
+    "agendaAdvances": [],
+    "newAgendas": [
+     {
+      "entity": "e_dayu",
+      "goal": "彻底肃清江州城内异常",
+      "stage": "封锁排查",
+      "visibility": "known",
+      "maxSteps": 4,
+      "source": {
+       "type": "event",
+       "ref": "ev_4_3"
+      },
+      "note": "应对煞气逼近与全面戒严"
+     },
+     {
+      "entity": "e_xie",
+      "goal": "夺取太岁残骨",
+      "stage": "对抗万法阁",
+      "visibility": "known",
+      "maxSteps": 5,
+      "source": {
+       "type": "event",
+       "ref": "ev_0"
+      },
+      "note": "发兵催战的最终目的"
+     }
+    ],
+    "stateChanges": [
+     {
+      "entity": "e_dayu",
+      "attr": "hardPower",
+      "delta": 0.1,
+      "actor": "e_dayu",
+      "cause": "ev_6_1"
+     },
+     {
+      "entity": "e_xie",
+      "attr": "hardPower",
+      "delta": -0.1,
+      "actor": "e_wanfa",
+      "cause": "ev_6_2"
+     }
+    ],
+    "agendaCancels": []
+   },
+   "moveFact": {
+    "verb": "修炼",
+    "object": null,
+    "location": "黄府",
+    "attempt": true,
+    "note": null,
+    "dropped": []
+   },
+   "expect": {
+    "warnings": [
+     "裁定: 属性硬边界（e_dayu.hardPower 1→1，申请 1.1）",
+     "裁定: 分量比折减 1.000（e_wanfa→e_xie.hardPower）",
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
+     "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
+     "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）",
+     "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
+     "行动↔盘算不一致: e_wanfa 无在飞盘算仍然行动（烟雾报警）"
+    ],
+    "gate": {
+     "silent": [
+      "e_player"
+     ],
+     "lifted": [
+      "e_player"
+     ]
+    },
+    "player": {
+     "weight": 0.09689999999999999,
+     "attrs": {
+      "hardPower": 0,
+      "office": 0,
+      "network": 0.19999999999999998,
+      "intel": 0.29999999999999993
+     },
+     "affected": [
+      {
+       "tick": 7,
+       "source": "e_dayu",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 7,
+       "source": "world",
+       "attr": "hardPower",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 7,
+       "source": "world",
+       "attr": "office",
+       "delta": 0,
+       "ratio": 1
+      },
+      {
+       "tick": 7,
+       "source": "world",
+       "attr": "network",
+       "delta": -0.01999999999999999,
+       "ratio": 1
+      },
+      {
+       "tick": 7,
+       "source": "world",
+       "attr": "intel",
+       "delta": -0.020000000000000018,
+       "ratio": 1
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

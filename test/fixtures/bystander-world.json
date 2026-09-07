@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "context": {
+    "world": "江州",
+    "tension": 0.55,
+    "positions": ["云砂坊市", "江州", "大盘谷", "北山"]
+  },
+  "entities": [
+    { "id": "e_xie", "kind": "faction", "name": "薛铁衣", "location": "大盘谷", "attrs": { "hardPower": 0.8, "office": 0.3, "network": 0.5, "intel": 0.6 } },
+    { "id": "e_dayu", "kind": "faction", "name": "大虞偏将", "location": "江州", "attrs": { "hardPower": 0.6, "office": 0.7, "network": 0.4, "intel": 0.4 } },
+    { "id": "e_wanfa", "kind": "faction", "name": "万法阁", "location": "北山", "attrs": { "hardPower": 0.5, "office": 0.4, "network": 0.6, "intel": 0.7 } }
+  ],
+  "weights": { "e_xie": 0.871125, "e_dayu": 0.901425, "e_wanfa": 0.749925 },
+  "agendas": [
+    { "id": "a_xie", "owner": "e_xie", "goal": "夺大盘谷阵眼，逼万法阁出谷", "stage": "围谷", "visibility": "concealed", "maxSteps": 5, "progress": 1, "memory": { "promises": [], "done": ["t0: 发兵围谷"], "blocked": [], "turnsAlive": 1 } },
+    { "id": "a_dayu", "owner": "e_dayu", "goal": "借灵脉名目吞万法阁北山基业", "stage": "递文书", "visibility": "known", "maxSteps": 4, "progress": 1, "memory": { "promises": [], "done": ["t0: 递出接管文书"], "blocked": [], "turnsAlive": 1 } },
+    { "id": "a_wanfa", "owner": "e_wanfa", "goal": "保住残骨与阵眼，与薛部周旋", "stage": "闭谷自守", "visibility": "known", "maxSteps": 4, "progress": 0, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 0 } }
+  ],
+  "events": [
+    { "id": "ev_0", "title": "薛铁衣兵围大盘谷", "source": { "type": "state" }, "position": "大盘谷", "ripples": ["e_xie", "e_wanfa"], "links": { "up": [], "down": [] }, "closed": false }
+  ],
+  "chronicle": [
+    { "id": "ch_0", "tick": 0, "text": "北山盘谷阵裂，薛铁衣发兵围谷，指名要万法阁交出阵眼。", "eventRef": "ev_0" }
+  ],
+  "meta": { "tick": 0 }
+}

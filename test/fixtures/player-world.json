@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "context": {
+    "world": "江州",
+    "tension": 0.6,
+    "positions": ["云砂坊市", "江州", "大盘谷", "北山", "黄府"],
+    "playerId": "e_player"
+  },
+  "entities": [
+    { "id": "e_xie", "kind": "faction", "name": "薛铁衣", "location": "大盘谷", "attrs": { "hardPower": 0.8, "office": 0.3, "network": 0.5, "intel": 0.6 } },
+    { "id": "e_dayu", "kind": "faction", "name": "大虞偏将", "location": "江州", "attrs": { "hardPower": 0.6, "office": 0.7, "network": 0.4, "intel": 0.4 } },
+    { "id": "e_wanfa", "kind": "faction", "name": "万法阁", "location": "北山", "attrs": { "hardPower": 0.5, "office": 0.4, "network": 0.6, "intel": 0.7 } },
+    { "id": "e_player", "kind": "character", "name": "黄坤", "location": "黄府", "attrs": { "hardPower": 0.25, "office": 0.05, "network": 0.3, "intel": 0.4 } }
+  ],
+  "weights": { "e_xie": 0.87975, "e_dayu": 0.91035, "e_wanfa": 0.75735, "e_player": 0.2397 },
+  "agendas": [
+    { "id": "a_xie", "owner": "e_xie", "goal": "逼黄坤入洗煞之局", "stage": "发兵催战", "visibility": "concealed", "maxSteps": 5, "progress": 1, "memory": { "promises": [], "done": ["t0: 发兵催战"], "blocked": [], "turnsAlive": 1 } },
+    { "id": "a_dayu", "owner": "e_dayu", "goal": "交割灵脉地契、收编黄坤", "stage": "开价磋商", "visibility": "known", "maxSteps": 4, "progress": 1, "memory": { "promises": [], "done": ["t0: 递出交割协议"], "blocked": [], "turnsAlive": 1 } },
+    { "id": "a_wanfa", "owner": "e_wanfa", "goal": "入谷洗煞、夺太岁残骨", "stage": "集结人手", "visibility": "known", "maxSteps": 4, "progress": 0, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 0 } }
+  ],
+  "events": [
+    { "id": "ev_0", "title": "薛铁衣发兵催战", "source": { "type": "state" }, "position": "大盘谷", "ripples": ["e_xie", "e_dayu"], "links": { "up": [], "down": [] }, "closed": false }
+  ],
+  "chronicle": [
+    { "id": "ch_0", "tick": 0, "text": "北山大盘谷阵裂，薛铁衣发兵催战，杀局将启。", "eventRef": "ev_0" }
+  ],
+  "meta": { "tick": 0 }
+}

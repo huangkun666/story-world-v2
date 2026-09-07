@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "context": { "world": "北境临战", "tension": 0.5, "positions": ["主帐", "前线", "粮道"] },
+  "entities": [
+    { "id": "e_lead", "kind": "character", "name": "主帅", "location": "主帐", "attrs": { "hardPower": 0.9, "office": 0.9, "network": 0.5, "intel": 0.5 } },
+    { "id": "e_court", "kind": "character", "name": "军师", "location": "主帐", "attrs": { "hardPower": 0.5, "office": 0.4, "network": 0.8, "intel": 0.9 } },
+    { "id": "e_min", "kind": "character", "name": "小校", "location": "前线", "attrs": { "hardPower": 0.2, "office": 0.1, "network": 0.1, "intel": 0.1 } }
+  ],
+  "weights": { "e_lead": 0.9, "e_court": 0.6, "e_min": 0.2 },
+  "agendas": [
+    { "id": "a_root", "owner": "e_lead", "goal": "北伐大业", "stage": "筹备", "visibility": "known", "maxSteps": 5, "progress": 1, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 2 } },
+    { "id": "a_son1", "owner": "e_court", "goal": "粮草调度", "stage": "就绪", "visibility": "known", "maxSteps": 3, "progress": 1, "parentId": "a_root", "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 2 } },
+    { "id": "a_son2", "owner": "e_min", "goal": "暗探敌营", "stage": "潜伏", "visibility": "concealed", "maxSteps": 3, "progress": 1, "parentId": "a_root", "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 2 } }
+  ],
+  "events": [
+    { "id": "ev_open", "title": "敌营异动", "source": { "type": "state" }, "position": "前线", "ripples": [], "closed": false }
+  ],
+  "chronicle": [],
+  "meta": { "tick": 0 }
+}
