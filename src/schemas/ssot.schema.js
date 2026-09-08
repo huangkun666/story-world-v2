@@ -14,9 +14,66 @@ export const ssotSchema = {
             required: ['world', 'tension', 'positions'],
             props: {
                 world: { kind: 'string', minLength: 1 },
-                tension: { kind: 'number' },               // 静态张力常量（切片，大势层暂缓）
+                tension: { kind: 'number' },               // 静态张力常量（切片）；已并入 setting.dynamic.tension.intensity（大势层细案 §3.7 兼容保留）
                 positions: { kind: 'array', minItems: 1, items: { kind: 'string', minLength: 1 } },
                 playerId: { kind: 'string', minLength: 1 },   // K8：玩家棋子标注（可选；缺省=旁观世界合法形态）
+                setting: {   // K24/大势层：设定池（全可选——旧世界缺省合法，A-1 兼容断言；细案 §3.1/§3.3）
+                    kind: 'object',
+                    additional: false,
+                    props: {
+                        frozen: {   // 冻结层：世界书提取产物（书指纹不变不重抽，K26；引擎只读）
+                            kind: 'object',
+                            additional: false,
+                            required: ['fingerprint', 'extractedAt', 'canon'],
+                            props: {
+                                fingerprint: { kind: 'string', minLength: 1 },
+                                extractedAt: { kind: 'string', minLength: 1 },
+                                canon: {   // 形状 = v1 abstractCanon 五件套（附录 A；无数量/长度约束，2026-08-28 口径）
+                                    kind: 'object',
+                                    additional: false,
+                                    required: ['powerScale', 'rules', 'society', 'techOrMagic', 'historyNotes'],
+                                    props: {
+                                        powerScale: {
+                                            kind: 'array',
+                                            items: {
+                                                kind: 'object',
+                                                additional: false,
+                                                required: ['level', 'note'],
+                                                props: {
+                                                    level: { kind: 'string' },   // 档位名（原文）
+                                                    note: { kind: 'string' },    // 该档意味着什么（原文/极简）
+                                                },
+                                            },
+                                        },
+                                        rules: { kind: 'array', items: { kind: 'string' } },
+                                        society: { kind: 'string' },
+                                        techOrMagic: { kind: 'string' },
+                                        historyNotes: { kind: 'array', items: { kind: 'string' } },
+                                    },
+                                },
+                            },
+                        },
+                        dynamic: {   // 演化层：引擎小步推、事件可改、模型不可改（K27/K29）
+                            kind: 'object',
+                            additional: false,
+                            required: ['tension'],
+                            props: {
+                                tension: {   // 结构性张力三件（极/方向/强度；ANCHOR §4.6①）
+                                    kind: 'object',
+                                    additional: false,
+                                    required: ['polarity', 'intensity'],
+                                    props: {
+                                        polarity: { kind: 'string', minLength: 1 },   // 极（原文溯源；无主=大势未聚的合法态，表示法 K29 曲线定）
+                                        direction: { kind: 'string' },   // 当前方向（谁压谁；缺省/空串=僵持）
+                                        intensity: { kind: 'number', min: 0, max: 1 },   // 强度 0..1（引擎确定性计算，模型不拍）
+                                    },
+                                },
+                                env: { kind: 'numRecord' },   // 环境量键值（引擎推演域；越阈值→状态驱动事件，K27 熵泵）
+                                derivedFrom: { kind: 'array', items: { kind: 'string' } },   // 派生源引用（书条目/事件 id/浪尖盘算 id）
+                            },
+                        },
+                    },
+                },
             },
         },
         entities: {

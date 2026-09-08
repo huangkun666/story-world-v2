@@ -197,7 +197,7 @@
 | 模块 | 职责 | 契约（输入 → 输出） | 依赖 | 状态 | 测试 | 最近台账 |
 |---|---|---|---|---|---|---|
 | `schema.js` | 迷你校验器（零依赖、全错误列表） | (文档, 形状) → 错误列表 | — | 稳定 | schema.test.js | S2 · K2/K3/K5 扩展 |
-| `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt） | schema + golden/live/bystander/player 世界测试 | S2 · K3 · K5 · K9 · K18 |
+| `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt；K24 扩 context.setting） | schema + golden/live/bystander/player 世界测试 + setting | S2 · K3 · K5 · K9 · K18 · K24 |
 | `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
 | `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2） | worldstep + smoke | K2（P3） |
 | `prompts.js` | 主调用 prompt（六铁律 + 内嵌 JSON 模板） | pack → prompt 字符串 | OUTPUT_TEMPLATE（与 schema 逐字一致） | 稳定（v2-agenda-t1-1：newAgendas + agendaCancels） | worldstep + streams 间接 | S4 · K5 · K18 |

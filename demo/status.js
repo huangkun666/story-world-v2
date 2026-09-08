@@ -17,7 +17,7 @@ const cell = (line, i) => (line.split('|')[i] ?? '').trim();
 // 模块 → 覆盖其行为的测试文件（静态映射；新增/变更时随台账行顺带维护）
 const TEST_MAP = {
     'schema.js': ['schema.test.js'],
-    'schemas/ssot.schema.js': ['schema.test.js', 'golden-slice.test.js', 'live-world.test.js', 'bystander-world.test.js'],
+    'schemas/ssot.schema.js': ['schema.test.js', 'setting.test.js', 'golden-slice.test.js', 'live-world.test.js', 'bystander-world.test.js'],
     'schemas/world-step.schema.js': ['schema.test.js'],
     'extract.js': ['extract.test.js'],
     'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js'],
