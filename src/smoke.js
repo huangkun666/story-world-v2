@@ -31,6 +31,8 @@ export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGe
         silentTotal: 0, liftedTotal: 0, droppedTotal: 0, weightSeries: {},
         // K16 树冒烟统计（盘算树细案 §4 K16）：每 tick 新生峰 / 顶层峰 / 盘算大厦顶拒绝数
         maxPerTickBirths: 0, peakTopLevel: 0, rejectedTotal: 0,
+        // K29 设定池冒烟：张力强度曲线采样 + 熵泵种子累计（热池事件 + 归档里程碑承接，链条不断口）
+        intensitySeries: {}, pumpSeedTotal: 0,
     };
     for (let t = 1; t <= ticks; t++) {
         const step = stepGen ? stepGen(t, world) : (t <= BEGIN ? advanceStep(t - 1) : idleStep());
@@ -62,6 +64,9 @@ export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGe
         if (t % 10 === 0 || t === ticks) {
             metrics.bytes.push({ tick: t, bytes: JSON.stringify(world).length });
             metrics.weightSeries[t] = { ...world.weights };
+            if (world.context?.setting?.dynamic?.tension) metrics.intensitySeries[t] = world.context.setting.dynamic.tension.intensity;
+            metrics.pumpSeedTotal = world.events.filter((e) => e.id.startsWith('ev_pump_')).length
+                + (world.milestones || []).reduce((a, m) => a + m.ids.filter((id) => id.startsWith('ev_pump_')).length, 0);
         }
     }
     return { world, metrics };

@@ -6,6 +6,7 @@ import { buildEvolutionPack } from './pack.js';
 import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
+import { updateTensionIntensity, eventBornTick } from './setting.js';   // K29：张力强度更新；K29 起 bornTickOf 共用契约解析器
 
 export const ATTR_BOUNDS = [0, 1];    // 属性硬边界（薄裁定器按量裁的硬结果之一）
 
@@ -160,13 +161,7 @@ function applyPlayerImpact(world, gstep, tick, playerId, playerAffected, warning
 // ③ 常驻保留：state 源未决事件永不自动闭环（不在此函数内处理）。
 // 闭环留痕只进观棋（不带 eventRef → 不进注入：闭环是历史状态，不是新动向）。
 // 完整闭环设计（叶子结清/裁剪/事件产率上限）随因果链强化阶段（dev-process §6 队列）。
-const bornTickOf = (ev) => {
-    // 事件 id 契约 ev_<tick>_<n>（hangEvents 唯一生成点，格式已锁）；K27 熵泵 id ev_pump_<tick>_<n>
-    // （引擎生成器，格式同族）——取首个数字段（向后兼容：'m_10' 里程碑 id 亦得 10）。
-    const seg = String(ev.id || '').split('_').find((s) => /^\d+$/.test(s));
-    const n = seg === undefined ? NaN : Number(seg);
-    return Number.isInteger(n) && n >= 0 ? n : -Infinity;   // 解析失败按"老账"（窗恒满）
-};
+const bornTickOf = (ev) => eventBornTick(ev.id);   // 事件 id 契约共享解析器（setting.js；K29 起同源）
 const headClosed = (world, ev) => {
     let cur = ev;
     const seen = new Set();
@@ -595,6 +590,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     if (playerId && moveFact?.verb) activeIds.add(playerId);
     for (const e of world.entities) { if (activeIds.has(e.id)) e.lastActiveTick = tick; }
     recomputeWeights(world, tick);
+    updateTensionIntensity(world, tick);   // K29 张力强度（细案 T3：事件频次×分量比×衰减；引擎确定性计算，模型不拍）
     const cancelledIds = applyAgendaCancels(world, gstep, tick, chronicle);   // K22 取消裁决（细案 §3.5 → A-5；先于推进——被取消者当 tick 推进落 closed 拦截）
     const closedIds = applyAgendaAdvances(world, gstep, tick, chronicle, warnings);
     for (const id of cancelledIds) closedIds.add(id);   // 取消集并入联闭（取消 = 终结产果路径之一）

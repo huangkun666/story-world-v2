@@ -22,9 +22,12 @@ export function buildEvolutionPack(ssot, moveFact) {
     const closedEvents = (ssot.events || []).filter((e) => e.closed).slice(-2).map((e) => ({
         id: e.id, title: e.title,
     }));
+    const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
     const pack = {
         world: ssot.context?.world,
-        tension: ssot.context?.tension,
+        // 张力：有 setting 取演化层强度（引擎算），无则回退 context.tension 数字（细案 §3.1 兼容口径）
+        tension: dyn ? dyn.tension?.intensity : ssot.context?.tension,
+        setting: dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : undefined,   // 大势块：张力三件 + 环境量（固定小结；derivedFrom 属引擎记账不入包）
         positions: ssot.context?.positions,
         entities,
         agendas,

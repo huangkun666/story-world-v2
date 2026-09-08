@@ -201,18 +201,18 @@
 | `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
 | `fingerprint.js` | 书指纹缓存：FNV-1a（v1 算法原样搬）+ LRU 有界 + 版本戳 | `bookFingerprint(text)` → 指纹串；`createCache(seed?)` → {get,set,size,keys}（命中=深拷贝返回） | — | 稳定（K26） | fingerprint.test.js | K26 |
 | `player-inject.js` | 玩家 attrs 自动注入（P-B 触发闭合）：零 token 词表映射 | `injectPlayerAttrs(ssot)` → 新 SSOT（命中即用/不覆盖手填/缺省=定案初始值） | — | 稳定（K28） | player-inject.test.js | K28 |
-| `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2） | worldstep + smoke | K2（P3） |
+| `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2；K29 大势块——有 setting 取演化层强度 + 张力三件/环境量，无则回退数字） | worldstep + smoke + birth + backdrop-smoke | K2（P3） · K29 |
 | `prompts.js` | 主调用 prompt（六铁律 + 内嵌 JSON 模板） | pack → prompt 字符串 | OUTPUT_TEMPLATE（与 schema 逐字一致） | 稳定（v2-agenda-t1-1：newAgendas + agendaCancels） | worldstep + streams 间接 | S4 · K5 · K18 |
 | `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |
-| `setting.js` | 设定池读写面：保留键空间判词 + 演化层写通道 | `isSettingRef(s)` → 布尔；`patchDynamic(setting,{key,delta})` → 新 setting（不可变、[0,1] 钳制） | —（schema 无设定池写面） | 稳定（K25） | setting-guard.test.js | K25 |
+| `setting.js` | 设定池读写面：保留键空间判词 + 演化层写通道 + 张力强度 + 事件 id 契约解析器 | `isSettingRef(s)` → 布尔；`patchDynamic(setting,{key,delta})` → 新 setting（不可变、[0,1] 钳制）；`computeTensionIntensity(world,tick)` / `updateTensionIntensity`（K29，提案参数）；`eventBornTick(id)`（settle 同源共用） | —（schema 无设定池写面） | 稳定（K25/K29） | setting-guard.test.js + backdrop-smoke | K25 · K29 |
 | `worldstep.js` | 主调用管线（传输注入 → 解析 → 真 schema + 语义校验） | ({transport, ssot, pack}) → {ok, step/errors} | check-step | 稳定 | worldstep.test.js | S4 · K5 用例 |
-| `settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决 / K27 熵泵挂段+bornTickOf 数字段扫描） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay + entropy | K9 · K11 · K22 · K27 |
+| `settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决 / K27 熵泵挂段+bornTickOf 数字段扫描 / K29 张力强度更新段） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay + entropy | K9 · K11 · K22 · K27 · K29 |
 | `entropy.js` | 熵泵摩擦制造：环境推演器 + 越阈落状态源事件 + 恢复闭环（细案 §3.5，全部数字提案态） | `pulseEntropy(world, tick, chronicle)`——每 ENV_TICK 一步、引擎生成器 | setting.js（写通道） | 稳定（K27） | entropy.test.js | K27 |
 | `streams.js` | 双流渲染（观棋三行 + RP 注入） | (ssot, stage, move) → 双流文本 | — | 稳定（K10 解挂：注入掩码真值=玩家观察者；无玩家全见 P-E） | streams.test.js | S6 · K10 |
 | `tick.js` | 完整 tick 编排 | ({transport, ssot, dialogue, extractCtx}) → 结果 | extract/pack/worldstep/settle/streams | 稳定 | streams + smoke + live + bystander | S6 |
 | `transport-http.js` | OpenAI 兼容传输（env 配置、base 归一化） | ({baseUrl, apiKey, model}) → transport(prompt → 文本) | — | 稳定（超时/max_tokens 缺口入队） | transport-http.test.js | S6 |
 | `st-preset.js` | 酒馆预设直读 | (settingsPath?) → 传输配置 | transport-http | 稳定 | —（diag-transport 工具覆盖） | 活演示·真跑 |
-| `smoke.js` | 合成冒烟 + 断言器 | 50/100 tick → 断言结果 | tick | 稳定（K6 泛化：stepGen + 门控统计 + 曲线采样；K11 增 dialogueGen 落子段；K20 归档后断言语义=台阶修订） | smoke + weight-smoke + tree-smoke | K6 · K11 · K20 |
+| `smoke.js` | 合成冒烟 + 断言器 | 50/100 tick → 断言结果 | tick | 稳定（K6 泛化：stepGen + 门控统计 + 曲线采样；K11 增 dialogueGen 落子段；K20 归档后断言语义=台阶修订；K29 张力强度/熵泵种子采样） | smoke + weight-smoke + tree-smoke + backdrop-smoke | K6 · K11 · K20 · K29 |
 | `weight.js` / `gate.js` | 分量公式 / 主动作权门控 | 见分量引擎细案 K1/K2 | settle | K1-K6 已落（公式/衰减/掩码/半径/门控/审计，提案态）· K18 agendaCancels 透传与静默滤除 | weight + gate + decay + weight-smoke | K1·K2·K6·K18 |
 | `demo/status.js` | 一键状态总览（本表与台账的聚合视图） | — → 阶段/健康度/模块覆盖/队列 | 只读文档与源码 | 稳定 | —（自校验：node demo/status.js） | 第三棒 |
 
