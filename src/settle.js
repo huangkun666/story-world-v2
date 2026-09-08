@@ -30,7 +30,7 @@ export const ARCHIVE = { hotWindow: 20, milestoneEvery: 10 };
 
 const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
 
-const SOURCE_LABEL = { plot: '盘算', state: '状态', ripple: '波及' };
+const SOURCE_LABEL = null; // 已废弃（第十三棒：编年源头措辞改写名不写代号，见 chronicleEvents）
 
 const entityName = (world, id) => world.entities.find((e) => e.id === id)?.name || id;   // 编年渲染：id 一律成名（"棋好看"）
 
@@ -493,17 +493,28 @@ function archiveClosedEvents(world, tick) {
     }
 }
 
-// ⑦ 编年：事件条目（可读、带因果；实体 id 一律渲染成名——"棋好看"）
+// ⑦ 编年：事件条目（可读、带因果；实体 id 一律渲染成名——"棋好看"。
+//   第十三棒：源头措辞写名/题/目标——由盘算「目标」而生 / 由世界处境而生 / 沿「上游事件标题」而来；
+//   代号（ev_/a_/e_）绝不入玩家视线（A-3）；历史行保持原样，只作用于新落账行。）
+function eventSourcePhrase(world, ev) {
+    if (ev.source.type === 'plot') {
+        const a = (world.agendas || []).find((x) => x.id === ev.source.ref);
+        return a ? `由盘算「${a.goal}」而生` : '由盘算而生';
+    }
+    if (ev.source.type === 'ripple') {
+        const up = (world.events || []).find((x) => x.id === ev.source.ref);
+        return up ? `沿「${up.title}」而来` : '沿旧事而来';
+    }
+    return '由世界处境而生';
+}
 function chronicleEvents(world, step, tick, chronicle) {
     const name = (id) => world.entities.find((e) => e.id === id)?.name || id;
     step.newEvents.forEach((ev, i) => {
-        const label = SOURCE_LABEL[ev.source.type] || ev.source.type;
-        const link = ev.source.type === 'ripple' ? `（上承 ${ev.source.ref}）` : '';
-        const ripples = ev.ripples?.length ? `，波及 ${ev.ripples.map(name).join('、')}` : '';
+        const ripples = ev.ripples?.length ? `，牵动 ${ev.ripples.map(name).join('、')}` : '';
         chronicle.push({
             id: `ch_${tick}_ev_${i + 1}`,
             tick,
-            text: `事件「${ev.title}」——源：${label}${link}，发生在 ${ev.position}${ripples}`,
+            text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}，事发 ${ev.position}${ripples}`,
             eventRef: `ev_${tick}_${i + 1}`,
         });
     });

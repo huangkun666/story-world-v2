@@ -15,6 +15,16 @@ export const LABELS = {
     status: { active: '活跃', retired: '背景', dead: '已灭' },
 };
 
+// 属性维度释义（第十三棒，用户拍板 A 案）：玩家通词、A-3 黑名单零命中；
+// 双通道无障碍——悬停 title + 视障 sr 文本（sw2-visually-hidden），不止鼠标。
+// 机械事实依据（weight.js COEFFS/掩码）：人脉推得动事（分量）、耳目看得见事（信息半径）。
+export const ATTR_HINTS = Object.freeze({
+    hardPower: '兵力：硬实力——兵马、武备、财力这类能押上桌的东西',
+    office: '权位：官职名分，号令效力的来源',
+    network: '人脉：关系网——能动员多少人、遇事有多少缓冲',
+    intel: '耳目：情报网有多灵——决定你能看多远',
+});
+
 // 渲染产物黑名单（引擎术语不得出现在玩家视线）
 export const BLACKLIST = [
     '分量', '熵泵', '里程碑', '上溯', '波及',
@@ -238,8 +248,10 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 export function renderEntitiesHtml(world) {
     const attrs = (e) => Object.entries(LABELS.attr).map(([k, label]) => {
         const v = e.attrs?.[k];
-        return v == null ? '' : `<span class="sw2-eattr">${label}<b>${v}</b></span>`;
-    }).filter(Boolean).join('');
+        if (v == null) return ''; // 账上无键=该维缺位（「世界书用不到兵力」语义：无兵世界不出现兵力列）
+        const hint = ATTR_HINTS[k] || label;
+        return `<span class="sw2-eattr" title="${escapeHtml(hint)}"><span class="sw2-visually-hidden">${escapeHtml(hint)}。</span>${label}<b>${v}</b></span>`;
+    }).join('');
     const rows = (world.entities || []).map((e) => {
         const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
         const status = e.status && e.status !== 'active' ? `<span class="sw2-visible ${e.status === 'dead' ? 'v-hidden' : 'v-known'}">${LABELS.status[e.status]}</span>` : '';
@@ -252,7 +264,8 @@ export function renderEntitiesHtml(world) {
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
-    return `<div class="sw2-list-head">全部角色与势力（${rows.length} 位 · 席位上限 32）</div><div class="sw2-entity-list">${rows.join('')}</div>`;
+    return `<div class="sw2-list-head">全部角色与势力（${rows.length} 位 · 席位上限 32）</div><div class="sw2-entity-list">${rows.join('')}</div>`
+        + `<div class="sw2-hint">势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。</div>`;
 }
 
 // ============ 设定档案页（A-6：展示与 setting.frozen 逐字段一致） ============

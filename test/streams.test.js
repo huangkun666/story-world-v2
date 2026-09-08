@@ -27,7 +27,7 @@ test('双流：观棋三行齐备（动态流/位置/格局），注入带世界
     assert.equal(r.ok, true, r.error);
     const obs = r.streams.observer.join('\n');
     assert.ok(obs.includes('◆ [tick 1] 盘算「打通边关商路」推进'), '动态流：盘算推进');
-    assert.ok(obs.includes('◆ [tick 1] 事件「守将允诺通关」——源：盘算'), '动态流：事件带因果');
+    assert.ok(obs.includes('◆ [tick 1] 事件「守将允诺通关」——由盘算「打通边关商路」而生'), '动态流：事件带因果');
     assert.ok(obs.includes('📍 各方位置：大荒商帮 @ 临渊城'), '位置行');
     assert.ok(obs.includes('▣ 当前格局：张力 0.5 · 未决事件 1 · 在飞盘算 1（「打通边关商路」2/4）'), '格局行（tick 后推进 1 步，2/4）');
     const inj = r.streams.injection;
@@ -39,7 +39,7 @@ test('双流：波及实体渲染为名（"棋好看"）', async () => {
     const s = EXTRACT_FIX.samples.find((x) => x.id === 'l25');
     const r = await runOne(s.dialogue);
     assert.ok(r.ok, r.error);
-    assert.ok(r.streams.observer.join('\n').includes('波及 大荒商帮'), 'id 渲染成名');
+    assert.ok(r.streams.observer.join('\n').includes('牵动 大荒商帮'), 'id 渲染成名');
 });
 
 test('tick 编排：OOC 对话 → 落子为空但世界照常结算（世界以自身状态为原料）', async () => {
@@ -67,7 +67,7 @@ test('主验收判据：观棋侧出现第一条动态流条目（可读、带�
     const first = r.streams.observer[0];
     assert.ok(first.startsWith('◆ [tick 1] '), `首条 = ${first}`);
     assert.ok(first.length >= 15, '可读长度');
-    assert.ok(r.streams.observer.join('\n').includes('——源：'), '因果语义在事件条目上');
+    assert.ok(r.streams.observer.join('\n').includes('——由盘算「'), '因果语义在事件条目上');
     console.log(`[验收] ${first}`);
 });
 

@@ -52,7 +52,7 @@ test('结算：基本 tick 全管线落账', () => {
     assert.ok(w.chronicle.length >= 2, '编年：推进 + 事件各一条');
     const evEntry = w.chronicle.find((c) => c.id === 'ch_1_ev_1');
     assert.ok(evEntry.text.includes('事件「守将允诺通关」'), '编年可读');
-    assert.ok(evEntry.text.includes('源：盘算'), '编年带因果');
+    assert.ok(evEntry.text.includes('由盘算「打通边关商路」而生'), '编年带因果（写名不写代号）');
 
     assert.equal(w.meta.simLog.length, 1, '台账记账');
     assert.ok(w.meta.simLog[0].packTokens > 0 && w.meta.simLog[0].ssotBytes > 0, '四字段有值');
@@ -117,7 +117,8 @@ test('结算：ripple 事件上游指针挂链', () => {
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     assert.deepEqual(r.ssot.events.find((e) => e.id === 'ev_4_1').links.up, ['ev_old'], '因果指针入 links.up');
-    assert.ok(r.ssot.chronicle.some((c) => c.text.includes('上承 ev_old')), '编年可见因果');
+    assert.ok(r.ssot.chronicle.some((c) => c.text.includes('沿「旧事」而来')), '编年可见因果（上游事件写标题）');
+    assert.ok(!r.ssot.chronicle.some((c) => /ev_[a-z0-9_]+/.test(c.text)), '事件代号绝不入编年文本（第十三棒：A-3 玩家视线）');
 });
 
 test('结算：已结算盘算的推进被拦截（满步重播 bug 回归）', () => {

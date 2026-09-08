@@ -20,7 +20,14 @@ export async function runMainCall({ transport, ssot, pack }) {
     try {
         step = JSON.parse(raw.trim());
     } catch {
-        return { ok: false, step: null, errors: ['主调用返回非法 JSON（真 schema 强制：形状不可靠即拒绝）'] };
+        // 第十三棒·真模型冒烟补诊断：预览前 120 字带回现场（肉眼定位围栏/截断/前后缀；铁律 8 数据说话）
+        const trimmed = raw.trim();
+        const preview = trimmed.slice(0, 120).replace(/\s+/g, ' ');
+        console.warn('[story-world-v2] 主调用非法 JSON，原始输出：', trimmed);
+        return {
+            ok: false, step: null,
+            errors: [`主调用返回非法 JSON（真 schema 强制：形状不可靠即拒绝）· 原始输出预览：${preview}${trimmed.length > 120 ? '…' : ''}`],
+        };
     }
     const checked = checkWorldStep(step, ssot);
     return { ok: checked.ok, step: checked.ok ? step : null, errors: checked.errors };

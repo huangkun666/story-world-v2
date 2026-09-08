@@ -21,8 +21,10 @@ const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
 const WINDOW_ID = 'story_world2_window';
 const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'settings'];
+// K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
+const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260908-k35';
+const CSS_VERSION = '20260908-a11y';
 
 export const sw2Version = () => VERSION;
 export function sw2TabState(name, active) {
@@ -144,21 +146,37 @@ function setStatus(text) {
 }
 
 // ---------- K34：渲染接线（纯函数产物 → DOM；面板零第二份状态） ----------
-export function refreshWorld(world, { config = {}, oldVolumes = [] } = {}) {
+export function refreshWorld(world, { config, oldVolumes = [] } = {}) {
     if (typeof document === 'undefined') return;
     const win = document.getElementById(WINDOW_ID);
     if (!win) return;
     try {
-        const out = renderAll(world, { config, oldVolumes });
+        // 第十三棒修复：config 缺省时取 live extension_settings——此前所有调用点都不传 config，
+        // 每次重绘把设置表单清空（「填了却报未配置、刷新即丢」根因之二）
+        const cfg = config ?? modelSettings() ?? {};
+        const out = renderAll(world, { config: cfg, oldVolumes });
         const chipWorld = win.querySelector('#sw2_world_chip');
         if (chipWorld) chipWorld.textContent = `世界：${out.header.world || '—'}`;
         const chipTick = win.querySelector('#sw2_tick_chip');
         if (chipTick) chipTick.textContent = out.header.tick;
         for (const name of SECTIONS) {
             const el = win.querySelector(`#sw2_view_${name}`);
-            if (el) el.innerHTML = out[name];
+            if (!el) continue;
+            if (name === 'board') {
+                // 2026-09-08 实机冒烟发现：board 是五块对象，直填 innerHTML 会渲染成 [object Object]
+                el.innerHTML = typeof out.board === 'string'
+                    ? out.board
+                    : BOARD_BLOCK_ORDER.map((k) => (out.board && out.board[k]) || '').join('');
+            } else {
+                el.innerHTML = out[name];
+            }
         }
-        setStatus(`已同步 · 刚刚演完 ${out.header.tick} · 窗口只读，不参与剧情`);
+        refreshSettingsHints(); // 密钥 placeholder 随渲染刷新（表单值由 cfg 注入）
+        // 第十三棒：每轮进展计数——「编年 +N 行」直接区分模型空步 vs 引擎未落账（账目可读性）
+        const chronicleLen = Array.isArray(world.chronicle) ? world.chronicle.length : 0;
+        const delta = sw2PrevChronicle == null ? null : chronicleLen - sw2PrevChronicle;
+        sw2PrevChronicle = chronicleLen;
+        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`} · 窗口只读，不参与剧情`);
     } catch (err) {
         setStatus(`⚠ 渲染失败：${err?.message || err}`);
         console.warn('[story-world-v2] render failed:', err);
@@ -183,6 +201,19 @@ function dispatchAction(action, payload, event) {
 // ---------- K35：存储层接线（热账=chat metadata；冷档=IndexedDB 卷） ----------
 const HOT_META_KEY = 'story_world_v2';
 const EXPORT_FILENAME = 'story-world-v2-export.json';
+
+// 首开空态世界（形状合法=render 契约；K34 防御口径：空世界=各数组为空，不是裸 {}）
+const EMPTY_WORLD = Object.freeze({
+    version: 1,
+    context: { world: '', tension: 0.5, positions: [] },
+    entities: [],
+    weights: {},
+    agendas: [],
+    events: [],
+    chronicle: [],
+    milestones: [],
+    meta: { tick: 0, simLog: [] },
+});
 
 // v1 教训（adapter.js）：ctx.chatMetadata 是取用时的引用快照，聊天切换后过期——
 // 每次读/写热账都重新取最新 context。
@@ -213,6 +244,7 @@ function volumeStore() {
 // CHAT_CHANGED → 世界重载（v1 同款）。
 let sw2TickQueue = null;
 let sw2LastSettings = null;
+let sw2PrevChronicle = null; // 上一渲染的编年行数（第十三棒：进展计数用）
 
 function modelSettings() {
     const ctx = freshCtx();
@@ -221,7 +253,6 @@ function modelSettings() {
 }
 
 // K36：设置页表单 ↔ extensionSettings 双向（v1 范式：即时写回 + saveSettingsDebounced）
-const SETTINGS_FIELDS = ['baseUrl', 'apiKey', 'model', 'playerDesc'];
 const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model', playerDesc: 'sw2_player_desc' };
 
 function readSettings() {
@@ -240,43 +271,32 @@ function writeSetting(key, value) {
     try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
 }
 
-function fillSettingsForm() {
+// K36 设置页表单 ↔ extension_settings 双向：表单值由渲染 config 注入（refreshWorld cfg），
+// 这里只刷密钥 placeholder——不再覆写 render 已注入的值（第十三棒修复根因之一）。
+function refreshSettingsHints() {
     const s = modelSettings() || {};
-    for (const key of SETTINGS_FIELDS) {
-        const el = document.getElementById(SETTINGS_INPUTS[key]);
-        if (!el) continue;
-        if (key === 'apiKey') {
-            // 密钥不显示明文也不预填掩码（掩码回写会污染存储）；placeholder 提示已设置
-            el.value = '';
-            el.placeholder = s.apiKey ? '（已设置 · 留空=保持不变）' : '输入模型服务密钥';
-            continue;
-        }
-        if (s[key] != null) el.value = s[key];
-    }
+    const el = document.getElementById(SETTINGS_INPUTS.apiKey);
+    if (el) el.placeholder = s.apiKey ? '（已设置 · 留空=保持不变）' : '输入模型服务密钥';
 }
 
+// 窗口级事件委托（第十三棒修复根因之一）：原实现把监听绑在首次执行时尚不存在的输入节点上
+// （先绑后渲，绑定了个寂寞）——打字从未落账。委托挂在窗口上，innerHTML 重绘后监听不失效。
 function bindSettingsForm() {
-    for (const key of SETTINGS_FIELDS) {
-        const el = document.getElementById(SETTINGS_INPUTS[key]);
-        if (!el) continue;
-        el.addEventListener('change', (e) => {
-            if (key === 'apiKey') {
-                const v = e.target.value;
-                if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不动（防清密钥）
-                return;
-            }
-            writeSetting(key, e.target.value);
-        });
-        el.addEventListener('input', (e) => {
-            if (key === 'apiKey') {
-                const v = e.target.value;
-                if (v && v.trim()) writeSetting('apiKey', v.trim());
-                return;
-            }
-            writeSetting(key, e.target.value);
-        });
-    }
-    fillSettingsForm();
+    const win = document.getElementById(WINDOW_ID);
+    if (!win || win.dataset.sw2SettingsBound) return;
+    win.dataset.sw2SettingsBound = '1';
+    const onField = (e) => {
+        const key = Object.keys(SETTINGS_INPUTS).find((k) => SETTINGS_INPUTS[k] === e.target?.id);
+        if (!key) return;
+        const v = e.target.value;
+        if (key === 'apiKey') {
+            if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不动（防清密钥）
+            return;
+        }
+        writeSetting(key, v);
+    };
+    win.addEventListener('input', onField);
+    win.addEventListener('change', onField);
 }
 
 async function advanceTick({ world, dialogue }) {
@@ -317,17 +337,15 @@ async function listOldVolumes() {
     }
 }
 
-// 幂等冷档轮转：世界编年超阈值 → 前置段入卷 + 热账写回（未超=零操作）。
-// 返回最新 hot 世界；失败时返回原世界（软着陆，不阻塞）。
+// 幂等冷档轮转 + 热账写回：编年超阈值 → 前置段入卷；且**无论是否轮转都写热账**。
+// （第十三棒修复：原实现只在入卷分支 writeHotMeta——无轮转路径推进后的世界从不落盘，
+//  只活在内存/DOM，刷新即回滚到推进前。loadWorld 也走此入口，幂等无副作用。）
 async function ensureChronicleRotated(world) {
     try {
         const { hot, volume } = rotateChronicle(world);
-        if (volume) {
-            await volumeStore().put(volume);
-            writeHotMeta(hotAccountShape(hot));
-            return hot;
-        }
-        return world;
+        if (volume) await volumeStore().put(volume);
+        writeHotMeta(hotAccountShape(hot));
+        return hot;
     } catch (_) {
         return world;
     }
@@ -337,7 +355,13 @@ async function ensureChronicleRotated(world) {
 export async function loadWorld() {
     const meta = readHotMeta();
     const world = meta ? loadHotAccount(meta) : null;
-    if (!world) return;
+    if (!world) {
+        // 首开空态：仍渲染六页签空壳 ——「导入恢复」不依赖世界存在（2026-09-08 冒烟发现：
+        // 导入按钮在 renderSettingsHtml 内，无世界=设置页不渲染=首开导入死结；K38 前无创建链）
+        refreshWorld(EMPTY_WORLD, { oldVolumes: [] });
+        setStatus('尚无世界 · 设置页「⬆ 导入恢复」可载入备份（「开始新世界」接线随 K38）');
+        return;
+    }
     const hot = await ensureChronicleRotated(world);
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
@@ -456,7 +480,8 @@ function initPanel(ctx) {
         bindTabs();
         bindActions();
         bindSettingsForm(); // K36：设置页表单 ↔ extension_settings
-        openWindow();
+        // 不自弹窗（2026-09-08 用户实机反馈「刷新即弹出」）：v1 范式=仅入口点击（魔杖/扩展菜单）。
+        // 加载照跑：热账轮转 + 卷清单预取，首次点击打开时已有内容。
         loadWorld(); // K35：面板打开即载入热账（含幂等轮转）
         setupAsyncTicks(ctx); // K36：回合钩子（MESSAGE_RECEIVED 推进 / CHAT_CHANGED 重载）
     });

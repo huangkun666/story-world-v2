@@ -140,14 +140,35 @@ test('K34 角色与势力页：全量表（位置/影响力/兵力权位人脉�
     const w = world();
     const html = renderEntitiesHtml(w);
     assert.match(html, /全部角色与势力（4 位 · 席位上限 32）/);
-    assert.match(html, /sw2-eattr">兵力<b>0\.8<\/b></);
-    assert.match(html, /sw2-eattr">耳目<b>0\.6<\/b></);
+    assert.ok(html.includes('sw2-eattr" title="兵力：硬实力'));
+    assert.ok(html.includes('sw2-eattr" title="耳目：情报网有多灵'));
     assert.match(html, /sw2-ename">黄坤<small>你的棋子/);
     assert.match(html, /最近活跃<br>第45轮/);
     w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', attrs: {}, status: 'dead' });
     const html2 = renderEntitiesHtml(w);
     assert.match(html2, /覆灭阁/);
     assert.match(html2, /sw2-visible v-hidden">已灭</);
+});
+
+test('第十三棒：属性维度释义与无障碍——title+视障文本双通道、注脚行、缺键零维不渲染', () => {
+    const w = world();
+    const html = renderEntitiesHtml(w);
+    // 悬停释义（鼠标通道）
+    assert.ok(html.includes('title="兵力：硬实力——兵马、武备、财力这类能押上桌的东西">'));
+    // 视障通道（sr 文本对读屏可见，chip 内先释义后数值）
+    assert.ok(html.includes('class="sw2-visually-hidden">兵力：硬实力——兵马、武备、财力这类能押上桌的东西。<'));
+    assert.ok(html.includes('class="sw2-visually-hidden">耳目：情报网有多灵——决定你能看多远。<'));
+    // 势力/角色差异注脚（机制事实：COEFFS 层差）
+    assert.ok(html.includes('势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。'));
+    // 缺键零维不渲染：账上只有兵力的世界，不出现权位/人脉/耳目任何 chip（「无兵世界」语义闭环）
+    const bareAttrs = world();
+    for (const e of bareAttrs.entities) e.attrs = {};
+    bareAttrs.entities.find((e) => e.id === 'e_xie').attrs = { hardPower: 0.8 };
+    const html2 = renderEntitiesHtml(bareAttrs);
+    assert.ok(html2.includes('title="兵力：硬实力'));
+    assert.ok(!html2.includes('title="权位'));
+    assert.ok(!html2.includes('title="人脉'));
+    assert.ok(!html2.includes('title="耳目'));
 });
 
 test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指纹/时间/五件套原文全量），重抽按钮在位', () => {
@@ -230,4 +251,16 @@ test('K34 防御：全空世界六页签不炸（空态合法）', () => {
     assert.ok(all.entities.includes('（0 位'));
     assert.ok(all.board.agendaStrip.includes('sw2-agenda-empty'));
     assert.ok(all.archive.includes('尚未入卷'));
+});
+
+test('第十三棒锁：事件源措辞零代号——把用户实机样例（ripple 行）锁进 A-3 全局扫描', () => {
+    const w = world();
+    w.events.push({ id: 'ev_3_1', title: '官军出城引发恐慌', source: { type: 'ripple', ref: 'ev_0' }, position: '江州', ripples: ['e_dayu'] });
+    w.chronicle.push({ id: 'ch_3_1', tick: 3, text: '事件「官军出城引发恐慌」——沿「薛铁衣发兵催战」而来，事发 江州，牵动 大虞偏将', eventRef: 'ev_3_1' });
+    const all = renderAll(w, { config: CONFIG, oldVolumes: VOLUMES });
+    // 玩家视线面：编年/动态流/位置速览（大事纪·旧卷的 ids 展开=管理细节豁免，K34 拍板口径）
+    const text = [all.chronicle, all.board.feed, all.board.side].map(textOnly).join('\n');
+    assert.ok(text.includes('沿「薛铁衣发兵催战」而来'));
+    assert.ok(text.includes('牵动 大虞偏将'));
+    assert.ok(!/ev_[a-z0-9_]+/.test(text), '玩家可见文本零事件代号（A-3）');
 });

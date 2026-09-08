@@ -31,10 +31,12 @@ test('K36/A-4 成功链：advance → tick → save → refresh 全走通，返�
 });
 
 test('K36/A-4 无世界：零阻塞提示，不调 tick', async () => {
-    const d = deps({ load: () => null });
+    const statuses = [];
+    const d = deps({ load: () => null, onStatus: (m) => statuses.push(m) });
     const q = createTickQueue(d);
     const r = await q.advance();
     assert.deepEqual(r, { ok: false, skipped: 'no-world' });
+    assert.match(statuses.join(''), /尚无世界.*导入恢复/); // 第十三棒：提示给双入口（导入恢复 / 开始新世界）
 });
 
 test('K36/A-5 防重入：演算中再点 → busy 拒；演算完放行（连点保护）', async () => {
@@ -94,4 +96,34 @@ test('K36/A-5 超时/异常兜底：tick 抛错 → 捕获为失败，save 不�
     boom = false;
     assert.equal((await q.advance()).ok, true);
     assert.equal(saved.length, 1);
+});
+
+test('第十三棒回归：save 异步（Promise）→ refresh 收到解析后的真世界，不是 Promise', async () => {
+    const seen = [];
+    const d = deps({
+        save: async (ssot) => { await Promise.resolve(); return { ...ssot, saved: true }; },
+        refresh: (hot) => { seen.push(Boolean(hot && hot.saved)); },
+    });
+    const q = createTickQueue(d);
+    const r = await q.advance();
+    assert.equal(r.ok, true);
+    assert.deepEqual(seen, [true]); // 若拿到 Promise：hot.saved === undefined → [false]
+});
+
+test('第十三棒回归：save 抛错 → 落账失败回执（世界已演算未保存），refresh 不调，可重试', async () => {
+    let boom = true;
+    const refreshCalls = [];
+    const d = deps({
+        save: async () => { if (boom) throw new Error('IDB 写入失败'); return { meta: { tick: 7 } }; },
+        refresh: () => { refreshCalls.push(1); },
+    });
+    const q = createTickQueue(d);
+    const r = await q.advance();
+    assert.equal(r.ok, false);
+    assert.match(r.error, /IDB 写入失败/);
+    assert.equal(r.save, true);
+    assert.equal(refreshCalls.length, 0);
+    boom = false;
+    assert.equal((await q.advance()).ok, true);
+    assert.equal(refreshCalls.length, 1);
 });
