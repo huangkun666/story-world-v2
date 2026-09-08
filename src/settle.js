@@ -5,6 +5,7 @@ import { checkWorldStep } from './check-step.js';
 import { buildEvolutionPack } from './pack.js';
 import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
+import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
 
 export const ATTR_BOUNDS = [0, 1];    // 属性硬边界（薄裁定器按量裁的硬结果之一）
 
@@ -160,7 +161,10 @@ function applyPlayerImpact(world, gstep, tick, playerId, playerAffected, warning
 // 闭环留痕只进观棋（不带 eventRef → 不进注入：闭环是历史状态，不是新动向）。
 // 完整闭环设计（叶子结清/裁剪/事件产率上限）随因果链强化阶段（dev-process §6 队列）。
 const bornTickOf = (ev) => {
-    const n = Number((ev.id || '').split('_')[1]);   // 事件 id 契约 ev_<tick>_<n>（hangEvents 唯一生成点，格式已锁）
+    // 事件 id 契约 ev_<tick>_<n>（hangEvents 唯一生成点，格式已锁）；K27 熵泵 id ev_pump_<tick>_<n>
+    // （引擎生成器，格式同族）——取首个数字段（向后兼容：'m_10' 里程碑 id 亦得 10）。
+    const seg = String(ev.id || '').split('_').find((s) => /^\d+$/.test(s));
+    const n = seg === undefined ? NaN : Number(seg);
     return Number.isInteger(n) && n >= 0 ? n : -Infinity;   // 解析失败按"老账"（窗恒满）
 };
 const headClosed = (world, ev) => {
@@ -595,6 +599,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     const closedIds = applyAgendaAdvances(world, gstep, tick, chronicle, warnings);
     for (const id of cancelledIds) closedIds.add(id);   // 取消集并入联闭（取消 = 终结产果路径之一）
     closeEvents(world, closedIds, tick, chronicle);   // 闭环三型：源结清（K9 执行债）+ 链尾结清（K19）+ 取消联闭（K22）
+    pulseEntropy(world, tick, chronicle);   // K27 熵泵（细案 §3.5 → A-6）：环境推演器每 ENV_TICK 一步；越阈落状态源事件；恢复闭环
     chronicleEvents(world, gstep, tick, chronicle);
     world.chronicle = [...world.chronicle, ...chronicle];   // 编年落账（推进留痕 + 事件条目）
     archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）

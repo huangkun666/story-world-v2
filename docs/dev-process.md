@@ -205,7 +205,8 @@
 | `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |
 | `setting.js` | 设定池读写面：保留键空间判词 + 演化层写通道 | `isSettingRef(s)` → 布尔；`patchDynamic(setting,{key,delta})` → 新 setting（不可变、[0,1] 钳制） | —（schema 无设定池写面） | 稳定（K25） | setting-guard.test.js | K25 |
 | `worldstep.js` | 主调用管线（传输注入 → 解析 → 真 schema + 语义校验） | ({transport, ssot, pack}) → {ok, step/errors} | check-step | 稳定 | worldstep.test.js | S4 · K5 用例 |
-| `settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决全落） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay | K9 · K11 · K22 |
+| `settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决 / K27 熵泵挂段+bornTickOf 数字段扫描） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay + entropy | K9 · K11 · K22 · K27 |
+| `entropy.js` | 熵泵摩擦制造：环境推演器 + 越阈落状态源事件 + 恢复闭环（细案 §3.5，全部数字提案态） | `pulseEntropy(world, tick, chronicle)`——每 ENV_TICK 一步、引擎生成器 | setting.js（写通道） | 稳定（K27） | entropy.test.js | K27 |
 | `streams.js` | 双流渲染（观棋三行 + RP 注入） | (ssot, stage, move) → 双流文本 | — | 稳定（K10 解挂：注入掩码真值=玩家观察者；无玩家全见 P-E） | streams.test.js | S6 · K10 |
 | `tick.js` | 完整 tick 编排 | ({transport, ssot, dialogue, extractCtx}) → 结果 | extract/pack/worldstep/settle/streams | 稳定 | streams + smoke + live + bystander | S6 |
 | `transport-http.js` | OpenAI 兼容传输（env 配置、base 归一化） | ({baseUrl, apiKey, model}) → transport(prompt → 文本) | — | 稳定（超时/max_tokens 缺口入队） | transport-http.test.js | S6 |
