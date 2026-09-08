@@ -94,6 +94,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -193,6 +194,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -289,6 +291,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 分量比折减 0.815（e_wanfa→e_xie.hardPower）"
@@ -401,6 +404,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 分量比折减 0.789（e_wanfa→e_xie.hardPower）"
@@ -499,6 +503,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 分量比折减 0.757（e_wanfa→e_xie.hardPower）"
@@ -614,6 +619,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -710,6 +716,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -723,6 +730,7 @@
    "tick": 8,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"

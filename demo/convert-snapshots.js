@@ -29,8 +29,8 @@ for (const file of readdirSync(new URL('../snapshots/', import.meta.url)).filter
     for (const line of lines) {
         if (!line.trim()) continue;
         const rec = JSON.parse(line);
-        if (!rec.step) {   // 该 tick 主调用解析失败（快照仅记录错误）——重放跳过，仅锁存在
-            steps.push({ tick: rec.tick, step: null, moveFact: null, expect: { warnings: rec.warnings, gate: null, player: null } });
+        if (!rec.step) {   // 该 tick 主调用解析失败（快照仅记录错误）——重放跳过，仅锁存在；K23 缺口②：带 world 则接续
+            steps.push({ tick: rec.tick, step: null, moveFact: null, world: rec.world ?? null, expect: { warnings: rec.warnings, gate: null, player: null } });
             continue;
         }
         rec.step.newAgendas = rec.step.newAgendas ?? [];
@@ -40,6 +40,7 @@ for (const file of readdirSync(new URL('../snapshots/', import.meta.url)).filter
             tick: rec.tick,
             step: rec.step,
             moveFact: move.verb ? move : null,
+            world: rec.world ?? null,
             expect: { warnings: rec.warnings, gate: rec.gate, player: rec.player },
         });
     }

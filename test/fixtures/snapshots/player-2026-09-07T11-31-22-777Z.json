@@ -91,6 +91,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {

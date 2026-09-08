@@ -77,6 +77,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -171,6 +172,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -280,6 +282,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -398,6 +401,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 分量比折减 0.944（e_wanfa→e_xie.intel）"
@@ -498,6 +502,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
@@ -584,6 +589,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）",
@@ -666,6 +672,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
@@ -747,6 +754,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_dayu.hardPower 0.8999999999999999→1，申请 1.0999999999999999）",

@@ -107,6 +107,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -228,6 +229,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -290,6 +292,7 @@
    "tick": 3,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "$.stateChanges[0].entity: 模型禁写玩家 \"e_player\"（红线 1 代码化）"
@@ -404,6 +407,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -575,6 +579,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "stateChanges 无 cause: e_dayu.hardPower（坏账前置，K5）",
@@ -732,6 +737,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
@@ -948,6 +954,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_dayu.hardPower 1→1，申请 2）",
@@ -1145,6 +1152,7 @@
     "note": null,
     "dropped": []
    },
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_xie.hardPower 0.9→1，申请 1.1）",

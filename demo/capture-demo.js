@@ -2,6 +2,7 @@
 // K7 准备件（K12 升级）：真模型输出快照（未决点"模型输出快照 fixture"的落盘机制）。
 // 用法：node demo/capture-demo.js [--world live|bystander|player] [--ticks 8] [--out snapshots]
 // 每 tick：真调用原文 raw + 引擎侧解析出的世界步 step + 门控审计 + 玩家审计（K12：--world player 含 e_player attrs/分量/影响通道）→ 落盘 snapshots/<world>-<时间戳>.jsonl
+// K23 缺口②（2026-09-08 第十棒）：每 tick 另落盘当轮世界 world（结算后 ssot；失败行=输入态）——step-null 后亦可接续重放。
 // 落盘内容即可转制为"模型输出快照 fixture"：引擎对历史真实输出跑回归（锁言行，零成本）。
 // 注意：本脚本需要真实模型配置（env 或酒馆预设，同 live-demo）；无配置时给出指引后退出，真跑由用户执行。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -53,6 +54,7 @@ for (const [i, dialogue] of TURNS.entries()) {
     const record = { tick: i + 1, dialogue, raw: null, step: null, gate: null, warnings: [] };
     const r = await runTick({ transport: capTransport, ssot: world, dialogue, extractCtx: CTX });
     if (!r.ok) {
+        record.world = world;   // K23 缺口②：失败行也落盘当轮世界（= tick 输入态，世界未前进）——链不断
         record.warnings = [r.error];
         lines.push(JSON.stringify(record));
         console.log(`tick ${i + 1} ✗ ${r.error}`);
@@ -71,6 +73,7 @@ for (const [i, dialogue] of TURNS.entries()) {
         attrs: r.ssot.entities.find((e) => e.id === r.ssot.context.playerId)?.attrs ?? null,
         affected: sim?.playerAffected ?? [],
     } : null;
+    record.world = r.ssot;   // K23 缺口②：每 tick 落盘结算后世界（step-null 后亦可接续重放，重放侧逐字节对照）
     record.warnings = r.stage.warnings;
     lines.push(JSON.stringify(record));
     world = r.ssot;

@@ -99,6 +99,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -202,6 +203,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -315,6 +317,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -435,6 +438,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_wanfa.hardPower 0.20000000000000004→0，申请 -0.09999999999999995）"
@@ -525,6 +529,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -647,6 +652,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_xie.hardPower 1→1，申请 1.1）",
@@ -763,6 +769,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_xie.hardPower 1→1，申请 1.1）",
@@ -873,6 +880,7 @@
     ]
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "裁定: 属性硬边界（e_xie.hardPower 1→1，申请 1.2）",

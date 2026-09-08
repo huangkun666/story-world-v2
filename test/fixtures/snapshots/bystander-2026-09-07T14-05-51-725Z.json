@@ -93,6 +93,7 @@
     "agendaCancels": []
    },
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [],
     "gate": {
@@ -106,6 +107,7 @@
    "tick": 2,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
@@ -118,6 +120,7 @@
    "tick": 3,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
@@ -130,6 +133,7 @@
    "tick": 4,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
@@ -142,6 +146,7 @@
    "tick": 5,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
@@ -154,6 +159,7 @@
    "tick": 6,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
@@ -166,6 +172,7 @@
    "tick": 7,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
@@ -178,6 +185,7 @@
    "tick": 8,
    "step": null,
    "moveFact": null,
+   "world": null,
    "expect": {
     "warnings": [
      "传输失败: HTTP 429"
