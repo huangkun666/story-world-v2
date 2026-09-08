@@ -20,6 +20,7 @@ const TEST_MAP = {
     'schemas/ssot.schema.js': ['schema.test.js', 'setting.test.js', 'golden-slice.test.js', 'live-world.test.js', 'bystander-world.test.js'],
     'schemas/world-step.schema.js': ['schema.test.js'],
     'extract.js': ['extract.test.js'],
+    'fingerprint.js': ['fingerprint.test.js'],
     'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js'],
     'prompts.js': ['worldstep.test.js', 'streams.test.js'],
     'check-step.js': ['worldstep.test.js', 'birth.test.js', 'setting-guard.test.js'],
