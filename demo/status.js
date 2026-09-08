@@ -36,6 +36,12 @@ const TEST_MAP = {
     'smoke.js': ['smoke.test.js', 'weight-smoke.test.js', 'tree-smoke.test.js', 'backdrop-smoke.test.js'],
     'weight.js': ['weight.test.js', 'decay.test.js', 'weight-smoke.test.js'],
     'gate.js': ['gate.test.js', 'weight-smoke.test.js', 'birth.test.js'],
+    'transport-config.js': ['transport-config.test.js', 'browser-compat.test.js'],
+    'abstract.js': ['abstract.test.js', 'browser-compat.test.js'],
+    'player-setup.js': ['player-setup.test.js'],
+    'render.js': ['render.test.js'],
+    'storage.js': ['storage.test.js'],
+    'async-tick.js': ['async-tick.test.js'],
 };
 
 // ---------- 健康度：现跑全量测试 ----------

@@ -100,7 +100,7 @@
 ## 5. 工具与命令手册
 
 - **运行位置**：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）。
-- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **262/262 全绿**（2026-09-08 第十一棒：K30 +7 浏览器可载性/传输配置、K31 +10 抽象管线、K32 +11 玩家接线、K33/K34 render.test 13 则重构后全量）。
+- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **282/282 全绿**（2026-09-08 第十二棒：K35 +13 存储层、K36 +7 异步可靠性——transport-http 超时/上限 2 则 + async-tick 5 则）。
 - **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
 - **演示**（`node demo/<名称>.js`，在项目根目录运行）：
   | 脚本 | 用途 |
@@ -192,7 +192,7 @@
 | 契约层 | `schema.js` + `schemas/*`（SSOT 形状、世界步形状）、`prompts.js`（模板）、`pack.js`（打包序） |
 | 引擎层 | `check-step.js`、`worldstep.js`、`settle.js`（+ 分量引擎起 `weight.js`、`gate.js`） |
 | 渲染层 | `streams.js`、`render.js`（K33+） |
-| 编排层 | `tick.js`、`transport-http.js`、`st-preset.js`、`smoke.js`、`transport-config.js`、`abstract.js`、`player-setup.js`、`web/index.js`（浏览器侧，K30+） |
+| 编排层 | `tick.js`、`transport-http.js`、`st-preset.js`、`smoke.js`、`transport-config.js`、`abstract.js`、`player-setup.js`、`storage.js`（K35+）、`async-tick.js`（K36+）、`web/index.js`（浏览器侧，K30+）、`web/idb-backend.js`（浏览器侧卷库，K35+） |
 
 **模块地图**（职责 / 契约 / 状态；状态：稳定=切片验收，计划=已拍板细案内；测试列 = 静态测试契约文件，用例数以 `node demo/status.js` 动态聚合为准；最近台账列 = 该模块最近一次变更步骤名）：
 
@@ -218,6 +218,9 @@
 | `transport-config.js` | 传输配置解析（K30，浏览器适配套）：设置对象 → 传输配置 | `resolveBrowserTransport(settings)` → {transport, source:'settings', baseUrl, model} 或 null（未配置） | transport-http | 稳定（K30） | transport-config + browser-compat | K30 |
 | `abstract.js` | 抽象管线执行器（K31）：书源→指纹→抽取小调用→净化→落 context.setting（frozen 五件套 + dynamic 初值）；命中零调用/书变失效/force 覆盖 | `extractWorldSetting({sourceText, extract, cache, force, extractedAt, legacyTension})` → {ok, setting, cached, fingerprint, errors}；`applySettingToSsot(ssot, setting)` → 新 SSOT（不可变） | fingerprint（缓存 1→2 形状）、entropy（ENV_KEYS 键表） | 稳定（K31） | abstract.test.js + browser-compat | K31 |
 | `player-setup.js` | 玩家开档解析接线（K32）：playerDesc → 小调用 prompt → transport → 解析 → injectPlayerAttrs；OVERWRITE force 语义 | `runPlayerSetup({ssot, playerDesc, transport, overwrite})` → {ok, ssot, skipped?, parsed?}；`buildPlayerParsePrompt(desc)` → prompt | player-inject、transport 注入式 | 稳定（K32） | player-setup.test.js | K32 |
+| `storage.js` | 存储层核心（K35）：热账形状 / 冷档轮转（编年超阈值→前置段入卷，断链防线=里程碑/因果留热态）/ 阅卷还原 / 导出导入验签（SHA-256） | `rotateChronicle(world,{limits,volumeSeq,now})` → {hot, volume\|null}（纯函数）；`hotAccountShape/loadHotAccount`；`volumeToChronicleRows(volume)` → 编年行；`buildExportBundle/verifyImportBundle`（async，双端 webcrypto） | —（store 注入面：浏览器=web/idb-backend，测试=内存 mock） | 稳定（K35） | storage.test.js | K35 |
+| `async-tick.js` | 异步可靠性编排（K36）：回合推进串行队列（防重入锁）/ 失败世界不动 / 异常兜底 / 手动补推语义 | `createTickQueue({tick,load,save,refresh,onStatus})` → {advance, busy}（advance → {ok, tick?}/ {ok:false, skipped?, error?}） | —（注入面：tick/load/save/refresh 全由调用方接） | 稳定（K36） | async-tick.test.js | K36 |
+| `web/idb-backend.js` | IndexedDB 卷库适配（K35，浏览器专属）：chatId+卷号键，接口与 store 注入面同构 | `createIdbVolumeStore(chatId)` → {list, put, get} | —（顶层零 indexedDB，Node 冒烟安全） | 稳定（K35） | —（storage.test 内存 mock 同接口覆盖） | K35 |
 | `smoke.js` | 合成冒烟 + 断言器 | 50/100 tick → 断言结果 | tick | 稳定（K6 泛化：stepGen + 门控统计 + 曲线采样；K11 增 dialogueGen 落子段；K20 归档后断言语义=台阶修订；K29 张力强度/熵泵种子采样） | smoke + weight-smoke + tree-smoke + backdrop-smoke | K6 · K11 · K20 · K29 |
 | `weight.js` / `gate.js` | 分量公式 / 主动作权门控 | 见分量引擎细案 K1/K2 | settle | K1-K6 已落（公式/衰减/掩码/半径/门控/审计，提案态）· K18 agendaCancels 透传与静默滤除 | weight + gate + decay + weight-smoke | K1·K2·K6·K18 |
 | `demo/status.js` | 一键状态总览（本表与台账的聚合视图） | — → 阶段/健康度/模块覆盖/队列 | 只读文档与源码 | 稳定 | —（自校验：node demo/status.js） | 第三棒 |

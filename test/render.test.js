@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
-    renderEntitiesHtml, renderSettingHtml, renderSettingsHtml,
+    renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
     escapeHtml, BLACKLIST,
 } from '../src/render.js';
 
@@ -182,6 +182,33 @@ test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表�
     assert.match(html, /data-action="advance-world"/);
     assert.match(html, /data-action="force-abstract"/);
     assert.match(html, /自动入卷阈值/);
+    assert.match(html, /data-action="export-world"/);
+    assert.match(html, /data-action="import-world"/);
+});
+
+test('K35/A-9 设置页：旧卷清单（卷号/信息/阅卷动作）入面；无卷时"尚未入卷"', () => {
+    const html = renderSettingsHtml(world(), { config: CONFIG, oldVolumes: VOLUMES });
+    assert.match(html, /入卷清单/);
+    assert.match(html, /sw2-vol">卷一/);
+    assert.match(html, /data-action="read-volume"/);
+    const empty = renderSettingsHtml(world(), { config: CONFIG, oldVolumes: [] });
+    assert.match(empty, /尚未入卷/);
+});
+
+test('K35/A-9 阅卷视图：卷段行还原（编年行形状→HTML，引擎 id 只进悬停；空卷防御）', () => {
+    const rows = [
+        { tick: 3, text: '天时骤变', eventRef: 'ev_3' },
+        { tick: 4, text: '坊市斗殴', eventRef: '' },
+    ];
+    const html = renderVolumeReadHtml('卷一', rows);
+    assert.match(html, /data-volume="卷一"/);
+    assert.match(html, /sw2-ch-round">3</);
+    assert.match(html, /天时骤变/);
+    assert.match(html, /title="ev_3"/);
+    const text = String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    assert.ok(!text.includes('ev_3')); // id 只在悬停，不进可见文本
+    const empty = renderVolumeReadHtml('卷二', []);
+    assert.match(empty, /（空卷）/);
 });
 
 test('K33 编码安全：实体名/编年文本/表单值含 <script> 全转义', () => {

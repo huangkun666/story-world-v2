@@ -7,14 +7,22 @@
 // K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入六页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml } from '../src/render.js';
+import {
+    hotAccountShape, loadHotAccount, rotateChronicle,
+    volumeToChronicleRows, buildExportBundle, verifyImportBundle,
+} from '../src/storage.js';
+import { createIdbVolumeStore } from './idb-backend.js';
+import { createTickQueue } from '../src/async-tick.js';
+import { runTick } from '../src/tick.js';
+import { resolveBrowserTransport } from '../src/transport-config.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
 const WINDOW_ID = 'story_world2_window';
 const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'settings'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260908-k34';
+const CSS_VERSION = '20260908-k35';
 
 export const sw2Version = () => VERSION;
 export function sw2TabState(name, active) {
@@ -157,15 +165,248 @@ export function refreshWorld(world, { config = {}, oldVolumes = [] } = {}) {
     }
 }
 
-// ---------- K34：按钮委托（K36 接真实调度前为占位） ----------
+// ---------- K34/K36：按钮委托（真实调度：advance-world 已接队列；其余按细案时序） ----------
 function dispatchAction(action, payload, event) {
     const bus = typeof window !== 'undefined' ? window.__sw2Actions : null;
     if (bus && typeof bus[action] === 'function') {
         bus[action](payload, event);
         return;
     }
-    const label = { 'init-world': '开始新世界', 'advance-world': '手动推进', 'force-abstract': '重新抽取设定', 'read-volume': '阅卷', 'source-pick': '换源' }[action] || action;
-    setStatus(`「${label}」接线随 K35/K36（当前为占位）`);
+    if (action === 'advance-world' && sw2TickQueue) {
+        sw2TickQueue.advance().catch(() => {}); // K36 手动补推（A-4 手动路径）
+        return;
+    }
+    const label = { 'init-world': '开始新世界', 'force-abstract': '重新抽取设定', 'source-pick': '换源' }[action] || action;
+    setStatus(`「${label}」接线随后续步骤（当前为占位）`);
+}
+
+// ---------- K35：存储层接线（热账=chat metadata；冷档=IndexedDB 卷） ----------
+const HOT_META_KEY = 'story_world_v2';
+const EXPORT_FILENAME = 'story-world-v2-export.json';
+
+// v1 教训（adapter.js）：ctx.chatMetadata 是取用时的引用快照，聊天切换后过期——
+// 每次读/写热账都重新取最新 context。
+function freshCtx() {
+    return getCtx();
+}
+
+function readHotMeta() {
+    const ctx = freshCtx();
+    return ctx?.chatMetadata?.[HOT_META_KEY] ?? null;
+}
+
+function writeHotMeta(meta) {
+    const ctx = freshCtx();
+    if (!ctx || typeof ctx.updateChatMetadata !== 'function') return;
+    ctx.updateChatMetadata({ [HOT_META_KEY]: meta });
+}
+
+function volumeStore() {
+    const ctx = freshCtx();
+    const chatId = ctx?.chatId || 'default';
+    return createIdbVolumeStore(String(chatId));
+}
+
+// ---------- K36：异步编排接线（A-4/A-5）----------
+// 线程模型：单例 tick 队列（防重入锁）；失败世界不动（引擎不变式）+ 状态条报错 + 重试路径；
+// 推进时机=回复完成后（MESSAGE_RECEIVED，2026-08-28 拍板：避免与主聊天 LLM 抢配额 429）；
+// CHAT_CHANGED → 世界重载（v1 同款）。
+let sw2TickQueue = null;
+let sw2LastSettings = null;
+
+function modelSettings() {
+    const ctx = freshCtx();
+    const raw = ctx?.extensionSettings?.['story_world_v2'] ?? null;
+    return raw && typeof raw === 'object' ? raw : null;
+}
+
+// K36：设置页表单 ↔ extensionSettings 双向（v1 范式：即时写回 + saveSettingsDebounced）
+const SETTINGS_FIELDS = ['baseUrl', 'apiKey', 'model', 'playerDesc'];
+const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model', playerDesc: 'sw2_player_desc' };
+
+function readSettings() {
+    const ctx = freshCtx();
+    if (ctx?.extensionSettings && typeof ctx.extensionSettings === 'object' && !ctx.extensionSettings['story_world_v2']) {
+        ctx.extensionSettings['story_world_v2'] = {};
+    }
+    return ctx?.extensionSettings?.['story_world_v2'] ?? null;
+}
+
+function writeSetting(key, value) {
+    const ctx = freshCtx();
+    const s = readSettings();
+    if (!s) return;
+    s[key] = value;
+    try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
+}
+
+function fillSettingsForm() {
+    const s = modelSettings() || {};
+    for (const key of SETTINGS_FIELDS) {
+        const el = document.getElementById(SETTINGS_INPUTS[key]);
+        if (!el) continue;
+        if (key === 'apiKey') {
+            // 密钥不显示明文也不预填掩码（掩码回写会污染存储）；placeholder 提示已设置
+            el.value = '';
+            el.placeholder = s.apiKey ? '（已设置 · 留空=保持不变）' : '输入模型服务密钥';
+            continue;
+        }
+        if (s[key] != null) el.value = s[key];
+    }
+}
+
+function bindSettingsForm() {
+    for (const key of SETTINGS_FIELDS) {
+        const el = document.getElementById(SETTINGS_INPUTS[key]);
+        if (!el) continue;
+        el.addEventListener('change', (e) => {
+            if (key === 'apiKey') {
+                const v = e.target.value;
+                if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不动（防清密钥）
+                return;
+            }
+            writeSetting(key, e.target.value);
+        });
+        el.addEventListener('input', (e) => {
+            if (key === 'apiKey') {
+                const v = e.target.value;
+                if (v && v.trim()) writeSetting('apiKey', v.trim());
+                return;
+            }
+            writeSetting(key, e.target.value);
+        });
+    }
+    fillSettingsForm();
+}
+
+async function advanceTick({ world, dialogue }) {
+    const settings = modelSettings();
+    sw2LastSettings = settings;
+    const resolved = resolveBrowserTransport(settings);
+    if (!resolved) {
+        return { ok: false, error: '模型通道未配置（设置页填写服务地址/密钥/模型）' };
+    }
+    const res = await runTick({ transport: resolved.transport, ssot: world, dialogue, extractCtx: {} });
+    return res;
+}
+
+export function setupAsyncTicks(ctx) {
+    if (sw2TickQueue) return;
+    const es = ctx?.eventSource;
+    const et = ctx?.eventTypes || ctx?.event_types;
+    sw2TickQueue = createTickQueue({
+        tick: advanceTick,
+        load: () => loadHotAccount(readHotMeta()),
+        save: (ssot) => ensureChronicleRotated(ssot),
+        refresh: (hot) => { refreshWorld(hot, { oldVolumes: LISTED_VOLUMES }); },
+        onStatus: setStatus,
+    });
+    es?.on?.(et.MESSAGE_RECEIVED, () => { sw2TickQueue.advance().catch(() => {}); });
+    es?.on?.(et.CHAT_CHANGED, () => { loadWorld().catch(() => {}); });
+}
+
+// 卷清单缓存（K36 接线用；loadWorld/导入后刷新）
+let LISTED_VOLUMES = [];
+
+// 原 listOldVolumes 保持语义（K35），refreshWorld 用缓存清单
+async function listOldVolumes() {
+    try {
+        return await volumeStore().list();
+    } catch (_) {
+        return [];
+    }
+}
+
+// 幂等冷档轮转：世界编年超阈值 → 前置段入卷 + 热账写回（未超=零操作）。
+// 返回最新 hot 世界；失败时返回原世界（软着陆，不阻塞）。
+async function ensureChronicleRotated(world) {
+    try {
+        const { hot, volume } = rotateChronicle(world);
+        if (volume) {
+            await volumeStore().put(volume);
+            writeHotMeta(hotAccountShape(hot));
+            return hot;
+        }
+        return world;
+    } catch (_) {
+        return world;
+    }
+}
+
+// 世界注入入口（K36 推进后 / 导入后 / 加载热账后调用）
+export async function loadWorld() {
+    const meta = readHotMeta();
+    const world = meta ? loadHotAccount(meta) : null;
+    if (!world) return;
+    const hot = await ensureChronicleRotated(world);
+    LISTED_VOLUMES = await listOldVolumes();
+    refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
+}
+
+// ---------- K35：真实动作总线（阅卷/导出/导入；其余按钮随 K36 接调度） ----------
+if (typeof window !== 'undefined') {
+    window.__sw2Actions = window.__sw2Actions || {};
+    const bus = window.__sw2Actions;
+
+    bus['read-volume'] = async (payload) => {
+        const volId = payload?.vol;
+        if (!volId) return;
+        try {
+            const volume = await volumeStore().get(volId);
+            if (!volume) { setStatus(`⚠ 卷「${volId}」不存在`); return; }
+            const rows = volumeToChronicleRows(volume);
+            const html = renderVolumeReadHtml(volId, rows);
+            const chronicle = document.getElementById('sw2_view_chronicle');
+            if (!chronicle) return;
+            chronicle.insertAdjacentHTML('afterbegin', html);
+            setStatus(`已展开旧卷「${volId}」（${rows.length} 条 · 只读还原）`);
+        } catch (err) {
+            setStatus(`⚠ 阅卷失败：${err?.message || err}`);
+        }
+    };
+
+    bus['export-world'] = async () => {
+        const meta = readHotMeta();
+        const world = meta ? loadHotAccount(meta) : null;
+        if (!world) { setStatus('⚠ 暂无世界可导出'); return; }
+        try {
+            const volumes = await volumeStore().list();
+            const full = await Promise.all(volumes.map((v) => volumeStore().get(v.id)));
+            const { json } = await buildExportBundle(world, full.filter(Boolean));
+            const blob = new Blob([json], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = EXPORT_FILENAME;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            setStatus('已导出整聊天备份（含旧卷）');
+        } catch (err) {
+            setStatus(`⚠ 导出失败：${err?.message || err}`);
+        }
+    };
+
+    bus['import-world'] = async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json,.json';
+        input.addEventListener('change', async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const res = await verifyImportBundle(text);
+                if (!res.ok) { setStatus(`⚠ 导入被拒：${res.error}`); return; }
+                writeHotMeta(hotAccountShape(res.world));
+                const store = volumeStore();
+                for (const v of res.volumes) await store.put(v);
+                await loadWorld();
+                setStatus('已导入：世界与旧卷恢复完成');
+            } catch (err) {
+                setStatus(`⚠ 导入失败：${err?.message || err}`);
+            }
+        });
+        input.click();
+    };
 }
 
 function bindActions() {
@@ -214,7 +455,10 @@ function initPanel(ctx) {
     ensureWindow(ctx).then(() => {
         bindTabs();
         bindActions();
+        bindSettingsForm(); // K36：设置页表单 ↔ extension_settings
         openWindow();
+        loadWorld(); // K35：面板打开即载入热账（含幂等轮转）
+        setupAsyncTicks(ctx); // K36：回合钩子（MESSAGE_RECEIVED 推进 / CHAT_CHANGED 重载）
     });
     ensureWandEntry();
 }

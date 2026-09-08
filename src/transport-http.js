@@ -3,6 +3,8 @@
 // base 归一化：末尾去斜杠；无 /v1 自动补（gcli.ggchan.dev 网关与 deepseek 均兼容 /v1 路径）。
 // 配置源：env（ST_OPENAI_BASE / ST_OPENAI_KEY / ST_WORLD_MODEL 或 OPENAI_*）→ 酒馆预设（st-preset.js）。
 // 测试注入假 fetchImpl。
+// K36 异步可靠性（细案 §3.3 → A-5）：主调用超时（AbortController）+ max_tokens 上限，
+//   两个数字为提案态（铁律 2，标注待报批；随 K36 报批批/长跑回填定案），参数化可覆盖、测试用小值。
 
 export function normalizeBase(base) {
     let b = String(base).trim().replace(/\/+$/, '');
@@ -10,31 +12,45 @@ export function normalizeBase(base) {
     return b;
 }
 
-export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = fetch }) {
+// 提案数字（铁律 2：提案态，标注待报批；细案 §3.3/§6）
+export const PROPOSED_CALL_LIMITS = Object.freeze({
+    timeoutMs: 120_000, // 主调用超时（提案）
+    maxTokens: 4096,    // 单轮演算输出上限（提案）
+});
+
+export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = fetch, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
     return async (prompt) => {
-        const res = await fetchImpl(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                model,
-                messages: [{ role: 'user', content: prompt }],
-                temperature,
-                response_format: { type: 'json_object' },
-            }),
-        });
-        if (!res.ok) {
-            const snippet = (await res.text()).slice(0, 240);
-            const err = new Error(`HTTP ${res.status}`);
-            err.status = res.status;
-            err.bodySnippet = snippet;
-            throw err;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(new Error(`主调用超时（${timeoutMs}ms，提案）`)), timeoutMs);
+        try {
+            const res = await fetchImpl(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature,
+                    response_format: { type: 'json_object' },
+                    ...(maxTokens ? { max_tokens: maxTokens } : {}),
+                }),
+                signal: controller.signal,
+            });
+            if (!res.ok) {
+                const snippet = (await res.text()).slice(0, 240);
+                const err = new Error(`HTTP ${res.status}`);
+                err.status = res.status;
+                err.bodySnippet = snippet;
+                throw err;
+            }
+            const data = await res.json();
+            return data?.choices?.[0]?.message?.content ?? '';
+        } finally {
+            clearTimeout(timer);
         }
-        const data = await res.json();
-        return data?.choices?.[0]?.message?.content ?? '';
     };
 }
 

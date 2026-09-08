@@ -300,7 +300,7 @@ export function renderSettingHtml(world) {
 
 // ============ 设置页 ============
 
-export function renderSettingsHtml(world, { config = {} } = {}) {
+export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {}) {
     const cfg = config || {};
     const envText = JSON.stringify({ 民生度: 0.5, 动乱度: 0.5, 天时: 0.5, 张力推手: 0.5 });
     void envText;
@@ -328,9 +328,31 @@ export function renderSettingsHtml(world, { config = {} } = {}) {
         + `<div class="sw2-hint" style="margin-top:10px">每轮对话后世界自动推进；此按钮是手动补推。<br>「重新抽取」会忽略缓存强行重抽设定，并重读你的开档描述。<br>演算失败时世界原样不动，状态条会报错，可重试。</div></div>`
         + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>旧卷与存储</h4>`
         + `<div class="sw2-cold-mgmt"><div class="sw2-row"><span>编年体积 · 当前</span><b>${(world.chronicle || []).length ? `${(JSON.stringify(world.chronicle).length / 1024).toFixed(1)}KB` : '0KB'}</b><em>每 100 轮约 21.7KB（实测）</em></div>`
-        + `<div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">500 轮 或 5MB</b><em>提案态 · 随本阶段报批</em></div>`
-        + `<div class="sw2-row"><span>入卷去处</span><b>插件本地 · 可导出可导入</b><em>割断的是旧账，不是来龙去脉</em></div></div></div>`
+        + `<div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">${cfg.limitsTicks ?? '500'} 轮 或 ${cfg.limitsBytesMB ?? '5'}MB</b><em>提案态 · 随本阶段报批</em></div>`
+        + `<div class="sw2-row"><span>入卷去处</span><b>插件本地 · 可导出可导入</b><em>割断的是旧账，不是来龙去脉</em></div>`
+        + `${renderVolumeListHtml(oldVolumes)}<div class="sw2-actions" style="margin-top:8px">`
+        + `<button class="sw2-btn" data-action="export-world">⬇ 导出整聊天</button>`
+        + `<button class="sw2-btn" data-action="import-world">⬆ 导入恢复</button></div></div>`
         + `</div>`;
+}
+
+// K35：旧卷清单（设置页/旧卷页共用行渲染；阅卷=还原前置段回编年视图）
+export function renderVolumeListHtml(oldVolumes = []) {
+    if (!oldVolumes.length) return `<div class="sw2-row"><span>入卷清单</span><b>尚未入卷——编年仍在热账</b><em></em></div>`;
+    const rows = oldVolumes.map((v) => `<div class="sw2-row"><span class="sw2-vol">${escapeHtml(v.id)}</span>`
+        + `<b>${escapeHtml(v.info)}</b><em><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(v.id)}">阅卷</span></em></div>`).join('');
+    return `<div class="sw2-row" style="display:block"><span>入卷清单</span>${rows}</div>`;
+}
+
+// K35：阅卷还原视图——卷段行（storage.volumeToChronicleRows 产物）→ 编年行 HTML（A-3：引擎 id 只进悬停）
+export function renderVolumeReadHtml(volumeId, rows = []) {
+    const line = (r) => `<div class="sw2-ch-line${r.eventRef ? ' sw2-ch-event' : ''}">`
+        + `<span class="sw2-ch-round">${escapeHtml(r.tick)}</span>`
+        + `<span class="sw2-ch-text">${escapeHtml(r.text)}</span>`
+        + (r.eventRef ? `<span class="sw2-ref" title="${escapeHtml(r.eventRef)}">？</span>` : '')
+        + `</div>`;
+    const body = rows.length ? rows.map(line).join('') : '<div class="sw2-ch-line"><span class="sw2-ch-text">（空卷）</span></div>';
+    return `<div class="sw2-chronicle" id="sw2_volume_read" data-volume="${escapeHtml(volumeId)}">${body}</div>`;
 }
 
 // ============ 六页签全集入口（K34 接线用；同输入逐字节一致 A-2 锁） ============
@@ -342,7 +364,7 @@ export function renderAll(world, { config = {}, oldVolumes = [] } = {}) {
         archive: renderArchiveHtml(world, { oldVolumes }),
         entities: renderEntitiesHtml(world),
         setting: renderSettingHtml(world),
-        settings: renderSettingsHtml(world, { config }),
+        settings: renderSettingsHtml(world, { config, oldVolumes }),
         header: {
             world: world.context?.world ?? '',
             tick: fmtTick(world.meta?.tick ?? 0),
