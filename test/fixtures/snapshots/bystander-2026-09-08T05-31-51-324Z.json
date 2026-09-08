@@ -87,7 +87,7 @@
      }
     ],
     "newAgendas": [],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_wanfa",
@@ -184,7 +184,7 @@
       "note": "试图打破两面受敌的死局"
      }
     ],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_wanfa",
@@ -298,7 +298,7 @@
      }
     ],
     "newAgendas": [],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_wanfa",
@@ -419,7 +419,7 @@
       "note": "防止局势失控"
      }
     ],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_wanfa",
@@ -517,7 +517,7 @@
       "note": "防备万法阁临死反扑"
      }
     ],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_dayu",
@@ -627,7 +627,7 @@
       "note": "绝境下的疯狂反击"
      }
     ],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_dayu",
@@ -746,7 +746,7 @@
      }
     ],
     "newAgendas": [],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_dayu",
@@ -862,7 +862,7 @@
       "note": "防止局势彻底失控"
      }
     ],
-    "agendaCancels": [],
+    "agendaCancels": [], "newEntities": [], "entityFates": [],
     "stateChanges": [
      {
       "entity": "e_xie",

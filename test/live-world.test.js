@@ -39,7 +39,7 @@ test('活演示世界：八条演示对话的落子提取命中', () => {
 });
 
 test('活演示世界：多实体世界跑一个 tick（fake 空步）不炸', async () => {
-    const idle = async () => ({ text: JSON.stringify({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] }) });
+    const idle = async () => ({ text: JSON.stringify({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] }) });
     const r = await runTick({ transport: idle, ssot: WORLD, dialogue: '（静默）', extractCtx: CTX });
     assert.equal(r.ok, true, r.error);
     assert.equal(r.ssot.meta.tick, 1);

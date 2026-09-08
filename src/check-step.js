@@ -72,6 +72,47 @@ export function checkWorldStep(step, ssot) {
         }
     }
 
+    // ②d 实体治理（K37/细案 §3.7 → A-10/A-11）：入局提议（newEntities）与覆灭提议（entityFates）语义校验
+    //   源三型命中账：book=书名录（frozen.canon.bookEntities）/ event=未决事件 / dialogueFact=对话依据册（meta.dialogueBook）
+    const bookNames = new Set((ssot.context?.setting?.frozen?.canon?.bookEntities || []).map((b) => String(b?.name || '')));
+    const booked = new Set(Object.keys(ssot.meta?.dialogueBook || {}));
+    for (const [i, ne] of (step.newEntities || []).entries()) {
+        if (playerId && ne.entity === playerId) errors.push(`$.newEntities[${i}].entity: 模型禁写玩家（红线 1 代码化；玩家不是入局提议者）`);
+        if (ne.entity && !entityIds.has(ne.entity)) errors.push(`$.newEntities[${i}].entity: 未知提议者 "${ne.entity}"`);
+        if (!ne.source?.type || !ne.source.ref) {
+            errors.push(`$.newEntities[${i}].source: 无源不入局——新实体必须带源引用（book/event/dialogueFact）`);
+            continue;
+        }
+        const stype = ne.source.type;
+        const ref = ne.source.ref;
+        if (stype === 'event') {
+            const ev = ssot.events.find((e) => e.id === ref);
+            if (!ev || ev.closed) errors.push(`$.newEntities[${i}].source: event 源必须引已存在未决事件（当前 ref="${ref}"）`);
+        } else if (stype === 'book') {
+            if (!bookNames.has(ref)) errors.push(`$.newEntities[${i}].source: book 源必须命中书名录（当前 ref="${ref}"）`);
+        } else if (stype === 'dialogueFact') {
+            if (!booked.has(ref)) errors.push(`$.newEntities[${i}].source: dialogueFact 源必须命中对话依据册（当前 ref="${ref}"）`);
+        }
+        if (ssot.entities.some((e) => e.name === ne.name)) errors.push(`$.newEntities[${i}].name: 账上已有同名实体「${ne.name}」（已有者不重建）`);
+        if (!positions.has(ne.location)) errors.push(`$.newEntities[${i}].location: "${ne.location}" 不在世界位置集`);
+    }
+    for (const [i, f] of (step.entityFates || []).entries()) {
+        const ent = f.entity && ssot.entities.find((e) => e.id === f.entity);
+        if (!ent) { errors.push(`$.entityFates[${i}].entity: 未知实体 "${f.entity || ''}"`); continue; }
+        if (playerId && f.entity === playerId) errors.push(`$.entityFates[${i}].entity: 玩家不可灭（玩家是棋子，覆灭归世界）`);
+        if ((ent.status || 'active') === 'dead') errors.push(`$.entityFates[${i}].entity: 已覆灭实体不重复覆灭（dead=终局）`);
+        if (!f.source?.ref) {
+            errors.push(`$.entityFates[${i}].source: 覆灭提议必须带源引用（真实落账复核归引擎）`);
+            continue;
+        }
+        if (f.source.type === 'event' && !eventIds.has(f.source.ref)
+            && !(ssot.milestones || []).some((m) => (m.ids || []).includes(f.source.ref))) {
+            errors.push(`$.entityFates[${i}].source: event 源必须引已存在事件（当前 ref="${f.source.ref}"；归档入纪者亦可）`);
+        } else if (f.source.type === 'agenda' && !agendaIds.has(f.source.ref)) {
+            errors.push(`$.entityFates[${i}].source: agenda 源必须引已存在盘算（当前 ref="${f.source.ref}"）`);
+        }
+    }
+
     // ③ 因果：ripple 源必须引用已存在事件（无源拒绝的语义侧）
     for (const [i, ev] of step.newEvents.entries()) {
         if (ev.source.type === 'ripple') {

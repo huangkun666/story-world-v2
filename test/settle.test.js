@@ -14,7 +14,7 @@ const validStep = () => ({
     newEvents: [{ title: '守将允诺通关', source: { type: 'plot', ref: 'a_1' }, position: '边关', ripples: ['e_merchant'] }],
     agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
     stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05, cause: 'a_1' }],
-    newAgendas: [], agendaCancels: [],
+    newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
 // 一实体无盘算的孤岛世界（一致性检查用）
@@ -99,7 +99,7 @@ test('结算：行动↔盘算一致性烟雾报警（无在飞盘算仍行动�
         actions: [{ entity: 'e_lone', verb: '动手', position: '孤岛' }],
         newEvents: [],
         agendaAdvances: [],
-        stateChanges: [], newAgendas: [], agendaCancels: [],
+        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: loneWorld(), step });
     assert.equal(r.ok, true);
@@ -112,7 +112,7 @@ test('结算：ripple 事件上游指针挂链', () => {
         actions: [],
         newEvents: [{ title: '旧事发酵', source: { type: 'ripple', ref: 'ev_old' }, position: '孤岛', ripples: ['e_lone'] }],
         agendaAdvances: [],
-        stateChanges: [], newAgendas: [], agendaCancels: [],
+        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -150,7 +150,7 @@ const pwWorld = (weights) => {
 };
 const targetStep = (target) => ({
     actions: [{ entity: 'e_xie', verb: '发兵', target, position: '大盘谷' }],
-    newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [],
+    newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
 test('K9：玩家被 targeting（强源）→ 影响通道全量落账 + simLog 审计', () => {
@@ -179,7 +179,7 @@ test('K9：事件波及玩家（plot 源）→ 各 attrs 受影响 + 审计四�
     const step = {
         actions: [],
         newEvents: [{ title: '围剿黄府', source: { type: 'plot', ref: 'a_xie' }, position: '黄府', ripples: ['e_player'] }],
-        agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [],
+        agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: pwWorld({ e_xie: 0.9, e_player: 0.2397 }), step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -197,7 +197,7 @@ test('K9：state 源波及 → 世界大势常量（w_src=1.0 提案）', () => 
     const step = {
         actions: [],
         newEvents: [{ title: '天雷动', source: { type: 'state' }, position: '黄府', ripples: ['e_player'] }],
-        agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [],
+        agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: pwWorld({ e_player: 0.2397 }), step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -212,7 +212,7 @@ test('K9：ripple 波及沿链上溯到 plot 属主分量', () => {
     const step = {
         actions: [],
         newEvents: [{ title: '兵变波及黄府', source: { type: 'ripple', ref: 'ev_up' }, position: '黄府', ripples: ['e_player'] }],
-        agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [],
+        agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: w, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -247,6 +247,7 @@ test('执行债：源盘算满步结算 → 其 plot 事件闭环 + 观棋留痕
     assert.equal(r.ssot.events.find((e) => e.id === 'ev_1_1').closed, true, '同 tick 新事件同闭');
     const note = r.ssot.chronicle.find((c) => c.id === 'ch_1_evc_ev_p');
     assert.ok(note && !note.eventRef, '闭环留痕在观棋侧（不带 eventRef → 不进注入）');
+    assert.equal(note.chainRef, 'ev_p', '闭环行带 chainRef 链目标（纯链入口数据，注入面不读；第十五棒补）');
     const vr = validate(r.ssot, ssotSchema);
     assert.equal(vr.ok, true, vr.errors.join('; '));
 });
@@ -286,7 +287,7 @@ test('K39/编年 kind 章：ripple 事件行=牵动（loneWorld 挂链）', () =
         actions: [],
         newEvents: [{ title: '旧事发酵', source: { type: 'ripple', ref: 'ev_old' }, position: '孤岛', ripples: ['e_lone'] }],
         agendaAdvances: [],
-        stateChanges: [], newAgendas: [], agendaCancels: [],
+        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true);
@@ -306,7 +307,7 @@ test('K39/编年 kind 章：concealed 盘算侧行=暗处（终结/取消按行�
         meta: { tick: 0 },
     };
     // 满步终结（concealed 终结上桌 → kind=shade）
-    const step1 = { actions: [], newEvents: [], agendaAdvances: [{ agendaId: 'a_d', step: '推进' }, { agendaId: 'a_d', step: '推进' }], stateChanges: [], newAgendas: [], agendaCancels: [] };
+    const step1 = { actions: [], newEvents: [], agendaAdvances: [{ agendaId: 'a_d', step: '推进' }, { agendaId: 'a_d', step: '推进' }], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
     const r1 = settleTick({ ssot: w, step: step1 });
     assert.equal(r1.ok, true);
     assert.equal(r1.ssot.agendas[0].closed, true, '暗盘算满步关闭');
@@ -314,7 +315,7 @@ test('K39/编年 kind 章：concealed 盘算侧行=暗处（终结/取消按行�
     assert.equal(fin.kind, 'shade', '暗盘算终结行=暗处');
     // 取消（concealed → shade）
     const w2 = structuredClone(w);
-    const step2 = { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [{ agendaId: 'a_d', reason: '收线' }] };
+    const step2 = { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [{ agendaId: 'a_d', reason: '收线' }], newEntities: [], entityFates: [] };
     const r2 = settleTick({ ssot: w2, step: step2 });
     assert.equal(r2.ok, true);
     const can = r2.stage.chronicle.find((c) => c.id === 'ch_1_can_a_d');

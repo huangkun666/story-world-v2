@@ -71,7 +71,7 @@
       "cause": "a_xie"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "探查",
@@ -193,7 +193,7 @@
       "cause": "a_dayu"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "询问",
@@ -327,7 +327,7 @@
       "cause": "a_xie"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "盘问",
@@ -462,7 +462,7 @@
       "cause": "a_dayu"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "跟随",
@@ -617,7 +617,7 @@
       "cause": "a_dayu"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "图谋",
@@ -785,7 +785,7 @@
       "cause": "ev_5_1"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "离开",
@@ -948,7 +948,7 @@
       "cause": "ev_6_2"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "修炼",

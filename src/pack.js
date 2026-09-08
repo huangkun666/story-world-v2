@@ -8,7 +8,7 @@ export const TOKEN_RATIO = 3;                // 粗略估计：1 token ≈ 3 字
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
 export function buildEvolutionPack(ssot, moveFact) {
-    const entities = (ssot.entities || []).map((e) => ({
+    const entities = (ssot.entities || []).filter((e) => !e.status || e.status === 'active').map((e) => ({   // K37/三点过滤①：retired/dead 出演化上下文
         id: e.id, kind: e.kind, name: e.name, location: e.location,
     }));
     const agendas = (ssot.agendas || []).filter((a) => !a.closed).map((a) => ({

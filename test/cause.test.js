@@ -10,7 +10,7 @@ import { settleTick } from '../src/settle.js';
 const GATED = JSON.parse(readFileSync(new URL('./fixtures/gated-world.json', import.meta.url), 'utf8'));
 
 const sc = (entity, attr, delta, extra = {}) => ({ entity, attr, delta, ...extra });
-const stepWith = (changes) => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: changes, newAgendas: [], agendaCancels: [] });
+const stepWith = (changes) => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: changes, newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 test('裁定：强方作用弱方 → 全量生效（不折减）', () => {
     const r = settleTick({ ssot: GATED, step: stepWith([sc('e_lo', 'hardPower', -0.05, { actor: 'e_hi', cause: 'ev_p' })]) });

@@ -34,7 +34,7 @@ const world = () => ({
     meta: { tick: 0 },
 });
 
-const emptyStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const emptyStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 const run = (w, ticks) => {
     let s = w;

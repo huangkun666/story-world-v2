@@ -6,7 +6,7 @@
 export const worldStepSchema = {
     kind: 'object',
     additional: false,
-    required: ['actions', 'newEvents', 'agendaAdvances', 'stateChanges', 'newAgendas', 'agendaCancels'],
+    required: ['actions', 'newEvents', 'agendaAdvances', 'stateChanges', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates'],
     props: {
         agendaCancels: {   // K18/因果链 T5：模型提议放弃盘算（带理由——提议权，裁决归引擎；与出生对称）
             kind: 'array',
@@ -42,6 +42,51 @@ export const worldStepSchema = {
                         },
                     },
                     note: { kind: 'string' },
+                },
+            },
+        },
+        newEntities: {   // K37/实体治理（§3.7 生通道②）：模型提议新实体入局——带源三型（book/event/dialogueFact）；出生/席位/上限全归引擎
+            kind: 'array',
+            items: {
+                kind: 'object',
+                additional: false,
+                required: ['name', 'location', 'source'],
+                props: {
+                    name: { kind: 'string', minLength: 1 },
+                    kind: { kind: 'string', enum: ['faction', 'character'] },
+                    location: { kind: 'string', minLength: 1 },
+                    entity: { kind: 'string', minLength: 1 },   // 提议者实体 id（静默判定用；dialogueFact 源可填观察者）
+                    source: {
+                        kind: 'object',
+                        additional: false,
+                        required: ['type'],
+                        props: {
+                            type: { kind: 'string', enum: ['book', 'event', 'dialogueFact'] },
+                            ref: { kind: 'string' },
+                        },
+                    },
+                },
+            },
+        },
+        entityFates: {   // K37/实体治理（§3.7 灭）：模型提议覆灭——与 agendaCancels 同构，真实落账复核归引擎
+            kind: 'array',
+            items: {
+                kind: 'object',
+                additional: false,
+                required: ['entity', 'verdict', 'source'],
+                props: {
+                    entity: { kind: 'string', minLength: 1 },
+                    verdict: { kind: 'string', enum: ['dead'] },
+                    source: {
+                        kind: 'object',
+                        additional: false,
+                        required: ['type'],
+                        props: {
+                            type: { kind: 'string', enum: ['event', 'agenda'] },
+                            ref: { kind: 'string' },
+                        },
+                    },
+                    reason: { kind: 'string' },
                 },
             },
         },

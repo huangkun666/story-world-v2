@@ -22,7 +22,7 @@ function gatedStepGen(tick) {
         }));
         const agendaAdvances = open.map((a) => ({ agendaId: a.id, step: `第 ${t} 步`, stage: '推进' }));
         if (t === TRIGGER) actions.push({ entity: 'e_hi', verb: '传唤', target: 'e_lo', position: '边城' });
-        return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas: [], agendaCancels: [] };
+        return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
     };
 }
 
@@ -109,7 +109,7 @@ function playerSmokeStepGen(t) {
         const agendaAdvances = open.map((a) => ({ agendaId: a.id, step: `第 ${t2} 步`, stage: '推进' }));
         if (t2 === 2) actions.push({ entity: 'e_xie', verb: '发兵', target: 'e_player', position: '大盘谷' });
         if (t2 === 3) actions.push({ entity: 'e_wanfa', verb: '袭扰', target: 'e_player', position: '北山' });
-        return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas: [], agendaCancels: [] };
+        return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
     };
 }
 

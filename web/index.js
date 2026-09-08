@@ -13,6 +13,7 @@ import {
     hotAccountShape, loadHotAccount, rotateChronicle,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
 } from '../src/storage.js';
+import { seedBookEntities } from '../src/abstract.js';
 import { createIdbVolumeStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
@@ -367,6 +368,7 @@ export async function loadWorld() {
         return;
     }
     const hot = await ensureChronicleRotated(world);
+    seedBookEntities(hot);   // K37 生通道①：书名录幂等入账（书内名号实体；席位按书序优先，POOL_CAP 提案）
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
 }
@@ -410,15 +412,19 @@ if (typeof window !== 'undefined') {
 
     // K41：因果链视图（展开器产物 afterbegin 进编年视图容器，复用阅卷模式；只读）
     bus['open-chain'] = (payload) => {
-        const id = payload?.chain;
-        const world = sw2LastWorld;
-        if (!world || !id) { setStatus('⚠ 无世界可展开链路'); return; }
-        const chain = expandChain(world, id);
-        const html = renderChainViewHtml(chain, { world, volumes: LISTED_VOLUMES });
-        const chronicle = document.getElementById('sw2_view_chronicle');
-        if (!chronicle) return;
-        chronicle.insertAdjacentHTML('afterbegin', html);
-        setStatus(chain.ok ? '已展开事件链（一手事实拼句 · 只读 · 可收起）' : '⚠ 无此事件的链路');
+        try {
+            const id = payload?.chain;
+            const world = sw2LastWorld;
+            if (!world || !id) { setStatus('⚠ 无世界可展开链路'); return; }
+            const chain = expandChain(world, id);
+            const html = renderChainViewHtml(chain, { world, volumes: LISTED_VOLUMES });
+            const chronicle = document.getElementById('sw2_view_chronicle');
+            if (!chronicle) return;
+            chronicle.insertAdjacentHTML('afterbegin', html);
+            setStatus(chain.ok ? '已展开事件链（一手事实拼句 · 只读 · 可收起）' : '⚠ 无此事件的链路');
+        } catch (err) {
+            setStatus(`⚠ 链路展开失败：${err?.message || err}`);
+        }
     };
 
     bus['chain-close'] = () => {

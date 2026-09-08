@@ -19,7 +19,7 @@ const pushSon = (extra = {}) => ({
         { agendaId: 'a_son1', step: '粮道探明', stage: '就绪' },
         { agendaId: 'a_son1', step: '押运启程', stage: '上路' },
     ],
-    stateChanges: [], newAgendas: [], agendaCancels: [],
+    stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     ...extra,
 });
 const hurt = (delta) => ({ entity: 'e_court', attr: 'network', delta, cause: 'a_root' });
@@ -46,7 +46,7 @@ test('K15/A-6 败露：单 tick 负向 δ ≥0.05 → 败露编年（功败垂�
 });
 
 test('K15/A-6 败露：跨 tick 窗口累计（各 0.03 → 近 2 tick 0.06 ≥0.05）', () => {
-    const step1 = { actions: [], newEvents: [], agendaAdvances: [{ agendaId: 'a_son1', step: '半程', stage: '中' }], stateChanges: [hurt(-0.03)], newAgendas: [], agendaCancels: [] };
+    const step1 = { actions: [], newEvents: [], agendaAdvances: [{ agendaId: 'a_son1', step: '半程', stage: '中' }], stateChanges: [hurt(-0.03)], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
     const w1 = settleTick({ ssot: TREE, step: step1 }).ssot;
     assert.ok(!w1.agendas.find((a) => a.id === 'a_son1').closed, '未满步不结算');
     const hw1 = w1.entities.find((e) => e.id === 'e_court').hurtWindow;
@@ -91,11 +91,11 @@ test('K15/A-6 判序：变形优先——有在飞子且负 δ ≥0.05 → 变�
 });
 
 test('K15 窗口惰性：无伤害不写；伤害康复两 tick 后字段消失（锚点零扰动）', () => {
-    const w1 = settleTick({ ssot: TREE, step: { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [hurt(-0.03)], newAgendas: [], agendaCancels: [] } }).ssot;
+    const w1 = settleTick({ ssot: TREE, step: { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [hurt(-0.03)], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] } }).ssot;
     const hw1 = w1.entities.find((e) => e.id === 'e_court').hurtWindow;
     assert.ok(Math.abs(hw1[0] + 0.03) < 1e-9 && hw1[1] === 0, `实际 ${hw1}`);
     assert.equal(w1.entities.find((e) => e.id === 'e_lead').hurtWindow, undefined, '无伤害实体不写字段');
-    const empty = { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] };
+    const empty = { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
     const w2 = settleTick({ ssot: w1, step: empty }).ssot;
     const hw2 = w2.entities.find((e) => e.id === 'e_court').hurtWindow;
     assert.ok(hw2[0] === 0 && Math.abs(hw2[1] + 0.03) < 1e-9, `滑动保留历史，实际 ${hw2}`);

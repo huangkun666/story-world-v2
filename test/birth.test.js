@@ -15,7 +15,7 @@ import { ssotSchema } from '../src/schemas/ssot.schema.js';
 const TREE = JSON.parse(readFileSync(new URL('./fixtures/tree-world.json', import.meta.url), 'utf8'));
 
 const na = (entity, goal, source, extra = {}) => ({ entity, goal, visibility: 'known', source, ...extra });
-const emptyStep = (newAgendas) => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas, agendaCancels: [] });
+const emptyStep = (newAgendas) => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas, agendaCancels: [], newEntities: [], entityFates: [] });
 
 test('K14/A-2：静默方提议被 gate 滤除（双面无痕：不落账、不编年、simLog 审计计数）', () => {
     const r = settleTick({ ssot: TREE, step: emptyStep([na('e_min', '夺旗', { type: 'state' })]) });
@@ -167,7 +167,7 @@ test('K14/A-5 后半：子满步达成 → 父 memory.done 记"兑现" + 编年'
             { agendaId: 'a_son1', step: '粮道探明', stage: '就绪' },
             { agendaId: 'a_son1', step: '押运启程', stage: '上路' },
         ],
-        stateChanges: [], newAgendas: [], agendaCancels: [],
+        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: TREE, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));

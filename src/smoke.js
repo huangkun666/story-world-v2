@@ -18,9 +18,9 @@ const advanceStep = (n) => ({
     newEvents: n === 1 ? [{ title: '守将允诺通关', source: { type: 'plot', ref: 'a_1' }, position: '边关', ripples: ['e_merchant'] }] : [],
     agendaAdvances: [{ agendaId: 'a_1', step: `推进第 ${n} 步`, stage: `阶段${n}` }],
     stateChanges: [],
-    newAgendas: [], agendaCancels: [],
+    newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
-const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 // stepGen(tick, world) → 世界步提案（K6：门控冒烟自定义生成器）；dialogueGen(tick, world) → 对话（K11：玩家落子段冒烟）
 export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGen, dialogueGen } = {}) {

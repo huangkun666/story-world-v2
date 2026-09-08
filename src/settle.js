@@ -28,6 +28,13 @@ export const CHAIN_SETTLE = 5;
 // 热窗 20 tick：闭环满 20 tick 且无未决下游 → 按出生段压入里程碑（温层）；里程碑不进模型输入（pack 只取未决+近 2 closed，自动剥离）
 export const ARCHIVE = { hotWindow: 20, milestoneEvery: 10 };
 
+// K37 实体治理数字组（细案 §3.7 → A-10..A-12；铁律 2：全部提案态，随 K37 曲线 + K38 报批）
+export const ENTITY_BIRTH_PER_TICK = 1;      // 提案：单轮新生 ≤1
+export const ENTITY_IDLE_RETIRE_TICKS = 20;  // 提案：连续未活跃轮数（背景化条件）
+export const RETIRE_WEIGHT_FLOOR = 0.05;     // 提案：影响力下限（背景化条件）
+export const ENTITY_GC_SCAN_TICKS = 20;      // 提案：背景化扫描周期
+export const POOL_CAP = 32;                  // 提案：席位上限（active 计数）
+
 const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
 
 const SOURCE_LABEL = null; // 已废弃（第十三棒：编年源头措辞改写名不写代号，见 chronicleEvents）
@@ -186,7 +193,7 @@ function closeEvents(world, closedIds, tick, chronicle) {
             if (!closedIds.has(ev.source.ref)) continue;
             ev.closed = true;
             ev.closedAt = tick;
-            chronicle.push({ id: `ch_${tick}_evc_${ev.id}`, tick, text: `事件「${ev.title}」闭环（源盘算已结算）`, kind: 'major' });
+            chronicle.push({ id: `ch_${tick}_evc_${ev.id}`, tick, text: `事件「${ev.title}」闭环（源盘算已结算）`, kind: 'major', chainRef: ev.id });
         }
     }
     for (const ev of world.events) {
@@ -196,7 +203,7 @@ function closeEvents(world, closedIds, tick, chronicle) {
         if (hasPendingDownstream(world, ev)) continue;
         ev.closed = true;
         ev.closedAt = tick;
-        chronicle.push({ id: `ch_${tick}_evc2_${ev.id}`, tick, text: `事件「${ev.title}」涟漪平息（链源已了结）`, kind: 'ripple' });
+        chronicle.push({ id: `ch_${tick}_evc2_${ev.id}`, tick, text: `事件「${ev.title}」涟漪平息（链源已了结）`, kind: 'ripple', chainRef: ev.id });
     }
 }
 
@@ -550,6 +557,133 @@ function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate
     world.meta.simLog.push(entry);
 }
 
+// K37 生通道②落账（细案 §3.7 → A-10）：入局提议——单轮 ≤1 / 席位 ≤32（提案）拒超限；
+// 落账（id=e_<tick>_<n>；kind 缺省 character；attrs 空=公式兜底）+ 编年「XX 入局」（kind major=大事）
+function spawnEntities(world, gstep, tick, warnings, chronicle) {
+    const born = [];
+    for (const ne of gstep.newEntities || []) {
+        if (born.length >= ENTITY_BIRTH_PER_TICK) {
+            warnings.push(`裁定: 入局限额（每 tick 新生 ≤${ENTITY_BIRTH_PER_TICK}）：「${ne.name}」被拒`);
+            continue;
+        }
+        const activeNow = world.entities.filter((e) => !e.status || e.status === 'active').length + born.length;
+        if (activeNow >= POOL_CAP) {
+            warnings.push(`裁定: 席位已满（席位 ≤${POOL_CAP}）：「${ne.name}」被拒`);
+            continue;
+        }
+        if (world.entities.some((e) => e.name === ne.name)) continue;   // 重名拒（check 已查，防御）
+        const ent = {
+            id: `e_${tick}_${born.length + 1}`,
+            kind: ne.kind || 'character',
+            name: ne.name,
+            location: ne.location,
+            attrs: {},
+            lastActiveTick: tick,
+        };
+        world.entities.push(ent);
+        born.push(ent);
+        const why = ne.source.type === 'event'
+            ? `因事件「${(world.events || []).find((e) => e.id === ne.source.ref)?.title ?? ''}」而生`
+            : ne.source.type === 'book' ? '名载书中' : '屡被提及，声名鹊起';
+        chronicle.push({ id: `ch_${tick}_ent_${ent.id}`, tick, text: `「${ent.name}」入局（${why}）`, kind: 'major' });
+    }
+    return born;
+}
+
+// K37 对话依据册（细案 §3.7 → A-10 通道③）：落子提取对象命中即记账（meta.dialogueBook，随背景化清理）；
+// "白小娥反复被点名"成为可溯源的 dialogueFact 依据（extract 双名单的引擎侧落账）
+function bookDialogue(world, moveFact, tick) {
+    const obj = moveFact?.object;
+    if (!obj || typeof obj !== 'string') return;
+    world.meta.dialogueBook = world.meta.dialogueBook || {};
+    const rec = world.meta.dialogueBook[obj] || { count: 0, lastTick: 0 };
+    rec.count += 1;
+    rec.lastTick = tick;
+    world.meta.dialogueBook[obj] = rec;
+}
+
+// K37 灭通道（细案 §3.7 → A-11）：覆灭提议 → 引擎复核——source.ref 真实落账且指向已了结
+// （agenda closed / 事件闭环或已归档入纪）+ 目标无在飞盘算子树 → status=dead（终局不复归）+ 编年「覆灭」；
+// 打崩 ≠ 灭（attrs 归零仍是合法客体，K7 万法阁案例回归）；玩家不可灭（check 已拒，防御）
+function applyEntityFates(world, gstep, tick, warnings, chronicle) {
+    for (const f of gstep.entityFates || []) {
+        const ent = world.entities.find((e) => e.id === f.entity);
+        if (!ent || (ent.status || 'active') === 'dead') continue;   // check 已查（防御）
+        if ((world.agendas || []).some((a) => a.owner === ent.id && !a.closed)) {
+            warnings.push(`裁定: 覆灭复核拒绝——「${ent.name}」仍有在飞盘算（先了结，再言灭）`);
+            continue;
+        }
+        if (f.source.type === 'agenda') {
+            const ag = world.agendas.find((a) => a.id === f.source.ref);
+            if (!ag || !ag.closed) { warnings.push(`裁定: 覆灭复核拒绝——源盘算「${f.source.ref}」未真实终结`); continue; }
+        } else {
+            const hot = world.events.find((e) => e.id === f.source.ref);
+            const archived = (world.milestones || []).some((m) => (m.ids || []).includes(f.source.ref));
+            if (!hot && !archived) { warnings.push(`裁定: 覆灭复核拒绝——源事件「${f.source.ref}」不在账`); continue; }
+            if (hot && !hot.closed) { warnings.push(`裁定: 覆灭复核拒绝——源事件「${f.source.ref}」未了结（尘埃未定）`); continue; }
+        }
+        ent.status = 'dead';
+        chronicle.push({
+            id: `ch_${tick}_fate_${ent.id}`,
+            tick,
+            text: `「${ent.name}」覆灭${f.reason ? `（${f.reason}）` : ''}`,
+            kind: 'major',
+        });
+    }
+}
+
+// K37 复归（细案 §3.7 → A-12）：被本 tick 落账事件点名（ripples 命中）→ retired 自动升回 active；
+// 一条确定性规则不发明状态机；dead 终局不复归；编年「复归」一笔（kind ripple——被波及点名而起的反应）
+function reactivateNamed(world, events, tick, chronicle) {
+    const named = new Set();
+    for (const ev of events || []) for (const r of ev.ripples || []) named.add(r);
+    if (!named.size) return;
+    for (const e of world.entities) {
+        if (e.status !== 'retired' || !named.has(e.id)) continue;
+        e.status = 'active';
+        e.lastActiveTick = tick;
+        const ev = (events || []).find((x) => (x.ripples || []).includes(e.id));
+        chronicle.push({
+            id: `ch_${tick}_rev_${e.id}`,
+            tick,
+            text: `「${e.name}」复归（被「${ev?.title ?? '事件'}」点名）`,
+            kind: 'ripple',
+        });
+    }
+}
+
+// K37 背景化 GC（细案 §3.7 → A-12）：扫描轮（每 ENTITY_GC_SCAN_TICKS）——条件=无在飞盘算 + 无未决事件/链引用
+// + 影响力 < RETIRE_WEIGHT_FLOOR（提案）+ 连续 ENTITY_IDLE_RETIRE_TICKS 轮未活跃 → status=retired
+// （名录/指针全保留；编年「淡出」一笔，kind state——处境驱动）；**超 POOL_CAP 强制**（任何 tick 检查：
+// 按活力低者先退，跳过有在飞盘算者——与 GC 条件同约束）；依据册随退休清理（其名消账）
+function retireInactive(world, tick, warnings, chronicle) {
+    const activeCount = () => world.entities.filter((e) => !e.status || e.status === 'active').length;
+    const canRetire = (e) => !(world.agendas || []).some((a) => a.owner === e.id && !a.closed)
+        && !(world.events || []).some((ev) => !ev.closed && (ev.ripples || []).includes(e.id));
+    // 超席位强制（守卫：入局已封顶 32，此处兜历史/导入池满的世界）
+    if (activeCount() > POOL_CAP) {
+        const candidates = world.entities
+            .filter((e) => (!e.status || e.status === 'active') && canRetire(e))
+            .sort((a, b) => (world.weights[a.id] ?? 0) - (world.weights[b.id] ?? 0));
+        for (const e of candidates) {
+            if (activeCount() <= POOL_CAP) break;
+            e.status = 'retired';
+            if (world.meta?.dialogueBook) delete world.meta.dialogueBook[e.name];
+            chronicle.push({ id: `ch_${tick}_ret_${e.id}`, tick, text: `「${e.name}」淡出视野（席位满员）`, kind: 'state' });
+        }
+    }
+    if (tick % ENTITY_GC_SCAN_TICKS !== 0) return;
+    for (const e of world.entities) {
+        if (e.status && e.status !== 'active') continue;
+        if (!canRetire(e)) continue;
+        if ((world.weights[e.id] ?? 1) >= RETIRE_WEIGHT_FLOOR) continue;
+        if (typeof e.lastActiveTick !== 'number' || tick - e.lastActiveTick < ENTITY_IDLE_RETIRE_TICKS) continue;
+        e.status = 'retired';
+        if (world.meta?.dialogueBook) delete world.meta.dialogueBook[e.name];
+        chronicle.push({ id: `ch_${tick}_ret_${e.id}`, tick, text: `「${e.name}」淡出视野（久未现身）`, kind: 'state' });
+    }
+}
+
 export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     // 校验先行：不合格则世界如实不动（诚实不落账），tick 不推进
     const pre = checkWorldStep(step, ssot);
@@ -564,6 +698,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     world.meta.tick = tick;
     const playerId = world.context?.playerId ?? null;   // K8/K9：玩家棋子标注（红线 1 代码化就位）
     const playerAffected = [];                          // K9：影响通道审计
+    bookDialogue(world, moveFact, tick);                // K37：对话依据册记账（moveFact.object 命中）
 
     // ②' 主动作权门控（K2，细案 §3.2）：校验之后、裁定之前。滤除静默方主动作——不落账、不编年、不注入（双面无痕）；被点名可应答。
     const gate = gateWorldStep(step, ssot, moveFact);
@@ -576,6 +711,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
         // 不可达（check 已过），防御
         return { ok: false, ssot, stage: { warnings, chronicle } };
     }
+    const born = spawnEntities(world, gstep, tick, warnings, chronicle);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
     // K15 三态判据窗口（细案 §3.4）：实体粒度近 2 tick 负向 δ（stateChanges 实际生效值）；
     // 窗口 [本 tick, 上一 tick]；惰性写——全 0 删字段（旧夹具/黄金锚点零扰动）。
     for (const e of world.entities) {
@@ -607,6 +743,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     for (const ad of gstep.agendaAdvances) { const o = agendaOwner.get(ad.agendaId); if (o) activeIds.add(o); }
     for (const ev of gstep.newEvents) { if (ev.source?.type === 'plot') { const o = agendaOwner.get(ev.source.ref); if (o) activeIds.add(o); } }
     for (const na of spawned) activeIds.add(na.owner);   // K14：提议并落账 = 活跃（与 gate 滤除语义对称——静默方提议被滤=不活跃）
+    for (const e of born) activeIds.add(e.id);           // K37：入局 = 活跃（lastActiveTick 落账）
     if (playerId && moveFact?.verb) activeIds.add(playerId);
     for (const e of world.entities) { if (activeIds.has(e.id)) e.lastActiveTick = tick; }
     recomputeWeights(world, tick);
@@ -616,7 +753,10 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     for (const id of cancelledIds) closedIds.add(id);   // 取消集并入联闭（取消 = 终结产果路径之一）
     pushTidePeak(world, closedIds, tick);   // K29：盘算浪尖派生（细案 §3.6②——顶层终结/取消 → derivedFrom 浪尖项，A-5 两来源之一）
     closeEvents(world, closedIds, tick, chronicle);   // 闭环三型：源结清（K9 执行债）+ 链尾结清（K19）+ 取消联闭（K22）
+    applyEntityFates(world, gstep, tick, warnings, chronicle);   // K37 灭通道：覆灭复核落账（在闭环后——尘埃落定再言灭）
     pulseEntropy(world, tick, chronicle);   // K27 熵泵（细案 §3.5 → A-6）：环境推演器每 ENV_TICK 一步；越阈落状态源事件；恢复闭环
+    reactivateNamed(world, events, tick, chronicle);   // K37 复归：本 tick 落账事件点名 → retired 升回 active
+    retireInactive(world, tick, warnings, chronicle);  // K37 背景化 GC：扫描轮条件退休 + 超席位强制（守卫）
     chronicleEvents(world, gstep, tick, chronicle);
     world.chronicle = [...world.chronicle, ...chronicle];   // 编年落账（推进留痕 + 事件条目）
     archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）

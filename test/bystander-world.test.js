@@ -40,7 +40,7 @@ test('旁观者回合：落子提取命中（全部与战局无关的小事）',
 });
 
 test('旁观者世界：跑一个 tick 不炸（fake 空步）', async () => {
-    const idle = async () => ({ text: JSON.stringify({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] }) });
+    const idle = async () => ({ text: JSON.stringify({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] }) });
     const r = await runTick({ transport: idle, ssot: WORLD, dialogue: '（静默）', extractCtx: CTX });
     assert.equal(r.ok, true, r.error);
     assert.equal(r.ssot.meta.tick, 1);

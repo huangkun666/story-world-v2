@@ -21,7 +21,7 @@ const stillWorld = () => ({
     meta: { tick: 0 },
 });
 
-const emptyStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const emptyStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 function runTicks(world, n, entityId = 'e_x') {
     const weights = [];
@@ -48,7 +48,7 @@ test('衰减：活跃恢复立即回满（lastActiveTick 记账 + factor 归 1�
     const { world: idleWorld } = runTicks(structuredClone(stillWorld()), 10);   // 已衰减 2 轮
     const act = settleTick({
         ssot: idleWorld,
-        step: { actions: [{ entity: 'e_x', verb: '起身', position: '静谷' }], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] },
+        step: { actions: [{ entity: 'e_x', verb: '起身', position: '静谷' }], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] },
     });
     assert.equal(act.ok, true);
     assert.equal(act.ssot.entities[0].lastActiveTick, 11, '活跃落账方记账');

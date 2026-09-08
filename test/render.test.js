@@ -131,7 +131,10 @@ test('K34 大事纪·旧卷页：里程碑卡（span/标题/ids 展开） + 卷�
     assert.match(html, /sw2-milestone-id">m_30</);
     assert.match(html, /第 1–30 轮 · 8 件事/);
     assert.match(html, /展开这一纪的条目/);
-    assert.match(html, /sw2-rawids">ev_0 · ev_15_1</);
+    assert.ok(html.includes('data-action="open-chain" data-chain="ev_0"'), '大事纪条目行链按钮（C-1 第二入口）');
+    assert.ok(html.includes('data-action="open-chain" data-chain="ev_15_1"'), '大事纪条目行链按钮（C-1 第二入口）');
+    const rawText = (v) => String(v).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    assert.ok(rawText(html).includes('ev_0') && rawText(html).includes('ev_15_1'), '管理区 ids 仍裸显');
     assert.match(html, /sw2-vol">卷一/);
     const empty = renderArchiveHtml(world(), {});
     assert.match(empty, /尚未入卷/);
@@ -140,7 +143,7 @@ test('K34 大事纪·旧卷页：里程碑卡（span/标题/ids 展开） + 卷�
 test('K34 角色与势力页：全量表（位置/影响力/兵力权位人脉耳目/谋划/最近活跃/状态徽）', () => {
     const w = world();
     const html = renderEntitiesHtml(w);
-    assert.match(html, /全部角色与势力（4 位 · 席位上限 32）/);
+    assert.match(html, /全部角色与势力（4 位在席 · 席位上限 32）/);
     assert.ok(html.includes('sw2-eattr" title="兵力：硬实力'));
     assert.ok(html.includes('sw2-eattr" title="耳目：情报网有多灵'));
     assert.match(html, /sw2-ename">黄坤<small>你的棋子/);
@@ -149,6 +152,10 @@ test('K34 角色与势力页：全量表（位置/影响力/兵力权位人脉�
     const html2 = renderEntitiesHtml(w);
     assert.match(html2, /覆灭阁/);
     assert.match(html2, /sw2-visible v-hidden">已灭</);
+    // K37 席位语义：在席计数只算 active + 退休/已灭标注
+    w.entities.push({ id: 'e_ret', kind: 'character', name: '归隐客', location: 'x', attrs: {}, status: 'retired' });
+    const html3 = renderEntitiesHtml(w);
+    assert.match(html3, /全部角色与势力（4 位在席 · 席位上限 32） <small class="sw2-quiet-note">另 2 位退休\/已灭<\/small>/);
 });
 
 test('第十三棒：属性维度释义与无障碍——title+视障文本双通道、注脚行、缺键零维不渲染', () => {
@@ -302,10 +309,36 @@ test('K41/A-16②：五筛命中面——chips 全量、多选并集=行选择�
     assert.ok(!union.includes('粮道拥堵') && !union.includes('由盘算「买粮」而生'), '并集外隐藏');
 });
 
-test('K41/A-15 入口：事件行「链」按钮（data-chain + id 悬停）；非事件行无按钮', () => {
+test('K41/A-15 入口：事件行「链」按钮（data-action + data-chain + id 悬停）；非事件行无按钮', () => {
     const html = renderChronicleHtml(filterWorld());
-    assert.ok(html.includes('data-chain="ev_1_1"') && html.includes('title="ev_1_1"'), '链按钮带 data-chain 与悬停 id');
+    assert.ok(html.includes('class="sw2-chainbtn" data-action="open-chain" data-chain="ev_1_1"'), '链按钮带 data-action=open-chain 与 data-chain');
+    assert.ok(html.includes('title="ev_1_1"'), '悬停 id 在位');
     assert.ok(!html.includes('data-chain="ch_1_1"') && !html.includes('data-chain="ch_1_2"'), '非事件行无链入口');
+    // 闭环/涟漪平息行（chainRef 第十五棒补）：同款按钮；eventRef 优先于 chainRef
+    const w2 = filterWorld();
+    w2.chronicle.push({ id: 'ch_2_1', tick: 4, text: '事件「旧事」涟漪平息（链源已了结）', kind: 'ripple', chainRef: 'ev_9_9' });
+    w2.chronicle.push({ id: 'ch_2_2', tick: 5, text: '兼有双引用行', kind: 'major', eventRef: 'ev_1_1', chainRef: 'ev_9_9' });
+    const html2 = renderChronicleHtml(w2);
+    assert.ok(html2.includes('data-action="open-chain" data-chain="ev_9_9"'), 'chainRef 行挂链（闭环/涟漪平息入口）');
+    assert.ok(html2.includes('data-action="open-chain" data-chain="ev_1_1"'), 'eventRef 优先于 chainRef');
+    assert.ok(!html2.includes('data-chain="ch_2_2"'), '行自身 id 不挂链');
+});
+
+test('第十五棒：历史闭环行（无 chainRef/eventRef）按行 id 解析挂链——旧账不篡改、纯渲染派生', () => {
+    const w = filterWorld();
+    w.chronicle.push(
+        { id: 'ch_6_evc_ev_6_1', tick: 6, text: '事件「旧事」闭环（源盘算已结算）', kind: 'major' },
+        { id: 'ch_7_evc2_ev_7_3', tick: 7, text: '事件「旧事」涟漪平息（链源已了结）', kind: 'ripple' },
+        { id: 'ch_8_ag_8_1', tick: 8, text: '盘算行（不匹配 evc 模式）', kind: 'scheme' },
+        { id: 'ch_9_evc_9_1', tick: 9, text: '残缺 id 形态（无 ev_ 事件段）', kind: 'major' },
+    );
+    const html = renderChronicleHtml(w);
+    assert.ok(html.includes('data-action="open-chain" data-chain="ev_6_1"'), '历史闭环行解析挂链');
+    assert.ok(html.includes('data-action="open-chain" data-chain="ev_7_3"'), '历史涟漪平息行解析挂链');
+    assert.ok(html.includes('title="ev_6_1"'), '解析 id 只进悬停');
+    assert.ok(!html.includes('data-chain="ch_8_ag_8_1"') && !html.includes('data-chain="ch_9_evc_9_1"'), '非 evc 模式不误挂');
+    const text = String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    assert.ok(!/ev_[a-z0-9_]+/.test(text), '解析 id 不进可见文本（A-3）');
 });
 
 function chainWorld() {

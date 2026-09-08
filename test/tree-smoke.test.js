@@ -40,7 +40,7 @@ function treeStepGen(t, world) {
         }
     }
     if (t % 10 === 0) newAgendas.push(na('e_min', '越权建言', { type: 'state' }));   // 静默滤除样本
-    return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas, agendaCancels: [] };
+    return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas, agendaCancels: [], newEntities: [], entityFates: [] };
 }
 
 test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 + 静默滤除累计 + 委派/变形/兑现落痕', async () => {

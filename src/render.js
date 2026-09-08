@@ -217,12 +217,17 @@ export function renderBoardHtml(world, opts = {}) {
 
 export function renderChronicleHtml(world, { oldVolumes = [], filter = null } = {}) {
     // K41 五筛（A-16②）：行选择 = 无 kind 旧账恒显示（不藏）∪ kind ∈ filter；filter=null 全选
+    // 闭环/涟漪平息行链目标（第十五棒）：chainRef 优先（新行盖章）→ eventRef（事件行）→
+    // 否则按行 id 解析历史闭环行（ch_<tick>_evc[2]_<evId>——行 id 内嵌事件 id；与 msIdTick 同款
+    // id 解析纪律：引擎 id 只进 data/title 悬停 A-3 豁免；旧账不篡改=渲染只读派生，不写回账本）
+    const chainTarget = (c) => c.chainRef || c.eventRef || (/^ch_\d+_evc2?_(ev_.+)$/.exec(String(c.id || '')) || [])[1] || '';
     const rows = (world.chronicle || []).map((c) => {
         if (filter != null && c.kind && !filter.has(c.kind)) return '';
-        return `<div class="sw2-ch-line${c.eventRef ? ' sw2-ch-event' : ''}">`
+        const target = chainTarget(c);
+        return `<div class="sw2-ch-line${target ? ' sw2-ch-event' : ''}">`
             + `<span class="sw2-ch-round">${c.tick}</span>`
             + `<span class="sw2-ch-text">${escapeHtml(c.text)}</span>`
-            + (c.eventRef ? `<button class="sw2-chainbtn" data-chain="${escapeHtml(c.eventRef)}" title="${escapeHtml(c.eventRef)}">链</button>` : '')
+            + (target ? `<button class="sw2-chainbtn" data-action="open-chain" data-chain="${escapeHtml(target)}" title="${escapeHtml(target)}">链</button>` : '')
             + `</div>`;
     }).filter(Boolean);
     const legacyCount = (world.chronicle || []).filter((c) => !c.kind).length;
@@ -256,7 +261,7 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
             + `<span class="sw2-mspan">第 1–${msIdTick(m.id)} 轮 · ${m.counts ?? 0} 件事</span></div>`
             + `<h5>${escapeHtml(titles.slice(0, 4).join('、'))}</h5>`
             + (ids.length
-                ? `<details><summary>展开这一纪的条目</summary><div class="sw2-rawids">${escapeHtml(ids.join(' · '))}</div></details>` : '')
+                ? `<details><summary>展开这一纪的条目</summary><div class="sw2-rawids">${ids.map((id) => `<span class="sw2-rawid">${escapeHtml(id)}<button class="sw2-chainbtn" data-action="open-chain" data-chain="${escapeHtml(id)}" title="${escapeHtml(id)}">链</button></span>`).join(' · ')}</div></details>` : '')
             + `</div>`;
     });
     const volRows = oldVolumes.map((v) => `<div class="sw2-cold-row"><span class="sw2-vol">${escapeHtml(v.id)}</span>`
@@ -286,7 +291,10 @@ export function renderEntitiesHtml(world) {
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
-    return `<div class="sw2-list-head">全部角色与势力（${rows.length} 位 · 席位上限 32）</div><div class="sw2-entity-list">${rows.join('')}</div>`
+    const allEnts = world.entities || [];
+    const seated = allEnts.filter((e) => !e.status || e.status === 'active');   // K37：席位计数只算 active
+    const quiet = allEnts.length - seated.length;
+    return `<div class="sw2-list-head">全部角色与势力（${seated.length} 位在席 · 席位上限 32）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
         + `<div class="sw2-hint">势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。</div>`;
 }
 
@@ -355,7 +363,7 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         + `<div class="sw2-field"><label>服务地址</label><input class="sw2-input" id="sw2_base" value="${escapeHtml(cfg.baseUrl || '')}"></div>`
         + `<div class="sw2-field"><label>密钥</label><input class="sw2-input sw2-key-mask" id="sw2_key" value="${escapeHtml(cfg.apiKey ? '••••••••••••••••••••' : '')}"><div class="sw2-hint">本机读取 · 不落库 · 不打印</div></div>`
         + `<div class="sw2-field"><label>世界模型</label><input class="sw2-input" id="sw2_model" value="${escapeHtml(cfg.model || '')}"></div>` 
-        + `<div class="sw2-field"><label>单轮演算上限（提案：120 秒 / 4096 字）</label><input class="sw2-input" id="sw2_limits" value="120s · 4096"></div></div>`
+        + `<div class="sw2-field"><label>单轮演算上限（提案：120 秒 / 4096 字）</label><input class="sw2-input" id="sw2_limits" value="120s · 4096" readonly title="提案值展示 · 随 K38 报批联动后生效"><div class="sw2-hint">提案态：报批前不视为定案，此处仅展示。</div></div></div>`
         + `<div class="sw2-set-card"><h4>操作</h4><div class="sw2-actions">`
         + `<button class="sw2-btn sw2-primary" data-action="init-world">✨ 开始新世界</button>`
         + `<button class="sw2-btn" data-action="advance-world">▶ 手动推进一步</button>`

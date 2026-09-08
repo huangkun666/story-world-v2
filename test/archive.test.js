@@ -24,7 +24,7 @@ const W = () => ({
     meta: { tick: 0 },
 });
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id) => ({ agendaId: id, step: '推进', stage: '中' });
 const ev = (title, source, tickN) => ({ title, source, position: '边城', ripples: ['e_x'] });

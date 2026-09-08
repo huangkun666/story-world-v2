@@ -30,7 +30,7 @@ const busyStep = () => ({
         { agendaId: 'a_mid', step: '布防完成', stage: '就绪' },
         { agendaId: 'a_lo', step: '自荐成功', stage: '上前' },
     ],
-    stateChanges: [], newAgendas: [], agendaCancels: [],
+    stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
 test('门控：低分量静默滤除（行动/推进/plot 事件零落账），高/中正常', () => {
@@ -98,7 +98,7 @@ test('门控：top-1 永不静默（全员低分量时仍有一个人在动）',
             { agendaId: 'a_mid', step: '布防完成', stage: '就绪' },
             { agendaId: 'a_lo', step: '自荐成功', stage: '上前' },
         ],
-        stateChanges: [], newAgendas: [], agendaCancels: [],
+        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -115,7 +115,7 @@ test('门控：静默方是合法客体（被打被波及照常落账，仍不�
         newEvents: [{ title: '兵卒哗动', source: { type: 'ripple', ref: 'ev_p' }, position: '大营', ripples: ['e_lo'] }],
         agendaAdvances: [{ agendaId: 'a_hi', step: '亲临弹压', stage: '镇压' }],
         stateChanges: [{ entity: 'e_lo', attr: 'hardPower', delta: -0.05, actor: 'e_hi', cause: 'ev_p' }],
-        newAgendas: [], agendaCancels: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: GATED, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));

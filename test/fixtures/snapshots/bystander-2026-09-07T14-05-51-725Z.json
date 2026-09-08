@@ -90,7 +90,7 @@
       "cause": "a_dayu"
      }
     ],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": null,
    "world": null,

@@ -11,7 +11,7 @@ import { ssotSchema } from '../src/schemas/ssot.schema.js';
 const TREE = JSON.parse(readFileSync(new URL('./fixtures/tree-world.json', import.meta.url), 'utf8'));
 import { readFileSync } from 'node:fs';
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id) => ({ agendaId: id, step: '推进', stage: '中' });
 

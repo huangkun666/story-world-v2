@@ -153,6 +153,29 @@ test('SSOT schema：编年行 kind 合法值通过、枚举外被拒、缺省合
     assert.ok(rb.errors.some((e) => e.includes('枚举外值 "nope"')));
 });
 
+test('SSOT schema：编年行 chainRef 可选字段——合法通过、与 eventRef 并存合法、缺省合法、非字符串拒（链路入口数据，第十五棒补）', () => {
+    const base = {
+        version: 1,
+        context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        weights: {},
+        agendas: [],
+        events: [],
+        chronicle: [],
+        meta: { tick: 1 },
+    };
+    const ok = structuredClone(base);
+    ok.chronicle = [{ id: 'ch_1_1', tick: 1, text: '事件「边关扣货」闭环（源盘算已结算）', kind: 'major', chainRef: 'ev_1_1' }];
+    assert.equal(validate(ok, ssotSchema).ok, true, 'chainRef 合法');
+    const both = structuredClone(base);
+    both.chronicle = [{ id: 'ch_1_2', tick: 2, text: '行', eventRef: 'ev_1_1', chainRef: 'ev_1_1' }];
+    assert.equal(validate(both, ssotSchema).ok, true, 'eventRef+chainRef 并存合法');
+    assert.equal(validate(base, ssotSchema).ok, true, '无 chainRef 旧行合法（旧世界零扰动）');
+    const bad = structuredClone(base);
+    bad.chronicle = [{ id: 'ch_1_3', tick: 3, text: '行', chainRef: 42 }];
+    assert.ok(!validate(bad, ssotSchema).ok, '非字符串 chainRef 被拒');
+});
+
 // ---------- 世界步 schema（提案形状） ----------
 
 test('世界步 schema：合法世界步通过', () => {
@@ -161,7 +184,7 @@ test('世界步 schema：合法世界步通过', () => {
         newEvents: [{ title: '边关扣货', source: { type: 'state' }, position: '边关', ripples: ['e_merchant'] }],
         agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
         stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05 }],
-        newAgendas: [], agendaCancels: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = validate(step, worldStepSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
@@ -173,7 +196,7 @@ test('世界步 schema：事件缺源被拒、未知字段被拒', () => {
         newEvents: [{ title: 't', position: '边关' }],   // 缺 source
         agendaAdvances: [],
         stateChanges: [],
-        newAgendas: [], agendaCancels: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
         magic: 1,
     };
     const r = validate(bad, worldStepSchema);

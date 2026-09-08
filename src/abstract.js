@@ -2,14 +2,16 @@
 // 抽象管线执行器（K31/双流 UI，编排层；细案 §3.4/§4 K31 → A-6/A-7）。
 // 书源文本 → 书指纹（K26，FNV-1a）→ 缓存命中 = 零抽取调用 / 书变自动失效 / force 绕过强制重抽
 // → 一次 LLM 小调用抽取（只提取不创作、无数量约束取全、原文措辞不润色）
-// → 净化（形状合法为止）→ 落 context.setting（frozen 五件套 + dynamic 初值）。
+// → 净化（形状合法为止）→ 落 context.setting（frozen 五件套 + bookEntities 书名录 + dynamic 初值）。
 // 职责链（红线 4 同构）：LLM 只提取不创作（上游提议）；引擎只做确定性净化与落账（引擎钳制）。
+// K37：书名录段（生通道①，§3.7）+ seedBookEntities 幂等入账（席位按书序优先，POOL_CAP 提案值）。
 // 纪律：
 //   - dynamic.tension.intensity 不许模型拍（K29 引擎确定性计算）——净化时丢弃模型侧 intensity；
 //   - env 初值键表白名单（报批二批 #3 定案四键）+ [0,1] 钳制；缺省 = 基线 0.5（提案）；
 //   - 空 canon 合法（K24 口径：无数量约束，防编造靠纪律不靠量制）。
 import { bookFingerprint } from './fingerprint.js';
 import { ENV_KEYS } from './entropy.js';
+import { POOL_CAP } from './settle.js';
 
 export const ENV_INIT_BASELINE = 0.5;      // 提案：抽取缺省环境量初值（patchDynamic 新键基线口径）
 export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时的强度初值（随长跑校准批）
@@ -26,6 +28,7 @@ export function buildAbstractPrompt(sourceText) {
                 society: '社会与制度格局（原文）',
                 techOrMagic: '力量/生态体系（原文）',
                 historyNotes: ['历史要点1（原文）'],
+                bookEntities: [{ name: '势力或角色的名号（原文名）', kind: 'faction|character（可省）' }],   // K37 书名录：书里明确存在的名号实体，只收原文名，不收泛指称呼
                 tension: { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' },
                 env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.5, 张力推手: 0.5 },
             },
@@ -43,7 +46,7 @@ export function sanitizeCanon(raw) {
         return { ok: false, errors: ['抽取输出非对象（真形状净化：不可靠即拒绝）'] };
     }
     const errors = [];
-    const canon = { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [] };
+    const canon = { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], bookEntities: [] };
 
     if (Array.isArray(raw.powerScale)) {
         for (const it of raw.powerScale) {
@@ -68,6 +71,19 @@ export function sanitizeCanon(raw) {
     if (Array.isArray(raw.historyNotes)) {
         for (const h of raw.historyNotes) { const s = String(h ?? '').trim(); if (s) canon.historyNotes.push(s); }
     } else if (raw.historyNotes !== undefined) errors.push('historyNotes 非数组（已弃）');
+
+    // K37 书名录：只提取不创作——name 原文名去重；kind 枚举净化（非法/缺省=character）；见字收、取全不取量
+    if (Array.isArray(raw.bookEntities)) {
+        const seen = new Set();
+        for (const it of raw.bookEntities) {
+            if (!it || typeof it !== 'object') { errors.push('bookEntities 含非对象项（已弃）'); continue; }
+            const name = String(it.name ?? '').trim();
+            if (!name) { errors.push('bookEntities 项缺 name（已弃）'); continue; }
+            if (seen.has(name)) continue;
+            seen.add(name);
+            canon.bookEntities.push({ name, kind: it.kind === 'faction' ? 'faction' : it.kind === 'character' ? 'character' : 'character' });
+        }
+    } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
 
     // 张力三件：极/方向取原文措辞；模型侧 intensity 一律丢弃（引擎算，K29）
     const tension = {
@@ -150,4 +166,31 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
 // 落账到世界（不可变）：context.setting 整体替换；旧 context.tension 保留（兼容口径 K24 §3.7）
 export function applySettingToSsot(ssot, setting) {
     return { ...ssot, context: { ...(ssot.context || {}), setting } };
+}
+
+// K37 生通道①（细案 §3.7 → A-10）：书名录初始化——frozen.canon.bookEntities 未在账实体幂等入账
+// （出处=书内条目，只提取不创作；kind 缺省 character；location 取位置集首个；attrs 空=公式兜底）；
+// 席位按书序优先入到 POOL_CAP 满（剩余留名录，供 book 源 newEntities 提议继续入局）；dead 同名不回魂。
+export function seedBookEntities(ssot) {
+    const book = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
+    if (!book.length) return { seeded: 0 };
+    const positions = ssot.context?.positions || [];
+    const home = positions[0] || '未知';
+    let seeded = 0;
+    for (const b of book) {
+        const active = (ssot.entities || []).filter((e) => !e.status || e.status === 'active').length;
+        if (active >= POOL_CAP) break;
+        const name = String(b?.name || '').trim();
+        if (!name) continue;
+        if ((ssot.entities || []).some((e) => e.name === name)) continue;   // 已有（含 retired）不重建；dead 不回魂
+        (ssot.entities = ssot.entities || []).push({
+            id: `e_bk_${seeded + 1}`,
+            kind: b.kind === 'faction' ? 'faction' : 'character',
+            name,
+            location: home,
+            attrs: {},
+        });
+        seeded += 1;
+    }
+    return { seeded };
 }

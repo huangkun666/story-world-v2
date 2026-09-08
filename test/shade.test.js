@@ -25,7 +25,7 @@ const W = () => ({
     meta: { tick: 0 },
 });
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id, s) => ({ agendaId: id, step: s, stage: '中' });
 const na = (entity, goal, source) => ({ entity, goal, visibility: 'concealed', source });

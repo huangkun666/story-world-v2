@@ -54,7 +54,7 @@ const CANONICAL_STEP = () => ({
     newEvents: [{ title: '守将允诺通关', source: { type: 'plot', ref: 'a_1' }, position: '边关', ripples: ['e_merchant'] }],
     agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
     stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05, cause: 'a_1' }],
-    newAgendas: [], agendaCancels: [],
+    newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
 test('黄金样本：引擎确定性（同输入同 step → 逐字节一致）', () => {

@@ -81,7 +81,7 @@
      }
     ],
     "newAgendas": [],
-    "agendaCancels": []
+    "agendaCancels": [], "newEntities": [], "entityFates": []
    },
    "moveFact": {
     "verb": "探查",

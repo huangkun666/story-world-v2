@@ -34,7 +34,7 @@ const world = () => ({
     meta: { tick: 0 },
 });
 
-const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [] });
+const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 // 挂因闭环步生成：熵泵事件未决时提议应对盘算（source.event=熵泵 id——A-6"可作盘算挂因"冒烟面）；
 // 有在飞盘算才行动/推进（零烟雾报警）；盘算满步达成后闭环。

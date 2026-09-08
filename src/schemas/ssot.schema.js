@@ -49,6 +49,18 @@ export const ssotSchema = {
                                         society: { kind: 'string' },
                                         techOrMagic: { kind: 'string' },
                                         historyNotes: { kind: 'array', items: { kind: 'string' } },
+                                        bookEntities: {   // K37 书名录（生通道①：书内名号实体，可选=旧世界零扰动）
+                                            kind: 'array',
+                                            items: {
+                                                kind: 'object',
+                                                additional: false,
+                                                required: ['name'],
+                                                props: {
+                                                    name: { kind: 'string', minLength: 1 },
+                                                    kind: { kind: 'string', enum: ['faction', 'character'] },
+                                                },
+                                            },
+                                        },
                                     },
                                 },
                             },
@@ -91,6 +103,7 @@ export const ssotSchema = {
                     attrs: { kind: 'numRecord' },                 // 硬实力/职权/人脉/情报（分量公式后续）
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
                     hurtWindow: { kind: 'array', minItems: 2, maxItems: 2, items: { kind: 'number' } },   // K15：近 2 tick 负向 δ 窗口 [本 tick, 上一 tick]（三态判据用；惰性写——全 0 删字段）
+                    status: { kind: 'string', enum: ['active', 'retired', 'dead'] },   // K37/实体治理 §3.7 状态契约（可选=缺省 active；旧世界零扰动）；dead=终局不复归；retired=可复归
                 },
             },
         },
@@ -201,6 +214,7 @@ export const ssotSchema = {
                     text: { kind: 'string', minLength: 1 },   // 编年 = 可见的因果链（§3⑤）
                     kind: { kind: 'string', enum: ['scheme', 'major', 'ripple', 'shade', 'state'] },   // K39/链视图细案 §3.1：编年行类型章（五筛用；可选=旧行零扰动）
                     eventRef: { kind: 'string' },
+                    chainRef: { kind: 'string' },   // 第十五棒补（K39 修正后拍板）：闭环/涟漪平息行的链目标事件 id——纯链入口数据，注入面（streams 只读 eventRef）语义分离；可选=旧行零扰动
                 },
             },
         },
@@ -210,6 +224,11 @@ export const ssotSchema = {
             required: ['tick'],
             props: {
                 tick: { kind: 'number', int: true, min: 0 },
+                dialogueBook: {   // K37/实体治理 §3.7 对话依据册：{ 对象名: {count, lastTick} }（可选；动态键 map——引擎记账保证内层形状，schema 只查整体为对象）
+                    kind: 'object',
+                    additional: true,
+                    props: {},
+                },
                 playerParse: {   // K32 溯源账：由解析注入的 attrs 键（force 重解析只覆盖此集的键；手填键永不触碰）
                     kind: 'object',
                     additional: false,
