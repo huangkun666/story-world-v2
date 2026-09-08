@@ -13,7 +13,7 @@ export function isSettingRef(s) {
 }
 
 export function patchDynamic(setting, patch) {
-    // patch: { key, delta } —— env 键小步增量；新键基线 0.5（提案态，随 K27 键表报批）
+    // patch: { key, delta } —— env 键小步增量；新键基线 0.5（提案态——不在报批二批清单，保持提案待后续批）
     if (!setting || typeof setting !== 'object' || !setting.dynamic) return setting;
     const env = setting.dynamic.env ?? {};
     const cur = typeof env[patch.key] === 'number' ? env[patch.key] : 0.5;
@@ -33,11 +33,11 @@ export function eventBornTick(id) {
 }
 
 // ---- K29 张力强度算法（细案 §3.1 要点 + T3 方向：事件频次 × 分量比 × 衰减——先曲线后报批，铁律 2/8）----
-// 强度 = 引擎确定性计算（模型不拍，world-step 无此写面）；数字全部提案态，K29 曲线为报批素材。
-export const TENSION_WINDOW = 10;      // 提案：活跃度观察窗（tick，含熵泵等全部近期事件）
-export const TENSION_FREQ_DIV = 4;     // 提案：频次归一除数（窗内 4 事件 = 满频）
-export const TENSION_INERTIA = 0.9;    // 提案：每 tick 惯性衰减（记忆系数——冷清时强度不骤跌）
-export const TENSION_BLEND = { freq: 0.6, rival: 0.4 };   // 提案：压力合成权重
+// 强度 = 引擎确定性计算（模型不拍，world-step 无此写面）；数字已定案（2026-09-08 报批二批 #9-12，K29 曲线为报批素材）。
+export const TENSION_WINDOW = 10;      // 定案（报批二批 #9）：活跃度观察窗（tick，含熵泵等全部近期事件）
+export const TENSION_FREQ_DIV = 4;     // 定案（报批二批 #10）：频次归一除数（窗内 4 事件 = 满频）
+export const TENSION_INERTIA = 0.9;    // 定案（报批二批 #11）：每 tick 惯性衰减（记忆系数——冷清时强度不骤跌）
+export const TENSION_BLEND = { freq: 0.6, rival: 0.4 };   // 定案（报批二批 #12）：压力合成权重
 
 export function computeTensionIntensity(world, tick) {
     const recent = (world.events || []).filter((e) => tick - eventBornTick(e.id) <= TENSION_WINDOW).length;
@@ -65,7 +65,7 @@ export function updateTensionIntensity(world, tick) {
 // ---- 盘算浪尖派生器（细案 §3.6② → A-5：大势两来源之二）----
 // 顶层盘算终结（达成/败露/变形）/取消 → 向 dynamic.derivedFrom 推"浪尖"项（tension.direction 的候选来源，
 // 引擎记账；上限 TIDE_CAP 滑动保留最近——SSOT 防漂移）。与抽象派生器并列的第二写入者；无第三来源（模型无写面）。
-export const TIDE_CAP = 20;   // 提案：浪尖派生引用上限
+export const TIDE_CAP = 20;   // 定案（报批二批 #13）：浪尖派生引用上限
 
 export function pushTidePeak(world, closedAgendaIds, tick) {
     const dynamic = world.context?.setting?.dynamic;

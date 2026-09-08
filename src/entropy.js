@@ -1,7 +1,7 @@
 // story-world-v2/src/entropy.js
 // 熵泵摩擦制造（K27/设定大势层，细案 §3.5 → A-6；longrun §2.3 收口——世界不冷却的"摩擦"来源）。
-// 环境推演器：每 ENV_TICK 一步，dynamic.env 各键按确定性锯齿表推小步（全部数字提案态，铁律 2——
-//   K29 冒烟曲线后随大势层数字一并报批）；
+// 环境推演器：每 ENV_TICK 一步，dynamic.env 各键按确定性锯齿表推小步（数字已定案——2026-09-08
+//   报批二批 #1-8；曲线 = 台账 L70/L72）；
 // 越阈 → 引擎生成状态源事件（熵泵事件：编年可见、挂事件链、可作盘算挂因 = source.event 未决）；
 // 环境回落越过回缓带 → 引擎闭环（与"常驻保留"不冲突：状态源常驻规则约束的是自动闭环路径，
 //   熵泵事件的生命周期由生成它的引擎自管——闭环/再发周期即泵的节奏）；
@@ -11,9 +11,9 @@
 
 import { patchDynamic } from './setting.js';
 
-export const ENV_TICK = 3;        // 提案：每 3 tick 一步（T5 拍板初案）
-export const ENV_DRIFT_STEP = 0.06;   // 提案：单步漂移量
-export const ENV_KEYS = ['民生度', '动乱度', '天时', '张力推手'];   // T5 键表（拍板初案）
+export const ENV_TICK = 3;        // 定案（报批二批 #1）：每 3 tick 一步（T5 拍板初案）
+export const ENV_DRIFT_STEP = 0.06;   // 定案（报批二批 #2）：单步漂移量
+export const ENV_KEYS = ['民生度', '动乱度', '天时', '张力推手'];   // 定案（报批二批 #3）：T5 键表（形状已拍）
 
 // 锯齿周期（先 down 后 up 的相位数）；dir = 首段方向（相位 1 起推——可达极值 = 首段相位数-1 步：
 // dir=+1 的键要够到危险带，down 须 ≥ at/步长+1——动乱度/张力推手 down=6 时峰值恰 0.80）
@@ -24,7 +24,7 @@ const SAW = {
     '张力推手': { down: 6, up: 5, dir: +1 },
 };
 
-// 危险带（越阈触发熵泵事件）/ 回缓带（= at 同向 + 0.1 余量，恢复闭环）——全部提案态
+// 危险带（越阈触发熵泵事件）/ 回缓带（= at 同向 + 0.1 余量，恢复闭环）——全部定案（报批二批 #4-7）
 export const BANDS = {
     '民生度': { dir: -1, at: 0.25, rec: 0.35, kind: '民生凋敝', title: '熵泵·民生凋敝：劳役征发四起' },
     '动乱度': { dir: +1, at: 0.75, rec: 0.65, kind: '动乱四起', title: '熵泵·动乱四起：匪患横行' },
@@ -70,7 +70,7 @@ export function pulseEntropy(world, tick, chronicle) {
             id: `ev_pump_${tick}_${n++}`,
             title: conf.title,
             source: { type: 'state' },
-            position: world.context.positions[0],   // 提案：熵泵事件落位置集首项（处境无特定驻点）
+            position: world.context.positions[0],   // 定案（报批二批 #8）：熵泵事件落位置集首项（处境无特定驻点）
             ripples: [],
             links: { up: [], down: [] },
             closed: false,
