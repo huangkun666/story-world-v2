@@ -200,6 +200,7 @@
 | `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt；K24 扩 context.setting） | schema + golden/live/bystander/player 世界测试 + setting | S2 · K3 · K5 · K9 · K18 · K24 |
 | `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
 | `fingerprint.js` | 书指纹缓存：FNV-1a（v1 算法原样搬）+ LRU 有界 + 版本戳 | `bookFingerprint(text)` → 指纹串；`createCache(seed?)` → {get,set,size,keys}（命中=深拷贝返回） | — | 稳定（K26） | fingerprint.test.js | K26 |
+| `player-inject.js` | 玩家 attrs 自动注入（P-B 触发闭合）：零 token 词表映射 | `injectPlayerAttrs(ssot)` → 新 SSOT（命中即用/不覆盖手填/缺省=定案初始值） | — | 稳定（K28） | player-inject.test.js | K28 |
 | `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2） | worldstep + smoke | K2（P3） |
 | `prompts.js` | 主调用 prompt（六铁律 + 内嵌 JSON 模板） | pack → prompt 字符串 | OUTPUT_TEMPLATE（与 schema 逐字一致） | 稳定（v2-agenda-t1-1：newAgendas + agendaCancels） | worldstep + streams 间接 | S4 · K5 · K18 |
 | `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |

@@ -21,6 +21,7 @@ const TEST_MAP = {
     'schemas/world-step.schema.js': ['schema.test.js'],
     'extract.js': ['extract.test.js'],
     'fingerprint.js': ['fingerprint.test.js'],
+    'player-inject.js': ['player-inject.test.js'],
     'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js'],
     'prompts.js': ['worldstep.test.js', 'streams.test.js'],
     'check-step.js': ['worldstep.test.js', 'birth.test.js', 'setting-guard.test.js'],
