@@ -61,3 +61,21 @@ export function updateTensionIntensity(world, tick) {
         dynamic: { ...setting.dynamic, tension: { ...setting.dynamic.tension, intensity } },
     };
 }
+
+// ---- 盘算浪尖派生器（细案 §3.6② → A-5：大势两来源之二）----
+// 顶层盘算终结（达成/败露/变形）/取消 → 向 dynamic.derivedFrom 推"浪尖"项（tension.direction 的候选来源，
+// 引擎记账；上限 TIDE_CAP 滑动保留最近——SSOT 防漂移）。与抽象派生器并列的第二写入者；无第三来源（模型无写面）。
+export const TIDE_CAP = 20;   // 提案：浪尖派生引用上限
+
+export function pushTidePeak(world, closedAgendaIds, tick) {
+    const dynamic = world.context?.setting?.dynamic;
+    if (!dynamic) return;
+    const tops = (world.agendas || []).filter((a) => closedAgendaIds.has(a.id) && !a.parentId);
+    if (!tops.length) return;
+    const derivedFrom = [...(dynamic.derivedFrom || [])];
+    for (const a of tops) derivedFrom.push(`浪尖:${a.id}@${tick}`);
+    world.context.setting = {
+        ...world.context.setting,
+        dynamic: { ...dynamic, derivedFrom: derivedFrom.slice(-TIDE_CAP) },
+    };
+}

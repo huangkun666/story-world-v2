@@ -100,4 +100,9 @@ test('K29/A-5/A-6/A-8：冒烟 100t 张力/环境量曲线——强度域 [0,1] 
     assert.equal(r.ok, true, r.errors.join('; '));
     const attrsLen = Object.keys(env).length === ENV_KEYS.length;
     assert.equal(attrsLen, true, '四键常驻');
+
+    // A-5 两来源之二：盘算浪尖派生——顶层盘算终结（达成）后 derivedFrom 有浪尖项
+    const derived = a.world.context.setting.dynamic.derivedFrom || [];
+    assert.ok(derived.some((d) => d.startsWith('浪尖:a_')), `浪尖项缺失: ${JSON.stringify(derived)}`);
+    assert.ok(derived.every((d) => /^浪尖:a_\d+_\d+@\d+$/.test(d) || d.startsWith('浪尖:')), '浪尖项格式统一');
 });
