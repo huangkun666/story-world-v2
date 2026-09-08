@@ -201,7 +201,8 @@
 | `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
 | `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2） | worldstep + smoke | K2（P3） |
 | `prompts.js` | 主调用 prompt（六铁律 + 内嵌 JSON 模板） | pack → prompt 字符串 | OUTPUT_TEMPLATE（与 schema 逐字一致） | 稳定（v2-agenda-t1-1：newAgendas + agendaCancels） | worldstep + streams 间接 | S4 · K5 · K18 |
-| `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒） | worldstep.test.js | S4 · K18 |
+| `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |
+| `setting.js` | 设定池读写面：保留键空间判词 + 演化层写通道 | `isSettingRef(s)` → 布尔；`patchDynamic(setting,{key,delta})` → 新 setting（不可变、[0,1] 钳制） | —（schema 无设定池写面） | 稳定（K25） | setting-guard.test.js | K25 |
 | `worldstep.js` | 主调用管线（传输注入 → 解析 → 真 schema + 语义校验） | ({transport, ssot, pack}) → {ok, step/errors} | check-step | 稳定 | worldstep.test.js | S4 · K5 用例 |
 | `settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决全落） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay | K9 · K11 · K22 |
 | `streams.js` | 双流渲染（观棋三行 + RP 注入） | (ssot, stage, move) → 双流文本 | — | 稳定（K10 解挂：注入掩码真值=玩家观察者；无玩家全见 P-E） | streams.test.js | S6 · K10 |

@@ -3,6 +3,7 @@
 // 事件源三类与无源拒绝（§4.2）、事件位置合法性切片版（§3.2）在此落实。
 import { validate } from './schema.js';
 import { worldStepSchema } from './schemas/world-step.schema.js';
+import { isSettingRef } from './setting.js';   // K25：设定池保留键空间判词
 
 // ids 索引
 function indexIds(ssot) {
@@ -100,6 +101,25 @@ export function checkWorldStep(step, ssot) {
     for (const [i, ev] of step.newEvents.entries()) {
         for (const [j, rid] of (ev.ripples || []).entries()) {
             if (!entityIds.has(rid)) errors.push(`$.newEvents[${i}].ripples[${j}]: 未知实体 "${rid}"`);
+        }
+    }
+
+    // ⑥ 设定池保留键空间（K25/大势层 → A-4）：context.setting 全池（frozen+dynamic）引擎持有、
+    //    模型不可写——任何世界步实体引用字段命中保留键空间即拒绝（校验拒绝、世界如实不动；
+    //    命名空间恒定保留，与设定池是否已落账无关；dynamic 的引擎写通道在 src/setting.js，模型无直写路径）
+    const refFields = [
+        ...step.actions.map((a, i) => [`$.actions[${i}].entity`, a.entity]),
+        ...step.actions.map((a, i) => [`$.actions[${i}].target`, a.target]),
+        ...step.stateChanges.map((c, i) => [`$.stateChanges[${i}].entity`, c.entity]),
+        ...step.stateChanges.map((c, i) => [`$.stateChanges[${i}].actor`, c.actor]),
+        ...(step.newAgendas || []).map((n, i) => [`$.newAgendas[${i}].entity`, n.entity]),
+    ];
+    for (const [path, ref] of refFields) {
+        if (isSettingRef(ref)) errors.push(`${path}: 设定池保留键不可作引用对象（引擎只读，K25/A-4）`);
+    }
+    for (const [i, ev] of step.newEvents.entries()) {
+        for (const [j, rid] of (ev.ripples || []).entries()) {
+            if (isSettingRef(rid)) errors.push(`$.newEvents[${i}].ripples[${j}]: 设定池保留键不可作引用对象（引擎只读，K25/A-4）`);
         }
     }
 
