@@ -100,7 +100,7 @@
 ## 5. 工具与命令手册
 
 - **运行位置**：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）。
-- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **288/288 全绿**（2026-09-08 第十三棒：ST 实机冒烟主场九连修，282→288——新增 prompts 契约锁 2 则、编年措辞/ripple 零代号锁 1 则、异步 save 回归锁 2 则、无世界文案断言 1 则等；全部细节见台账 L96-L106）。
+- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **305/305 全绿**（2026-09-08 第十四棒：K39 kind 章（288→292）→ K40 chain.js 展开器（292→300）→ K41 五筛+珠链渲染（300→305）；全部细节见台账 L112-L115）。
 - **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——**部署位**：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（第十三棒落位，台账 L96；v1 同层同法先例；web/ 改动免重复拷贝，ST 页面刷新即载）；重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
 - **演示**（`node demo/<名称>.js`，在项目根目录运行）：
   | 脚本 | 用途 |
@@ -154,6 +154,7 @@
 | 暗处渲染（concealed 叙事暗度） | **已实施（K21：编年侧三型抑制）** | —（已办结） | 抑制面=adv/委派/兑现；上桌=事件/终结三态/拆环/联闭；数据窗口不变（ANCHOR §6 拍板原文） |
 | 其后按 ANCHOR §6（因果链强化 → 设定大势层 → 双流 UI） | — | — | 因果链强化（事件闭环/裁剪）→ 设定大势层（含熵泵摩擦制造、冻结/演化层分离）→ 双流 UI（ST 集成、异步化、里程碑视图） |
 | 未决点 1 深化 | 已知限制 | 提取调用增强时 | 条件句/多意图样本（活档已见"等灵脉得了后"） |
+| 因果链视图 + 编年过滤器 | **已办结（K39-K42 实施完成，2026-09-08；305/305；ST 实机冒烟待用户环境）**（`docs/chronicle-chain-view-spec.md`） | ST 面板实机冒烟（筛选/链入口/阅卷三动作） | 零新增提案数字；数据面实读完毕（settle 14+entropy 2 编年写行点 / links.up 单向语义 / 里程碑段级聚合 / 卷 fromTick-toTick 区间映射） |
 
 **钻层盘点（2026-09-07 起的方式，新增建议可砍）：** 机制细案开工前，对相关链路向下钻一层，暴露项三类归类——**执行债**（已拍板未实现，排期顺手清）/ **设计缺口**（补细案或入队）/ **实现细节**（就地处理不设计）。本次盘点结果：
 
@@ -200,7 +201,7 @@
 | 模块 | 职责 | 契约（输入 → 输出） | 依赖 | 状态 | 测试 | 最近台账 |
 |---|---|---|---|---|---|---|
 | `schema.js` | 迷你校验器（零依赖、全错误列表） | (文档, 形状) → 错误列表 | — | 稳定 | schema.test.js | S2 · K2/K3/K5 扩展 |
-| `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt；K24 扩 context.setting） | schema + golden/live/bystander/player 世界测试 + setting | S2 · K3 · K5 · K9 · K18 · K24 |
+| `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt；K24 扩 context.setting；K39 扩编年行 kind 章） | schema + golden/live/bystander/player 世界测试 + setting | S2 · K3 · K5 · K9 · K18 · K24 · K39 |
 | `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
 | `fingerprint.js` | 书指纹缓存：FNV-1a（v1 算法原样搬）+ LRU 有界 + 版本戳 | `bookFingerprint(text)` → 指纹串；`createCache(seed?)` → {get,set,size,keys}（命中=深拷贝返回） | — | 稳定（K26） | fingerprint.test.js | K26 |
 | `player-inject.js` | 玩家 attrs 自动注入（P-B 触发闭合；v1.1=LLM 解析版，T7 拍板；K32 增溯源账 v1.2）：玩家开档描述 → 一次小调用解析 | `injectPlayerAttrs(ssot,{playerDesc,parse,overwrite})` → 新 SSOT（有依据=解析值 [0,1] 钳制 / 无依据·失败=定案默认 #6-9 / 手填优先 / 幂等；overwrite 只覆盖 meta.playerParse 溯源账内键） | — | 稳定（K28 → v1.1 → K32 v1.2） | player-inject + player-setup | K28 · 第十棒 · K32 |
@@ -209,10 +210,11 @@
 | `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |
 | `setting.js` | 设定池读写面：保留键空间判词 + 演化层写通道 + 张力强度 + 事件 id 契约解析器 | `isSettingRef(s)` → 布尔；`patchDynamic(setting,{key,delta})` → 新 setting（不可变、[0,1] 钳制）；`computeTensionIntensity(world,tick)` / `updateTensionIntensity`（K29，提案参数）；`eventBornTick(id)`（settle 同源共用） | —（schema 无设定池写面） | 稳定（K25/K29） | setting-guard.test.js + backdrop-smoke | K25 · K29 |
 | `worldstep.js` | 主调用管线（传输注入 → 解析 → 真 schema + 语义校验） | ({transport, ssot, pack}) → {ok, step/errors} | check-step | 稳定 | worldstep.test.js | S4 · K5 用例 |
-| `settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决 / K27 熵泵挂段+bornTickOf 数字段扫描 / K29 张力强度更新段） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay + entropy | K9 · K11 · K22 · K27 · K29 |
-| `entropy.js` | 熵泵摩擦制造：环境推演器 + 越阈落状态源事件 + 恢复闭环（细案 §3.5，全部数字提案态） | `pulseEntropy(world, tick, chronicle)`——每 ENV_TICK 一步、引擎生成器 | setting.js（写通道） | 稳定（K27） | entropy.test.js | K27 |
+| `await settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决 / K27 熵泵挂段+bornTickOf 数字段扫描 / K29 张力强度更新段；K39 编年行 kind 章 14 处盖章） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay + entropy + chain | K9 · K11 · K22 · K27 · K29 · K39 |
+| `entropy.js` | 熵泵摩擦制造：环境推演器 + 越阈落状态源事件 + 恢复闭环（细案 §3.5，全部数字提案态） | `pulseEntropy(world, tick, chronicle)`——每 ENV_TICK 一步、引擎生成器 | setting.js（写通道） | 稳定（K27；K39 编年行盖 state 章） | entropy.test.js | K27 · K39 |
 | `streams.js` | 双流渲染（观棋三行 + RP 注入） | (ssot, stage, move) → 双流文本 | — | 稳定（K10 解挂：注入掩码真值=玩家观察者；无玩家全见 P-E） | streams.test.js | S6 · K10 |
-| `render.js` | 渲染核心纯函数（K33/K34）：六页签 HTML 渲染 + 玩家语言词典 + 黑名单（第十三棒：ATTR_HINTS 属性释义 + 无障碍 sr 通道） | `renderAll(world, {config, oldVolumes})` → {board, chronicle, archive, entities, setting, settings, header}（同输入逐字节一致；引擎 id 只进 title 悬停；A-6 设定页与 frozen 逐字段一致） | entropy（BANDS/ENV_KEYS 只读） | 稳定（K33 → K34 HTML 面） | render.test.js | K33 · K34 · 第十三棒 |
+| `chain.js` | 因果链展开器（K40，链视图细案 §3.2 → A-15）：事件链上承（ripple 逐跳 / plot 盘算弧线 / state 终节点 / 里程碑聚合穿透）+ 下沿全分支树 + 三态防御，引擎层纯函数只读 | `expandChain(world, rootId)` → `{ok, root, up, down}`（节点：event/agenda/milestone/state-root/gap/leaf-note/terminal） | setting（eventBornTick 只读） | 稳定（K40） | chain.test.js | K40 |
+| `render.js` | 渲染核心纯函数（K33/K34）：六页签 HTML 渲染 + 玩家语言词典 + 黑名单（第十三棒：ATTR_HINTS 属性释义 + 无障碍 sr 通道；K41 编年五筛 + 珠链视图渲染） | `renderAll(world, {config, oldVolumes, view})` → {board, chronicle, archive, entities, setting, settings, header}（同输入逐字节一致；引擎 id 只进 title 悬停；A-6 设定页与 frozen 逐字段一致；view.chronicleFilter=五筛视图态，缺省全选） | entropy（BANDS/ENV_KEYS 只读） | 稳定（K33 → K34 HTML 面；K41 五筛/链视图） | render.test.js | K33 · K34 · 第十三棒 · K41 |
 | `tick.js` | 完整 tick 编排 | ({transport, ssot, dialogue, extractCtx}) → 结果 | extract/pack/worldstep/settle/streams | 稳定 | streams + smoke + live + bystander | S6 |
 | `transport-http.js` | OpenAI 兼容传输（env 配置、base 归一化） | ({baseUrl, apiKey, model}) → transport(prompt → 文本) | — | 稳定（超时/max_tokens 缺口入队） | transport-http.test.js | S6 |
 | `st-preset.js` | 酒馆预设直读（Node-only：node:fs 读 settings.json，浏览器侧不触达） | (settingsPath?) → 传输配置 | transport-http | 稳定 | —（diag-transport 工具覆盖） | 活演示·真跑 |

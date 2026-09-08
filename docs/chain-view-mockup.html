@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>因果链视图 · 演示图（chronicle-chain-view-spec 草案）</title>
+<!--
+  chain-view-mockup.html —— 因果链视图 + 编年五筛 的 HTML 演示图（第十四棒）。
+  对应细案 docs/chronicle-chain-view-spec.md §3.2（链展开器形态）/§3.3（渲染）/拍板点 C-1/C-2。
+  视觉语言取 ui-panel-mockup.html v3 / web/style.css 令牌：金=最新、暗红=暗处、蓝=可点。
+  A-3 纪律演示：可见文案零引擎术语（牵动/大事纪/来路/谋划 为玩家词面）；引擎 id 只进悬停与
+  <details> 管理豁免区（与大事纪页同口径）。
+  v2026-09-08-02：沙漏布局（根居中 · ▲来路/▼牵动）。
+  v2026-09-08-03：珠链节点化（用户反馈「长条卡片观感不明显」）——圆珠类型徽（事/谋/纪/源/旧/卷）
+    串在纵轴上，珠间挂 ▲/▼ 方向语，根事件=金圈大珠，分支=珠链分杈。
+  两个演示世界：示例一=江州热世界（全热账）；示例二=长世界（已入卷，跨卷穿透）。
+  JS 仅做视图演示（筛子多选并集/双链切换/阅卷提示），无外部依赖，直接浏览器打开。
+-->
+<style>
+:root{
+  --sw2-panel:#1b1f28;--sw2-card:#20252f;--sw2-card-2:#262c38;
+  --sw2-line:#2c3342;--sw2-line-soft:#242a36;
+  --sw2-text:#e8eaef;--sw2-text-dim:#9aa3b5;--sw2-text-faint:#6b7590;
+  --sw2-amber:#e3ad55;--sw2-amber-dim:rgba(227,173,85,.35);
+  --sw2-red:#df6c62;--sw2-green:#8fbf8f;--sw2-blue:#79a7d6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1015;color:var(--sw2-text);font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;font-size:14px;line-height:1.6;padding:26px 14px 60px}
+.page{max-width:980px;margin:0 auto}
+.demo-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;margin-bottom:14px;border:1px solid var(--sw2-line);border-radius:10px;background:var(--sw2-panel);font-size:12.5px;color:var(--sw2-text-dim)}
+.demo-bar b{color:var(--sw2-amber);font-weight:600}
+.demo-bar .tag{font-size:10.5px;color:var(--sw2-text-faint);border:1px solid var(--sw2-line);border-radius:999px;padding:1px 9px}
+.win{background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;box-shadow:0 20px 70px rgba(0,0,0,.6);overflow:hidden}
+.hd{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft)}
+.badge{width:34px;height:34px;border-radius:9px;flex:none;background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);color:#161006;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.tt{flex:1;min-width:0}
+.tt .t1{font-size:15.5px;font-weight:700;letter-spacing:.5px}
+.tt .t2{font-size:11.5px;color:var(--sw2-text-faint)}
+.chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap}
+.chip.gold{color:var(--sw2-amber);border-color:var(--sw2-amber-dim)}
+.sb{display:flex;align-items:center;gap:10px;padding:7px 18px;font-size:12px;color:var(--sw2-text-faint);border-bottom:1px solid var(--sw2-line-soft)}
+.sb .dot{width:7px;height:7px;border-radius:50%;background:var(--sw2-green);flex:none}
+.tabs{display:flex;gap:4px;padding:10px 14px 0;flex-wrap:wrap}
+.tab{padding:8px 15px;font-size:13.5px;color:var(--sw2-text-faint);border-radius:8px;border:none;background:none;cursor:pointer;font-family:inherit}
+.tab.act{color:var(--sw2-text);background:var(--sw2-card-2);box-shadow:inset 0 -2px 0 var(--sw2-amber)}
+.tab.dim{opacity:.55}
+.view{padding:16px 18px 22px}
+.col-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.col-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft)}
+/* ---- 编年页：五筛 chips（C-2：多选=并集；无 kind 旧账恒显示+计数提示） ---- */
+.filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.fchip{font-size:12.5px;padding:4px 14px;border-radius:999px;border:1px solid var(--sw2-line);background:var(--sw2-panel);color:var(--sw2-text-dim);cursor:pointer;user-select:none;font-family:inherit}
+.fchip:hover{border-color:var(--sw2-text-faint)}
+.fchip.on{background:var(--sw2-card-2);color:var(--sw2-text);border-color:var(--sw2-amber-dim);box-shadow:inset 0 0 0 1px var(--sw2-amber-dim)}
+.fchip.all{color:var(--sw2-amber)}
+.legacy-note{display:none;font-size:11.5px;color:var(--sw2-text-faint);margin-left:auto;font-style:normal}
+.legacy-note.show{display:inline}
+/* ---- 编年行 + 事件行「链」入口（C-1） ---- */
+.chronicle{display:flex;flex-direction:column;gap:5px;border:1px solid var(--sw2-line-soft);border-radius:10px;padding:9px;background:var(--sw2-panel)}
+.ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px}
+.ch-line:hover{background:var(--sw2-card)}
+.ch-line .r{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);flex:none;width:44px;text-align:right}
+.ch-line .t{flex:1;color:var(--sw2-text-dim)}
+.ch-line.ev .t{color:var(--sw2-text)}
+.ch-line.sel{background:var(--sw2-card-2);box-shadow:inset 2px 0 0 var(--sw2-amber)}
+.chainbtn{flex:none;font-size:11px;color:var(--sw2-blue);border:1px solid var(--sw2-line);background:var(--sw2-card);border-radius:6px;padding:1px 8px;cursor:pointer;font-family:inherit}
+.chainbtn:hover{border-color:var(--sw2-blue);background:var(--sw2-card-2)}
+.roll{font-size:12.5px;color:var(--sw2-amber);font-weight:600;padding:9px 10px;margin-top:6px;border-top:1px dashed var(--sw2-line);border-bottom:1px dashed var(--sw2-line)}
+.arch-mini{padding:10px;margin-top:10px;border:1px dashed var(--sw2-line);border-radius:9px;font-size:12.5px;color:var(--sw2-text-dim)}
+.arch-mini b{color:var(--sw2-amber);font-weight:600}
+.arch-mini .ids{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);margin-top:5px;word-break:break-all}
+.arch-mini .ids span{color:var(--sw2-blue);cursor:pointer;border-bottom:1px dotted transparent}
+.arch-mini .ids span:hover{border-bottom-color:var(--sw2-blue)}
+/* ===================== 链视图 · v3 珠链 =====================
+   纵轴贯通；圆珠=类型徽（事/谋/纪/源/旧/卷）串在轴上，珠间挂 ▲/▼ 方向语；
+   根事件=金圈大珠沉在轴心（沙漏：来路▲在上、牵动▼在下）。 */
+.chain{display:none;margin-top:12px;border:1px solid var(--sw2-line);border-radius:10px;background:var(--sw2-panel);overflow:hidden}
+.chain.show{display:block}
+.chain-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 15px;border-bottom:1px solid var(--sw2-line-soft);background:var(--sw2-card)}
+.chain-hd .tt{font-size:14px;font-weight:700}
+.chain-hd .sub{font-size:11.5px;color:var(--sw2-text-faint);flex:1;min-width:180px}
+.sw{display:inline-flex;gap:6px}
+.sw button{font-size:11.5px;padding:3px 12px;border-radius:7px;border:1px solid var(--sw2-line);background:var(--sw2-panel);color:var(--sw2-text-dim);cursor:pointer;font-family:inherit}
+.sw button.on{color:var(--sw2-text);border-color:var(--sw2-amber-dim);background:var(--sw2-card-2)}
+.chain-body{padding:14px 16px 16px}
+.cv-col{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:3px;margin:4px 0;display:flex;align-items:center;gap:8px}
+.cv-col::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft)}
+/* 中轴短线（段与根之间的过渡） */
+.axis{width:2px;height:14px;margin:2px auto;background:var(--sw2-line)}
+/* ---- 珠链纵向主轴（来路段） ---- */
+.rail{position:relative;padding-left:34px;margin:2px 0}
+.rail::before{content:"";position:absolute;left:15px;top:4px;bottom:4px;width:2px;background:var(--sw2-line)}
+.bead{position:relative;display:flex;gap:11px;align-items:flex-start;margin:8px 0}
+.bead::before{content:"";position:absolute;left:-19px;top:13px;width:17px;height:2px;background:var(--sw2-line)}   /* 竖轴 → 珠 的横接点 */
+.bk{width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:12.5px;font-weight:800;background:var(--sw2-panel);border:1.5px solid;letter-spacing:0}
+.bk.b-ev{color:var(--sw2-blue);border-color:rgba(121,167,214,.6)}
+.bk.b-ag{color:var(--sw2-amber);border-color:rgba(227,173,85,.6)}
+.bk.b-ag.dark{border-color:var(--sw2-red);color:#c98a82}
+.bk.b-ms{color:var(--sw2-green);border-color:rgba(143,191,143,.55)}
+.bk.b-term{color:var(--sw2-text-faint);border-color:var(--sw2-line)}
+.bk.b-gap{color:var(--sw2-text-faint);border-color:var(--sw2-text-faint);border-style:dashed}
+.bk.b-leaf{color:var(--sw2-green);border-color:rgba(143,191,143,.45);border-style:dotted}
+/* 珠身文字 */
+.bt{flex:1;min-width:0;padding:2px 0 0}
+.bt .nm{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.bt .nm .src{font-size:11px;color:var(--sw2-text-faint);font-weight:400}
+.bt .meta{font-size:12px;color:var(--sw2-text-dim);margin-top:2px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.bt .meta .dim{color:var(--sw2-text-faint);font-size:11px}
+.bt .meta b{color:var(--sw2-text);font-weight:600}
+/* 珠间方向语（▲ 向更早 / ▼ 向未来） */
+.hop{display:flex;align-items:center;gap:7px;margin:2px 0 2px 34px;font-size:11px;color:var(--sw2-text-faint)}
+.hop .dir{color:var(--sw2-amber);font-weight:700;letter-spacing:1px}
+/* 根事件：金圈大珠 */
+.hero{display:flex;align-items:center;gap:16px;padding:10px 16px;margin:2px 0}
+.hero .hx{width:46px;height:46px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:16px;font-weight:800;color:var(--sw2-amber);border:2px solid var(--sw2-amber);
+    background:linear-gradient(140deg,#2b2d22,#20252f);box-shadow:0 0 20px rgba(227,173,85,.28)}
+.hero .hn{font-size:16.5px;font-weight:700;line-height:1.45}
+.hero .hm{margin-top:3px;font-size:12px;color:var(--sw2-text-dim);display:flex;gap:14px;flex-wrap:wrap}
+.hero .hm b{color:var(--sw2-amber);font-weight:600}
+/* ---- 下沿分杈：珠链分枝 ---- */
+.tree{position:relative;padding-left:22px}
+.branch{position:relative;padding-left:24px;margin:2px 0}
+.branch::before{content:"";position:absolute;left:-18px;top:0;bottom:0;width:2px;background:var(--sw2-line)}   /* 主干延续 */
+.branch::after{content:"";position:absolute;left:-18px;top:14px;width:35px;height:2px;background:var(--sw2-line)}  /* 分杈臂 */
+.branch.last::before{bottom:auto;height:14px}
+.branch .bead::before{content:none}   /* 分杈臂已到珠，不再加接点 */
+.tree .bead{margin:6px 0}
+/* 徽 & 杂件 */
+.vb{font-size:9.5px;padding:0 5px;border-radius:3px;letter-spacing:2px}
+.vb.known{background:#26313f;color:#8fb2d6}
+.vb.hidden{background:#372627;color:#c98a82}
+.verdict{font-size:10.5px;padding:1px 8px;border-radius:999px;border:1px solid var(--sw2-line);color:var(--sw2-text-dim)}
+.verdict.open{color:var(--sw2-amber);border-color:var(--sw2-amber-dim)}
+.verdict.done{color:var(--sw2-green);border-color:rgba(143,191,143,.4)}
+.verdict.stop{color:var(--sw2-red);border-color:rgba(223,108,98,.4)}
+.dots{display:inline-flex;gap:3px;vertical-align:1px}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--sw2-card-2);display:inline-block}
+.dots i.on{background:var(--sw2-amber)}
+.kchip{font-size:11px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:1px 9px;font-family:inherit;background:var(--sw2-panel)}
+.kchip.darkchip{border-color:rgba(223,108,98,.45);color:#c98a82}
+details.mini{margin-top:3px}
+details.mini summary{font-size:11.5px;color:var(--sw2-text-dim);cursor:pointer;user-select:none;display:inline-flex;gap:5px;align-items:center}
+details.mini summary:hover{color:var(--sw2-text)}
+details.mini .in{font-family:"Cascadia Mono",Consolas,monospace;font-size:10.5px;color:var(--sw2-text-faint);margin-top:4px;line-height:1.8;word-break:break-all}
+.open-vol{font-size:12px;color:var(--sw2-blue);border:1px solid var(--sw2-line);background:var(--sw2-card);border-radius:999px;padding:3px 13px;cursor:pointer;font-family:inherit}
+.open-vol:hover{border-color:var(--sw2-blue)}
+.tail{font-size:11.5px;color:var(--sw2-text-faint);margin-top:10px;line-height:1.65}
+.toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:var(--sw2-card-2);border:1px solid var(--sw2-line);border-radius:999px;padding:9px 20px;font-size:12.5px;color:var(--sw2-text);box-shadow:0 10px 30px rgba(0,0,0,.5);display:none;z-index:99}
+/* 图例 / 页脚 */
+.legend{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px 18px;padding:13px 16px;border:1px solid var(--sw2-line);border-radius:10px;background:var(--sw2-panel);font-size:12px;color:var(--sw2-text-dim)}
+.legend b{color:var(--sw2-text);font-weight:600}
+.lg{display:inline-flex;align-items:center;gap:7px}
+.lg i{width:20px;height:20px;border-radius:50%;border:1.5px solid;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:10px;font-weight:800}
+.lg i.c-ev{color:var(--sw2-blue);border-color:rgba(121,167,214,.6)}
+.lg i.c-ag{color:var(--sw2-amber);border-color:rgba(227,173,85,.6)}
+.lg i.c-ms{color:var(--sw2-green);border-color:rgba(143,191,143,.55)}
+.lg i.c-term{color:var(--sw2-text-faint);border-color:var(--sw2-line)}
+.foot{margin-top:12px;font-size:11.5px;color:var(--sw2-text-faint);line-height:1.9}
+.foot code{font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-text-dim)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="demo-bar">
+    <b>因果链视图 · 演示图</b>
+    <span>对应细案 <code>docs/chronicle-chain-view-spec.md</code> §3.2/§3.3 · 拍板点 C-1/C-2</span>
+    <span class="tag">v3 · 珠链节点化</span>
+    <span class="tag">示例一＝江州热世界</span>
+    <span class="tag">示例二＝长世界 · 跨卷穿透</span>
+  </div>
+
+  <div class="win">
+    <div class="hd">
+      <div class="badge">棋</div>
+      <div class="tt"><div class="t1">观棋窗口</div><div class="t2">Story World v2 · 演示形态</div></div>
+      <span class="chip">世界：江州</span>
+      <span class="chip gold">第 6 轮</span>
+    </div>
+    <div class="sb"><span class="dot"></span><span>已同步 · 刚演完 第6轮 · 编年 +2 行 · 窗口只读，不参与剧情</span></div>
+    <div class="tabs">
+      <button class="tab">观棋</button>
+      <button class="tab act">编年</button>
+      <button class="tab">大事纪·旧卷</button>
+      <button class="tab dim">角色与势力</button>
+      <button class="tab dim">设定</button>
+      <button class="tab dim">设置</button>
+    </div>
+
+    <div class="view">
+      <!-- 编年页：五筛（C-2：多选=并集；无 kind 旧账恒显示+计数提示） -->
+      <div class="col-head">编年 · 史卷</div>
+      <div class="filter-bar">
+        <span class="fchip all on" data-f="all">全部</span>
+        <span class="fchip on" data-f="scheme">谋划</span>
+        <span class="fchip on" data-f="major">大事</span>
+        <span class="fchip on" data-f="ripple">牵动</span>
+        <span class="fchip on" data-f="shade">暗处</span>
+        <span class="fchip on" data-f="state">时局</span>
+        <em class="legacy-note" id="legacyNote">另有 9 条旧账未分类，任何筛选下始终显示</em>
+      </div>
+
+      <div class="chronicle">
+        <div class="ch-line"><span class="r">1</span><span class="t">由世界处境而生：江州官府 生「筹备江州防务」</span></div>
+        <div class="ch-line"><span class="r">2</span><span class="t">盘算「筹备江州防务」推进：征调商行出力，商路驻防重整</span></div>
+        <div class="ch-line"><span class="r">2</span><span class="t">委派：江州官府 拆大给小——「打通边关商路」（授 大虞偏将）</span></div>
+        <div class="ch-line"><span class="r">3</span><span class="t">盘算「打通边关商路」推进：守将首肯，车队放行</span></div>
+        <div class="ch-line ev"><span class="r">3</span><span class="t">事件「边关商路重开」——由盘算「打通边关商路」而生，事发 江州，牵动 大虞偏将</span></div>
+        <div class="ch-line ev sel"><span class="r">4</span><span class="t">事件「官军出城引发恐慌」——沿「边关商路重开」而来，事发 江州，牵动 大虞偏将</span>
+          <button class="chainbtn" data-chain="A">链</button></div>
+        <div class="ch-line"><span class="r">5</span><span class="t">盘算「打通边关商路」满步结算：达成（终结产果）</span></div>
+        <div class="ch-line ev"><span class="r">5</span><span class="t">事件「边关商路重开」闭环（源盘算已结算）</span></div>
+        <div class="ch-line"><span class="r">6</span><span class="t">事件「商路税银入库」——由盘算「打通边关商路」而生，事发 江州</span></div>
+        <div class="roll">⚑ 第 1–6 轮 · 编年与大事纪在此相接（示例二演示跨卷形态）</div>
+      </div>
+
+      <!-- 第二条入口（C-1）：大事纪 ids 展开条 = 管理豁免区，ids 可开链 -->
+      <div class="arch-mini">
+        <b>大事纪 · 纪 m_40</b>（第 1–40 轮 · 9 件事 · 示例二世界）——id 是管理细节，点任一条看它的来去：
+        <div class="ids">
+          <span data-chain="B">ev_3_1</span> · <span data-chain="B">ev_3_2</span> ·
+          <span data-chain="B">ev_4_1</span> · <span data-chain="B">ev_9_2</span> ·
+          <span data-chain="B">ev_11_1</span> · <span data-chain="B">ev_12_3</span> ·
+          <span data-chain="B">ev_18_1</span> · <span data-chain="B">ev_39_1</span> ·
+          <span data-chain="B">ev_39_2</span>
+        </div>
+      </div>
+
+      <!-- 链视图（K42 编排：open-chain 产物 insertAdjacentHTML afterbegin 于此容器） -->
+      <div class="chain" id="chain">
+        <div class="chain-hd">
+          <div class="tt">事件「<span id="chainTitle">官军出城引发恐慌</span>」的来去</div>
+          <div class="sub" id="chainSub">事发 江州 · 第 4 轮 · 来路 2 跳 · 牵动 3 条在账</div>
+          <div class="sw">
+            <button class="on" data-s="A">示例一 · 热世界</button>
+            <button data-s="B">示例二 · 跨卷穿透</button>
+          </div>
+        </div>
+
+        <!-- ============ 示例一：珠链沙漏——来路▲在上、根金珠居中、牵动▼在下 ============ -->
+        <div class="chain-body" id="paneA">
+          <div class="cv-col">来路 · 上承（<span style="color:var(--sw2-amber);letter-spacing:1px">▲ 向更早</span>）</div>
+          <div class="rail">
+            <div class="bead">
+              <span class="bk b-term">源</span>
+              <div class="bt">
+                <div class="nm">盘算是动作的源头 <span class="src">顶层谋划 · 不再更上</span></div>
+                <div class="meta">顶层盘算本身就是根——它只从世界处境与设定里生，账上没有更早的来路。</div>
+              </div>
+            </div>
+            <div class="hop"><span class="dir">▲</span>委派自上</div>
+            <div class="bead">
+              <span class="bk b-ag">谋</span>
+              <div class="bt">
+                <div class="nm">筹备江州防务 <span class="vb known">明</span><span class="verdict open">在办</span>
+                  <span class="src">江州官府 · 顶层</span></div>
+                <div class="meta">阶段 征集 <span class="dots"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span> 2/5
+                  <span class="dim">· 下沿子谋划：</span><span class="kchip">打通边关商路</span>
+                  <span class="kchip darkchip">借夜禁压商（暗 · 在办 2/4）</span></div>
+              </div>
+            </div>
+            <div class="hop"><span class="dir">▲</span>委派自上</div>
+            <div class="bead">
+              <span class="bk b-ag">谋</span>
+              <div class="bt">
+                <div class="nm">打通边关商路 <span class="vb known">明</span><span class="verdict done">已了结 · 达成</span>
+                  <span class="src">大虞偏将 · 阶段 通商</span></div>
+                <div class="meta"><span class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span> 3/4</div>
+                <div class="meta dim" style="font-size:11.5px;color:var(--sw2-text-faint)">最近一步：守将首肯，车队放行</div>
+                <details class="mini"><summary>产果 · 2 件（由本谋划生的事件）</summary>
+                  <div class="in">边关商路重开 · 商路税银入库（再往下的牵动：官军出城引发恐慌 等 3 条）</div>
+                </details>
+              </div>
+            </div>
+            <div class="hop"><span class="dir">▲</span>由盘算而生</div>
+            <div class="bead">
+              <span class="bk b-ev">事</span>
+              <div class="bt">
+                <div class="nm">边关商路重开 <span class="src">事件 · 第 3 轮 · 已了结</span></div>
+                <div class="meta">由盘算「<b>打通边关商路</b>」而生</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="axis"></div>
+          <div class="hero">
+            <span class="hx">事</span>
+            <div>
+              <div class="hn">“官军出城引发恐慌”</div>
+              <div class="hm">
+                <span><b>源自</b>：沿「边关商路重开」而来</span>
+                <span><b>事发</b>：江州</span>
+                <span><b>牵动</b>：大虞偏将</span>
+                <span><b>第 4 轮</b> · 未了结</span>
+              </div>
+            </div>
+          </div>
+          <div class="axis"></div>
+
+          <div class="cv-col">牵动 · 下沿（<span style="color:var(--sw2-amber);letter-spacing:1px">▼ 向未来</span>）</div>
+          <div class="tree">
+            <div class="branch">
+              <div class="bead">
+                <span class="bk b-ev">事</span>
+                <div class="bt">
+                  <div class="nm">江州粮价上涨 <span class="src">事件 · 第 5 轮 · 已了结</span></div>
+                  <div class="meta">沿「官军出城引发恐慌」而来 · 牵动 坊市</div>
+                </div>
+              </div>
+              <div class="branch last">
+                <div class="bead">
+                  <span class="bk b-ev">事</span>
+                  <div class="bt">
+                    <div class="nm">坊市夜禁 <span class="src">事件 · 第 5 轮 · 未了结</span></div>
+                    <div class="meta">沿「江州粮价上涨」而来 · 牵动 江州官府</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="branch last">
+              <div class="bead">
+                <span class="bk b-ev">事</span>
+                <div class="bt">
+                  <div class="nm">万法阁密使入城 <span class="src">事件 · 第 5 轮 · 已了结</span></div>
+                  <div class="meta">沿「官军出城引发恐慌」而来 · 牵动 万法阁</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tail">链条走到这里为止——再往下的牵动要等世界接着演化才有账。</div>
+        </div>
+
+        <!-- ============ 示例二：珠链同构——跨卷穿透（纪珠聚合上溯） ============ -->
+        <div class="chain-body" id="paneB" style="display:none">
+          <div class="cv-col">来路 · 上承（<span style="color:var(--sw2-amber);letter-spacing:1px">▲ 向更早 · 跨卷穿透</span>）</div>
+          <div class="rail">
+            <div class="bead">
+              <span class="bk b-term">源</span>
+              <div class="bt">
+                <div class="nm">纪之源头已不可查（旧账）</div>
+                <div class="meta">最老的纪没有记录更早的来路——如实显示，不猜不编。</div>
+              </div>
+            </div>
+            <div class="hop"><span class="dir">▲</span>更早的大纪</div>
+            <div class="bead">
+              <span class="bk b-ms">纪</span>
+              <div class="bt">
+                <div class="nm">纪 m_30 <span class="src">第 1–30 轮 · 7 件事</span></div>
+                <div class="meta">“穷山的来客 · 万法阁闭门 · 灵脉传闻四起 · …”</div>
+              </div>
+            </div>
+            <div class="hop"><span class="dir">▲</span>沿纪的聚合指针</div>
+            <div class="bead">
+              <span class="bk b-ms">纪</span>
+              <div class="bt">
+                <div class="nm">纪 m_40 <span class="src">第 1–40 轮 · 9 件事</span></div>
+                <div class="meta">“边关商路重开 · 祖庙血案 · 官军出城引发恐慌 · …”</div>
+                <details class="mini"><summary>展开这一纪的条目（管理细节）</summary>
+                  <div class="in">ev_3_1 · ev_3_2 · ev_4_1 · ev_9_2 · ev_11_1 · ev_12_3 · ev_18_1 · ev_39_1 · ev_39_2</div>
+                </details>
+                <div class="meta"><span class="dim">纪内更早的 4 件已收进旧卷·卷1（第 1–32 轮）：</span>
+                  <button class="open-vol" data-vol="卷1">阅卷 · 卷1</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="axis"></div>
+          <div class="hero">
+            <span class="hx">事</span>
+            <div>
+              <div class="hn">“万法阁秘宴走漏”</div>
+              <div class="hm">
+                <span><b>源自</b>：沿「旧事」而来（<b>源头已入大事纪</b>）</span>
+                <span><b>事发</b>：江州</span>
+                <span><b>牵动</b>：万法阁</span>
+                <span><b>第 41 轮</b> · 已了结</span>
+              </div>
+            </div>
+          </div>
+          <div class="axis"></div>
+
+          <div class="cv-col">牵动 · 下沿（<span style="color:var(--sw2-amber);letter-spacing:1px">▼ 向未来</span>）</div>
+          <div class="tree">
+            <div class="branch">
+              <div class="bead">
+                <span class="bk b-ev">事</span>
+                <div class="bt">
+                  <div class="nm">灵脉传闻四起 <span class="src">事件 · 第 42 轮 · 未了结</span></div>
+                  <div class="meta">沿「万法阁秘宴走漏」而来 · 牵动 万法阁 · 灵脉</div>
+                </div>
+              </div>
+            </div>
+            <div class="branch">
+              <div class="bead">
+                <span class="bk b-ev">事</span>
+                <div class="bt">
+                  <div class="nm">万法阁悬赏风波 <span class="src">事件 · 第 43 轮 · 已了结</span></div>
+                  <div class="meta">沿「万法阁秘宴走漏」而来 · 牵动 万法阁</div>
+                </div>
+              </div>
+            </div>
+            <div class="branch last">
+              <div class="bead">
+                <span class="bk b-leaf">卷</span>
+                <div class="bt">
+                  <div class="nm">另有 4 条在旧卷 <span class="verdict done">纪 m_40</span></div>
+                  <div class="meta">这一支的后续牵动已随段入卷（第 33–40 轮）——阅卷看全文。</div>
+                  <div class="meta"><button class="open-vol" data-vol="卷2">阅卷 · 卷2 · 第 33–40 轮</button>
+                    <button class="open-vol" data-vol="卷1">阅卷 · 卷1 · 第 1–32 轮</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cv-col">另例 · 悬空引用（防御态）</div>
+          <div class="rail">
+            <div class="bead">
+              <span class="bk b-gap">旧</span>
+              <div class="bt">
+                <div class="nm">沿「旧事」而来 <span class="src">已无从检索</span></div>
+                <div class="meta">引用的上游既不在热账也不在任何大事纪——正直展示「旧事」二字，不猜内容。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="lg"><i class="c-ev">事</i><b>事件珠</b>（来路/牵动的节点）</span>
+    <span class="lg"><i class="c-ag">谋</i><b>谋划珠</b>（明暗徽 · 阶段 · 进度 · 结局 · 产果）</span>
+    <span class="lg"><i class="c-ms">纪</i><b>大事纪珠</b>（聚合穿透 · 阅卷）</span>
+    <span class="lg"><i class="c-term">源</i><b>源头/终端</b>（顶层谋划 · 纪之尽头）</span>
+    <span>虚珠=悬空引用（旧）· 点珠=旧卷余尾（卷）</span>
+    <span>▲ 向更早 · ▼ 向未来（根珠居中）</span>
+    <span>蓝字=可点</span>
+  </div>
+
+  <div class="foot">
+    全部文案都是<b>事实拼句</b>——来自编年落账文本与账本字段（标题/来源措辞/牵动名单/任期轮/明暗/阶段/进度/结局），引擎零创作零预测，润色延后。
+    引擎代号只出现在悬停与「展开条目」管理区（A-3 豁免口径，与大事纪页一致）；玩家视线内零代号。<br>
+    对应细案：珠型=§3.2 节点种类（event / agenda / milestone / state-root / gap / leaf-note）· 五筛与旧账提示=§3.1/§3.3 · 入口两处与阅卷联动=§3.4。
+    <br><code>docs/chain-view-mockup.html</code> · 第十四棒 · v3 珠链节点化（沙漏 + 圆珠串轴）· 待拍板 C-1..C-5
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var toastTimer;
+  function toast(msg){
+    var el=document.getElementById('toast');
+    el.textContent=msg; el.style.display='block';
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){el.style.display='none';},2600);
+  }
+  // 筛子多选=并集（纯视图态演示；取消部分筛选时出现旧账提示）
+  var chips=[].slice.call(document.querySelectorAll('.fchip'));
+  chips.forEach(function(c){
+    c.addEventListener('click',function(){
+      if(c.dataset.f==='all'){ chips.forEach(function(x){x.classList.add('on');}); note(false); return; }
+      if(c.classList.contains('on')){
+        c.classList.remove('on');
+        var still=chips.some(function(x){return x!==c&&x.classList.contains('on');});
+        if(!still){ document.querySelector('.fchip.all').classList.add('on'); }
+        note(true);
+      } else {
+        c.classList.add('on');
+        document.querySelector('.fchip.all').classList.remove('on');
+        note(false);
+      }
+    });
+  });
+  function note(show){ document.getElementById('legacyNote').classList.toggle('show',show); }
+  // 双链切换（open-chain 的演示：不同 root 的展开）
+  function showPane(s){
+    document.getElementById('paneA').style.display=s==='A'?'':'none';
+    document.getElementById('paneB').style.display=s==='B'?'':'none';
+    document.querySelectorAll('.sw button').forEach(function(b){b.classList.toggle('on',b.dataset.s===s);});
+    var t=s==='A'?['官军出城引发恐慌','事发 江州 · 第 4 轮 · 来路 2 跳 · 牵动 3 条在账']
+                 :['万法阁秘宴走漏','事发 江州 · 第 41 轮 · 来路跨 2 纪 · 牵动 2 条在账 + 4 条在旧卷'];
+    document.getElementById('chainTitle').textContent=t[0];
+    document.getElementById('chainSub').textContent=t[1];
+  }
+  document.querySelectorAll('.sw button').forEach(function(b){
+    b.addEventListener('click',function(){ showPane(b.dataset.s); });
+  });
+  // 链入口：编年行「链」按钮 / 大事纪 ids
+  function openChain(which){
+    showPane(which);
+    var box=document.getElementById('chain');
+    box.classList.add('show');
+    box.scrollIntoView({behavior:'smooth',block:'nearest'});
+    toast('已展开事件链（演示）——示例'+(which==='A'?'一':'二'));
+  }
+  document.querySelectorAll('[data-chain]').forEach(function(el){
+    el.addEventListener('click',function(){ openChain(el.getAttribute('data-chain')); });
+  });
+  // 阅卷按钮：演示提示（真实接线=K35 read-volume 还原进编年视图）
+  document.querySelectorAll('.open-vol').forEach(function(el){
+    el.addEventListener('click',function(){
+      toast('（演示）阅卷「'+el.getAttribute('data-vol')+'」：将把卷内编年还原进编年视图 · K35 接线');
+    });
+  });
+})();
+</script>
+</body>
+</html>

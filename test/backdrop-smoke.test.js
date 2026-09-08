@@ -85,6 +85,9 @@ test('K29/A-5/A-6/A-8：冒烟 100t 张力/环境量曲线——强度域 [0,1] 
     const born = a.world.chronicle.filter((c) => c.text.includes('因事而生') && c.text.includes('熵泵'));
     assert.ok(born.length >= 2, `熵泵挂因盘算 ${born.length} ≥ 2`);
 
+    // K39/A-16①：settle 落账编年行 100% 带 kind 章（漏章回归锁——未来新增编年写点漏章即红）
+    assert.ok(a.world.chronicle.every((c) => ['scheme', 'major', 'ripple', 'shade', 'state'].includes(c.kind)), '冒烟 100t 落账编年行全带 kind（A-16①）');
+
     // 预算（A-8）与既有冒烟断言（体积界除外——切片刻度 20KB 不含设定池世界：大势层 100t 终态 ≈ 21.7KB，
     // 编年无裁剪为已知队列项，双流 UI 阶段裁剪/冷档；归档闸在事件池生效即有界）
     assert.ok(m.maxPackTokens <= 4000, `输入峰 ${m.maxPackTokens} ≤ 4000`);

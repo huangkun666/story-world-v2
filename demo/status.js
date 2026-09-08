@@ -29,6 +29,7 @@ const TEST_MAP = {
     'setting.js': ['setting-guard.test.js', 'backdrop-smoke.test.js'],
     'entropy.js': ['entropy.test.js'],
     'settle.js': ['settle.test.js', 'golden-slice.test.js', 'gate.test.js', 'cause.test.js', 'decay.test.js', 'weight-smoke.test.js', 'birth.test.js', 'verdict.test.js', 'event-close.test.js', 'archive.test.js', 'shade.test.js', 'cancel.test.js', 'snapshot-replay.test.js', 'entropy.test.js'],
+    'chain.js': ['chain.test.js'],
     'streams.js': ['streams.test.js', 'shade.test.js'],
     'tick.js': ['streams.test.js', 'smoke.test.js', 'live-world.test.js', 'bystander-world.test.js'],
     'transport-http.js': ['transport-http.test.js'],

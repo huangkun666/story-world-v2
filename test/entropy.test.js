@@ -70,6 +70,7 @@ test('K27/A-6：越阈落熵泵事件——t15 四键齐发（ev_pump_15_1..4、
     ]);
     const fired = w.chronicle.filter((c) => c.text.includes('环境量越阈'));
     assert.equal(fired.length, 4, '编年可见（越阈上桌条目）');
+    assert.ok(fired.every((c) => c.kind === 'state'), '熵泵事件行盖 state 章（K39）');
     const r = validate(w, ssotSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
 });
@@ -88,6 +89,7 @@ test('K27/A-6：恢复闭环——张力推手 t21、民生度/动乱度 t24、�
     assert.equal(evs.filter((e) => e.closed).length, 4, '四种全部缓和');
     const closes = w.chronicle.filter((c) => c.text.includes('缓和'));
     assert.equal(closes.length, 4);
+    assert.ok(closes.every((c) => c.kind === 'state'), '缓和行盖 state 章（K39）');
     const byKind = Object.fromEntries(evs.map((e) => [e.title.slice(3, e.title.indexOf('：')), e]));
     assert.equal(byKind['大势紧绷'].closedAt, 21);
     assert.equal(byKind['民生凋敝'].closedAt, 24);

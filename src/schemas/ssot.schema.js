@@ -199,6 +199,7 @@ export const ssotSchema = {
                     id: { kind: 'string', minLength: 1 },
                     tick: { kind: 'number', int: true, min: 0 },
                     text: { kind: 'string', minLength: 1 },   // 编年 = 可见的因果链（§3⑤）
+                    kind: { kind: 'string', enum: ['scheme', 'major', 'ripple', 'shade', 'state'] },   // K39/链视图细案 §3.1：编年行类型章（五筛用；可选=旧行零扰动）
                     eventRef: { kind: 'string' },
                 },
             },

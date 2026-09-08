@@ -25,6 +25,15 @@ export const ATTR_HINTS = Object.freeze({
     intel: '耳目：情报网有多灵——决定你能看多远',
 });
 
+// K41/链视图细案 §3.1（A-16）：编年五筛（chips 玩家词面 ↔ kind 契约 token）
+export const CHRONICLE_FILTERS = Object.freeze([
+    { token: 'scheme', label: '谋划' },
+    { token: 'major', label: '大事' },
+    { token: 'ripple', label: '牵动' },
+    { token: 'shade', label: '暗处' },
+    { token: 'state', label: '时局' },
+]);
+
 // 渲染产物黑名单（引擎术语不得出现在玩家视线）
 export const BLACKLIST = [
     '分量', '熵泵', '里程碑', '上溯', '波及',
@@ -206,12 +215,23 @@ export function renderBoardHtml(world, opts = {}) {
 
 // ============ 编年页 ============
 
-export function renderChronicleHtml(world, { oldVolumes = [] } = {}) {
-    const rows = (world.chronicle || []).map((c) => `<div class="sw2-ch-line${c.eventRef ? ' sw2-ch-event' : ''}">`
-        + `<span class="sw2-ch-round">${c.tick}</span>`
-        + `<span class="sw2-ch-text">${escapeHtml(c.text)}</span>`
-        + (c.eventRef ? `<span class="sw2-ref" title="${escapeHtml(c.eventRef)}">？</span>` : '')
-        + `</div>`);
+export function renderChronicleHtml(world, { oldVolumes = [], filter = null } = {}) {
+    // K41 五筛（A-16②）：行选择 = 无 kind 旧账恒显示（不藏）∪ kind ∈ filter；filter=null 全选
+    const rows = (world.chronicle || []).map((c) => {
+        if (filter != null && c.kind && !filter.has(c.kind)) return '';
+        return `<div class="sw2-ch-line${c.eventRef ? ' sw2-ch-event' : ''}">`
+            + `<span class="sw2-ch-round">${c.tick}</span>`
+            + `<span class="sw2-ch-text">${escapeHtml(c.text)}</span>`
+            + (c.eventRef ? `<button class="sw2-chainbtn" data-chain="${escapeHtml(c.eventRef)}" title="${escapeHtml(c.eventRef)}">链</button>` : '')
+            + `</div>`;
+    }).filter(Boolean);
+    const legacyCount = (world.chronicle || []).filter((c) => !c.kind).length;
+    const chip = (token, label, on) => `<span class="sw2-fchip${on ? ' on' : ''}" data-action="set-filter" data-filter="${token}">${label}</span>`;
+    const chips = [chip('all', '全部', filter == null)]
+        .concat(CHRONICLE_FILTERS.map((f) => chip(f.token, f.label, filter != null && filter.has(f.token))))
+        .join('');
+    const legacyNote = filter != null && legacyCount > 0
+        ? `<em class="sw2-legacy-note">另有 ${legacyCount} 条旧账未分类，任何筛选下始终显示</em>` : '';
     const notes = (world.milestones || []).map((m) => {
         const titles = Array.isArray(m.titles) ? m.titles : (m.title ? [m.title] : []);
         return `<div class="sw2-ch-roll">⚑ 第 1–${msIdTick(m.id)} 轮已收进大事纪「${escapeHtml(titles.join('、'))}」</div>`;
@@ -220,7 +240,9 @@ export function renderChronicleHtml(world, { oldVolumes = [] } = {}) {
         + `<span class="sw2-volinfo">${escapeHtml(v.info)}</span><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(v.id)}">阅卷</span></div>`);
     const volBlock = volumes.length
         ? `<div class="sw2-cold"><h4>旧卷（早于大事纪的编年原文 · 按需阅卷）</h4>${volumes.join('')}</div>` : '';
-    return `<div class="sw2-col-head">编年 · 史卷</div><div class="sw2-chronicle">${rows.join('')}${notes.join('')}</div>${volBlock}`;
+    return `<div class="sw2-col-head">编年 · 史卷</div>`
+        + `<div class="sw2-ch-filter">${chips}${legacyNote}</div>`
+        + `<div class="sw2-chronicle">${rows.join('')}${notes.join('')}</div>${volBlock}`;
 }
 
 // ============ 大事纪·旧卷页 ============
@@ -368,12 +390,140 @@ export function renderVolumeReadHtml(volumeId, rows = []) {
     return `<div class="sw2-chronicle" id="sw2_volume_read" data-volume="${escapeHtml(volumeId)}">${body}</div>`;
 }
 
+// ============ K41 链视图（细案 §3.2/§3.3 → A-15 渲染面；珠链形态=chain-view-mockup.html v3 沙漏） ============
+// 纯函数、零创作：把 chain.js 展开器的节点链渲染成珠链 HTML——id → 玩家名/措辞全在本层；
+// 引擎 id 只进悬停 title 与「展开条目」管理区（A-3 豁免口径）；阅卷按钮按纪 span ∩ 卷 fromTick/toTick 装配。
+
+function cvVols(volumes, span) {
+    return (volumes || []).filter((v) => {
+        const f = Number.isFinite(v.fromTick) ? v.fromTick : -Infinity;
+        const t = Number.isFinite(v.toTick) ? v.toTick : Infinity;
+        return t >= (span?.from ?? 0) && f <= (span?.to ?? Infinity);
+    });
+}
+const cvOpenBtns = (vols) => (vols.length
+    ? `<span class="sw2-cv-vols">${vols.map((v) => `<button class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(v.id)}">阅卷 · ${escapeHtml(v.id)}</button>`).join('')}</span>`
+    : '');
+const cvVerdict = (a) => {
+    if (!a.closed) return '<span class="sw2-cv-verdict open">在办</span>';
+    return (a.blockedTail || '').startsWith('放弃')
+        ? '<span class="sw2-cv-verdict stop">已终止</span>'
+        : '<span class="sw2-cv-verdict done">已了结</span>';
+};
+const cvVb = (v) => (v === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : '<span class="sw2-visible v-known">明</span>');
+const cvDots = (p, m) => {
+    const s = [];
+    for (let i = 0; i < m; i += 1) s.push(`<i class="${i < p ? 'on' : ''}"></i>`);
+    return `<span class="sw2-cv-dots">${s.join('')}</span>`;
+};
+const cvChip = (x) => `<span class="sw2-cv-chip${x.visibility === 'concealed' ? ' dark' : ''}">${escapeHtml(x.goal)}${x.visibility === 'concealed' ? '（暗）' : ''} · ${x.closed ? '已了结' : '在办'} ${x.progress ?? 0}/${x.maxSteps ?? 0}</span>`;
+const cvSrcPhrase = (n) => {
+    if (!n) return '由世界处境而生';
+    if (n.kind === 'event') return `沿「${n.title}」而来`;
+    if (n.kind === 'agenda') return `由盘算「${n.goal}」而生`;
+    if (n.kind === 'milestone') return '源头已入大事纪';
+    if (n.kind === 'gap') return '沿「旧事」而来（已无从检索）';
+    if (n.kind === 'terminal') return '纪之源头已不可查';
+    return '由世界处境而生';
+};
+
+function cvUpBeads(world, nodes, volumes) {
+    return (nodes || []).map((n, i) => {
+        if (n.kind === 'event') {
+            const src = cvSrcPhrase(nodes[i - 1]);   // 更远一侧 = 本事件的来路
+            return `<div class="sw2-cv-bead ev"><span class="sw2-cv-bk">事</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">${escapeHtml(n.title)}<span class="sw2-cv-src">事件 · ${fmtTick(n.born)} · ${n.closed ? '已了结' : '未了结'}</span></div>`
+                + `<div class="sw2-cv-meta">${src}</div></div></div>`;
+        }
+        if (n.kind === 'agenda') {
+            return `<div class="sw2-cv-bead ag${n.visibility === 'concealed' ? ' dark' : ''}"><span class="sw2-cv-bk">谋</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">${escapeHtml(n.goal)}${cvVb(n.visibility)}${cvVerdict(n)}<span class="sw2-cv-src">谋划 · ${escapeHtml(entityLabel(world, n.owner))} · 阶段 ${escapeHtml(n.stage)}</span></div>`
+                + `<div class="sw2-cv-meta">${cvDots(n.progress, n.maxSteps)} ${n.progress}/${n.maxSteps}</div>`
+                + (n.doneTail ? `<div class="sw2-cv-meta dim">最近一步：${escapeHtml(n.doneTail)}</div>` : '')
+                + (n.blockedTail ? `<div class="sw2-cv-meta dim blk">受阻：${escapeHtml(n.blockedTail)}</div>` : '')
+                + (n.parents.length ? `<div class="sw2-cv-meta">委派自上：${n.parents.map(cvChip).join('')}</div>` : '')
+                + (n.children.length ? `<div class="sw2-cv-meta">下沿子谋划：${n.children.map(cvChip).join('')}</div>` : '')
+                + (n.fruits.length ? `<details class="sw2-cv-roll"><summary>产果 · ${n.fruits.length} 件（由本谋划生的事件）</summary><div class="sw2-cv-in">${n.fruits.map((f) => `${escapeHtml(f.title)}（${fmtTick(f.born)}${f.closed ? ' · 已了结' : ''}）`).join(' · ')}</div></details>` : '')
+                + `</div></div>`;
+        }
+        if (n.kind === 'milestone') {
+            return `<div class="sw2-cv-bead ms"><span class="sw2-cv-bk">纪</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">大事纪<span class="sw2-cv-src">第 ${n.span.from}–${n.span.to} 轮 · ${n.counts.events ?? 0} 件事</span></div>`
+                + `<div class="sw2-cv-meta">“${(n.titles || []).slice(0, 3).map(escapeHtml).join(' · ')}”</div>`
+                + ((n.ids || []).length ? `<details class="sw2-cv-roll"><summary>展开这一纪的条目（管理细节）</summary><div class="sw2-cv-in">${escapeHtml(n.ids.join(' · '))}</div></details>` : '')
+                + cvOpenBtns(cvVols(volumes, n.span))
+                + ((n.parents || []).length ? `<div class="sw2-cv-nest">${cvUpBeads(world, n.parents, volumes)}</div>` : '')
+                + `</div></div>`;
+        }
+        if (n.kind === 'state-root') {
+            return `<div class="sw2-cv-bead term"><span class="sw2-cv-bk">源</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">由世界处境而生<span class="sw2-cv-src">终节点 · 不再更上</span></div>`
+                + `<div class="sw2-cv-meta">处境是事件的起点——账上没有比它更早的来路。</div></div></div>`;
+        }
+        if (n.kind === 'gap') {
+            return `<div class="sw2-cv-bead gap"><span class="sw2-cv-bk">旧</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">${n.reason === 'ring' ? '环防' : '沿「旧事」而来'}<span class="sw2-cv-src">${n.reason === 'ring' ? '至此为止' : '已无从检索'}</span></div>`
+                + `<div class="sw2-cv-meta">${n.reason === 'ring' ? '引用成环，链在此剪断（账不可信处的如实标注）。' : '引用的上游既不在热账也不在任何大事纪——正直展示，不猜内容。'}</div></div></div>`;
+        }
+        if (n.kind === 'terminal') {
+            return `<div class="sw2-cv-bead term"><span class="sw2-cv-bk">源</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">纪之源头已不可查（旧账）<span class="sw2-cv-src">最老的大纪</span></div>`
+                + `<div class="sw2-cv-meta">最老的纪没有记录更早的来路——如实显示，不猜不编。</div></div></div>`;
+        }
+        return '';
+    }).join('');
+}
+
+function cvDownTree(world, nodes, volumes) {
+    const bead = (n) => {
+        if (n.kind === 'event') {
+            return `<div class="sw2-cv-branch"><div class="sw2-cv-bead ev"><span class="sw2-cv-bk">事</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">${escapeHtml(n.title)}<span class="sw2-cv-src">事件 · ${fmtTick(n.born)} · ${n.closed ? '已了结' : '未了结'}${n.ring ? '（环防）' : ''}</span></div></div></div>`
+                + ((n.children || []).length ? `<div class="sw2-cv-nest">${n.children.map(bead).join('')}</div>` : '')
+                + `</div>`;
+        }
+        if (n.kind === 'leaf-note') {
+            return `<div class="sw2-cv-branch"><div class="sw2-cv-bead leaf"><span class="sw2-cv-bk">卷</span><div class="sw2-cv-bt">`
+                + `<div class="sw2-cv-nm">另有后续在旧卷<span class="sw2-cv-src">第 ${n.span.from}–${n.span.to} 轮 · 已随段入卷</span></div>`
+                + `<div class="sw2-cv-meta">这一支的后续牵动已随段入卷——阅卷看全文。${cvOpenBtns(cvVols(volumes, n.span))}</div></div></div></div>`;
+        }
+        return '';
+    };
+    return `<div class="sw2-cv-col">牵动 · 下沿（▼ 向未来）</div><div class="sw2-cv-tree">${(nodes || []).map(bead).join('')}</div>`;
+}
+
+export function renderChainViewHtml(chain, { world, volumes = [] } = {}) {
+    if (!chain || !chain.ok) {
+        return `<div class="sw2-cv" id="sw2_chain_view"><div class="sw2-cv-head"><div class="sw2-cv-t">事件链</div>`
+            + `<button class="sw2-btn sw2-cv-close" data-action="chain-close">收起</button></div>`
+            + `<div class="sw2-cv-def">没有这条事件（已无从检索）。</div></div>`;
+    }
+    const root = chain.root;
+    const isMs = root.kind === 'milestone';
+    const nearSrc = (chain.up || []).at(-1);
+    const up = isMs ? (root.parents || []) : (chain.up || []);
+    const hero = isMs
+        ? `<div class="sw2-cv-hero"><span class="sw2-cv-hx">纪</span><div><div class="sw2-cv-hn">大事纪 · 第 ${root.span.from}–${root.span.to} 轮 · ${root.counts.events ?? 0} 件事</div>`
+            + `<div class="sw2-cv-hm">“${(root.titles || []).slice(0, 3).map(escapeHtml).join(' · ')}”${cvOpenBtns(cvVols(volumes, root.span))}</div></div></div>`
+        : `<div class="sw2-cv-hero"><span class="sw2-cv-hx">事</span><div><div class="sw2-cv-hn">“${escapeHtml(root.title)}”</div>`
+            + `<div class="sw2-cv-hm"><span><b>源自</b>：${cvSrcPhrase(nearSrc)}</span><span><b>事发</b>：${escapeHtml(root.position)}</span>`
+            + `<span><b>${fmtTick(root.born)}</b> · ${root.closed ? '已了结' : '未了结'}</span></div></div></div>`;
+    return `<div class="sw2-cv" id="sw2_chain_view">`
+        + `<div class="sw2-cv-head"><div class="sw2-cv-t">${isMs ? '大事纪的来去' : `事件「${escapeHtml(root.title)}」的来去`}</div>`
+        + `<button class="sw2-btn sw2-cv-close" data-action="chain-close">收起</button></div>`
+        + `<div class="sw2-cv-col">来路 · 上承（▲ 向更早）</div><div class="sw2-cv-rail">${cvUpBeads(world, up, volumes)}</div>`
+        + `<div class="sw2-cv-axis"></div>${hero}<div class="sw2-cv-axis"></div>`
+        + cvDownTree(world, chain.down || [], volumes)
+        + `<div class="sw2-cv-foot">全部为一手事实拼句：来路/牵动取自账本指针与落账文本，引擎不新编一字。</div>`
+        + `</div>`;
+}
+
 // ============ 六页签全集入口（K34 接线用；同输入逐字节一致 A-2 锁） ============
 
-export function renderAll(world, { config = {}, oldVolumes = [] } = {}) {
+export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {}) {
     return {
         board: renderBoardHtml(world),
-        chronicle: renderChronicleHtml(world, { oldVolumes }),
+        chronicle: renderChronicleHtml(world, { oldVolumes, filter: view.chronicleFilter ?? null }),
         archive: renderArchiveHtml(world, { oldVolumes }),
         entities: renderEntitiesHtml(world),
         setting: renderSettingHtml(world),

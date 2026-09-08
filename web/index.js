@@ -7,7 +7,8 @@
 // K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入六页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll, renderVolumeReadHtml } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml, renderChainViewHtml } from '../src/render.js';
+import { expandChain } from '../src/chain.js';
 import {
     hotAccountShape, loadHotAccount, rotateChronicle,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
@@ -24,7 +25,7 @@ const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'setti
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260908-a11y';
+const CSS_VERSION = '20260908-chain';
 
 export const sw2Version = () => VERSION;
 export function sw2TabState(name, active) {
@@ -154,7 +155,8 @@ export function refreshWorld(world, { config, oldVolumes = [] } = {}) {
         // 第十三棒修复：config 缺省时取 live extension_settings——此前所有调用点都不传 config，
         // 每次重绘把设置表单清空（「填了却报未配置、刷新即丢」根因之二）
         const cfg = config ?? modelSettings() ?? {};
-        const out = renderAll(world, { config: cfg, oldVolumes });
+        sw2LastWorld = world;   // K41：链视图入口持引用（同一对象，零第二份状态）
+        const out = renderAll(world, { config: cfg, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter } });
         const chipWorld = win.querySelector('#sw2_world_chip');
         if (chipWorld) chipWorld.textContent = `世界：${out.header.world || '—'}`;
         const chipTick = win.querySelector('#sw2_tick_chip');
@@ -244,7 +246,9 @@ function volumeStore() {
 // CHAT_CHANGED → 世界重载（v1 同款）。
 let sw2TickQueue = null;
 let sw2LastSettings = null;
-let sw2PrevChronicle = null; // 上一渲染的编年行数（第十三棒：进展计数用）
+let sw2PrevChronicle = null;      // 上一渲染的编年行数（第十三棒：进展计数用）
+let sw2ChronicleFilter = null;    // K41 编年五筛视图态（kind Set；null=全选；纯视图态——不落 SSOT、不落盘，重绘保留，关面板重置）
+let sw2LastWorld = null;          // K41 链视图入口的世界引用缓存（同一对象引用，非第二份状态）
 
 function modelSettings() {
     const ctx = freshCtx();
@@ -389,6 +393,38 @@ if (typeof window !== 'undefined') {
         }
     };
 
+    // K41：编年五筛（多选=并集；清零回全选；重绘后 chips 由 render 按视图态重画）
+    bus['set-filter'] = (payload) => {
+        const t = payload?.filter;
+        if (t === 'all' || t == null) {
+            sw2ChronicleFilter = null;
+        } else {
+            sw2ChronicleFilter = sw2ChronicleFilter ? new Set(sw2ChronicleFilter) : new Set();
+            if (sw2ChronicleFilter.has(t)) sw2ChronicleFilter.delete(t);
+            else sw2ChronicleFilter.add(t);
+            if (!sw2ChronicleFilter.size) sw2ChronicleFilter = null;
+        }
+        if (sw2LastWorld) refreshWorld(sw2LastWorld);
+        else setStatus('筛选取愿已记（尚无世界）');
+    };
+
+    // K41：因果链视图（展开器产物 afterbegin 进编年视图容器，复用阅卷模式；只读）
+    bus['open-chain'] = (payload) => {
+        const id = payload?.chain;
+        const world = sw2LastWorld;
+        if (!world || !id) { setStatus('⚠ 无世界可展开链路'); return; }
+        const chain = expandChain(world, id);
+        const html = renderChainViewHtml(chain, { world, volumes: LISTED_VOLUMES });
+        const chronicle = document.getElementById('sw2_view_chronicle');
+        if (!chronicle) return;
+        chronicle.insertAdjacentHTML('afterbegin', html);
+        setStatus(chain.ok ? '已展开事件链（一手事实拼句 · 只读 · 可收起）' : '⚠ 无此事件的链路');
+    };
+
+    bus['chain-close'] = () => {
+        document.getElementById('sw2_chain_view')?.remove();
+    };
+
     bus['export-world'] = async () => {
         const meta = readHotMeta();
         const world = meta ? loadHotAccount(meta) : null;
@@ -445,7 +481,7 @@ function bindActions() {
             return;
         }
         const action = el.getAttribute('data-action');
-        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol') };
+        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter') };
         dispatchAction(action, payload, e);
     });
 }

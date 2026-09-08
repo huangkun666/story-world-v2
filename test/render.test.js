@@ -9,8 +9,9 @@ import path from 'node:path';
 import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
-    escapeHtml, BLACKLIST,
+    renderChainViewHtml, escapeHtml, BLACKLIST,
 } from '../src/render.js';
+import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -263,4 +264,124 @@ test('第十三棒锁：事件源措辞零代号——把用户实机样例（ri
     assert.ok(text.includes('沿「薛铁衣发兵催战」而来'));
     assert.ok(text.includes('牵动 大虞偏将'));
     assert.ok(!/ev_[a-z0-9_]+/.test(text), '玩家可见文本零事件代号（A-3）');
+});
+
+// ============ K41/链视图细案：编年五筛（A-16）+ 链视图渲染（A-15 渲染面） ============
+
+function filterWorld() {
+    const w = world();
+    w.chronicle = [
+        { id: 'ch_1_1', tick: 1, text: '盘算「买粮」推进：开仓放粮', kind: 'scheme' },
+        { id: 'ch_1_2', tick: 1, text: '事件「边关扣货」——由盘算「买粮」而生，事发 边关', kind: 'major', eventRef: 'ev_1_1' },
+        { id: 'ch_1_3', tick: 2, text: '事件「粮道拥堵」——沿「边关扣货」而来，事发 商路', kind: 'ripple', eventRef: 'ev_2_1' },
+        { id: 'ch_1_4', tick: 3, text: '旧账：早先的某一行（无章）' },
+    ];
+    w.milestones = [{ id: 'm_30', span: [0, 30], counts: 8, titles: ['发兵催战'], ids: ['ev_0'] }];
+    return w;
+}
+
+test('K41/A-16②：五筛命中面——chips 全量、多选并集=行选择、无 kind 旧账恒显示 + 计数提示', () => {
+    const all = renderChronicleHtml(filterWorld());
+    assert.match(all, /sw2-ch-filter/);
+    for (const f of ['all', 'scheme', 'major', 'ripple', 'shade', 'state']) {
+        assert.ok(all.includes(`data-filter="${f}"`), `chips 缺 ${f}`);
+    }
+    // 缺省（null）= 全选：全部行都在，无旧账提示
+    assert.ok(all.includes('开仓放粮') && all.includes('边关扣货') && all.includes('粮道拥堵') && all.includes('旧账：早先的某一行'));
+    assert.ok(!all.includes('另有 '), '全选态不出现旧账提示');
+    // 只看牵动：ripple 行 + 无章旧账行恒显示，其余隐藏；计数提示出现
+    const ripple = renderChronicleHtml(filterWorld(), { filter: new Set(['ripple']) });
+    assert.ok(ripple.includes('粮道拥堵'), 'ripple 行在');
+    assert.ok(ripple.includes('旧账：早先的某一行'), '无 kind 旧账恒显示（不藏）');
+    assert.ok(ripple.includes('已收进大事纪「发兵催战」'), 'A-16④：里程碑插行（卷标）筛选下恒显示');
+    assert.ok(!ripple.includes('开仓放粮') && !ripple.includes('由盘算「买粮」而生'), '其余筛类行隐藏（大事行唯一子串）');
+    assert.match(ripple, /另有 1 条旧账未分类，任何筛选下始终显示/);
+    // 多选=并集：谋划+暗处
+    const union = renderChronicleHtml(filterWorld(), { filter: new Set(['scheme', 'shade']) });
+    assert.ok(union.includes('开仓放粮'), '谋划行在');
+    assert.ok(!union.includes('粮道拥堵') && !union.includes('由盘算「买粮」而生'), '并集外隐藏');
+});
+
+test('K41/A-15 入口：事件行「链」按钮（data-chain + id 悬停）；非事件行无按钮', () => {
+    const html = renderChronicleHtml(filterWorld());
+    assert.ok(html.includes('data-chain="ev_1_1"') && html.includes('title="ev_1_1"'), '链按钮带 data-chain 与悬停 id');
+    assert.ok(!html.includes('data-chain="ch_1_1"') && !html.includes('data-chain="ch_1_2"'), '非事件行无链入口');
+});
+
+function chainWorld() {
+    return {
+        version: 1,
+        context: { world: '江州', tension: 0.5, positions: ['江州'] },
+        entities: [
+            { id: 'e_gov', kind: 'faction', name: '江州官府', location: '江州', attrs: {} },
+            { id: 'e_du', kind: 'character', name: '大虞偏将', location: '江州', attrs: {} },
+        ],
+        weights: {},
+        agendas: [
+            { id: 'a_1', owner: 'e_gov', goal: '筹备江州防务', stage: '征集', visibility: 'known', maxSteps: 5, progress: 2, memory: { promises: [], done: ['t1: 征调商行出力'], blocked: ['t2: 放弃（粮道已绝）'], turnsAlive: 2 } },
+            { id: 'a_2', owner: 'e_du', goal: '打通边关商路', stage: '通商', visibility: 'concealed', maxSteps: 4, progress: 3, parentId: 'a_1', memory: { promises: [], done: ['t3: 守将首肯，车队放行'], blocked: [], turnsAlive: 3 } },
+        ],
+        events: [
+            { id: 'ev_1_1', title: '官军出城引发恐慌', source: { type: 'plot', ref: 'a_2' }, position: '江州', ripples: [], links: { up: [], down: [] }, closed: false },
+            { id: 'ev_2_1', title: '边关商路重开', source: { type: 'ripple', ref: 'ev_1_1' }, position: '江州', ripples: [], links: { up: ['ev_1_1'], down: [] }, closed: false },
+            { id: 'ev_3_1', title: '江州粮价上涨', source: { type: 'ripple', ref: 'ev_2_1' }, position: '江州', ripples: [], links: { up: ['ev_2_1'], down: [] }, closed: true },
+        ],
+        chronicle: [],
+        milestones: [],
+        meta: { tick: 6 },
+    };
+}
+
+test('K41/A-15 链视图渲染：珠链结构 + 事实措辞面 + 暗徽/结局徽 + 防御态', () => {
+    const w = chainWorld();
+    const chain = expandChain(w, 'ev_2_1');
+    const html = renderChainViewHtml(chain, { world: w, volumes: [{ id: '卷A', info: '', fromTick: 1, toTick: 40 }] });
+    assert.ok(html.includes('sw2_chain_view'));
+    assert.match(html, /事件「边关商路重开」的来去/);
+    assert.match(html, /沿「官军出城引发恐慌」而来/);            // root 源自（最近上游）
+    assert.match(html, /由盘算「打通边关商路」而生/);            // 上游事件的来路（弧线）
+    assert.match(html, /打通边关商路/);
+    assert.match(html, /v-hidden">暗</);                          // 暗徽（concealed 弧线）
+    assert.match(html, /在办/);
+    assert.match(html, /委派自上/);
+    assert.match(html, /最近一步：t3: 守将首肯，车队放行/);
+    assert.match(html, /牵动 · 下沿/);
+    assert.match(html, /江州粮价上涨/);
+    assert.ok(!html.includes('data-action="read-volume"'), '热世界链无阅卷按钮（无纪）');
+    // 防御态
+    assert.match(renderChainViewHtml(null, { world: w }), /已无从检索/);
+});
+
+test('K41/A-15 里程碑穿透渲染：纪珠 + 聚合 parents + 卷区间装配阅卷 + 下沿余尾', () => {
+    const w = chainWorld();
+    w.events = w.events.filter((e) => e.id !== 'ev_1_1');         // 上游归档入纪
+    w.milestones = [{ id: 'm_30', span: { from: 1, to: 30 }, counts: { events: 7 }, titles: ['穷山的来客'], ids: ['ev_1_1'], links: { up: [], down: ['ev_2_1'] } }];
+    const chain = expandChain(w, 'ev_2_1');
+    const vols = [
+        { id: '卷一', info: '', fromTick: 1, toTick: 30 },
+        { id: '卷二', info: '', fromTick: 31, toTick: 60 },
+    ];
+    const html = renderChainViewHtml(chain, { world: w, volumes: vols });
+    assert.match(html, /大事纪/);
+    assert.match(html, /第 1–30 轮 · 7 件事/);
+    assert.match(html, /穷山的来客/);
+    assert.match(html, /纪之源头已不可查/);
+    assert.ok(html.includes('data-vol="卷一"'), 'span 区间命中的卷装配阅卷');
+    assert.ok(!html.includes('data-vol="卷二"'), '区间外的卷不装配');
+    assert.match(html, /另有后续在旧卷/, '下沿余尾收敛珠');
+});
+
+test('K41/A-3：链视图可见文本零禁词零代号（管理豁免区剥除外；热链与跨纪链双扫）', () => {
+    const scan = (html) => {
+        const stripped = String(html).replace(/<details[\s\S]*?<\/details>/g, '');
+        const text = stripped.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+        for (const term of BLACKLIST) assert.ok(!text.includes(term), `链视图含禁词「${term}」`);
+        assert.ok(!/ev_[a-z0-9_]+/.test(text), '链视图可见文本零事件代号');
+        assert.ok(!/a_\d+/.test(text), '盘算代号不裸出（只进悬停/管理区）');
+    };
+    scan(renderChainViewHtml(expandChain(chainWorld(), 'ev_2_1'), { world: chainWorld() }));
+    const w = chainWorld();
+    w.events = w.events.filter((e) => e.id !== 'ev_1_1');
+    w.milestones = [{ id: 'm_30', span: { from: 1, to: 30 }, counts: { events: 7 }, titles: ['穷山的来客'], ids: ['ev_1_1'], links: { up: [], down: ['ev_2_1'] } }];
+    scan(renderChainViewHtml(expandChain(w, 'ev_2_1'), { world: w }));
 });

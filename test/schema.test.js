@@ -124,6 +124,35 @@ test('SSOT schema：盘算 closed 可选、meta.simLog 记账合法', () => {
     assert.equal(r.ok, true, r.errors.join('; '));
 });
 
+// ---------- 编年行 kind 章（K39/链视图细案 §3.1：五筛类型章，可选=旧行零扰动） ----------
+
+test('SSOT schema：编年行 kind 合法值通过、枚举外被拒、缺省合法（旧行零扰动）', () => {
+    const base = {
+        version: 1,
+        context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        weights: {},
+        agendas: [],
+        events: [],
+        chronicle: [],
+        meta: { tick: 1 },
+    };
+    for (const kind of ['scheme', 'major', 'ripple', 'shade', 'state']) {
+        const withKind = structuredClone(base);
+        withKind.chronicle = [{ id: 'ch_1_1', tick: 1, text: '行', kind }];
+        const r = validate(withKind, ssotSchema);
+        assert.equal(r.ok, true, `${kind}: ${r.errors.join('; ')}`);
+    }
+    const oldRow = structuredClone(base);
+    oldRow.chronicle = [{ id: 'ch_0_1', tick: 1, text: '旧账行（无 kind=合法）' }];
+    assert.equal(validate(oldRow, ssotSchema).ok, true, '无 kind 旧行合法');
+    const bad = structuredClone(base);
+    bad.chronicle = [{ id: 'ch_1_1', tick: 1, text: '行', kind: 'nope' }];
+    const rb = validate(bad, ssotSchema);
+    assert.ok(!rb.ok);
+    assert.ok(rb.errors.some((e) => e.includes('枚举外值 "nope"')));
+});
+
 // ---------- 世界步 schema（提案形状） ----------
 
 test('世界步 schema：合法世界步通过', () => {

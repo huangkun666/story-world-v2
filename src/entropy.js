@@ -57,7 +57,7 @@ export function pulseEntropy(world, tick, chronicle) {
         if (ev) {
             ev.closed = true;
             ev.closedAt = tick;
-            chronicle.push({ id: `ch_${tick}_pumpC_${ev.id}`, tick, text: `熵泵·${conf.kind} 缓和（${key} ${env[key].toFixed(2)}，环境回落）` });
+            chronicle.push({ id: `ch_${tick}_pumpC_${ev.id}`, tick, text: `熵泵·${conf.kind} 缓和（${key} ${env[key].toFixed(2)}，环境回落）`, kind: 'state' });
         }
     }
     // 越阈落事件：危险带内且无同种未决熵泵事件 → 引擎生成状态源事件（可作盘算挂因）
@@ -80,6 +80,7 @@ export function pulseEntropy(world, tick, chronicle) {
             id: `ch_${tick}_pump_${ev.id}`,
             tick,
             text: `${conf.title}（${key} ${env[key].toFixed(2)}，环境量越阈，处境上桌）`,
+            kind: 'state',
         });
     }
     world.context.setting = s;

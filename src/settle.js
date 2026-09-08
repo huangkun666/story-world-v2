@@ -186,7 +186,7 @@ function closeEvents(world, closedIds, tick, chronicle) {
             if (!closedIds.has(ev.source.ref)) continue;
             ev.closed = true;
             ev.closedAt = tick;
-            chronicle.push({ id: `ch_${tick}_evc_${ev.id}`, tick, text: `事件「${ev.title}」闭环（源盘算已结算）` });
+            chronicle.push({ id: `ch_${tick}_evc_${ev.id}`, tick, text: `事件「${ev.title}」闭环（源盘算已结算）`, kind: 'major' });
         }
     }
     for (const ev of world.events) {
@@ -196,7 +196,7 @@ function closeEvents(world, closedIds, tick, chronicle) {
         if (hasPendingDownstream(world, ev)) continue;
         ev.closed = true;
         ev.closedAt = tick;
-        chronicle.push({ id: `ch_${tick}_evc2_${ev.id}`, tick, text: `事件「${ev.title}」涟漪平息（链源已了结）` });
+        chronicle.push({ id: `ch_${tick}_evc2_${ev.id}`, tick, text: `事件「${ev.title}」涟漪平息（链源已了结）`, kind: 'ripple' });
     }
 }
 
@@ -243,6 +243,7 @@ function breakCycle(cycle, world, tick, chronicle) {
         id: `ch_${tick}_cyc_${victim.id}`,
         tick,
         text: `拆环：${entityName(world, victim.owner)} 让路转伺机（分量最低）`,
+        kind: victim.visibility === 'concealed' ? 'shade' : 'scheme',
     });
 }
 
@@ -286,10 +287,10 @@ export function spawnAgendas(world, gstep, tick, warnings, chronicle) {
         spawned.push(agenda);
         // 挂因留痕（§4.4①/②，措辞按细案 §3.2 三型）
         if (na.source.type === 'state') {
-            chronicle.push({ id: `ch_${tick}_ag_${agenda.id}`, tick, text: `由处境而生：${entityName(world, owner)} 生「${goal}」` });
+            chronicle.push({ id: `ch_${tick}_ag_${agenda.id}`, tick, text: `由处境而生：${entityName(world, owner)} 生「${goal}」`, kind: agenda.visibility === 'concealed' ? 'shade' : 'scheme' });
         } else if (na.source.type === 'event') {
             const ev = (world.events || []).find((e) => e.id === na.source.ref);
-            chronicle.push({ id: `ch_${tick}_ag_${agenda.id}`, tick, text: `因事而生：${entityName(world, owner)} 由「${ev?.title ?? na.source.ref}」生「${goal}」` });
+            chronicle.push({ id: `ch_${tick}_ag_${agenda.id}`, tick, text: `因事而生：${entityName(world, owner)} 由「${ev?.title ?? na.source.ref}」生「${goal}」`, kind: agenda.visibility === 'concealed' ? 'shade' : 'scheme' });
         } else {
             const parent = world.agendas.find((x) => x.id === agenda.parentId);
             parent.memory.promises.push(agenda.id);   // A-5 前半：委派承诺写入（清 promises 写入执行债）
@@ -299,6 +300,7 @@ export function spawnAgendas(world, gstep, tick, warnings, chronicle) {
                     id: `ch_${tick}_ag_${agenda.id}`,
                     tick,
                     text: `委派：${entityName(world, parent.owner)} 拆大给小——「${goal}」（授 ${entityName(world, owner)}）`,
+                    kind: 'scheme',
                 });
             }
         }
@@ -342,6 +344,7 @@ function applyAgendaCancels(world, gstep, tick, chronicle) {
             id: `ch_${tick}_can_${a.id}`,
             tick,
             text: `盘算「${a.goal}」取消（${owner}）：${ac.reason || '未言明理由'}`,
+            kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
         });
         const sons = world.agendas.filter((x) => x.parentId === a.id && !x.closed);
         if (sons.length) {
@@ -350,6 +353,7 @@ function applyAgendaCancels(world, gstep, tick, chronicle) {
                 id: `ch_${tick}_canS_${a.id}`,
                 tick,
                 text: `取消后遗留子盘算 ${sons.length} 项转独立（事业未竟）`,
+                kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
             });
         }
     }
@@ -373,7 +377,7 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
         a.memory.turnsAlive += 1;
         // K21 暗处渲染（因果链细案 §3.4 → A-4）：concealed 推进不留痕——memory.done 属账照写，动态流条目抑制（暗处合法）
         if (a.visibility !== 'concealed') {
-            chronicle.push({ id: `ch_${tick}_adv_${ad.agendaId}`, tick, text: `盘算「${a.goal}」推进：${ad.step}` });
+            chronicle.push({ id: `ch_${tick}_adv_${ad.agendaId}`, tick, text: `盘算「${a.goal}」推进：${ad.step}`, kind: 'scheme' });
         }
         if (a.progress >= a.maxSteps) {
             a.closed = true;
@@ -391,6 +395,7 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
                     id: `ch_${tick}_fin_${a.id}`,
                     tick,
                     text: `盘算「${a.goal}」满步结算：变形，事业移交诸子（${sons.length} 项断链转独立）`,
+                    kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
                 });
             } else {
                 const owner = world.entities.find((x) => x.id === a.owner);
@@ -401,12 +406,14 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
                         id: `ch_${tick}_fin_${a.id}`,
                         tick,
                         text: `盘算「${a.goal}」满步结算：败露——功败垂成（${entityName(world, a.owner)}）`,
+                        kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
                     });
                 } else {
                     chronicle.push({
                         id: `ch_${tick}_fin_${a.id}`,
                         tick,
                         text: `盘算「${a.goal}」满步结算：达成（终结产果 §4.4④）`,
+                        kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
                     });
                 }
             }
@@ -421,6 +428,7 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
                             id: `ch_${tick}_ful_${a.id}`,
                             tick,
                             text: `兑现：${entityName(world, parent.owner)} 收「${a.goal}」之果`,
+                            kind: 'scheme',
                         });
                     }
                 }
@@ -515,6 +523,7 @@ function chronicleEvents(world, step, tick, chronicle) {
             id: `ch_${tick}_ev_${i + 1}`,
             tick,
             text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}，事发 ${ev.position}${ripples}`,
+            kind: ev.source.type === 'plot' ? 'major' : ev.source.type === 'ripple' ? 'ripple' : 'state',
             eventRef: `ev_${tick}_${i + 1}`,
         });
     });

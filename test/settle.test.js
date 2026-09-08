@@ -264,3 +264,59 @@ test('执行债：state 源事件不随盘算联闭（常驻事件语义保留�
     assert.equal(r.ssot.events.find((e) => e.id === 'ev_state').closed, false, 'state 事件不联闭');
     assert.equal(r.ssot.events.find((e) => e.id === 'ev_p').closed, true);
 });
+
+// ---------- K39/编年 kind 章（链视图细案 §3.1 → A-16①：五筛类型章；盘算侧按行主 visibility 定暗、事件侧按 source.type 定类） ----------
+
+test('K39/编年 kind 章：settle 落账全行带 kind + plot 事件行=大事（A-16① 漏章锁）', () => {
+    const r = settleTick({ ssot: GOLDEN, step: validStep() });
+    assert.equal(r.ok, true);
+    const KINDS = new Set(['scheme', 'major', 'ripple', 'shade', 'state']);
+    assert.ok(r.stage.chronicle.length >= 2, '有落账行');
+    assert.ok(r.stage.chronicle.every((c) => KINDS.has(c.kind)), `全行带 kind: ${JSON.stringify(r.stage.chronicle)}`);
+    const adv = r.stage.chronicle.find((c) => c.id === 'ch_1_adv_a_1');
+    assert.equal(adv.kind, 'scheme', '推进行=谋划');
+    const ev = r.stage.chronicle.find((c) => c.id === 'ch_1_ev_1');
+    assert.equal(ev.kind, 'major', 'plot 事件行=大事');
+    assert.equal(ev.eventRef, 'ev_1_1', '事件行 eventRef 保持（闭环行不带 eventRef 的注入面语义不被扰动，K39 修正）');
+});
+
+test('K39/编年 kind 章：ripple 事件行=牵动（loneWorld 挂链）', () => {
+    const world = loneWorld();
+    const step = {
+        actions: [],
+        newEvents: [{ title: '旧事发酵', source: { type: 'ripple', ref: 'ev_old' }, position: '孤岛', ripples: ['e_lone'] }],
+        agendaAdvances: [],
+        stateChanges: [], newAgendas: [], agendaCancels: [],
+    };
+    const r = settleTick({ ssot: world, step });
+    assert.equal(r.ok, true);
+    const ev = r.stage.chronicle.find((c) => c.id === 'ch_4_ev_1');
+    assert.equal(ev.kind, 'ripple', 'ripple 事件行=牵动');
+});
+
+test('K39/编年 kind 章：concealed 盘算侧行=暗处（终结/取消按行主盘算 visibility 定暗）', () => {
+    const w = {
+        version: 1,
+        context: { world: '夜城', tension: 0.5, positions: ['夜城'] },
+        entities: [{ id: 'e_d', kind: 'character', name: '暗子', location: '夜城', attrs: { hardPower: 0.7, network: 0.5 } }],
+        weights: { e_d: 0.5 },   // 预热分量（K7 夹具教训：t1 门控跑在真分量重算前，种子权重防误判静默）
+        agendas: [{ id: 'a_d', owner: 'e_d', goal: '暗线行动', stage: '谋划', visibility: 'concealed', maxSteps: 2, progress: 0, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
+        events: [],
+        chronicle: [],
+        meta: { tick: 0 },
+    };
+    // 满步终结（concealed 终结上桌 → kind=shade）
+    const step1 = { actions: [], newEvents: [], agendaAdvances: [{ agendaId: 'a_d', step: '推进' }, { agendaId: 'a_d', step: '推进' }], stateChanges: [], newAgendas: [], agendaCancels: [] };
+    const r1 = settleTick({ ssot: w, step: step1 });
+    assert.equal(r1.ok, true);
+    assert.equal(r1.ssot.agendas[0].closed, true, '暗盘算满步关闭');
+    const fin = r1.stage.chronicle.find((c) => c.id === 'ch_1_fin_a_d');
+    assert.equal(fin.kind, 'shade', '暗盘算终结行=暗处');
+    // 取消（concealed → shade）
+    const w2 = structuredClone(w);
+    const step2 = { actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [{ agendaId: 'a_d', reason: '收线' }] };
+    const r2 = settleTick({ ssot: w2, step: step2 });
+    assert.equal(r2.ok, true);
+    const can = r2.stage.chronicle.find((c) => c.id === 'ch_1_can_a_d');
+    assert.equal(can.kind, 'shade', '暗盘算取消行=暗处');
+});
