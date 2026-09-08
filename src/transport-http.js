@@ -38,10 +38,12 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
     };
 }
 
-export function createEnvTransport(env = process.env) {
-    const base = env.ST_OPENAI_BASE || env.OPENAI_BASE_URL;
-    const key = env.ST_OPENAI_KEY || env.OPENAI_API_KEY;
-    const model = env.ST_WORLD_MODEL || env.OPENAI_MODEL;
+export function createEnvTransport(env) {
+    // 浏览器安全守卫（K30）：无参调用在浏览器（无 process）不抛 —— 缺 env 视为空配置
+    const e = env ?? (typeof process !== 'undefined' ? process.env : {});
+    const base = e.ST_OPENAI_BASE || e.OPENAI_BASE_URL;
+    const key = e.ST_OPENAI_KEY || e.OPENAI_API_KEY;
+    const model = e.ST_WORLD_MODEL || e.OPENAI_MODEL;
     if (!base || !key || !model) return null;
     return createHttpTransport({ baseUrl: base, apiKey: key, model });
 }

@@ -14,7 +14,7 @@ export const PLAYER_DESC_LIMIT = 2000;   // 提案态：玩家描述输入上限
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
-export function injectPlayerAttrs(ssot, { playerDesc = '', parse } = {}) {
+export function injectPlayerAttrs(ssot, { playerDesc = '', parse, overwrite = false } = {}) {
     const playerId = ssot.context?.playerId;
     const canon = ssot.context?.setting?.frozen?.canon;
     if (!playerId || !canon) return ssot;   // 触发点未就绪：不动（无玩家 = P-E 旁观零特判）
@@ -28,16 +28,37 @@ export function injectPlayerAttrs(ssot, { playerDesc = '', parse } = {}) {
         try { parsed = parse(desc); } catch { parsed = null; }   // 失败零阻塞：落默认
     }
 
+    const clamp01 = (v) => Math.min(1, Math.max(0, v));
+    const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
     const keys = Object.keys(PLAYER_INJECT_DEFAULTS);
     const valueOf = (k) => {
         const v = parsed && parsed[k];
         return isNum(v) ? clamp01(v) : PLAYER_INJECT_DEFAULTS[k];
     };
 
-    // 落账：手填优先（含已注入值=幂等）；有依据字段=解析值（钳制）；其余=已定案默认
+    // 手填优先（含已注入值=幂等）；有依据字段=解析值（钳制）；其余=已定案默认
+    // K32 溯源账：parse 有依据而落账的键记入 meta.playerParse.injected——
+    // force 重解析（overwrite=true）只覆盖此集的键；手填键（从未由解析注入）永不触碰；
+    // 重解析无新依据（失败/未输出该键）→ 旧解析值保留、溯源不变（不降级默认）。
+    const prevInjected = new Set(ssot.meta?.playerParse?.injected || []);
     const next = { ...player, attrs: { ...player.attrs } };
-    for (const k of keys) if (next.attrs[k] == null) next.attrs[k] = valueOf(k);
+    const injected = new Set(prevInjected);
+    for (const k of keys) {
+        const pv = parsed && isNum(parsed[k]) ? clamp01(parsed[k]) : null;
+        if (next.attrs[k] == null) {
+            next.attrs[k] = pv ?? PLAYER_INJECT_DEFAULTS[k];
+            if (pv != null) injected.add(k);
+        } else if (overwrite && prevInjected.has(k)) {
+            if (pv != null) { next.attrs[k] = pv; injected.add(k); }
+            // pv == null：保持旧解析值，溯源不变（失败零阻塞语义的 force 面）
+        }
+        // 其余（手填/非拓源键）：不动
+    }
+
     const out = structuredClone(ssot);
     out.entities = ssot.entities.map((e) => (e.id === playerId ? next : e));
+    if (injected.size) {
+        out.meta = { ...(out.meta || {}), playerParse: { injected: [...injected].sort() } };
+    }
     return out;
 }

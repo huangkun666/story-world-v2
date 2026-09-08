@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>观棋窗口 · Story World v2 · 面板样例 v3</title>
+<style>
+  /* ============ 观棋窗口面板样例 v3（自包含、零依赖、离线可开） ============
+     结构：顶部一句话时局（重心）→ 信息带（世情四键仪表/大势/浪尖/盘算计数）
+     → 各方盘算总览 → 主区（动态流为主 + 位置侧面）→ 五页签（观棋/编年/大事纪·旧卷/角色与势力/设置）。
+     玩家语言：分量→影响力、盘算→谋划、熵泵→时局、attrs→兵力/权位/人脉/耳目；
+     引擎 id 收进「？」悬停。数据为演示样例（live-world 夹具 + 实测曲线）。 */
+  :root{
+    --sw2-bg:#0d1015;
+    --sw2-panel:#1b1f28;
+    --sw2-card:#20252f;
+    --sw2-card-2:#262c38;
+    --sw2-line:#2c3342;
+    --sw2-line-soft:#242a36;
+    --sw2-text:#e8eaef;
+    --sw2-text-dim:#9aa3b5;
+    --sw2-text-faint:#6b7590;
+    --sw2-amber:#e3ad55;
+    --sw2-red:#df6c62;
+    --sw2-green:#8fbf8f;
+    --sw2-blue:#79a7d6;
+    --sw2-font: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+    --sw2-mono: "Cascadia Mono", Consolas, monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:var(--sw2-bg);color:var(--sw2-text);
+    font-family:var(--sw2-font);font-size:14px;line-height:1.6;
+    padding:32px 20px 64px;display:flex;justify-content:center;
+  }
+  .sw2-window{
+    width:1120px;max-width:100%;
+    background:var(--sw2-panel);
+    border:1px solid var(--sw2-line);border-radius:12px;
+    box-shadow:0 20px 70px rgba(0,0,0,.6);overflow:hidden;
+  }
+
+  /* ---------- 头部 ---------- */
+  .sw2-header{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft);}
+  .sw2-badge{
+    width:34px;height:34px;border-radius:9px;flex:none;
+    background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);
+    color:#161006;font-size:17px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sw2-title-block{flex:1;min-width:0;}
+  .sw2-title{font-size:15.5px;font-weight:700;letter-spacing:.5px;}
+  .sw2-subtitle{font-size:11.5px;color:var(--sw2-text-faint);}
+  .sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;}
+  .sw2-chip.sw2-tick{color:var(--sw2-amber);border-color:rgba(227,173,85,.35);font-family:var(--sw2-mono);}
+  .sw2-close{width:30px;height:30px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--sw2-text-faint);cursor:pointer;}
+  .sw2-close:hover{background:var(--sw2-card);color:var(--sw2-text);}
+
+  /* ---------- 状态条 ---------- */
+  .sw2-statusbar{
+    display:flex;align-items:center;gap:10px;padding:7px 18px;font-size:12px;color:var(--sw2-text-faint);
+    border-bottom:1px solid var(--sw2-line-soft);
+  }
+  .sw2-statusbar .sw2-dot{width:7px;height:7px;border-radius:50%;background:var(--sw2-green);flex:none;}
+  .sw2-statusbar .sw2-main{color:var(--sw2-text-dim);}
+  .sw2-statusbar .sw2-right{margin-left:auto;}
+
+  /* ---------- 页签 ---------- */
+  .sw2-tabs{display:flex;gap:4px;padding:10px 14px 0;flex-wrap:wrap;}
+  .sw2-tab{
+    padding:8px 15px;font-size:13.5px;cursor:pointer;
+    color:var(--sw2-text-faint);border-radius:8px;user-select:none;
+  }
+  .sw2-tab:hover{color:var(--sw2-text);background:var(--sw2-card);}
+  .sw2-tab.sw2-active{color:var(--sw2-text);background:var(--sw2-card-2);box-shadow:inset 0 -2px 0 var(--sw2-amber);}
+
+  /* ---------- 视图 ---------- */
+  .sw2-view{display:none;padding:16px 18px 20px;}
+  .sw2-view.sw2-active{display:block;}
+
+  /* ============ 观棋页 ============ */
+
+  /* 顶部：一句话时局（全页视觉重心） */
+  .sw2-digest{
+    background:linear-gradient(120deg,#272e3c 0%, #20252f 60%);
+    border:1px solid var(--sw2-line);border-left:4px solid var(--sw2-amber);
+    border-radius:10px;padding:14px 18px;margin-bottom:10px;
+  }
+  .sw2-digest-line{font-size:16.5px;font-weight:700;letter-spacing:.3px;color:var(--sw2-text);line-height:1.5;}
+  .sw2-digest-line .sw2-accent{color:var(--sw2-amber);}
+  .sw2-digest-sub{margin-top:4px;font-size:13px;color:var(--sw2-text-dim);}
+
+  /* 信息带：世情四键仪表 / 大势 / 浪尖 / 盘算计数（一条横带，安静副角） */
+  .sw2-infoband{
+    display:flex;align-items:stretch;gap:0;
+    border:1px solid var(--sw2-line-soft);border-radius:10px;
+    background:var(--sw2-card);margin-bottom:10px;overflow:hidden;
+  }
+  .sw2-band-block{padding:10px 14px;flex:1;min-width:0;}
+  .sw2-band-block + .sw2-band-block{border-left:1px solid var(--sw2-line-soft);}
+  .sw2-band-label{
+    font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;
+    margin-bottom:7px;display:flex;align-items:center;gap:6px;
+  }
+  /* 世情四键（仪表回来了：条 + 数值 + 危险带着色） */
+  .sw2-env{margin-top:2px;}
+  .sw2-env-row{display:grid;grid-template-columns:44px 1fr 34px;gap:8px;align-items:center;margin-bottom:4px;}
+  .sw2-env-row:last-child{margin-bottom:0;}
+  .sw2-env-row .sw2-env-name{font-size:11.5px;color:var(--sw2-text-dim);}
+  .sw2-env-row .sw2-env-bar{height:5px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
+  .sw2-env-row .sw2-env-bar i{display:block;height:100%;border-radius:3px;}
+  .sw2-env-row .sw2-env-val{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-dim);text-align:right;}
+  .sw2-env-row.sw2-danger .sw2-env-val{color:var(--sw2-red);font-weight:700;}
+  .sw2-env-row.sw2-danger .sw2-env-name{color:var(--sw2-red);}
+  /* 大势：结构性张力三件 + 强度 */
+  .sw2-tension-line{font-size:14.5px;font-weight:700;color:var(--sw2-text);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .sw2-tension-line .sw2-int{font-size:12px;font-family:var(--sw2-mono);color:var(--sw2-amber);font-weight:400;}
+  .sw2-tension-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}
+  /* 浪尖 */
+  .sw2-tides{display:flex;flex-direction:column;gap:4px;}
+  .sw2-tide{font-size:12px;color:var(--sw2-text-dim);display:flex;gap:7px;align-items:baseline;}
+  .sw2-tide b{color:var(--sw2-text);font-weight:600;}
+  .sw2-tide .sw2-tweek{font-family:var(--sw2-mono);font-size:10.5px;color:var(--sw2-text-faint);}
+  /* 盘算计数 */
+  .sw2-big-num{font-size:19px;font-weight:700;font-family:var(--sw2-mono);}
+  .sw2-num-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;line-height:1.55;}
+
+  /* 各方盘算总览（一行小卡） */
+  .sw2-agenda-strip{margin-bottom:12px;}
+  .sw2-agenda-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;}
+  .sw2-agenda-card{
+    background:var(--sw2-card);border:1px solid var(--sw2-line-soft);
+    border-radius:8px;padding:9px 12px;
+  }
+  .sw2-agenda-card.sw2-agenda-hidden{border-left:3px solid var(--sw2-red);}
+  .sw2-agenda-card .sw2-ahead{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+  .sw2-agenda-card .sw2-aowner{font-size:12px;font-weight:700;color:var(--sw2-amber);}
+  .sw2-agenda-card .sw2-agoal{font-size:13px;color:var(--sw2-text);line-height:1.5;}
+  .sw2-agenda-card .sw2-astage{
+    margin-top:4px;display:flex;align-items:center;gap:6px;
+    font-size:11.5px;color:var(--sw2-text-faint);
+  }
+  .sw2-agenda-card .sw2-aprog{display:flex;gap:3px;margin-left:auto;}
+  .sw2-agenda-card .sw2-dotstep{width:6px;height:6px;border-radius:50%;background:var(--sw2-card-2);}
+  .sw2-agenda-card .sw2-dotstep.on{background:var(--sw2-amber);}
+  .sw2-agenda-card .sw2-asteps{font-family:var(--sw2-mono);font-size:10.5px;}
+  .sw2-visible{font-size:9.5px;padding:0 5px;border-radius:3px;letter-spacing:2px;}
+  .sw2-visible.v-known{background:#26313f;color:#8fb2d6;}
+  .sw2-visible.v-hidden{background:#372627;color:#c98a82;}
+  .sw2-agenda-empty{
+    grid-column:1/-1;font-size:12.5px;color:var(--sw2-text-faint);
+    padding:10px;border:1px dashed var(--sw2-line);border-radius:8px;text-align:center;
+  }
+
+  /* 主区：动态流为主，侧栏安静 */
+  .sw2-board-main{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start;}
+  .sw2-col-head{
+    font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;
+    display:flex;align-items:center;gap:8px;margin-bottom:8px;
+  }
+  .sw2-col-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+
+  .sw2-feed{display:flex;flex-direction:column;gap:8px;}
+  .sw2-entry{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:11px 14px 10px;position:relative;}
+  .sw2-entry .sw2-ctext{font-size:14.5px;color:var(--sw2-text);line-height:1.65;}
+  .sw2-entry .sw2-cmeta{margin-top:5px;font-size:11.5px;color:var(--sw2-text-faint);display:flex;gap:12px;align-items:center;}
+  .sw2-entry .sw2-cmeta .sw2-round{font-family:var(--sw2-mono);}
+  .sw2-entry .sw2-cmeta .sw2-ref{color:var(--sw2-blue);cursor:help;border-bottom:1px dotted transparent;}
+  .sw2-entry .sw2-cmeta .sw2-ref:hover{border-bottom-color:var(--sw2-blue);}
+  .sw2-entry.sw2-latest{
+    background:var(--sw2-card-2);border-color:rgba(227,173,85,.45);
+    border-left:3px solid var(--sw2-amber);
+    box-shadow:0 0 0 1px rgba(227,173,85,.08), 0 6px 24px rgba(0,0,0,.35);
+  }
+  .sw2-entry.sw2-latest .sw2-ctext{font-size:15.5px;font-weight:600;}
+  .sw2-now{position:absolute;top:-9px;right:12px;font-size:10.5px;letter-spacing:2px;color:#141006;background:var(--sw2-amber);border-radius:4px;padding:2px 8px;font-weight:700;}
+  .sw2-entry.sw2-hidden{background:linear-gradient(100deg, rgba(223,108,98,.06), transparent 40%), var(--sw2-card);}
+  .sw2-hidden-badge{font-size:10px;color:#c98a82;letter-spacing:2px;border:1px solid rgba(223,108,98,.4);border-radius:4px;padding:1px 6px;}
+
+  .sw2-milestone-strip{
+    margin-top:4px;padding:8px 14px;font-size:12.5px;color:var(--sw2-text-dim);
+    background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;
+  }
+  .sw2-milestone-strip b{color:var(--sw2-amber);font-weight:600;}
+  .sw2-milestone-strip .sw2-goto{color:var(--sw2-blue);cursor:pointer;margin-left:6px;}
+  .sw2-milestone-strip .sw2-goto:hover{text-decoration:underline;}
+
+  /* 侧栏 */
+  .sw2-side{display:flex;flex-direction:column;gap:8px;}
+  .sw2-entity{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:11px 12px;}
+  .sw2-entity-head{display:flex;align-items:baseline;gap:7px;margin-bottom:6px;}
+  .sw2-entity-name{font-weight:700;font-size:14px;}
+  .sw2-entity-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+  .sw2-entity-loc{font-size:12px;color:var(--sw2-text-dim);margin-left:auto;}
+  .sw2-weight-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .sw2-weight-row .sw2-wlabel{font-size:11.5px;color:var(--sw2-text-faint);flex:none;}
+  .sw2-weight-row .sw2-wbar{flex:1;height:6px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
+  .sw2-weight-row .sw2-wbar i{display:block;height:100%;background:var(--sw2-amber);border-radius:3px;opacity:.85;}
+  .sw2-weight-row .sw2-wval{font-size:11px;color:var(--sw2-text-dim);flex:none;font-family:var(--sw2-mono);}
+  .sw2-agenda{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);margin-bottom:6px;}
+  .sw2-agenda b{color:var(--sw2-text);font-weight:600;}
+  .sw2-stage{display:flex;align-items:center;gap:6px;}
+  .sw2-stage .sw2-aprog{display:flex;gap:3px;}
+  .sw2-stage .sw2-dotstep{width:6px;height:6px;border-radius:50%;background:var(--sw2-card-2);}
+  .sw2-stage .sw2-dotstep.on{background:var(--sw2-amber);}
+  .sw2-stage .sw2-stagetext{font-size:11px;color:var(--sw2-text-faint);}
+  .sw2-stage .sw2-steps{font-family:var(--sw2-mono);font-size:10px;color:var(--sw2-text-faint);margin-left:auto;}
+  .sw2-entity.sw2-player{border-style:dashed;border-color:var(--sw2-line);}
+  .sw2-entity.sw2-player .sw2-entity-name::before{content:"你 · ";color:var(--sw2-amber);font-weight:700;}
+  .sw2-entity.sw2-player .sw2-note{font-size:11px;color:var(--sw2-text-faint);margin-top:4px;}
+
+  /* ============ 编年页 ============ */
+  .sw2-filters{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .sw2-filter{font-size:12px;padding:3px 12px;border-radius:999px;cursor:pointer;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);}
+  .sw2-filter.sw2-on{background:var(--sw2-amber);border-color:var(--sw2-amber);color:#141006;font-weight:600;}
+  .sw2-chronicle{display:flex;flex-direction:column;gap:5px;max-height:560px;overflow:auto;padding-right:4px;}
+  .sw2-ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px;}
+  .sw2-ch-line:hover{background:var(--sw2-card);}
+  .sw2-ch-line .sw2-ch-round{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);flex:none;width:44px;text-align:right;}
+  .sw2-ch-line .sw2-ch-text{flex:1;color:var(--sw2-text-dim);}
+  .sw2-ch-line.sw2-ch-event .sw2-ch-text{color:var(--sw2-text);}
+  .sw2-ch-line.sw2-ch-hidden .sw2-ch-text{color:#a98a90;}
+  .sw2-ch-roll{
+    font-size:12.5px;color:var(--sw2-amber);font-weight:600;
+    padding:9px 10px;margin-top:5px;
+    border-top:1px dashed var(--sw2-line);border-bottom:1px dashed var(--sw2-line);
+  }
+  .sw2-ch-roll small{font-weight:400;color:var(--sw2-text-faint);margin-left:8px;}
+
+  /* ============ 大事纪·旧卷 ============ */
+  .sw2-arch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .sw2-milestone{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:13px 15px;}
+  .sw2-milestone-head{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+  .sw2-milestone-id{font-family:var(--sw2-mono);font-size:11.5px;color:var(--sw2-amber);}
+  .sw2-milestone .sw2-mspan{font-size:11.5px;color:var(--sw2-text-faint);}
+  .sw2-milestone h5{font-size:15px;margin-bottom:5px;}
+  .sw2-milestone .sw2-mtitles{font-size:12.5px;color:var(--sw2-text-dim);display:flex;gap:6px;flex-wrap:wrap;}
+  .sw2-milestone .sw2-mtitles span{border-radius:4px;padding:1px 7px;background:var(--sw2-card-2);}
+  .sw2-milestone details{margin-top:7px;}
+  .sw2-milestone summary{font-size:12px;color:var(--sw2-text-dim);cursor:pointer;user-select:none;}
+  .sw2-milestone summary:hover{color:var(--sw2-text);}
+  .sw2-milestone .sw2-rawids{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);margin-top:5px;word-break:break-all;}
+  .sw2-cold{background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;padding:13px 15px;margin-top:12px;}
+  .sw2-cold h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:8px;}
+  .sw2-cold-row{display:flex;align-items:center;gap:10px;font-size:13px;padding:7px 8px;border-radius:7px;}
+  .sw2-cold-row:hover{background:var(--sw2-card-2);}
+  .sw2-cold-row .sw2-vol{font-family:var(--sw2-mono);color:var(--sw2-text);flex:none;}
+  .sw2-cold-row .sw2-volinfo{color:var(--sw2-text-dim);flex:1;}
+  .sw2-cold-row .sw2-volact{font-size:12px;color:var(--sw2-blue);cursor:pointer;flex:none;}
+  .sw2-cold-row .sw2-volact:hover{text-decoration:underline;}
+
+  /* ============ 角色与势力页 ============ */
+  .sw2-entity-list{display:flex;flex-direction:column;gap:7px;}
+  .sw2-entity-row{
+    display:grid;grid-template-columns:150px 74px 130px 1fr 1.6fr 96px;gap:10px;align-items:center;
+    background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;
+    padding:10px 13px;
+  }
+  .sw2-entity-row.sw2-player{border-style:dashed;border-color:rgba(227,173,85,.4);}
+  .sw2-entity-row .sw2-ename{font-weight:700;font-size:14px;}
+  .sw2-entity-row .sw2-ename small{display:block;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+  .sw2-entity-row .sw2-eloc{font-size:12px;color:var(--sw2-text-dim);}
+  .sw2-entity-row .sw2-eweight{display:flex;align-items:center;gap:7px;}
+  .sw2-entity-row .sw2-eweight .sw2-wbar{flex:1;height:6px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
+  .sw2-entity-row .sw2-eweight .sw2-wbar i{display:block;height:100%;background:var(--sw2-amber);border-radius:3px;}
+  .sw2-entity-row .sw2-eweight .sw2-wval{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-amber);}
+  .sw2-entity-row .sw2-eattrs{display:flex;gap:5px;flex-wrap:wrap;}
+  .sw2-entity-row .sw2-eattr{
+    font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sw2-card-2);
+    color:var(--sw2-text-dim);white-space:nowrap;
+  }
+  .sw2-entity-row .sw2-eattr b{color:var(--sw2-text);font-family:var(--sw2-mono);font-weight:600;margin-left:3px;}
+  .sw2-entity-row .sw2-eagenda{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.5;}
+  .sw2-entity-row .sw2-eagenda b{color:var(--sw2-text);font-weight:600;}
+  .sw2-entity-row .sw2-eactive{font-size:11.5px;color:var(--sw2-text-faint);text-align:right;}
+  .sw2-list-head{
+    font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:6px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .sw2-list-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+
+  /* ============ 设置页 ============ */
+  .sw2-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .sw2-set-card h4{
+    font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:10px;
+    display:flex;align-items:center;gap:7px;
+  }
+  .sw2-set-card h4::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+  .sw2-radio-group{display:flex;flex-direction:column;gap:6px;}
+  .sw2-radio{
+    display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--sw2-text);
+    padding:7px 10px;border:1px solid var(--sw2-line-soft);border-radius:8px;cursor:pointer;
+  }
+  .sw2-radio:hover{border-color:var(--sw2-line);}
+  .sw2-radio.sw2-reco{border-color:rgba(227,173,85,.4);}
+  .sw2-radio input{accent-color:var(--sw2-amber);}
+  .sw2-radio small{color:var(--sw2-text-faint);font-size:11.5px;margin-left:6px;}
+  .sw2-reco-tip{font-size:10.5px;color:var(--sw2-amber);border:1px solid rgba(227,173,85,.4);border-radius:4px;padding:0 5px;letter-spacing:1px;flex:none;}
+  .sw2-source-line{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:9px 11px;border:1px solid var(--sw2-line-soft);border-radius:8px;
+    background:var(--sw2-panel);
+  }
+  .sw2-source-tag{font-size:13.5px;font-weight:600;color:var(--sw2-text);}
+  .sw2-source-note{font-size:11.5px;color:var(--sw2-text-faint);}
+  .sw2-source-alt{position:relative;}
+  .sw2-source-alt summary{font-size:11.5px;color:var(--sw2-blue);cursor:pointer;list-style:none;user-select:none;}
+  .sw2-source-alt summary:hover{text-decoration:underline;}
+  .sw2-source-alt-body{
+    position:absolute;top:calc(100% + 4px);left:0;z-index:5;
+    margin-top:0;padding:8px 12px;min-width:210px;
+    background:var(--sw2-card-2);border:1px solid var(--sw2-line);border-radius:8px;
+    font-size:12.5px;color:var(--sw2-text-dim);
+    display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .sw2-source-alt-body span{cursor:pointer;color:var(--sw2-blue);}
+  .sw2-source-alt-body span:hover{text-decoration:underline;}
+
+  /* ============ 设定页（档案阅览 + 重抽入口） ============ */
+  .sw2-sv-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+  .sw2-sv-title{font-size:16px;font-weight:700;}
+  .sw2-sv-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.6;}
+  .sw2-sv-cards{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .sw2-sv-chip{font-size:11.5px;border-radius:999px;padding:3px 10px;border:1px solid var(--sw2-line);color:var(--sw2-text-dim);}
+  .sw2-sv-chip.ok{color:var(--sw2-green);border-color:rgba(143,191,143,.4);}
+  .sw2-sv-chip.stale{color:var(--sw2-red);border-color:rgba(223,108,98,.4);}
+  .sw2-sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
+  .sw2-sv-grid .sw2-set-card{
+    background:var(--sw2-card);border:1px solid var(--sw2-line-soft);
+    border-radius:10px;padding:12px 14px;
+  }
+  .sw2-sv-grid .sw2-set-card h4{
+    font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:9px;
+    display:flex;align-items:center;gap:7px;
+  }
+  .sw2-sv-grid .sw2-set-card h4::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+  .sw2-sv-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--sw2-line-soft);font-size:13px;align-items:baseline;}
+  .sw2-sv-row:last-child{border-bottom:none;}
+  .sw2-sv-row b{color:var(--sw2-amber);font-weight:700;flex:none;width:110px;}
+  .sw2-sv-row span{color:var(--sw2-text-dim);}
+  .sw2-sv-para{font-size:13.5px;color:var(--sw2-text-dim);line-height:1.75;margin-bottom:8px;}
+  .sw2-sv-para:last-child{margin-bottom:0;}
+  .sw2-sv-hist{display:flex;gap:10px;padding:5px 0;font-size:13px;align-items:baseline;}
+  .sw2-sv-hist .sw2-hist-tick{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);flex:none;width:56px;}
+  .sw2-sv-hist span:last-child{color:var(--sw2-text-dim);}
+  .sw2-field{margin-top:11px;}
+  .sw2-field label{display:block;font-size:12px;color:var(--sw2-text-dim);margin-bottom:5px;}
+  .sw2-field textarea{
+    width:100%;min-height:84px;resize:vertical;
+    background:var(--sw2-panel);color:var(--sw2-text);
+    border:1px solid var(--sw2-line);border-radius:8px;
+    padding:9px 11px;font-family:var(--sw2-font);font-size:13.5px;
+  }
+  .sw2-field textarea:focus{outline:none;border-color:rgba(227,173,85,.5);}
+  .sw2-hint{font-size:11.5px;color:var(--sw2-text-faint);margin-top:4px;}
+  .sw2-parse-status{
+    margin-top:8px;font-size:12.5px;color:var(--sw2-green);
+    background:var(--sw2-panel);border-radius:7px;padding:7px 10px;line-height:1.6;
+  }
+  .sw2-parse-status .sw2-mono{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);}
+  .sw2-input{
+    width:100%;background:var(--sw2-panel);color:var(--sw2-text);
+    border:1px solid var(--sw2-line);border-radius:8px;
+    padding:8px 11px;font-size:13px;font-family:var(--sw2-mono);
+  }
+  .sw2-input:focus{outline:none;border-color:rgba(227,173,85,.5);}
+  .sw2-key-mask{letter-spacing:3px;color:var(--sw2-text-faint);}
+  .sw2-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+  .sw2-btn{
+    padding:9px 18px;border-radius:8px;border:1px solid var(--sw2-line);
+    background:var(--sw2-card-2);color:var(--sw2-text);
+    font-size:13.5px;cursor:pointer;font-family:var(--sw2-font);
+  }
+  .sw2-btn:hover{border-color:var(--sw2-text-faint);}
+  .sw2-btn.sw2-primary{background:var(--sw2-amber);border-color:var(--sw2-amber);color:#141006;font-weight:700;}
+  .sw2-btn.sw2-primary:hover{filter:brightness(1.06);}
+  .sw2-btn.sw2-danger{border-color:rgba(223,108,98,.5);color:var(--sw2-red);}
+  .sw2-btn.sw2-danger:hover{background:rgba(223,108,98,.1);}
+  .sw2-cold-mgmt{font-size:13px;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:7px;}
+  .sw2-cold-mgmt .sw2-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+  .sw2-cold-mgmt b{color:var(--sw2-text);font-family:var(--sw2-mono);font-weight:600;}
+  .sw2-cold-mgmt em{font-style:normal;font-size:11px;color:var(--sw2-text-faint);}
+  .sw2-cold-mgmt .sw2-thr{color:var(--sw2-amber);}
+  .sw2-admin{margin-top:12px;grid-column:1/-1;}
+  .sw2-admin summary{font-size:12px;color:var(--sw2-text-faint);cursor:pointer;user-select:none;}
+  .sw2-admin summary:hover{color:var(--sw2-text-dim);}
+  .sw2-admin .sw2-admin-body{
+    margin-top:8px;padding:10px 12px;border:1px dashed var(--sw2-line);border-radius:8px;
+    font-size:11.5px;color:var(--sw2-text-faint);line-height:1.9;font-family:var(--sw2-mono);
+  }
+
+  /* ---------- 页脚 ---------- */
+  .sw2-footer{
+    margin-top:16px;padding-top:10px;border-top:1px solid var(--sw2-line-soft);
+    font-size:11.5px;color:var(--sw2-text-faint);
+    display:flex;gap:16px;flex-wrap:wrap;
+  }
+  .sw2-footer b{color:var(--sw2-text-dim);}
+</style>
+</head>
+<body>
+
+<div class="sw2-window">
+
+  <!-- ======== 头部 ======== -->
+  <header class="sw2-header">
+    <div class="sw2-badge">棋</div>
+    <div class="sw2-title-block">
+      <div class="sw2-title">观棋窗口</div>
+      <div class="sw2-subtitle">世界的眼睛 · Story World</div>
+    </div>
+    <span class="sw2-chip">江州</span>
+    <span class="sw2-chip sw2-tick">第 47 轮</span>
+    <div class="sw2-close" title="关闭（Esc）">✕</div>
+  </header>
+
+  <!-- ======== 状态条 ======== -->
+  <div class="sw2-statusbar">
+    <span class="sw2-dot"></span>
+    <span class="sw2-main">已同步 · 刚刚演完第 47 轮</span>
+    <span class="sw2-right">每轮对话后自动刷新 · 窗口只读，不参与剧情</span>
+  </div>
+
+  <!-- ======== 页签 ======== -->
+  <nav class="sw2-tabs">
+    <div class="sw2-tab sw2-active" data-view="board">♟ 观棋</div>
+    <div class="sw2-tab" data-view="chronicle">📜 编年</div>
+    <div class="sw2-tab" data-view="archive">🏛 大事纪·旧卷</div>
+    <div class="sw2-tab" data-view="entities">👥 角色与势力</div>
+    <div class="sw2-tab" data-view="setting">📖 设定</div>
+    <div class="sw2-tab" data-view="settings">⚙ 设置</div>
+  </nav>
+
+  <!-- ============ 观棋页 ============ -->
+  <section id="view-board" class="sw2-view sw2-active">
+
+    <!-- 一句话时局（重心） -->
+    <div class="sw2-digest">
+      <div class="sw2-digest-line">
+        大虞偏将压着万法阁，<span class="sw2-accent">大盘谷的杀局已启</span>，坊市正乱。
+      </div>
+      <div class="sw2-digest-sub">
+        三方各怀着盘算：<b>1 件在暗处</b> · 劳役征发刚落下，你的家门也被点到
+      </div>
+    </div>
+
+    <!-- 信息带：世情四键 / 大势 / 浪尖 / 盘算计数 -->
+    <div class="sw2-infoband">
+      <div class="sw2-band-block">
+        <div class="sw2-band-label">世情 · 四键</div>
+        <div class="sw2-env">
+          <div class="sw2-env-row"><span class="sw2-env-name">民生</span><span class="sw2-env-bar"><i style="width:44%;background:var(--sw2-green)"></i></span><span class="sw2-env-val">0.44</span></div>
+          <div class="sw2-env-row"><span class="sw2-env-name">乱象</span><span class="sw2-env-bar"><i style="width:62%;background:var(--sw2-amber)"></i></span><span class="sw2-env-val">0.62</span></div>
+          <div class="sw2-env-row"><span class="sw2-env-name">天时</span><span class="sw2-env-bar"><i style="width:35%;background:var(--sw2-amber)"></i></span><span class="sw2-env-val">0.35</span></div>
+          <div class="sw2-env-row sw2-danger"><span class="sw2-env-name">时局</span><span class="sw2-env-bar"><i style="width:80%;background:var(--sw2-red)"></i></span><span class="sw2-env-val">0.80</span></div>
+        </div>
+      </div>
+      <div class="sw2-band-block">
+        <div class="sw2-band-label">大势 · 结构性张力</div>
+        <div class="sw2-tension-line">大虞 ↔ 万法阁 <span class="sw2-int">0.72</span></div>
+        <div class="sw2-tension-sub">方向：大虞偏将压万法阁 · 引擎按事件与对峙算，不由模型拍</div>
+      </div>
+      <div class="sw2-band-block">
+        <div class="sw2-band-label">浪尖 · 刚收尾的大动作</div>
+        <div class="sw2-tides">
+          <div class="sw2-tide"><b>洗煞阵启</b><span class="sw2-tweek">31轮</span></div>
+          <div class="sw2-tide"><b>割约送出</b><span class="sw2-tweek">44轮</span></div>
+        </div>
+      </div>
+      <div class="sw2-band-block">
+        <div class="sw2-band-label">盘算</div>
+        <div class="sw2-big-num">3<small>/15</small></div>
+        <div class="sw2-num-sub">1 件在暗处 · 顶层 2/5<br>每轮新生 ≤2（定案）</div>
+      </div>
+    </div>
+
+    <!-- 各方盘算总览 -->
+    <div class="sw2-agenda-strip">
+      <div class="sw2-col-head">各方盘算 · 总览</div>
+      <div class="sw2-agenda-cards">
+        <div class="sw2-agenda-card sw2-agenda-hidden">
+          <div class="sw2-ahead"><span class="sw2-aowner">薛铁衣</span><span class="sw2-visible v-hidden">暗</span></div>
+          <div class="sw2-agoal">逼黄坤入洗煞之局</div>
+          <div class="sw2-astage">发兵催战
+            <span class="sw2-aprog"><span class="sw2-dotstep on"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span></span>
+            <span class="sw2-asteps">1/5</span>
+          </div>
+        </div>
+        <div class="sw2-agenda-card">
+          <div class="sw2-ahead"><span class="sw2-aowner">大虞偏将</span><span class="sw2-visible v-known">明</span></div>
+          <div class="sw2-agoal">交割灵脉地契、收编黄坤</div>
+          <div class="sw2-astage">开价磋商
+            <span class="sw2-aprog"><span class="sw2-dotstep on"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span></span>
+            <span class="sw2-asteps">1/4</span>
+          </div>
+        </div>
+        <div class="sw2-agenda-card">
+          <div class="sw2-ahead"><span class="sw2-aowner">万法阁</span><span class="sw2-visible v-known">明</span></div>
+          <div class="sw2-agoal">入谷洗煞、夺太岁残骨</div>
+          <div class="sw2-astage">集结人手
+            <span class="sw2-aprog"><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span><span class="sw2-dotstep"></span></span>
+            <span class="sw2-asteps">0/4</span>
+          </div>
+        </div>
+        <div class="sw2-agenda-empty">你的棋子眼下没有在办的盘算——每一步从对话里来。</div>
+      </div>
+    </div>
+
+    <!-- 主区：动态流 + 位置侧面 -->
+    <div class="sw2-board-main">
+
+      <div>
+        <div class="sw2-col-head">动态流 · 最新在上</div>
+        <div class="sw2-feed">
+
+          <div class="sw2-entry sw2-latest">
+            <span class="sw2-now">最新</span>
+            <div class="sw2-ctext">劳役征发——大虞偏将征调坊市丁壮，黄府也被点到名。</div>
+            <div class="sw2-cmeta">
+              <span class="sw2-round">47轮</span>
+              <span>牵动：大虞偏将 · 你</span>
+              <span class="sw2-ref" title="ev_pump_47_1 · 源：处境（时局越阈落事）">？</span>
+            </div>
+          </div>
+
+          <div class="sw2-entry sw2-hidden">
+            <div class="sw2-ctext">
+              <span class="sw2-hidden-badge">暗</span>
+              薛铁衣的杀局又进一步——大军压至大盘谷口，守将放行。
+            </div>
+            <div class="sw2-cmeta">
+              <span class="sw2-round">46轮</span>
+              <span>来由：第0轮 发兵催战</span>
+              <span class="sw2-ref" title="a_xie · e_xie · visibility=concealed（数据照写，仅叙事抑制）">？</span>
+            </div>
+          </div>
+
+          <div class="sw2-entry">
+            <div class="sw2-ctext">大虞偏将派帐下偏校赴黄府，递交灵脉地契的割约。</div>
+            <div class="sw2-cmeta">
+              <span class="sw2-round">44轮</span>
+              <span>派出：帐下偏校</span>
+            </div>
+          </div>
+
+          <div class="sw2-entry">
+            <div class="sw2-ctext">万法阁残部自北山溃走，大虞偏将的粮道被牵动。</div>
+            <div class="sw2-cmeta">
+              <span class="sw2-round">39轮</span>
+              <span>来由：第31轮 残部突围</span>
+              <span>牵动：大虞偏将</span>
+            </div>
+          </div>
+
+          <div class="sw2-entry">
+            <div class="sw2-ctext">万法阁的「入谷洗煞」散了——事业交给诸子，分作两路。</div>
+            <div class="sw2-cmeta">
+              <span class="sw2-round">33轮</span>
+              <span>变数：诸子接手</span>
+            </div>
+          </div>
+
+          <div class="sw2-entry">
+            <div class="sw2-ctext">薛铁衣的洗煞阵启，铁衣旧部合围大盘谷。</div>
+            <div class="sw2-cmeta">
+              <span class="sw2-round">31轮</span>
+              <span>来由：第0轮 发兵催战</span>
+            </div>
+          </div>
+
+          <div class="sw2-milestone-strip">
+            ⚑ 更早的 <b>第 1–30 轮</b>已收进大事纪「杀局将启」（8 件事，来龙去脉仍在）
+            <span class="sw2-goto">去翻旧账 →</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 位置与动作：速览卡（全量见「角色与势力」页） -->
+      <aside class="sw2-side">
+        <div class="sw2-col-head">位置与动作 · 速览</div>
+
+        <div class="sw2-entity">
+          <div class="sw2-entity-head">
+            <span class="sw2-entity-name">薛铁衣</span>
+            <span class="sw2-entity-kind">势力</span>
+            <span class="sw2-hidden-badge">暗</span>
+            <span class="sw2-entity-loc">大盘谷</span>
+          </div>
+          <div class="sw2-weight-row">
+            <span class="sw2-wlabel">影响力</span>
+            <span class="sw2-wbar"><i style="width:88%"></i></span>
+            <span class="sw2-wval">88</span>
+          </div>
+          <div class="sw2-agenda"><b>逼黄坤入洗煞之局</b> · 发兵催战</div>
+          <div class="sw2-stage"><span class="sw2-stagetext">1/5 · 最近动作：压谷口（46轮）</span></div>
+        </div>
+
+        <div class="sw2-entity">
+          <div class="sw2-entity-head">
+            <span class="sw2-entity-name">大虞偏将</span>
+            <span class="sw2-entity-kind">势力</span>
+            <span class="sw2-entity-loc">江州</span>
+          </div>
+          <div class="sw2-weight-row">
+            <span class="sw2-wlabel">影响力</span>
+            <span class="sw2-wbar"><i style="width:91%"></i></span>
+            <span class="sw2-wval">91</span>
+          </div>
+          <div class="sw2-agenda"><b>交割灵脉地契、收编黄坤</b> · 开价磋商</div>
+          <div class="sw2-stage"><span class="sw2-stagetext">1/4 · 最近动作：劳役征发（47轮）</span></div>
+        </div>
+
+        <div class="sw2-entity">
+          <div class="sw2-entity-head">
+            <span class="sw2-entity-name">万法阁</span>
+            <span class="sw2-entity-kind">势力</span>
+            <span class="sw2-entity-loc">北山</span>
+          </div>
+          <div class="sw2-weight-row">
+            <span class="sw2-wlabel">影响力</span>
+            <span class="sw2-wbar"><i style="width:76%"></i></span>
+            <span class="sw2-wval">76</span>
+          </div>
+          <div class="sw2-agenda"><b>入谷洗煞、夺太岁残骨</b> · 集结人手</div>
+          <div class="sw2-stage"><span class="sw2-stagetext">0/4 · 最近动作：残部突围（39轮）</span></div>
+        </div>
+
+        <div class="sw2-entity sw2-player">
+          <div class="sw2-entity-head">
+            <span class="sw2-entity-name">黄坤</span>
+            <span class="sw2-entity-kind">你的棋子</span>
+            <span class="sw2-entity-loc">黄府</span>
+          </div>
+          <div class="sw2-weight-row">
+            <span class="sw2-wlabel">影响力</span>
+            <span class="sw2-wbar"><i style="width:18%"></i></span>
+            <span class="sw2-wval">18</span>
+          </div>
+          <div class="sw2-agenda">眼下没有在办的盘算——你的每一步从对话里来。</div>
+          <div class="sw2-stage"><span class="sw2-stagetext">最近活跃：45轮</span></div>
+          <div class="sw2-note">被大局波及会伤筋动骨；硬碰大势力会被折减。</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ 编年页 ============ -->
+  <section id="view-chronicle" class="sw2-view">
+    <div class="sw2-filters">
+      <span class="sw2-filter sw2-on">全部</span>
+      <span class="sw2-filter">谋划</span>
+      <span class="sw2-filter">大事</span>
+      <span class="sw2-filter">牵动</span>
+      <span class="sw2-filter">暗处</span>
+      <span class="sw2-filter">时局</span>
+    </div>
+    <div class="sw2-chronicle">
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">47</span><span class="sw2-ch-text">劳役征发——大虞偏将征调坊市丁壮。</span></div>
+      <div class="sw2-ch-line sw2-ch-hidden"><span class="sw2-ch-round">46</span><span class="sw2-ch-text">薛铁衣杀局推进：大军压至大盘谷口（暗处谋划，仅此可见）</span></div>
+      <div class="sw2-ch-line"><span class="sw2-ch-round">45</span><span class="sw2-ch-text">你过问粮道（行迹一副）</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">44</span><span class="sw2-ch-text">大虞偏将派帐下偏校赴黄府送割约。</span></div>
+      <div class="sw2-ch-line"><span class="sw2-ch-round">40</span><span class="sw2-ch-text">万法阁集结人手（入谷洗煞）</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">39</span><span class="sw2-ch-text">残部突围——牵动大虞偏将粮道。</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">33</span><span class="sw2-ch-text">万法阁「入谷洗煞」变形——诸子接手，分作两路。</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">31</span><span class="sw2-ch-text">薛铁衣洗煞阵启，铁衣旧部合围大盘谷。</span></div>
+      <div class="sw2-ch-roll">⚑ 第 1–30 轮已收进大事纪「杀局将启」（8 件事）<small>来龙去脉仍在，展开见「大事纪·旧卷」</small></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">24</span><span class="sw2-ch-text">民生缓过来了（回缓带内）。</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">15</span><span class="sw2-ch-text">天时不作美——北山雨水成灾，万法阁行路受阻。</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">15</span><span class="sw2-ch-text">时局紧绷——全境风声鹤唳。</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">15</span><span class="sw2-ch-text">街面乱了——坊市斗殴蔓延。</span></div>
+      <div class="sw2-ch-line sw2-ch-event"><span class="sw2-ch-round">0</span><span class="sw2-ch-text">北山大盘谷阵裂，薛铁衣发兵催战，杀局将启。</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 大事纪·旧卷页 ============ -->
+  <section id="view-archive" class="sw2-view">
+    <div class="sw2-arch-grid">
+      <div class="sw2-milestone">
+        <div class="sw2-milestone-head">
+          <span class="sw2-milestone-id">纪 一</span>
+          <span class="sw2-mspan">第 1–30 轮 · 8 件事</span>
+        </div>
+        <h5>杀局将启</h5>
+        <div class="sw2-mtitles">
+          <span>发兵催战</span><span>民生凋敝</span><span>时局紧绷</span><span>坊市斗殴</span>
+        </div>
+        <details>
+          <summary>展开这一纪的条目</summary>
+          <div class="sw2-rawids">ev_0 · ev_15_1 · ev_15_2 · ev_15_3 · ev_15_4 · ev_21_1 · ev_24_1 · ev_30_1</div>
+        </details>
+      </div>
+      <div class="sw2-milestone">
+        <div class="sw2-milestone-head">
+          <span class="sw2-milestone-id">纪 二</span>
+          <span class="sw2-mspan">第 31–50 轮 · 11 件事</span>
+        </div>
+        <h5>残局重组</h5>
+        <div class="sw2-mtitles">
+          <span>残部突围</span><span>万法阁变形</span><span>割约送出</span>
+        </div>
+        <details>
+          <summary>展开这一纪的条目</summary>
+          <div class="sw2-rawids">ev_31_1 · ev_31_2 · ev_33_1 · ev_33_2 · ev_39_1 · ev_39_2 · ev_44_1 · ev_44_2 · ev_45_1 · ev_46_1 · ev_47_1</div>
+        </details>
+      </div>
+    </div>
+
+    <div class="sw2-cold">
+      <h4>旧卷（早于大事纪的编年原文 · 按需阅卷）</h4>
+      <div class="sw2-cold-row">
+        <span class="sw2-vol">卷一</span>
+        <span class="sw2-volinfo">第 1–500 轮 · 512KB · 收在插件本地 · 2026-09-01 入卷</span>
+        <span class="sw2-volact">阅卷</span>
+      </div>
+      <div class="sw2-cold-row">
+        <span class="sw2-vol">卷二</span>
+        <span class="sw2-volinfo">第 501–1000 轮 · 498KB · 收在插件本地 · 2026-09-05 入卷</span>
+        <span class="sw2-volact">阅卷</span>
+      </div>
+      <div class="sw2-cold-row">
+        <span class="sw2-vol">卷三</span>
+        <span class="sw2-volinfo">第 1001–1500 轮 · 505KB · 收在插件本地 · 2026-09-08 入卷</span>
+        <span class="sw2-volact">阅卷</span>
+      </div>
+      <div class="sw2-cold-row" style="color:var(--sw2-text-faint)">
+        <span class="sw2-vol">今卷</span>
+        <span class="sw2-volinfo">第 1501 轮至今 · 20.2KB · 每 100 轮约 21.7KB（实测曲线）</span>
+        <span class="sw2-volact">导出备份</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 角色与势力页 ============ -->
+  <section id="view-entities" class="sw2-view">
+    <div class="sw2-list-head">全部角色与势力（4 位 · 席位上限 32 超出会告警）</div>
+    <div class="sw2-entity-list">
+
+      <div class="sw2-entity-row">
+        <div class="sw2-ename">薛铁衣<small>势力</small></div>
+        <div class="sw2-eloc">大盘谷</div>
+        <div class="sw2-eweight">
+          <span class="sw2-wbar"><i style="width:88%"></i></span><span class="sw2-wval">88</span>
+        </div>
+        <div class="sw2-eattrs">
+          <span class="sw2-eattr">兵力<b>0.8</b></span><span class="sw2-eattr">权位<b>0.3</b></span><span class="sw2-eattr">人脉<b>0.5</b></span><span class="sw2-eattr">耳目<b>0.6</b></span>
+        </div>
+        <div class="sw2-eagenda"><b>逼黄坤入洗煞之局</b> <span class="sw2-visible v-hidden">暗</span><br>发兵催战 · 1/5</div>
+        <div class="sw2-eactive">最近活跃<br>46轮</div>
+      </div>
+
+      <div class="sw2-entity-row">
+        <div class="sw2-ename">大虞偏将<small>势力</small></div>
+        <div class="sw2-eloc">江州</div>
+        <div class="sw2-eweight">
+          <span class="sw2-wbar"><i style="width:91%"></i></span><span class="sw2-wval">91</span>
+        </div>
+        <div class="sw2-eattrs">
+          <span class="sw2-eattr">兵力<b>0.6</b></span><span class="sw2-eattr">权位<b>0.7</b></span><span class="sw2-eattr">人脉<b>0.4</b></span><span class="sw2-eattr">耳目<b>0.4</b></span>
+        </div>
+        <div class="sw2-eagenda"><b>交割灵脉地契、收编黄坤</b> <span class="sw2-visible v-known">明</span><br>开价磋商 · 1/4</div>
+        <div class="sw2-eactive">最近活跃<br>47轮</div>
+      </div>
+
+      <div class="sw2-entity-row">
+        <div class="sw2-ename">万法阁<small>势力</small></div>
+        <div class="sw2-eloc">北山</div>
+        <div class="sw2-eweight">
+          <span class="sw2-wbar"><i style="width:76%"></i></span><span class="sw2-wval">76</span>
+        </div>
+        <div class="sw2-eattrs">
+          <span class="sw2-eattr">兵力<b>0.5</b></span><span class="sw2-eattr">权位<b>0.4</b></span><span class="sw2-eattr">人脉<b>0.6</b></span><span class="sw2-eattr">耳目<b>0.7</b></span>
+        </div>
+        <div class="sw2-eagenda"><b>入谷洗煞、夺太岁残骨</b> <span class="sw2-visible v-known">明</span><br>集结人手 · 0/4</div>
+        <div class="sw2-eactive">最近活跃<br>39轮</div>
+      </div>
+
+      <div class="sw2-entity-row sw2-player">
+        <div class="sw2-ename">黄坤<small>你的棋子</small></div>
+        <div class="sw2-eloc">黄府</div>
+        <div class="sw2-eweight">
+          <span class="sw2-wbar"><i style="width:18%"></i></span><span class="sw2-wval">18</span>
+        </div>
+        <div class="sw2-eattrs">
+          <span class="sw2-eattr">兵力<b>0.3</b></span><span class="sw2-eattr">权位<b>0.05</b></span><span class="sw2-eattr">人脉<b>0.3</b></span><span class="sw2-eattr">耳目<b>0.4</b></span>
+        </div>
+        <div class="sw2-eagenda">眼下没有在办的盘算<br>你的每一步从对话里来</div>
+        <div class="sw2-eactive">最近活跃<br>45轮</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 设定页（档案阅览 + 重抽入口） ============ -->
+  <section id="view-setting" class="sw2-view">
+    <div class="sw2-sv-head">
+      <div>
+        <div class="sw2-sv-title">世界设定 · 江州</div>
+        <div class="sw2-sv-sub">书指纹 <span class="sw2-mono">fnv1a_9f31…_12044</span> · 抽取于 2026-09-08 · 全部条目取自原文，未增写一句（只提取不创作）</div>
+      </div>
+      <div class="sw2-sv-cards">
+        <span class="sw2-sv-chip ok">✓ 已冻结 · 设定未变不重抽</span>
+        <button class="sw2-btn sw2-danger">↻ 重新抽取设定</button>
+      </div>
+    </div>
+
+    <div class="sw2-sv-grid">
+      <div class="sw2-set-card" style="grid-column:1/-1">
+        <h4>大势现状（演变层 · 引擎算 · 每轮随动）</h4>
+        <div class="sw2-tension-line" style="margin-bottom:8px">大虞 ↔ 万法阁 <span class="sw2-int">0.72</span></div>
+        <div class="sw2-env">
+          <div class="sw2-env-row"><span class="sw2-env-name">民生</span><span class="sw2-env-bar"><i style="width:44%;background:var(--sw2-green)"></i></span><span class="sw2-env-val">0.44</span></div>
+          <div class="sw2-env-row"><span class="sw2-env-name">乱象</span><span class="sw2-env-bar"><i style="width:62%;background:var(--sw2-amber)"></i></span><span class="sw2-env-val">0.62</span></div>
+          <div class="sw2-env-row"><span class="sw2-env-name">天时</span><span class="sw2-env-bar"><i style="width:35%;background:var(--sw2-amber)"></i></span><span class="sw2-env-val">0.35</span></div>
+          <div class="sw2-env-row sw2-danger"><span class="sw2-env-name">时局</span><span class="sw2-env-bar"><i style="width:80%;background:var(--sw2-red)"></i></span><span class="sw2-env-val">0.80</span></div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">浪尖（派生源 · 滑动保留 20）：<b style="color:var(--sw2-text-dim)">洗煞阵启@31轮</b> · <b style="color:var(--sw2-text-dim)">割约送出@44轮</b></div>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>力量谱系（5 档 · 取全）</h4>
+        <div class="sw2-sv-row"><b>凝煞</b><span>宗师 · 镇一方煞气（原文：「煞气一镇，万邪辟易」）</span></div>
+        <div class="sw2-sv-row"><b>化神</b><span>真人 · 神游千里，夜行无碍</span></div>
+        <div class="sw2-sv-row"><b>元婴</b><span>大宗 · 可开宗立派（原文：「一举突破元婴」）</span></div>
+        <div class="sw2-sv-row"><b>金丹</b><span>上人 · 一府之名流</span></div>
+        <div class="sw2-sv-row"><b>炼气</b><span>修士 · 江湖底子，散修居多（原文：「炼气九层」）</span></div>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>法则（7 条）</h4>
+        <div class="sw2-sv-row"><b>煞灵相生</b><span>煞气须以灵脉镇压，灵脉须以血煞滋养</span></div>
+        <div class="sw2-sv-row"><b>契书为王</b><span>灵脉之权归于契书，契书为官府所辖</span></div>
+        <div class="sw2-sv-row"><b>谷禁</b><span>元婴以上不得入大盘谷</span></div>
+        <div class="sw2-sv-row"><b>残骨勿动</b><span>太岁残骨不可轻启，启则阵裂</span></div>
+        <div class="sw2-sv-row"><b>兵不越坊</b><span>官军不入坊市，坊市不藏兵</span></div>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>社会格局 · 力量体系</h4>
+        <p class="sw2-sv-para">大虞官军辖江州全境，矿场把头与坊市会馆共治市井，江湖门派在北山自成山头——官、坊、山三面各有各的规矩。</p>
+        <p class="sw2-sv-para">灵力源自灵脉，修行以炼气为基、元婴为峰；煞气是灵脉的另一面，镇不住就是灾，镇住了就是权。</p>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>史略（6 条）</h4>
+        <div class="sw2-sv-hist"><span class="sw2-hist-tick">百年前</span><span>太岁陨落北山，残骨埋于大盘谷底</span></div>
+        <div class="sw2-sv-hist"><span class="sw2-hist-tick">三十年前</span><span>洗煞阵立，铁衣旧部守谷</span></div>
+        <div class="sw2-sv-hist"><span class="sw2-hist-tick">十余年前</span><span>万法阁入北山，与守谷旧部结怨</span></div>
+        <div class="sw2-sv-hist"><span class="sw2-hist-tick">三年前</span><span>黄坤于北山矿场搏命，攒下小灵脉一处</span></div>
+        <div class="sw2-sv-hist"><span class="sw2-hist-tick">半年前</span><span>大虞偏将奉命赴江州，收编豪强</span></div>
+        <div class="sw2-sv-hist"><span class="sw2-hist-tick">今下</span><span>阵裂、催战、割约——杀局将启</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 设置页 ============ -->
+  <section id="view-settings" class="sw2-view">
+    <div class="sw2-settings">
+
+      <div class="sw2-set-card">
+        <h4>世界设定（书的来源）</h4>
+        <div class="sw2-source-line">
+          <span class="sw2-source-tag">来源：角色卡描述</span>
+          <span class="sw2-source-note">自动读取卡片全文 · 设定没变就不重复抽取（书指纹）</span>
+          <details class="sw2-source-alt">
+            <summary>换源 &#9662;（一般不用）</summary>
+            <div class="sw2-source-alt-body">
+              <span>SillyTavern 世界信息（合订）</span>
+              <span>手动粘贴文本</span>
+            </div>
+          </details>
+        </div>
+        <div class="sw2-hint" style="margin-top:10px">
+          设定全文（力量谱系 / 法则 / 社会格局 / 力量体系 / 史略 + 大势现状）在
+          <span class="sw2-goto2" data-view="setting">「设定」页</span>阅览，
+          「重新抽取」按钮也在那里——设置页只管配置。
+        </div>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>你的开档描述</h4>
+        <div class="sw2-field">
+          <label>写一段"你是谁"（自然语言 · ≤2000 字提案）</label>
+          <textarea>我名黄坤，散修出身，炼气九层。曾在北山矿场搏命十年，攒下一处小灵脉，认得几位矿场把头的门路。性子谨慎，不沾恩怨，只求在夹缝里挣一份家业。</textarea>
+          <div class="sw2-hint">世界从中摘你的底子（兵力/权位/人脉/耳目）；摘不出的落定案默认；你手填过的一律不动。</div>
+        </div>
+        <div class="sw2-parse-status">
+          ✓ 上次解析：四项都有依据 · <span class="sw2-mono">兵力 30 ← 炼气九层/矿场搏命</span>
+        </div>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>模型通道</h4>
+        <div class="sw2-field">
+          <label>服务地址</label>
+          <input class="sw2-input" value="https://gcli.ggchan.dev/v1">
+        </div>
+        <div class="sw2-field">
+          <label>密钥</label>
+          <input class="sw2-input sw2-key-mask" value="••••••••••••••••••••">
+          <div class="sw2-hint">本机读取 · 不落库 · 不打印</div>
+        </div>
+        <div class="sw2-field">
+          <label>世界模型</label>
+          <input class="sw2-input" value="gemini-3.1-pro-preview">
+        </div>
+        <div class="sw2-field">
+          <label>单轮演算上限（提案：120 秒 / 4096 字）</label>
+          <input class="sw2-input" value="120s · 4096">
+        </div>
+      </div>
+
+      <div class="sw2-set-card">
+        <h4>操作</h4>
+        <div class="sw2-actions">
+          <button class="sw2-btn sw2-primary">✨ 开始新世界</button>
+          <button class="sw2-btn">▶ 手动推进一步</button>
+          <button class="sw2-btn sw2-danger">↻ 重新抽取设定</button>
+        </div>
+        <div class="sw2-hint" style="margin-top:10px">
+          每轮对话后世界自动推进；此按钮是手动补推。<br>
+          「重新抽取」会忽略缓存强行重抽设定，并重读你的开档描述。<br>
+          演算失败时世界原样不动，状态条会报错，可重试。
+        </div>
+      </div>
+
+      <div class="sw2-set-card" style="grid-column:1/-1">
+        <h4>旧卷与存储</h4>
+        <div class="sw2-cold-mgmt">
+          <div class="sw2-row"><span>编年体积 · 当前</span><b>20.2KB</b><em>每 100 轮约 21.7KB（实测）</em></div>
+          <div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">500 轮 或 5MB</b><em>提案态 · 随本阶段报批</em></div>
+          <div class="sw2-row"><span>入卷去处</span><b>插件本地 · 可导出可导入</b><em>割断的是旧账，不是来龙去脉（红线 2）</em></div>
+        </div>
+
+        <details class="sw2-admin">
+          <summary>▸ 管理细节（存储方案 / 指纹 / 审计 / 阈值）</summary>
+          <div class="sw2-admin-body">
+            存储全在插件内：热账随聊天（chat metadata）· 旧卷 IndexedDB · 设置 extension_settings
+            —— 除模型调用外数据不出本机，可整体导出备份<br>
+            书指纹缓存：FNV-1a · LRU=5 · cacheVersion=1（K26）<br>
+            强度算法：窗10 / 除数4 / 惯性0.9 / 合成6:4（定案 · 报批二批#9-12）<br>
+            熵泵：3轮一步 · 步长0.06 · 四键锯齿（定案 · 报批二批#1-8）<br>
+            玩家解析：PLAYER_DESC_LIMIT=2000（提案）· 定案默认 0.25/0.05/0.3/0.4<br>
+            主调用：超时/字数上限提案态（本阶段报批）· 实体席位上限 32（超限告警）
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== 页脚 ======== -->
+  <div class="sw2-footer">
+    <span><b>样例 v3</b>：数据为演示（live-world 夹具 + 实测曲线），非真实运行时数据</span>
+    <span><b>玩家语言</b>：分量→影响力 · 盘算→谋划 · 熵泵→时局 · attrs→兵力/权位/人脉/耳目（引擎 id 收进「？」悬停）</span>
+  </div>
+</div>
+
+<script>
+  // 页签切换
+  document.querySelectorAll('.sw2-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      document.querySelectorAll('.sw2-tab').forEach(function (t) { t.classList.remove('sw2-active'); });
+      document.querySelectorAll('.sw2-view').forEach(function (v) { v.classList.remove('sw2-active'); });
+      tab.classList.add('sw2-active');
+      document.getElementById('view-' + tab.getAttribute('data-view')).classList.add('sw2-active');
+    });
+  });
+  // 编年过滤器（视觉样例，不真正过滤）
+  document.querySelectorAll('.sw2-filter').forEach(function (f) {
+    f.addEventListener('click', function () {
+      document.querySelectorAll('.sw2-filter').forEach(function (x) { x.classList.remove('sw2-on'); });
+      f.classList.add('sw2-on');
+    });
+  });
+  // 「去翻旧账」→ 编年页；「设定页」链接 → 设定页
+  document.querySelectorAll('.sw2-goto, .sw2-goto2').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var view = el.getAttribute('data-view') || 'chronicle';
+      document.querySelector('.sw2-tab[data-view="' + view + '"]').click();
+    });
+  });
+</script>
+</body>
+</html>

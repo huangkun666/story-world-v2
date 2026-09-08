@@ -209,6 +209,14 @@ export const ssotSchema = {
             required: ['tick'],
             props: {
                 tick: { kind: 'number', int: true, min: 0 },
+                playerParse: {   // K32 溯源账：由解析注入的 attrs 键（force 重解析只覆盖此集的键；手填键永不触碰）
+                    kind: 'object',
+                    additional: false,
+                    required: ['injected'],
+                    props: {
+                        injected: { kind: 'array', items: { kind: 'string' } },
+                    },
+                },
                 simLog: {   // 逐轮模拟台账（长跑防线细案 §2.5 四字段 + 警告）
                     kind: 'array',
                     items: {

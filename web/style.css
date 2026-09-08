@@ -1,0 +1,250 @@
+/* story-world-v2/web/style.css —— 观棋窗口全量样式（K30 骨架 + K34 六页签，sw2_ 命名空间）。
+   与 v1 sd_ 全隔离（共页共存）。取 ui-panel-mockup.html v3 的视觉语言：金=最新一轮、暗红=暗处、
+   信息带副角安静、技术细节收敛。变量与 render.js 内联 var(--sw2-*) 对齐。 */
+:root{
+  --sw2-panel:#1b1f28;
+  --sw2-card:#20252f;
+  --sw2-card-2:#262c38;
+  --sw2-line:#2c3342;
+  --sw2-line-soft:#242a36;
+  --sw2-text:#e8eaef;
+  --sw2-text-dim:#9aa3b5;
+  --sw2-text-faint:#6b7590;
+  --sw2-amber:#e3ad55;
+  --sw2-amber-dim:rgba(227,173,85,.35);
+  --sw2-red:#df6c62;
+  --sw2-green:#8fbf8f;
+  --sw2-blue:#79a7d6;
+}
+.sw2-window-mask{
+  position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
+  z-index:50000;display:none;align-items:center;justify-content:center;
+  padding:20px;box-sizing:border-box;background:rgba(13,16,21,.55);
+}
+.sw2-window-mask.sw2-open{display:flex;}
+.sw2-window{
+  width:1120px;max-width:100%;max-height:88%;overflow:auto;
+  background:var(--sw2-panel);color:var(--sw2-text);
+  border:1px solid var(--sw2-line);border-radius:12px;
+  box-shadow:0 20px 70px rgba(0,0,0,.6);
+  font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+  font-size:14px;line-height:1.6;
+}
+
+/* ---------- 头部 / 状态条 / 页签 ---------- */
+.sw2-header{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft);}
+.sw2-badge{
+  width:34px;height:34px;border-radius:9px;flex:none;
+  background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);color:#161006;
+  font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;
+}
+.sw2-title-block{flex:1;min-width:0;}
+.sw2-title{font-size:15.5px;font-weight:700;letter-spacing:.5px;}
+.sw2-subtitle{font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;}
+.sw2-chip.sw2-tick{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-close{width:30px;height:30px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--sw2-text-faint);cursor:pointer;}
+.sw2-close:hover{background:var(--sw2-card);color:var(--sw2-text);}
+.sw2-statusbar{display:flex;align-items:center;gap:10px;padding:7px 18px;font-size:12px;color:var(--sw2-text-faint);border-bottom:1px solid var(--sw2-line-soft);}
+.sw2-dot{width:7px;height:7px;border-radius:50%;background:var(--sw2-green);flex:none;}
+.sw2-main{color:var(--sw2-text-dim);}
+.sw2-tabs{display:flex;gap:4px;padding:10px 14px 0;flex-wrap:wrap;}
+.sw2-tab{padding:8px 15px;font-size:13.5px;cursor:pointer;color:var(--sw2-text-faint);border-radius:8px;user-select:none;}
+.sw2-tab:hover{color:var(--sw2-text);background:var(--sw2-card);}
+.sw2-tab.sw2-active{color:var(--sw2-text);background:var(--sw2-card-2);box-shadow:inset 0 -2px 0 var(--sw2-amber);}
+.sw2-view{display:none;padding:16px 18px 20px;}
+.sw2-view.sw2-active{display:block;}
+.sw2-placeholder{padding:26px 20px;border:1px dashed var(--sw2-line);border-radius:10px;color:var(--sw2-text-faint);font-size:13px;text-align:center;}
+.sw2-col-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.sw2-col-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+.sw2-ref{color:var(--sw2-blue);cursor:help;border-bottom:1px dotted transparent;font-size:11px;}
+.sw2-ref:hover{border-bottom-color:var(--sw2-blue);}
+
+/* ---------- 观棋：时局句（重心） ---------- */
+.sw2-digest{
+  background:linear-gradient(120deg,#272e3c 0%, #20252f 60%);
+  border:1px solid var(--sw2-line);border-left:4px solid var(--sw2-amber);
+  border-radius:10px;padding:14px 18px;margin-bottom:10px;
+}
+.sw2-digest-line{font-size:16.5px;font-weight:700;letter-spacing:.3px;line-height:1.5;}
+.sw2-digest-sub{margin-top:4px;font-size:13px;color:var(--sw2-text-dim);}
+
+/* ---------- 观棋：信息带 ---------- */
+.sw2-infoband{display:flex;align-items:stretch;border:1px solid var(--sw2-line-soft);border-radius:10px;background:var(--sw2-card);margin-bottom:10px;overflow:hidden;}
+.sw2-band-block{padding:10px 14px;flex:1;min-width:0;}
+.sw2-band-block + .sw2-band-block{border-left:1px solid var(--sw2-line-soft);}
+.sw2-band-label{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:7px;}
+.sw2-env-row{display:grid;grid-template-columns:44px 1fr 34px;gap:8px;align-items:center;margin-bottom:4px;}
+.sw2-env-row:last-child{margin-bottom:0;}
+.sw2-env-row .sw2-env-name{font-size:11.5px;color:var(--sw2-text-dim);}
+.sw2-env-row .sw2-env-bar{height:5px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
+.sw2-env-row .sw2-env-bar i{display:block;height:100%;border-radius:3px;}
+.sw2-env-row .sw2-env-val{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-dim);text-align:right;}
+.sw2-env-row.sw2-danger .sw2-env-val{color:var(--sw2-red);font-weight:700;}
+.sw2-env-row.sw2-danger .sw2-env-name{color:var(--sw2-red);}
+.sw2-clash-main{font-size:14.5px;font-weight:700;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.sw2-clash-main .sw2-int{font-size:12px;font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-amber);font-weight:400;}
+.sw2-clash-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}
+.sw2-tides{display:flex;flex-direction:column;gap:4px;}
+.sw2-tide{font-size:12px;color:var(--sw2-text-dim);}
+.sw2-big-num{font-size:19px;font-weight:700;font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-big-num small{font-size:12px;color:var(--sw2-text-faint);font-weight:400;margin-left:2px;}
+.sw2-num-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;line-height:1.55;}
+
+/* ---------- 观棋：盘算总览 + 动态流 + 位置速览 ---------- */
+.sw2-agenda-strip{margin-bottom:12px;}
+.sw2-agenda-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;}
+.sw2-agenda-card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:8px;padding:9px 12px;}
+.sw2-agenda-card.sw2-agenda-hidden{border-left:3px solid var(--sw2-red);}
+.sw2-agenda-card .sw2-ahead{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+.sw2-agenda-card .sw2-aowner{font-size:12px;font-weight:700;color:var(--sw2-amber);}
+.sw2-agenda-card .sw2-agoal{font-size:13px;line-height:1.5;}
+.sw2-agenda-card .sw2-astage{margin-top:4px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-agenda-card .sw2-aprog{display:flex;gap:3px;margin-left:auto;}
+.sw2-dotstep{width:6px;height:6px;border-radius:50%;background:var(--sw2-card-2);display:inline-block;}
+.sw2-dotstep.on{background:var(--sw2-amber);}
+.sw2-agenda-card .sw2-asteps{font-family:"Cascadia Mono",Consolas,monospace;font-size:10.5px;}
+.sw2-agenda-empty{grid-column:1/-1;font-size:12.5px;color:var(--sw2-text-faint);padding:10px;border:1px dashed var(--sw2-line);border-radius:8px;text-align:center;}
+.sw2-visible{font-size:9.5px;padding:0 5px;border-radius:3px;letter-spacing:2px;}
+.sw2-visible.v-known{background:#26313f;color:#8fb2d6;}
+.sw2-visible.v-hidden{background:#372627;color:#c98a82;}
+
+.sw2-board-main{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start;}
+.sw2-feed{display:flex;flex-direction:column;gap:8px;}
+.sw2-entry{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:11px 14px 10px;position:relative;}
+.sw2-entry .sw2-ctext{font-size:14.5px;line-height:1.65;}
+.sw2-entry .sw2-cmeta{margin-top:5px;font-size:11.5px;color:var(--sw2-text-faint);display:flex;gap:12px;align-items:center;}
+.sw2-entry .sw2-cmeta .sw2-round{font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-entry.sw2-latest{background:var(--sw2-card-2);border-color:var(--sw2-amber-dim);border-left:3px solid var(--sw2-amber);box-shadow:0 0 0 1px rgba(227,173,85,.08), 0 6px 24px rgba(0,0,0,.35);}
+.sw2-entry.sw2-latest .sw2-ctext{font-size:15.5px;font-weight:600;}
+.sw2-now{position:absolute;top:-9px;right:12px;font-size:10.5px;letter-spacing:2px;color:#141006;background:var(--sw2-amber);border-radius:4px;padding:2px 8px;font-weight:700;}
+.sw2-entry.sw2-hidden{background:linear-gradient(100deg, rgba(223,108,98,.06), transparent 40%), var(--sw2-card);}
+.sw2-milestone-strip{margin-top:4px;padding:8px 14px;font-size:12.5px;color:var(--sw2-text-dim);background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;}
+.sw2-milestone-strip b{color:var(--sw2-amber);font-weight:600;}
+.sw2-goto{color:var(--sw2-blue);cursor:pointer;margin-left:6px;}
+.sw2-goto:hover{text-decoration:underline;}
+
+.sw2-side{display:flex;flex-direction:column;gap:8px;}
+.sw2-entity{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:11px 12px;}
+.sw2-entity-head{display:flex;align-items:baseline;gap:7px;margin-bottom:6px;}
+.sw2-entity-name{font-weight:700;font-size:14px;}
+.sw2-entity-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+.sw2-entity-loc{font-size:12px;color:var(--sw2-text-dim);margin-left:auto;}
+.sw2-weight-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.sw2-weight-row .sw2-wlabel{font-size:11.5px;color:var(--sw2-text-faint);flex:none;}
+.sw2-weight-row .sw2-wbar{flex:1;height:6px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
+.sw2-weight-row .sw2-wbar i{display:block;height:100%;background:var(--sw2-amber);border-radius:3px;opacity:.85;}
+.sw2-weight-row .sw2-wval{font-size:11px;color:var(--sw2-text-dim);flex:none;font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-agenda{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);margin-bottom:6px;}
+.sw2-agenda b{color:var(--sw2-text);font-weight:600;}
+.sw2-stage{display:flex;align-items:center;gap:6px;}
+.sw2-stage .sw2-stagetext{font-size:11px;color:var(--sw2-text-faint);}
+.sw2-entity.sw2-player{border-style:dashed;border-color:var(--sw2-line);}
+.sw2-entity.sw2-player .sw2-entity-name::before{content:"你 · ";color:var(--sw2-amber);font-weight:700;}
+.sw2-note{font-size:11px;color:var(--sw2-text-faint);margin-top:4px;}
+
+/* ---------- 编年页 ---------- */
+.sw2-chronicle{display:flex;flex-direction:column;gap:5px;max-height:560px;overflow:auto;padding-right:4px;}
+.sw2-ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px;}
+.sw2-ch-line:hover{background:var(--sw2-card);}
+.sw2-ch-line .sw2-ch-round{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);flex:none;width:44px;text-align:right;}
+.sw2-ch-line .sw2-ch-text{flex:1;color:var(--sw2-text-dim);}
+.sw2-ch-line.sw2-ch-event .sw2-ch-text{color:var(--sw2-text);}
+.sw2-ch-roll{font-size:12.5px;color:var(--sw2-amber);font-weight:600;padding:9px 10px;margin-top:5px;border-top:1px dashed var(--sw2-line);border-bottom:1px dashed var(--sw2-line);}
+
+/* ---------- 大事纪·旧卷页 ---------- */
+.sw2-arch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.sw2-milestone{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:13px 15px;}
+.sw2-milestone-head{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.sw2-milestone-id{font-family:"Cascadia Mono",Consolas,monospace;font-size:11.5px;color:var(--sw2-amber);}
+.sw2-mspan{font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-milestone h5{font-size:15px;margin-bottom:5px;}
+.sw2-milestone details{margin-top:7px;}
+.sw2-milestone summary{font-size:12px;color:var(--sw2-text-dim);cursor:pointer;user-select:none;}
+.sw2-milestone summary:hover{color:var(--sw2-text);}
+.sw2-rawids{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);margin-top:5px;word-break:break-all;}
+.sw2-cold{background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;padding:13px 15px;margin-top:12px;}
+.sw2-cold h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:8px;}
+.sw2-cold-row{display:flex;align-items:center;gap:10px;font-size:13px;padding:7px 8px;border-radius:7px;}
+.sw2-cold-row:hover{background:var(--sw2-card-2);}
+.sw2-vol{font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-text);flex:none;}
+.sw2-volinfo{color:var(--sw2-text-dim);flex:1;}
+.sw2-volact{font-size:12px;color:var(--sw2-blue);cursor:pointer;flex:none;}
+.sw2-volact:hover{text-decoration:underline;}
+
+/* ---------- 角色与势力页 ---------- */
+.sw2-list-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.sw2-list-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+.sw2-entity-list{display:flex;flex-direction:column;gap:7px;}
+.sw2-entity-row{display:grid;grid-template-columns:150px 74px 130px 1fr 1.6fr 96px;gap:10px;align-items:center;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 13px;}
+.sw2-entity-row.sw2-player{border-style:dashed;border-color:var(--sw2-amber-dim);}
+.sw2-ename{font-weight:700;font-size:14px;}
+.sw2-ename small{display:block;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+.sw2-eloc{font-size:12px;color:var(--sw2-text-dim);}
+.sw2-eweight{display:flex;align-items:center;gap:7px;}
+.sw2-eweight .sw2-wbar{flex:1;height:6px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
+.sw2-eweight .sw2-wbar i{display:block;height:100%;background:var(--sw2-amber);border-radius:3px;}
+.sw2-eweight .sw2-wval{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-amber);}
+.sw2-eattrs{display:flex;gap:5px;flex-wrap:wrap;}
+.sw2-eattr{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
+.sw2-eattr b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;margin-left:3px;}
+.sw2-eagenda{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.5;}
+.sw2-eagenda b{color:var(--sw2-text);font-weight:600;}
+.sw2-eactive{font-size:11.5px;color:var(--sw2-text-faint);text-align:right;}
+
+/* ---------- 设定档案页 ---------- */
+.sw2-sv-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+.sw2-sv-title{font-size:16px;font-weight:700;}
+.sw2-sv-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.6;}
+.sw2-sv-cards{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.sw2-sv-chip{font-size:11.5px;border-radius:999px;padding:3px 10px;border:1px solid var(--sw2-line);color:var(--sw2-text-dim);}
+.sw2-sv-chip.ok{color:var(--sw2-green);border-color:rgba(143,191,143,.4);}
+.sw2-sv-chip.stale{color:var(--sw2-red);border-color:rgba(223,108,98,.4);}
+.sw2-sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
+.sw2-set-card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:10px;padding:12px 14px;}
+.sw2-set-card h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:9px;display:flex;align-items:center;gap:7px;}
+.sw2-set-card h4::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+.sw2-sv-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--sw2-line-soft);font-size:13px;align-items:baseline;}
+.sw2-sv-row:last-child{border-bottom:none;}
+.sw2-sv-row b{color:var(--sw2-amber);font-weight:700;flex:none;width:110px;}
+.sw2-sv-row span{color:var(--sw2-text-dim);}
+.sw2-sv-para{font-size:13.5px;color:var(--sw2-text-dim);line-height:1.75;margin-bottom:8px;}
+.sw2-sv-para:last-child{margin-bottom:0;}
+.sw2-sv-hist{display:flex;gap:10px;padding:5px 0;font-size:13px;align-items:baseline;}
+.sw2-hist-tick{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);flex:none;width:56px;}
+.sw2-sv-hist span:last-child{color:var(--sw2-text-dim);}
+
+/* ---------- 设置页 ---------- */
+.sw2-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.sw2-source-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 11px;border:1px solid var(--sw2-line-soft);border-radius:8px;background:var(--sw2-panel);}
+.sw2-source-tag{font-size:13.5px;font-weight:600;}
+.sw2-source-note{font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-source-alt{position:relative;}
+.sw2-source-alt summary{font-size:11.5px;color:var(--sw2-blue);cursor:pointer;list-style:none;user-select:none;}
+.sw2-source-alt summary:hover{text-decoration:underline;}
+.sw2-source-alt-body{position:absolute;top:calc(100% + 4px);left:0;z-index:5;padding:8px 12px;min-width:210px;background:var(--sw2-card-2);border:1px solid var(--sw2-line);border-radius:8px;font-size:12.5px;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.sw2-source-alt-body span{cursor:pointer;color:var(--sw2-blue);}
+.sw2-source-alt-body span:hover{text-decoration:underline;}
+.sw2-field{margin-top:11px;}
+.sw2-field label{display:block;font-size:12px;color:var(--sw2-text-dim);margin-bottom:5px;}
+.sw2-field textarea{width:100%;min-height:84px;resize:vertical;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13.5px;}
+.sw2-field textarea:focus{outline:none;border-color:var(--sw2-amber-dim);}
+.sw2-hint{font-size:11.5px;color:var(--sw2-text-faint);margin-top:4px;}
+.sw2-input{width:100%;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:8px 11px;font-size:13px;font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-input:focus{outline:none;border-color:var(--sw2-amber-dim);}
+.sw2-key-mask{letter-spacing:3px;color:var(--sw2-text-faint);}
+.sw2-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.sw2-btn{padding:9px 18px;border-radius:8px;border:1px solid var(--sw2-line);background:var(--sw2-card-2);color:var(--sw2-text);font-size:13.5px;cursor:pointer;font-family:inherit;}
+.sw2-btn:hover{border-color:var(--sw2-text-faint);}
+.sw2-btn.sw2-primary{background:var(--sw2-amber);border-color:var(--sw2-amber);color:#141006;font-weight:700;}
+.sw2-btn.sw2-primary:hover{filter:brightness(1.06);}
+.sw2-btn.sw2-danger{border-color:rgba(223,108,98,.5);color:var(--sw2-red);}
+.sw2-btn.sw2-danger:hover{background:rgba(223,108,98,.1);}
+.sw2-cold-mgmt{font-size:13px;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:7px;}
+.sw2-cold-mgmt .sw2-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+.sw2-cold-mgmt b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;}
+.sw2-cold-mgmt em{font-style:normal;font-size:11px;color:var(--sw2-text-faint);}
+.sw2-cold-mgmt .sw2-thr{color:var(--sw2-amber);}
+
+/* ---------- 页脚 ---------- */
+.sw2-footer{padding:10px 18px;border-top:1px solid var(--sw2-line-soft);font-size:11.5px;color:var(--sw2-text-faint);}

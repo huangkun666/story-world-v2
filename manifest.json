@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "id": "story_world_v2",
+  "display_name": "观棋窗口 (Story World v2)",
+  "version": "0.1.0",
+  "description": "story-world v2 双流 UI（K30 骨架）：观棋窗口 + 世界面板。引擎纯 ESM 零依赖跑在 ST 页面内；当前为面板挂载骨架（sw2_ 命名空间，与 v1 sd_ 全隔离），渲染接入随 K33-K34，世界推进随 K36 接线。",
+  "author": "huangkun",
+  "auto_update": false,
+  "requires": [],
+  "js": "web/index.js",
+  "css": "web/style.css"
+}

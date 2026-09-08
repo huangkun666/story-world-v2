@@ -7,7 +7,10 @@
 
 export const FNV1A_OFFSET = 0x811c9dc5;
 export const FNV1A_PRIME = 0x01000193;
-export const CACHE_VERSION = 1;        // 缓存形状版本戳（形状演进时 +1，旧条目自动失效）
+export const CACHE_VERSION = 2;        // 缓存形状版本戳（形状演进时 +1，旧条目自动失效）
+                                     // v1→v2（K31）：缓存值由 canon 五件套扩展为 {canon, tension, env}
+                                     //   ——同指纹命中需还原 dynamic 初值（张力/环境量），只存五件套会在
+                                     //   命中路径丢初值；v2 无持久化缓存，版本抬升零迁移成本。
 export const CACHE_MAX = 5;            // LRU 上限（v1 原值；多书共存有界）
 
 export function bookFingerprint(text) {
