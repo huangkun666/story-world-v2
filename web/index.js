@@ -347,6 +347,39 @@ function diagExtract(resolved) {
     };
 }
 
+// 第十九棒：初始化成功路径常驻取数诊断（交接任务书 §8.1 悬案实证用）——把「浏览器运行时到底取到了什么」
+// 整包上控制台：character 形态/内置书有无/条数、worldInfo 形态/条数/条目预览、合订源组成预览、抽取产出尺寸。
+// 纯日志零行为变化（失败路径另有 autoComposeSource 的诊断 warn，此处抽取完成后统一补两侧事实，成败都打）。
+function logInitDiagnostics(ctx, src, extractOut) {
+    try {
+        const char = (ctx?.character && typeof ctx.character === 'object') ? ctx.character
+            : (Array.isArray(ctx?.characters) && ctx.characters[0] ? ctx.characters[0] : null);
+        const charBook = (char?.character_book || char?.data?.character_book) || null;
+        const bookEntries = charBook && Array.isArray(charBook.entries) ? charBook.entries : null;
+        const wi = ctx?.worldInfo;
+        const wiShape = Array.isArray(wi) ? 'array' : (wi && typeof wi === 'object') ? 'object' : typeof wi;
+        const wiEntries = Array.isArray(wi) ? wi : (wi && typeof wi === 'object' && Array.isArray(wi.entries) ? wi.entries : null);
+        const pieces = ['description', 'scenario', 'personality', 'first_mes'].filter((k) => typeof char?.[k] === 'string' && char[k].trim());
+        const canon = extractOut?.setting?.frozen?.canon;
+        console.info('[story-world-v2] 初始化取数诊断', {
+            ctxKeys: ctx ? Object.keys(ctx).slice(0, 40) : null,
+            character: {
+                name: char?.name ?? null,
+                pieces: pieces.length ? pieces : null,
+                book: charBook ? { at: char.character_book ? 'character_book' : 'data.character_book', entries: bookEntries ? bookEntries.length : null } : '无',
+            },
+            worldInfo: {
+                shape: wiShape,
+                entries: wiEntries ? wiEntries.length : null,
+                keys: wi && typeof wi === 'object' && !Array.isArray(wi) ? Object.keys(wi).slice(0, 20) : null,
+                preview: wiEntries ? wiEntries.slice(0, 2).map((e) => `${String(e.key ?? e.name ?? e.uid ?? '?')}: ${String(e.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)}`) : null,
+            },
+            source: { ok: src?.ok, label: src?.label, usedChars: src?.usedChars, entryCount: src?.entryCount, pieceCount: src?.pieceCount, truncated: src?.truncated, preview: src?.text ? src.text.replace(/\s+/g, ' ').slice(0, 40) : null },
+            extract: extractOut ? { ok: extractOut.ok, cached: extractOut.cached, fingerprint: extractOut.fingerprint, errors: extractOut.errors || [], canonSize: canon ? { powerScale: canon.powerScale?.length || 0, rules: canon.rules?.length || 0, society: canon.society?.length || 0, techOrMagic: canon.techOrMagic?.length || 0, historyNotes: canon.historyNotes?.length || 0, bookEntities: canon.bookEntities?.length || 0 } : null } : null,
+        });
+    } catch (_) {}
+}
+
 // K36 设置页表单 ↔ extension_settings 双向：表单值由渲染 config 注入（refreshWorld cfg），
 // 这里只刷密钥 placeholder——不再覆写 render 已注入的值（第十三棒修复根因之一）。
 function refreshSettingsHints() {
@@ -564,6 +597,7 @@ if (typeof window !== 'undefined') {
                 extract: diagExtract(resolved), // 第十八棒：空/非JSON 响应现场上控制台
                 force: false,
             });
+            logInitDiagnostics(getCtx(), src, r); // 第十九棒：悬案实证——取数/抽取实况常驻上控制台
             if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
             const seed = {
                 version: 1,
@@ -601,6 +635,7 @@ if (typeof window !== 'undefined') {
                 extract: diagExtract(resolved),
                 force: true,
             });
+            logInitDiagnostics(getCtx(), src, r); // 第十九棒：悬案实证——重抽路径同款常驻诊断
             if (!r.ok) { setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
             const next = applySettingToSsot(world, r.setting);
             seedBookEntities(next);
