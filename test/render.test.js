@@ -75,14 +75,18 @@ test('K33/A-3：六页签玩家可见文本零引擎术语（黑名单；标签/
     assert.ok(text.includes('盘算')); // 玩家通词放行（共识样例 v3）
 });
 
-test('K33 观棋·时局句与信息带：模板拼装（极性/强度/危险带词）零创作零预测；世情四键危险带判态', () => {
+test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世情=未聚，不混张力）；张力归张力行；世情四键危险带判态', () => {
     const { digest, infoband } = renderBoardHtml(world());
-    assert.match(digest, /大虞\/万法阁，大虞偏将压万法阁 · 强度72/);
+    assert.match(digest, /大势未聚，各方各走各的路/);   // leg21：本世界无 situation → 时局句不再拼张力
+    assert.ok(!digest.includes('大虞/万法阁'), '张力极不入时局句');
+    assert.ok(!digest.includes('强度'), '强度数字不入时局句');
     assert.match(digest, /天时·天时不作美、时局·大势紧绷。/);
     assert.match(digest, /各方正谋划 3 件事，其中 1 件在暗处。/);
     assert.match(infoband, /sw2-env-name">民生</);
     assert.match(infoband, /sw2-env-val">0\.44</);
     assert.match(infoband, /sw2-env-row sw2-danger/);              // 天时 0.15 与时局 0.8 危险带
+    assert.match(infoband, /大虞\/万法阁/);                       // 张力极在张力行（三件套不丢）
+    assert.match(infoband, />72</);                               // 强度数字在张力行
     assert.match(infoband, /逼黄坤入洗煞之局（第32轮）/);         // 浪尖 → 盘算目标（id 不透传）
     assert.match(infoband, /<div class="sw2-big-num">3<small>\/15<\/small>/);
 });
@@ -272,8 +276,8 @@ test('K34 防御：全空世界六页签不炸（空态合法）', () => {
     assert.ok(all.archive.includes('尚未入卷'));
 });
 
-test('K46 观棋·大势行与张力行并带（名实分离）', () => {
-    const w = {
+test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+浪尖（不再混张力）；张力三件套全归张力行', () => {
+    const mk = () => ({
         version: 1, context: {
             world: 'x', tension: 0.5, positions: ['x'],
             setting: { dynamic: { tension: { polarity: '正邪相争', direction: '魔涨道消', intensity: 0.82 }, env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.15, 张力推手: 0.8 }, derivedFrom: ['浪尖:a_1@3'] } },
@@ -281,16 +285,18 @@ test('K46 观棋·大势行与张力行并带（名实分离）', () => {
         entities: [{ id: 'e_a', kind: 'faction', name: '甲宗', location: 'x', attrs: {} }], weights: { e_a: 0.9 },
         agendas: [{ id: 'a_1', owner: 'e_a', goal: '血洗洛城', stage: '用兵', visibility: 'known', maxSteps: 3, progress: 2, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
         events: [], chronicle: [], milestones: [], meta: { tick: 3, simLog: [] },
-    };
-    const html = renderBoardHtml(w).infoband;
-    assert.ok(html.includes('sw2-band-label">大势</div>'), '大势行在位');
-    assert.ok(html.includes('sw2-band-label">张力 · 结构性三件套'), '张力行独立成行');
-    assert.ok(!html.includes('大势 · 结构性张力'), '旧标签（大势顶张力名）废除');
-    assert.ok(html.includes('高烈度 82'), '强度带词入大势句');
-    assert.ok(html.includes('天时不作美'), '环境危险带入大势句');
-    assert.ok(html.includes('浪尖：血洗洛城'), '浪尖入大势句（目标名不露 id）');
-    assert.ok(html.includes('魔涨道消'), '方向在大势句');
-    assert.ok(html.includes('正邪相争') && html.includes('>82<'), '张力三件套数值在张力行');
+    });
+    const { infoband, digest } = renderBoardHtml(mk());
+    assert.ok(infoband.includes('sw2-band-label">大势</div>'), '大势行在位');
+    assert.ok(infoband.includes('sw2-band-label">张力 · 结构性三件套'), '张力行独立成行');
+    assert.ok(!infoband.includes('大势 · 结构性张力'), '旧标签（大势顶张力名）废除');
+    assert.ok(infoband.includes('大势未聚（无主张力）。'), '无世情时大势行=未聚（不拼张力）');
+    assert.ok(infoband.includes('浪尖：血洗洛城'), '浪尖入大势句（目标名不露 id）');
+    assert.ok(infoband.includes('（高烈度）') && infoband.includes('>82<'), '强度带词+数值归张力行');
+    assert.ok(infoband.includes('魔涨道消（原文方向）'), '方向在张力行');
+    assert.ok(infoband.includes('正邪相争'), '张力极在张力行');
+    assert.ok(!infoband.includes('高烈度 82'), '烈度不再拼进大势句');
+    assert.match(digest, /天时不作美/, '环境危险带经时局句副句（世情面，不属张力）');
 });
 
 test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）', () => {

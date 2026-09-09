@@ -17,6 +17,23 @@ function mkWorld(bookEntities, { tension = 0.5, entities = [], weights = {} } = 
     };
 }
 
+test('leg21: 名册所在优先入账——书内明述的 location 随实体，无则落位置集首个/中立兜底', () => {
+    const book = [
+        { name: '昆仑道宫', kind: 'faction', location: '昆仑山' },
+        { name: '散修甲', kind: 'character' },
+    ];
+    const w = mkWorld(book);
+    const r = seedBookEntities(w);
+    assert.equal(r.seeded, 2);
+    assert.equal(w.entities.find((e) => e.name === '昆仑道宫').location, '昆仑山', '名册所在优先');
+    assert.equal(w.entities.find((e) => e.name === '散修甲').location, '中央', '无所在 → 位置集首个（测试夹具自设）');
+    const w2 = mkWorld(book);
+    w2.context.positions = [];
+    const r2 = seedBookEntities(w2);
+    assert.equal(r2.seeded, 2);
+    assert.equal(w2.entities.find((e) => e.name === '散修甲').location, '未明', '无位置集 → 中立词「未明」');
+});
+
 test('K43: 全量入账无席位截断——角色+独立势力全部入账，location 不入池', () => {
     const book = [
         { name: '人族', kind: 'faction' }, { name: '妖族', kind: 'faction' },

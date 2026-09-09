@@ -96,9 +96,6 @@ const dotSteps = (progress, maxSteps) => {
 
 export function renderDigestHtml(world) {
     const dyn = world.context?.setting?.dynamic;
-    const pol = dyn?.tension?.polarity;
-    const dir = dyn?.tension?.direction;
-    const inten = dyn?.tension?.intensity;
     const env = dyn?.env || {};
     const envs = ENV_KEYS.map((k) => ({ k, ...envBand(k, env[k] ?? 0.5) }));
     const dangerList = envs.filter((x) => x.state === 'danger').map((x) => `${LABELS.env[x.k]}·${x.word}`);
@@ -107,12 +104,11 @@ export function renderDigestHtml(world) {
     const hidden = active.filter((a) => a.visibility === 'concealed').length;
 
     // leg20 世情路径恢复：抽象书级 situation 为时局句主句（原文措辞），拼装句降为无世情时的回退
+    // leg21（用户指认）：时局句只领世情——张力（极/方向/强度）归「张力 · 结构性三件套」行，不再混进主句
     const sit = world.context?.setting?.frozen?.canon?.situation;
     const main = sit
-        ? `${escapeHtml(sit)}${dir ? `，方向：${escapeHtml(dir)}` : ''} · 强度${fmtPct(inten)}`
-        : pol
-            ? `${escapeHtml(pol)}${dir ? `，${escapeHtml(dir)}` : '，两下僵持'} · 强度${fmtPct(inten)}`
-            : '大势未聚，各方各走各的路';
+        ? escapeHtml(sit)
+        : '大势未聚，各方各走各的路';
     const sub = dangerList.length || active.length
         ? `${dangerList.length ? escapeHtml(dangerList.join('、')) + '。' : ''}各方正谋划 ${active.length} 件事${hidden ? `，其中 ${hidden} 件在暗处` : ''}。`
         : '眼下没有在办的谋划，也没有越界的处境。';
@@ -122,6 +118,8 @@ export function renderDigestHtml(world) {
 export function renderInfoBandHtml(world) {
     const dyn = world.context?.setting?.dynamic;
     const env = dyn?.env || {};
+    const pre = !world.meta || world.meta.tick === 0;   // leg21：未演化态诚实标注（基线值非事实值）
+    const baselineHint = pre ? ' <span class="sw2-baseline-hint">基线值 · 首轮后随世界演化</span>' : '';
     const envRows = ENV_KEYS.map((k) => {
         const v = env[k] ?? 0.5;
         const band = envBand(k, v);
@@ -137,24 +135,19 @@ export function renderInfoBandHtml(world) {
         hidden: (world.agendas || []).filter((a) => !a.closed && a.visibility === 'concealed').length,
         top: (world.agendas || []).filter((a) => !a.closed && !a.parentId).length,
     };
-    // K46（细案 C4）：大势行 = 真·天下大势一句（张力 + 环境危险带 + 浪尖 TOP，确定性拼装零创作）；
-    // 张力行 = 结构性张力三件套独立成行（不再顶「大势」之名——用户 2026-09-09 指认名实错位）
-    const dangerKinds = ENV_KEYS.filter((k) => envBand(k, env[k] ?? 0.5).state === 'danger').map((k) => BANDS[k].kind);
+    // K46（细案 C4）+ leg21（用户指认）：大势行 = 真·天下大势一句（世情句领；无世情=未聚——张力不再混入）；
+    // 张力行 = 结构性张力三件套独立成行（极/方向/强度带词全部归此行）
     const intWord = t.intensity == null ? '' : t.intensity < 0.4 ? '低烈度' : t.intensity < 0.7 ? '中烈度' : '高烈度';
     const sit = world.context?.setting?.frozen?.canon?.situation;   // leg20：世情句领大势行（原文措辞）
     const trend = [
-        sit ? `${escapeHtml(sit)}。` : '',
-        t.polarity ? `${escapeHtml(t.polarity)}` : '大势未聚（无主张力）',
-        t.direction ? `，方向：${escapeHtml(t.direction)}` : '',
-        intWord ? `（${intWord} ${fmtPct(t.intensity)}）` : '',
-        dangerKinds.length ? `；${escapeHtml(dangerKinds.join('、'))}` : '',
-        tides.length ? `；浪尖：${escapeHtml(tides.slice(0, 2).join('、'))}` : '',
+        sit ? `${escapeHtml(sit)}。` : '大势未聚（无主张力）。',
+        tides.length ? `浪尖：${escapeHtml(tides.slice(0, 2).join('、'))}` : '',
     ].join('');
     return `<div class="sw2-infoband">`
-        + `<div class="sw2-band-block"><div class="sw2-band-label">世情 · 四键</div><div class="sw2-env">${envRows.join('')}</div></div>`
+        + `<div class="sw2-band-block"><div class="sw2-band-label">世情 · 四键${baselineHint}</div><div class="sw2-env">${envRows.join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">大势</div><div class="sw2-trend">${trend}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">张力 · 结构性三件套</div>`
-        + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
+        + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')}${intWord ? `（${intWord}）` : ''} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
         + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">浪尖 · 刚收尾的大动作</div><div class="sw2-tides">${tides.map((x) => `<div class="sw2-tide">${x}</div>`).join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">盘算</div>`

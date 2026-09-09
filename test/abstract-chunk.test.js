@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows } from '../src/abstract.js';
+import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows, ATTRS_BATCH_MAX } from '../src/abstract.js';
 
 // 测试书：k0..k(n-1) 条目行（约 210 字符/条）；名号藏在条目深处（第 3 个词）
 function makeBook(n) {
@@ -54,17 +54,18 @@ test('chunkRows：行级分块按累计字符，超长单行自成一块', () =>
     assert.deepEqual(chunkRows(rows, 100), [rows.join('\n')]);
 });
 
-test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次，全量覆盖（尾部名号不丢）', async () => {
+test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次 + 属性轮批量，全量覆盖（尾部名号不丢）', async () => {
     const src = makeBook(2000); // ≈ 42 万字符（含尾部 字 填充）——超 3 万触发分块
     const lenA = Array.from(src).length;
     assert.ok(lenA > CANON_SRC_CHAR, '前置：确为大书');
     const calls = [];
     const r = await extractWorldSetting({ sourceText: src, extract: makeExtract({ calls }), cache: null });
     assert.equal(r.ok, true);
-    // 1 次 canon（头 3 万）+ ceil(全量/块) 次块调用
+    // 1 次 canon（头 3 万）+ ceil(全量/块) 次名册块调用 + ceil(全量名号/批) 次属性轮调用（leg21 拆轮后）
     assert.ok(calls.length >= 2, `应多次调用（实际 ${calls.length} 次）`);
     const expectChunks = Math.ceil(lenA / ROSTER_CHUNK_CHAR);
-    assert.equal(calls.length, 1 + expectChunks, `1 次五件套 + ${expectChunks} 块`);
+    const expectAttrs = Math.ceil(2000 / ATTRS_BATCH_MAX);
+    assert.equal(calls.length, 1 + expectChunks + expectAttrs, `1 次五件套 + ${expectChunks} 块 + ${expectAttrs} 属性批`);
     // 五件套来源 = 头 3 万单发：首个 prompt 的原文段 ≤ 3 万
     const names = r.setting.frozen.canon.bookEntities.map((b) => b.name);
     assert.ok(names.includes('名号1999'), '尾部条目名号全量覆盖（v1 教训：名字密集段不许头截断）');
@@ -73,6 +74,76 @@ test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次，全量覆
     assert.equal(names[0], '名号0');
     assert.equal(names[names.length - 1], '名号1999');
     assert.ok(r.setting.frozen.canon.powerScale.length === 1, '五件套仍出自 canon 单发');
+});
+
+test('leg21 名册轮 prompt 瘦身：块调用不再问五件套/张力/属性，带种族禁令与所在字段', async () => {
+    const src = makeBook(200); // ≈ 4.2 万字符 → 大书路径（1 块 + 属性轮）
+    const rosterPrompts = [];
+    const extract = async (prompt) => {
+        if (prompt.includes('名册抽取器')) rosterPrompts.push(prompt);
+        const header = '———— 设定原文如下 ————';
+        const part = prompt.includes(header) ? prompt.slice(prompt.indexOf(header) + header.length) : '';
+        return JSON.stringify({ bookEntities: parseNames(part) });
+    };
+    const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
+    assert.equal(r.ok, true);
+    assert.ok(rosterPrompts.length >= 1, '名册轮确实发起块调用');
+    const p = rosterPrompts[0];
+    assert.match(p, /不要给它们标 faction/, '种族禁令名单式强化在位（人族/妖族/鬼族…不算势力）');
+    assert.match(p, /location/, '所在字段入名册轮（位置诚实化）');
+    assert.ok(!p.includes('powerScale'), '名册轮不再问力量谱系');
+    assert.ok(!p.includes('situation'), '名册轮不再问世情句');
+    assert.ok(!p.includes('intensity'), '名册轮不再问张力强度');
+    assert.ok(!p.includes('依据'), '名册轮不再问属性依据（拆到属性轮）');
+    assert.ok(!p.includes('hardPower'), '名册轮不再问四维数值');
+});
+
+test('leg21 属性轮：名册后独立批量抽属性 + 依据出处校验 + 合并', async () => {
+    const src = makeBook(450); // ≈ 9.5 万字符 → 分块
+    const attrCalls = [];
+    const extract = async (prompt) => {
+        if (prompt.includes('属性抽取器')) {
+            attrCalls.push(prompt.length);
+            const names = (prompt.split('———— 待抽取属性的名号 ————')[1] || '').split('、').map((s) => s.trim()).filter(Boolean);
+            const bookEntities = names.map((name, i) => (i % 2 === 0
+                ? { name, attrs: { hardPower: 0.6, office: 0.4, 依据: name } }    // 依据=名号本身 ∈ 原文
+                : { name, attrs: { intel: 0.9, 依据: '根本不在书里的句子' } }));  // 依据不在原文 → 弃
+            return JSON.stringify({ bookEntities });
+        }
+        const header = '———— 设定原文如下 ————';
+        const part = prompt.includes(header) ? prompt.slice(prompt.indexOf(header) + header.length) : '';
+        return JSON.stringify({ bookEntities: parseNames(part) });
+    };
+    const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
+    assert.equal(r.ok, true);
+    assert.equal(attrCalls.length, Math.ceil(450 / ATTRS_BATCH_MAX), '属性轮按批上限分拆');
+    const es = r.setting.frozen.canon.bookEntities;
+    const even = es.find((b) => b.name === '名号0');
+    assert.deepEqual(even.attrs, { hardPower: 0.6, office: 0.4 }, '依据在原文 → 属性合并');
+    assert.equal(even.evidence, '名号0');
+    const odd = es.find((b) => b.name === '名号1');
+    assert.equal(odd.attrs, undefined, '依据不在原文 → 属性弃，名号保留');
+    assert.ok(r.errors.some((e) => /属性出处校验/.test(e)), '弃置留痕');
+});
+
+test('leg21 所在出处校验：所在地不在原文 → 弃+警告；在原文 → 保留（seed 用之）', async () => {
+    const rawBook = '大荒世界：宗门林立。昆仑道宫坐镇昆仑山。';
+    const r = await extractWorldSetting({
+        sourceText: rawBook,
+        extract: async () => JSON.stringify({
+            bookEntities: [
+                { name: '昆仑道宫', kind: 'faction', location: '昆仑山' },
+                { name: '万法阁', kind: 'faction', location: '灵脉山' },
+            ],
+            powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], tension: {}, env: {},
+        }),
+        cache: null,
+    });
+    assert.equal(r.ok, true);
+    const es = r.setting.frozen.canon.bookEntities;
+    assert.equal(es.find((b) => b.name === '昆仑道宫').location, '昆仑山');
+    assert.equal(es.find((b) => b.name === '万法阁').location, undefined, '所在不在原文 → 弃');
+    assert.ok(r.errors.some((e) => /所在出处校验/.test(e)));
 });
 
 test('小书（≤ 3 万）单发：仅 1 次调用（既有行为零变化）', async () => {

@@ -27,7 +27,7 @@ const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'setti
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260908-chain';
+const CSS_VERSION = '20260910-fix';
 
 export const sw2Version = () => VERSION;
 export function sw2TabState(name, active) {
@@ -668,7 +668,7 @@ if (typeof window !== 'undefined') {
             if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
             const seed = {
                 version: 1,
-                context: { world: src.worldName || '未名世界', tension: 0.5, positions: ['中央'], setting: r.setting },
+                context: { world: src.worldName || '未名世界', tension: 0.5, positions: ['未明'], setting: r.setting },
                 entities: [], weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
                 meta: { tick: 0, simLog: [] },
                 // 位置集默认单点（提案态）——多位置后续随页内表单扩展（换源机制已废）
