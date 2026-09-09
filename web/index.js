@@ -280,38 +280,73 @@ function writeSetting(key, value) {
 // 第十八棒：初始化设定源自动合订（编排层）——只有自动两条路：
 // 缺省自动合订 角色卡四件套 + 世界信息/卡内置世界书（世界书全量，大书分块抽取在 abstract 层）；
 // 恢复 v1「读取当前角色卡一键初始化」手感；原生 prompt 从初始化路径清除。
-// 取数形状宽容：worldInfo 兼容 数组 / {entries} 两种 ST 形态；群聊（context.character=null）
-// 回退取群成员首位卡；失败上控制台诊断现场（形状未知时不再盲猜）。
-function collectWorldInfoEntries(ctx) {
-    const wi = ctx?.worldInfo;
-    if (Array.isArray(wi)) return wi;
-    if (wi && typeof wi === 'object' && Array.isArray(wi.entries)) return wi.entries;
-    return [];
+// 取数形状宽容：世界信息兼容 三形态（旧版 ctx.worldInfo 数组/{entries} + 模块化 ST 的官方挂载世界）；
+// 失败上控制台诊断现场（形状未知时不再盲猜）。
+
+// 世界书条目收集（第十九棒实证修正）：模块化 ST 的 getContext() 无 worldInfo/character 字段——
+// 挂载世界在 extension_settings.world_info（已载表）+ globalSelect（附加名），条目经官方
+// ctx.loadWorldInfo(name) 取（getContext 暴露，服务端按名取、模块内缓存）。旧版 ctx.worldInfo 形态保留兼容。
+// 候选序 = 卡挂 world 字段 → globalSelect → 已载表键（去重）。
+async function collectWorldInfoEntries(ctx, character) {
+    const legacy = ctx?.worldInfo;
+    if (Array.isArray(legacy)) return { entries: legacy, worldSources: null };
+    if (legacy && typeof legacy === 'object' && Array.isArray(legacy.entries)) return { entries: legacy.entries, worldSources: null };
+    const names = [];
+    const seenName = new Set();
+    const push = (n) => { if (n && typeof n === 'string' && n.trim() && !seenName.has(n)) { seenName.add(n); names.push(n.trim()); } };
+    push(character?.world); // 卡挂世界（v1 时代同指针：大荒z → 大荒-姬元真）
+    for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
+    for (const n of Object.keys(ctx?.extensionSettings?.world_info ?? {})) push(n);
+    const entries = [];
+    const worldSources = [];
+    for (const name of names) {
+        try {
+            const w = typeof ctx?.loadWorldInfo === 'function' ? await ctx.loadWorldInfo(name) : null;
+            const raw = w?.entries;
+            const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : null);
+            worldSources.push({ name, ok: Boolean(list?.length), entries: list?.length ?? 0 });
+            if (list) for (const e of list) if (e && typeof e === 'object') entries.push(e);
+        } catch (err) {
+            worldSources.push({ name, ok: false, entries: 0 });
+        }
+    }
+    return { entries, worldSources };
 }
 
+// 当前聊天角色卡（第十九棒实证修正）：模块化 ST 的 getContext() 没有 character 字段——单聊取
+// characters[characterId]（ST 内部同款索引语义），群聊取群成员卡（v1 chatMemberCards 同款：members=头像名）。
+// 旧版 ctx.character 保留兼容。不再回退 characters[0]——那是角色库首卡（内置 Assistant），不是当前聊天卡。
 function pickCharacter(ctx) {
-    const c = ctx?.character;
-    if (c && typeof c === 'object') return c;
-    const chs = ctx?.characters;
-    if (Array.isArray(chs) && chs.length) return chs[0]; // 群聊兜底：取首位成员卡
+    if (ctx?.character && typeof ctx.character === 'object') return ctx.character; // 旧版 ST 兼容
+    const chars = ctx?.characters;
+    if (!Array.isArray(chars)) return null;
+    if (ctx?.groupId != null) {
+        const g = Array.isArray(ctx.groups) ? ctx.groups.find((x) => String(x?.id) === String(ctx.groupId)) : null;
+        const avatars = Array.isArray(g?.members) ? g.members : [];
+        for (const av of avatars) { const m = chars.find((c) => c?.avatar === av); if (m) return m; }
+        return null;
+    }
+    const chid = Number(ctx?.characterId);
+    if (Number.isInteger(chid) && chid >= 0 && chars[chid]) return chars[chid];
     return null;
 }
 
-function autoComposeSource() {
+async function autoComposeSource() {
     const ctx = getCtx();
-    const res = composeInitSource({
-        character: pickCharacter(ctx),
-        worldInfoEntries: collectWorldInfoEntries(ctx),
-    });
+    const character = pickCharacter(ctx);
+    const { entries: worldInfoEntries, worldSources } = await collectWorldInfoEntries(ctx, character);
+    const res = composeInitSource({ character, worldInfoEntries });
+    res.sourceDiag = { // 诊断附加元数据（非契约字段，仅控制台消费）
+        identity: { characterId: ctx?.characterId ?? null, groupId: ctx?.groupId ?? null, chatId: ctx?.chatId ?? null },
+        character: { name: character?.name ?? null, world: character?.world ?? null, hasBook: Boolean(character?.character_book || character?.data?.character_book) },
+        worldSources,
+    };
     if (!res.ok) {
         try {
             console.warn('[story-world-v2] 初始化设定源失败诊断', {
-                ctxType: ctx ? typeof ctx : null,
                 ctxKeys: ctx ? Object.keys(ctx).slice(0, 40) : null,
-                charName: pickCharacter(ctx)?.name ?? null,
-                charShape: (() => { const c = pickCharacter(ctx); return c ? { keys: Object.keys(c).slice(0, 40), hasBook: Boolean(c.character_book || c.data?.character_book) } : null; })(),
+                sourceDiag: res.sourceDiag,
                 worldInfoType: ctx?.worldInfo ? (Array.isArray(ctx.worldInfo) ? 'array' : typeof ctx.worldInfo) : null,
-                worldInfoKeys: ctx?.worldInfo && typeof ctx.worldInfo === 'object' && !Array.isArray(ctx.worldInfo) ? Object.keys(ctx.worldInfo) : null,
                 reason: res.reason,
             });
         } catch (_) {}
@@ -348,23 +383,23 @@ function diagExtract(resolved) {
 }
 
 // 第十九棒：初始化成功路径常驻取数诊断（交接任务书 §8.1 悬案实证用）——把「浏览器运行时到底取到了什么」
-// 整包上控制台：character 形态/内置书有无/条数、worldInfo 形态/条数/条目预览、合订源组成预览、抽取产出尺寸。
+// 整包上控制台：聊天身份/角色卡形态与挂载世界逐本条目数、worldInfo 形态、合订源组成预览、抽取产出尺寸。
 // 纯日志零行为变化（失败路径另有 autoComposeSource 的诊断 warn，此处抽取完成后统一补两侧事实，成败都打）。
 function logInitDiagnostics(ctx, src, extractOut) {
     try {
-        const char = (ctx?.character && typeof ctx.character === 'object') ? ctx.character
-            : (Array.isArray(ctx?.characters) && ctx.characters[0] ? ctx.characters[0] : null);
+        const char = pickCharacter(ctx);
         const charBook = (char?.character_book || char?.data?.character_book) || null;
-        const bookEntries = charBook && Array.isArray(charBook.entries) ? charBook.entries : null;
+        const bookEntries = charBook ? (Array.isArray(charBook.entries) ? charBook.entries : (charBook.entries && typeof charBook.entries === 'object' ? Object.values(charBook.entries) : null)) : null;
         const wi = ctx?.worldInfo;
         const wiShape = Array.isArray(wi) ? 'array' : (wi && typeof wi === 'object') ? 'object' : typeof wi;
         const wiEntries = Array.isArray(wi) ? wi : (wi && typeof wi === 'object' && Array.isArray(wi.entries) ? wi.entries : null);
         const pieces = ['description', 'scenario', 'personality', 'first_mes'].filter((k) => typeof char?.[k] === 'string' && char[k].trim());
         const canon = extractOut?.setting?.frozen?.canon;
         console.info('[story-world-v2] 初始化取数诊断', {
-            ctxKeys: ctx ? Object.keys(ctx).slice(0, 40) : null,
+            identity: { characterId: ctx?.characterId ?? null, groupId: ctx?.groupId ?? null, chatId: ctx?.chatId ?? null },
             character: {
                 name: char?.name ?? null,
+                world: char?.world ?? null, // 卡挂世界（模块化 ST 主取数指针）
                 pieces: pieces.length ? pieces : null,
                 book: charBook ? { at: char.character_book ? 'character_book' : 'data.character_book', entries: bookEntries ? bookEntries.length : null } : '无',
             },
@@ -373,6 +408,7 @@ function logInitDiagnostics(ctx, src, extractOut) {
                 entries: wiEntries ? wiEntries.length : null,
                 keys: wi && typeof wi === 'object' && !Array.isArray(wi) ? Object.keys(wi).slice(0, 20) : null,
                 preview: wiEntries ? wiEntries.slice(0, 2).map((e) => `${String(e.key ?? e.name ?? e.uid ?? '?')}: ${String(e.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)}`) : null,
+                mounted: src?.sourceDiag?.worldSources ?? null, // 逐本挂载世界：名称/取到与否/条目数（实证核心）
             },
             source: { ok: src?.ok, label: src?.label, usedChars: src?.usedChars, entryCount: src?.entryCount, pieceCount: src?.pieceCount, truncated: src?.truncated, preview: src?.text ? src.text.replace(/\s+/g, ' ').slice(0, 40) : null },
             extract: extractOut ? { ok: extractOut.ok, cached: extractOut.cached, fingerprint: extractOut.fingerprint, errors: extractOut.errors || [], canonSize: canon ? { powerScale: canon.powerScale?.length || 0, rules: canon.rules?.length || 0, society: canon.society?.length || 0, techOrMagic: canon.techOrMagic?.length || 0, historyNotes: canon.historyNotes?.length || 0, bookEntities: canon.bookEntities?.length || 0 } : null } : null,
@@ -589,7 +625,7 @@ if (typeof window !== 'undefined') {
             const settings = modelSettings() || {};
             const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS }); // 抽取独立预算（16384 提案，Diagnostic 实证 finish=length@4096）
             if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）——设定期望初始化需要它'); return; }
-            const src = autoComposeSource();
+            const src = await autoComposeSource();
             if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}——把设定写进 ST 世界信息或角色卡描述，再点一次`); return; }
             setStatus(`正在抽取世界设定（源：${src.label} · ${src.usedChars} 字符${src.truncated ? ' · 超出防御上限截余' : ''}）…`);
             const r = await extractWorldSetting({
@@ -625,7 +661,7 @@ if (typeof window !== 'undefined') {
             const settings = modelSettings() || {};
             const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS });
             if (!resolved) { setStatus('⚠ 模型通道未配置（重抽需要抽取调用）'); return; }
-            const src = autoComposeSource();
+            const src = await autoComposeSource();
             if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}——把设定写进 ST 世界信息或角色卡描述，再点一次`); return; }
             const sourceText = src.text;
             const srcLabel = src.label;
