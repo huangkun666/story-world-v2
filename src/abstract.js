@@ -16,7 +16,8 @@
 //   - 空 canon 合法（K24 口径：无数量约束，防编造靠纪律不靠量制）。
 import { bookFingerprint } from './fingerprint.js';
 import { ENV_KEYS } from './entropy.js';
-import { POOL_CAP, ENTITY_ATTR_DEFAULT, INBORN_ATTR_KEYS } from './settle.js';
+import { ENTITY_ATTR_DEFAULT, INBORN_ATTR_KEYS } from './settle.js';
+import { computeWeight } from './weight.js';
 
 export const ENV_INIT_BASELINE = 0.5;      // 提案：抽取缺省环境量初值（patchDynamic 新键基线口径）
 export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时的强度初值（随长跑校准批）
@@ -38,7 +39,7 @@ export function buildAbstractPrompt(sourceText) {
                 society: '社会与制度格局（原文）',
                 techOrMagic: '力量/生态体系（原文）',
                 historyNotes: ['历史要点1（原文）'],
-                bookEntities: [{ name: '势力或角色的名号（原文名）', kind: 'faction|character（可省）' }],   // K37 书名录：书里明确存在的名号实体，只收原文名，不收泛指称呼
+                bookEntities: [{ name: '势力或角色的名号（原文名）', kind: 'faction|character|location（可省）', parent: '书中明述的上级势力/所属势力（原文名，可省；未明述不填）' }],   // K37 书名录 + 第十九棒：只收原文名，不收泛指称呼；地名（洲/山/谷等）标 location；隶属只认书中明述
                 tension: { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' },
                 env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.5, 张力推手: 0.5 },
             },
@@ -82,7 +83,8 @@ export function sanitizeCanon(raw) {
         for (const h of raw.historyNotes) { const s = String(h ?? '').trim(); if (s) canon.historyNotes.push(s); }
     } else if (raw.historyNotes !== undefined) errors.push('historyNotes 非数组（已弃）');
 
-    // K37 书名录：只提取不创作——name 原文名去重；kind 枚举净化（非法/缺省=character）；见字收、取全不取量
+    // K37 书名录：只提取不创作——name 原文名去重；kind 枚举净化（非法/缺省=character）
+    // 第十九棒：kind 三值（location=地名不入实体池，canon 保留备位置机制）；parent 净化（书中明述才填，字符串）
     if (Array.isArray(raw.bookEntities)) {
         const seen = new Set();
         for (const it of raw.bookEntities) {
@@ -91,7 +93,9 @@ export function sanitizeCanon(raw) {
             if (!name) { errors.push('bookEntities 项缺 name（已弃）'); continue; }
             if (seen.has(name)) continue;
             seen.add(name);
-            canon.bookEntities.push({ name, kind: it.kind === 'faction' ? 'faction' : it.kind === 'character' ? 'character' : 'character' });
+            const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : 'character';
+            const parent = String(it.parent ?? '').trim();
+            canon.bookEntities.push(parent ? { name, kind, parent } : { name, kind });
         }
     } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
 
@@ -305,31 +309,96 @@ export function applySettingToSsot(ssot, setting) {
 // K37 生通道①（细案 §3.7 → A-10）：书名录初始化——frozen.canon.bookEntities 未在账实体幂等入账
 // （出处=书内条目，只提取不创作；kind 缺省 character；location 取位置集首个）；
 // K38（敲定稿 D 条）：attrs 按 kind 缺省兜底（与 newEntities 入口同口径——入局即有值，不再哑巴）；
-// 席位按书序优先入到 POOL_CAP 满（剩余留名录，供 book 源 newEntities 提议继续入局）；dead 同名不回魂。
+// 第十九棒/K43（full-roster-lens-spec C1/C7/C8 拍板）：**全量棋盘**
+//   - 无席位截断：角色整量入账 + 独立势力整量入账（location 类地名不入实体池——canon 保留备位置机制）；
+//   - 势力净化折叠：书中明述隶属（parent）的势力名号不独立入账，归并进链顶势力实体的 branches 分支表
+//     （平铺直属名，深链解析到顶；parent 缺失/自指/成环/目标非势力 → 弃关系+警告，名号仍独立入账）；
+//   - 关联字段（C7）：character 带 parent（所属势力/分支名）单存；势力侧成员=派生反查；
+//   - 初始分量预填：以 context.tension 口径（与 settle 首轮同源）为全部实体预填 world.weights——t1 门控就有真分量。
 const buildSeedAttrs = (kind) => {
     const v = ENTITY_ATTR_DEFAULT[kind] ?? ENTITY_ATTR_DEFAULT.character;
     return Object.fromEntries(INBORN_ATTR_KEYS.map((k) => [k, v]));
 };
+
+// 沿 parent 链上溯到顶级（无 parent 的势力名）；链上出现环 → null；目标不存在/非势力 → null
+function resolveTopFaction(name, idx) {
+    const seen = new Set();
+    let cur = name;
+    while (cur && idx.has(cur) && idx.get(cur).kind === 'faction' && idx.get(cur).parent) {
+        if (seen.has(cur)) return null;         // 环
+        seen.add(cur);
+        cur = idx.get(cur).parent;
+    }
+    if (!cur || !idx.has(cur) || idx.get(cur).kind !== 'faction') return null;   // 缺失/目标非势力
+    return cur;
+}
+
 export function seedBookEntities(ssot) {
     const book = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
-    if (!book.length) return { seeded: 0 };
+    if (!book.length) return { seeded: 0, folded: 0, skippedLocation: 0, warnings: [] };
     const positions = ssot.context?.positions || [];
     const home = positions[0] || '未知';
+    const warnings = [];
+
+    // 名册索引（sanitize 已按 name 去重）
+    const idx = new Map(book.map((b) => [b.name, b]));
+    const byName = new Map();                   // 已入账实体名 → 实体
+    for (const e of ssot.entities || []) byName.set(e.name, e);
+
     let seeded = 0;
-    for (const b of book) {
-        const active = (ssot.entities || []).filter((e) => !e.status || e.status === 'active').length;
-        if (active >= POOL_CAP) break;
-        const name = String(b?.name || '').trim();
-        if (!name) continue;
-        if ((ssot.entities || []).some((e) => e.name === name)) continue;   // 已有（含 retired）不重建；dead 不回魂
-        (ssot.entities = ssot.entities || []).push({
+    let folded = 0;
+    let skippedLocation = 0;
+    const pushEntity = (b) => {
+        if (byName.has(b.name)) return null;    // 已有（含 retired）不重建；dead 不回魂
+        const ent = {
             id: `e_bk_${seeded + 1}`,
             kind: b.kind === 'faction' ? 'faction' : 'character',
-            name,
+            name: b.name,
             location: home,
             attrs: buildSeedAttrs(b.kind === 'faction' ? 'faction' : 'character'),
-        });
+        };
+        (ssot.entities = ssot.entities || []).push(ent);
+        byName.set(b.name, ent);
         seeded += 1;
+        return ent;
+    };
+
+    // 第一遍：独立势力（无 parent）整量入账（书序）
+    const foldedNames = [];
+    for (const b of book) {
+        if (b.kind === 'location') { skippedLocation += 1; continue; }       // 地名不入池
+        if (b.kind !== 'faction') continue;
+        if (b.parent) { foldedNames.push(b); continue; }                     // 有隶属=第二遍折叠
+        pushEntity(b);
     }
-    return { seeded };
+    // 第二遍：子势力折叠（parent 链解析到顶 → 挂链顶实体 branches）
+    for (const b of foldedNames) {
+        const top = resolveTopFaction(b.parent, idx);
+        const topEntity = top ? byName.get(top) : null;
+        if (!topEntity) {
+            warnings.push(`书名录: 「${b.name}」的隶属「${b.parent}」未明述为独立势力——弃关系，按独立势力入账`);
+            pushEntity(b);
+            continue;
+        }
+        if (!topEntity.branches) topEntity.branches = [];
+        if (!topEntity.branches.includes(b.name)) topEntity.branches.push(b.name);
+        folded += 1;
+    }
+    // 第三遍：角色整量入账 + parent（所属势力）解析
+    for (const b of book) {
+        if (b.kind !== 'character') continue;
+        const ent = pushEntity(b);
+        if (!ent) continue;
+        const top = b.parent ? resolveTopFaction(b.parent, idx) : null;
+        const topEntity = top ? byName.get(top) : null;
+        if (topEntity) ent.parent = top;
+        else if (b.parent) warnings.push(`书名录: 「${b.name}」的所属「${b.parent}」未明述为势力——弃关系（角色照常入账）`);
+    }
+    // 第四遍：初始分量预填（与 settle 首轮同口径：context.tension ?? 0.5）
+    const tension = ssot.context?.tension ?? 0.5;
+    for (const e of ssot.entities || []) {
+        ssot.weights = ssot.weights || {};
+        if (ssot.weights[e.id] === undefined) ssot.weights[e.id] = computeWeight(e.attrs, e.kind, tension);
+    }
+    return { seeded, folded, skippedLocation, warnings };
 }

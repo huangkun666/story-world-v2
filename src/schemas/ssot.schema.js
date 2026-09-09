@@ -49,7 +49,7 @@ export const ssotSchema = {
                                         society: { kind: 'string' },
                                         techOrMagic: { kind: 'string' },
                                         historyNotes: { kind: 'array', items: { kind: 'string' } },
-                                        bookEntities: {   // K37 书名录（生通道①：书内名号实体，可选=旧世界零扰动）
+                                        bookEntities: {   // K37 书名录（生通道①：书内名号实体，可选=旧世界零扰动）；第十九棒：kind 增 location（地名不入池）+ parent（书中明述的上级/所属，从属方单存）
                                             kind: 'array',
                                             items: {
                                                 kind: 'object',
@@ -57,7 +57,8 @@ export const ssotSchema = {
                                                 required: ['name'],
                                                 props: {
                                                     name: { kind: 'string', minLength: 1 },
-                                                    kind: { kind: 'string', enum: ['faction', 'character'] },
+                                                    kind: { kind: 'string', enum: ['faction', 'character', 'location'] },
+                                                    parent: { kind: 'string', minLength: 1 },
                                                 },
                                             },
                                         },
@@ -104,6 +105,8 @@ export const ssotSchema = {
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
                     hurtWindow: { kind: 'array', minItems: 2, maxItems: 2, items: { kind: 'number' } },   // K15：近 2 tick 负向 δ 窗口 [本 tick, 上一 tick]（三态判据用；惰性写——全 0 删字段）
                     status: { kind: 'string', enum: ['active', 'retired', 'dead'] },   // K37/实体治理 §3.7 状态契约（可选=缺省 active；旧世界零扰动）；dead=终局不复归；retired=可复归
+                    parent: { kind: 'string', minLength: 1 },   // 第十九棒/C7：从属方单存——character→所属势力/分支名，faction→上级势力名（书中明述；可选=旧世界零扰动）
+                    branches: { kind: 'array', items: { kind: 'string', minLength: 1 } },   // 第十九棒/C8：势力实体分支表（子势力名号平铺；可选=旧世界零扰动）
                 },
             },
         },
@@ -121,6 +124,7 @@ export const ssotSchema = {
                     stage: { kind: 'string', minLength: 1 },
                     visibility: { kind: 'string', enum: ['known', 'concealed'] },  // 暗处可以有人（§3④）
                     parentId: { kind: 'string', minLength: 1 },   // K13/盘算树：父盘算 id（可选——顶层盘算无父；深链合法）
+                    branch: { kind: 'string', minLength: 1 },   // 第十九棒/C8：分支身份链（子势力名；owner 仍是父实体；可选=旧世界零扰动）
                     maxSteps: { kind: 'number', int: true, min: 1 },                // 必须能在世界时间里结算（§4.5）
                     progress: { kind: 'number', int: true, min: 0 },
                     closed: { kind: 'boolean' },    // 满步强制结算后置真（S5，终结产果 §4.4④）
