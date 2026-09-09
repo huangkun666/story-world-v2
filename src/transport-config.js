@@ -3,9 +3,12 @@
 // 链：settings（extension_settings，浏览器侧持有）→ null（面板报"未配置"）。
 // Node 侧链（env → 酒馆预设）保持 st-preset.resolveWorldTransport 不变——两链互不干扰。
 // 密钥纪律：settings 为运行时读取（用户本机输入），不落日志、不打印、不进代码。
-import { createHttpTransport } from './transport-http.js';
+import { createHttpTransport, EXTRACTION_MAX_TOKENS } from './transport-http.js';
 
-export function resolveBrowserTransport(settings) {
+// 第十八棒：抽取预算透传（init-world/force-abstract 用 16384 提案，主调用保持 4096 提案不变）
+export { EXTRACTION_MAX_TOKENS };
+
+export function resolveBrowserTransport(settings, { maxTokens } = {}) {
     const s = settings || {};
     if (!s.baseUrl || !s.apiKey || !s.model) return null;
     return {
@@ -13,6 +16,7 @@ export function resolveBrowserTransport(settings) {
             baseUrl: s.baseUrl,
             apiKey: s.apiKey,
             model: s.model,
+            ...(maxTokens ? { maxTokens } : {}),
             ...(s.fetchImpl ? { fetchImpl: s.fetchImpl } : {}), // 测试注入通道
         }),
         source: 'settings',

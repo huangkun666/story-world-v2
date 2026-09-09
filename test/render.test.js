@@ -202,7 +202,7 @@ test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指�
 
 test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表单值来自 config', () => {
     const html = renderSettingsHtml(world(), { config: CONFIG });
-    assert.match(html, /来源：角色卡描述/);
+    assert.match(html, /来源：角色卡 \+ 世界信息（自动合订）/);
     assert.match(html, /<textarea id="sw2_player_desc"[^>]*>我名黄坤，炼气九层.<\/textarea>/u);
     assert.match(html, /id="sw2_base" value="https:\/\/gcli\.ggchan\.dev\/v1"/);
     assert.match(html, /id="sw2_key" value="••••••••••••••••••••"/);

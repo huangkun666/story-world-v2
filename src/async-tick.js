@@ -31,7 +31,7 @@ export function createTickQueue({ tick, load, save, refresh, onStatus }) {
         }
         const world = load();
         if (!world) {
-            onStatus?.('尚无世界：当前聊天没有世界账——可到设置页「⬆ 导入恢复」载入备份（「开始新世界」接线未就绪）');
+            onStatus?.('尚无世界：当前聊天没有世界账——可到设置页「✨ 开始新世界」一键创建（角色卡自动为源），或「⬆ 导入恢复」载入备份');
             return { ok: false, skipped: 'no-world' };
         }
         running = true;

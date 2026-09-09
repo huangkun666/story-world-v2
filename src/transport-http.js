@@ -18,6 +18,11 @@ export const PROPOSED_CALL_LIMITS = Object.freeze({
     maxTokens: 4096,    // 单轮演算输出上限（提案）
 });
 
+// 第十八棒：抽取调用独立输出上限（提案）。诊断实证（demo/diag-init-extract.js）：
+// 思考型模型（reasoning_content）推理与输出共享预算，63k 输入 @4096 → finish=length 截断（推理 4024 吃光）；
+// 同输入 @16384 → finish=stop 完整。v1「80k 段连续空回复」同源（预算饿死，非网关）——抽取统一提额。
+export const EXTRACTION_MAX_TOKENS = 16384;
+
 export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = fetch, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
     return async (prompt) => {

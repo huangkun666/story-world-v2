@@ -358,11 +358,8 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
     void envText;
     return `<div class="sw2-settings">`
         + `<div class="sw2-set-card"><h4>世界设定（书的来源）</h4>`
-        + `<div class="sw2-source-line"><span class="sw2-source-tag">来源：角色卡描述</span>`
-        + `<span class="sw2-source-note">自动读取卡片全文 · 设定没变就不重复抽取（书指纹）</span>`
-        + `<details class="sw2-source-alt"><summary>换源 &#9662;（一般不用）</summary>`
-        + `<div class="sw2-source-alt-body"><span data-action="source-pick" data-source="worldinfo">SillyTavern 世界信息（合订）</span>`
-        + `<span data-action="source-pick" data-source="paste">手动粘贴文本</span></div></details></div>`
+        + `<div class="sw2-source-line"><span class="sw2-source-tag">来源：角色卡 + 世界信息（自动合订）</span>`
+        + `<span class="sw2-source-note">自动读取：卡四件套 + 世界信息/卡内置世界书（世界书全量摄入，大书分块多次抽取）；设定没变就不重复抽取（书指纹）</span></div>`
         + `<div class="sw2-hint" style="margin-top:10px">设定全文（力量谱系/法则/社会格局/力量体系/史略 + 大势现状）在「设定」页阅览，「重新抽取」也在那里。</div></div>`
         + `<div class="sw2-set-card"><h4>你的开档描述</h4>`
         + `<div class="sw2-field"><label>写一段"你是谁"（自然语言 · ≤2000 字提案）</label>`

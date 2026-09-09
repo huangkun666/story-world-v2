@@ -1,10 +1,15 @@
 // story-world-v2/src/abstract.js
-// 抽象管线执行器（K31/双流 UI，编排层；细案 §3.4/§4 K31 → A-6/A-7）。
+// 抽象管线执行器（K31/双流 UI，编排层；细案 §3.4/§4 K31 → A-6/A-7；第十八棒 v1 范本对照修正）。
 // 书源文本 → 书指纹（K26，FNV-1a）→ 缓存命中 = 零抽取调用 / 书变自动失效 / force 绕过强制重抽
-// → 一次 LLM 小调用抽取（只提取不创作、无数量约束取全、原文措辞不润色）
-// → 净化（形状合法为止）→ 落 context.setting（frozen 五件套 + bookEntities 书名录 + dynamic 初值）。
+// → LLM 抽取（只提取不创作、无数量约束取全、原文措辞不润色）→ 净化（形状合法为止）
+// → 落 context.setting（frozen 五件套 + bookEntities 书名录 + dynamic 初值）。
+// 第十八棒修正（v1 范本实读 director.js/abstract.js）：**大书分段多调用，绝不单次硬吃全量**——
+//   - 设定五件套：头 CANON_SRC_CHAR 单发（v1 拍板 30000，80k 段曾连续空回复，16k-30k 历史稳定）；
+//   - 书名录：全条目分块多次调用（块失败→对半拆递归深度≤4/单条兜底→保底重试一次→跳过降级，
+//     块间合并去重，全书级出处判定=原文没出现的名号弃（纯编造才丢））；
+//   - 小书（≤3 万字符）保持单发——行为与既有版本零差异（测试基线不动）。
+// v1 教训（adapter.js L19）：人名藏在条目深处，头 400 字截断会砍掉名字密集段——大书分块必须全量覆盖。
 // 职责链（红线 4 同构）：LLM 只提取不创作（上游提议）；引擎只做确定性净化与落账（引擎钳制）。
-// K37：书名录段（生通道①，§3.7）+ seedBookEntities 幂等入账（席位按书序优先，POOL_CAP 提案值）。
 // 纪律：
 //   - dynamic.tension.intensity 不许模型拍（K29 引擎确定性计算）——净化时丢弃模型侧 intensity；
 //   - env 初值键表白名单（报批二批 #3 定案四键）+ [0,1] 钳制；缺省 = 基线 0.5（提案）；
@@ -15,6 +20,11 @@ import { POOL_CAP, ENTITY_ATTR_DEFAULT, INBORN_ATTR_KEYS } from './settle.js';
 
 export const ENV_INIT_BASELINE = 0.5;      // 提案：抽取缺省环境量初值（patchDynamic 新键基线口径）
 export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时的强度初值（随长跑校准批）
+
+// 第十八棒（v1 拍板值同款 · 提案态，随报批）：
+export const CANON_SRC_CHAR = 30000;       // 设定五件套抽取：书文前 3 万字符单发（v1 实测 16k-30k 稳定）
+export const ROSTER_CHUNK_CHAR = 60000;    // 书名录分块尺寸（字符级累计；v1 参数翻烧饼史终值）
+export const ROSTER_CHUNK_DEPTH = 4;       // 块失败对半拆递归深度上限（v1 同款；条目数 ≤1 时不再拆）
 
 export function buildAbstractPrompt(sourceText) {
     return [
@@ -123,9 +133,90 @@ export function assembleSetting({ canon, tension, env, legacyTension, fingerprin
     };
 }
 
+const EMPTY_CANON = () => ({ powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], bookEntities: [] });
+
+// 单发小包装：prompt → 调用 → JSON 解析 → 净化；失败返回 {callError}
+async function callOnce(extract, text) {
+    let rawText;
+    try {
+        rawText = await extract(buildAbstractPrompt(text));
+    } catch (err) {
+        return { callError: `抽取调用失败: ${err?.message || err}` };
+    }
+    if (typeof rawText !== 'string' || !rawText.trim()) return { callError: '抽取输出为空' };
+    let raw;
+    try {
+        raw = JSON.parse(rawText.trim());
+    } catch {
+        return { callError: '抽取输出非法 JSON（真形状净化：不可靠即拒绝）' };
+    }
+    const cleaned = sanitizeCanon(raw);
+    if (!cleaned.ok) return { callError: cleaned.errors.join('; ') };
+    return { cleaned };
+}
+
+// 行级分块：按累计字符 ≤ maxChar 切块（保行完整；超长单行自成一块）
+export function chunkRows(rows, maxChar) {
+    const chunks = [];
+    let cur = [];
+    let curLen = 0;
+    for (const r of rows) {
+        const len = Array.from(r).length;
+        if (cur.length && curLen + len > maxChar) {
+            chunks.push(cur.join('\n'));
+            cur = [];
+            curLen = 0;
+        }
+        cur.push(r);
+        curLen += len;
+    }
+    if (cur.length) chunks.push(cur.join('\n'));
+    return chunks;
+}
+
+// 拆半递归（v1 tryChunk 同款精神）：块首试无效 → 对半拆（保内容，不空等重试）→ 拆不动保底重试一次 → 仍无效跳过降级。
+// 返回 cleaned | null；两半合并只取 bookEntities 并集（块级只收书名录，v1 同款）。
+function mergeCleaned(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    const seen = new Set(a.canon.bookEntities.map((x) => x.name));
+    const bookEntities = [...a.canon.bookEntities];
+    for (const x of b.canon.bookEntities) {
+        if (seen.has(x.name)) continue;
+        seen.add(x.name);
+        bookEntities.push(x);
+    }
+    return { canon: { ...a.canon, bookEntities }, tension: a.tension, env: a.env };
+}
+
+async function tryRosterChunk(extract, text, depth, probeState) {
+    const r = await callOnce(extract, text);
+    if (!r.callError) return { cleaned: r.cleaned };
+    probeState.failures += 1;
+    if (depth < ROSTER_CHUNK_DEPTH) {
+        const lines = text.split('\n').filter(Boolean);
+        if (lines.length > 1) {
+            const mid = Math.ceil(lines.length / 2);
+            const halfA = await tryRosterChunk(extract, lines.slice(0, mid).join('\n'), depth + 1, probeState);
+            if (halfA.aborted) return halfA;
+            const halfB = await tryRosterChunk(extract, lines.slice(mid).join('\n'), depth + 1, probeState);
+            if (halfB.aborted) return halfB;
+            return { cleaned: mergeCleaned(halfA.cleaned, halfB.cleaned) };
+        }
+    }
+    // 拆不动（单条/深度到底）→ 保底重试一次（v1 同款）
+    const retry = await callOnce(extract, text);
+    if (!retry.callError) return { cleaned: retry.cleaned };
+    probeState.failures += 1;
+    return { cleaned: null };
+}
+
 // 执行器：{sourceText, extract, cache?, force?, extractedAt?, legacyTension?} → {ok, setting, cached, fingerprint, errors}
+// 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量（与历史行为零差异）；大书分段多调用——
+// 五件套=头 CANON_SRC_CHAR 单发；书名录=全条目分块多调用（拆半自适应 + 降级 + 全书级出处校验）。
 export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension }) {
-    const fp = bookFingerprint(sourceText);
+    const src = String(sourceText ?? '');
+    const fp = bookFingerprint(src);
     const stamp = extractedAt || new Date().toISOString();
 
     if (!force && cache) {
@@ -142,25 +233,68 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     }
 
     if (typeof extract !== 'function') return { ok: false, errors: ['未提供抽取调用（extract 注入缺失）'] };
-    let rawText;
-    try {
-        rawText = await extract(buildAbstractPrompt(sourceText));
-    } catch (err) {
-        return { ok: false, errors: [`抽取调用失败: ${err?.message || err}`] };
-    }
-    if (typeof rawText !== 'string' || !rawText.trim()) return { ok: false, errors: ['抽取输出为空'] };
-    let raw;
-    try {
-        raw = JSON.parse(rawText.trim());
-    } catch {
-        return { ok: false, errors: ['抽取输出非法 JSON（真形状净化：不可靠即拒绝）'] };
-    }
-    const cleaned = sanitizeCanon(raw);
-    if (!cleaned.ok) return { ok: false, errors: cleaned.errors };
+    const errors = [];
+    const srcLen = Array.from(src).length;
 
-    const setting = assembleSetting({ canon: cleaned.canon, tension: cleaned.tension, env: cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp });
-    if (cache) cache.set(fp, { canon: cleaned.canon, tension: cleaned.tension, env: cleaned.env }, stamp);
-    return { ok: true, cached: false, fingerprint: fp, setting };
+    // 小书：单发全量（现语义零变化）；空/失败自动重试一次（v1 教训：网关对长输入偶发空回复，director 注释实证）
+    if (srcLen <= CANON_SRC_CHAR) {
+        let r = await callOnce(extract, src);
+        if (r.callError) r = await callOnce(extract, src);
+        if (r.callError) return { ok: false, errors: [`抽取失败（已重试一次）：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`] };
+        const setting = assembleSetting({ canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp });
+        if (cache) cache.set(fp, { canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env }, stamp);
+        return { ok: true, cached: false, fingerprint: fp, setting, errors };
+    }
+
+    // 大书：五件套=头 CANON_SRC_CHAR 单发（失败降级=空 canon，不阻塞书名录）；空/失败自动重试一次
+    const canonSrc = Array.from(src).slice(0, CANON_SRC_CHAR).join('');
+    let canonR = await callOnce(extract, canonSrc);
+    if (canonR.callError) canonR = await callOnce(extract, canonSrc);
+    if (canonR.callError) {
+        errors.push(`设定五件套抽取失败（已降级空 canon）：${canonR.callError}`);
+    }
+    const canonBase = canonR.cleaned ?? { canon: EMPTY_CANON(), tension: { polarity: '', direction: '' }, env: {} };
+
+    // 书名录：全条目分块多调用（全量覆盖，v1 教训：人名藏在条目深处，不许头截断）
+    const rows = src.split('\n').map((s) => s.trim()).filter(Boolean);
+    const chunks = chunkRows(rows, ROSTER_CHUNK_CHAR);
+    const bookSeen = new Set();
+    const bookNames = [];
+    for (const b of canonBase.canon.bookEntities) {   // 头 30k 内名号先入（书序优先）
+        if (bookSeen.has(b.name)) continue;
+        bookSeen.add(b.name);
+        bookNames.push(b);
+    }
+    const probeState = { failures: 0 };
+    let okChunks = 0;
+    for (const chunk of chunks) {
+        const { cleaned } = await tryRosterChunk(extract, chunk, 0, probeState);
+        if (!cleaned) {
+            errors.push('书名录块抽取失败（已跳过降级，其余块照常；网络恢复后「重新抽取」可补回）');
+            continue;
+        }
+        okChunks += 1;
+        for (const b of cleaned.canon.bookEntities) {
+            if (bookSeen.has(b.name)) continue;
+            bookSeen.add(b.name);
+            bookNames.push(b);
+        }
+    }
+
+    // 全书级出处判定（v1 同款：块级只洗结构，出处全书级判一次；纯编造才丢）
+    const before = bookNames.length;
+    const finalNames = bookNames.filter((b) => src.includes(b.name));
+    if (finalNames.length < before) {
+        errors.push(`书名录全书级出处校验：${before - finalNames.length} 个名号原文未出现（疑似编造，已弃）`);
+    }
+
+    const canon = { ...canonBase.canon, bookEntities: finalNames };
+    if (canonR.callError && okChunks === 0 && !finalNames.length) {
+        return { ok: false, errors: ['设定与书名录抽取全部失败（世界未动，可重试）'] };
+    }
+    const setting = assembleSetting({ canon, tension: canonBase.tension, env: canonBase.env, legacyTension, fingerprint: fp, extractedAt: stamp });
+    if (cache) cache.set(fp, { canon, tension: canonBase.tension, env: canonBase.env }, stamp);
+    return { ok: true, cached: false, fingerprint: fp, setting, errors };
 }
 
 // 落账到世界（不可变）：context.setting 整体替换；旧 context.tension 保留（兼容口径 K24 §3.7）

@@ -17,7 +17,8 @@ import { seedBookEntities, extractWorldSetting, applySettingToSsot } from '../sr
 import { createIdbVolumeStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
-import { resolveBrowserTransport } from '../src/transport-config.js';
+import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
+import { composeInitSource } from '../src/init-source.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
@@ -197,7 +198,7 @@ function dispatchAction(action, payload, event) {
         sw2TickQueue.advance().catch(() => {}); // K36 手动补推（A-4 手动路径）
         return;
     }
-    const label = { 'init-world': '开始新世界', 'force-abstract': '重新抽取设定', 'source-pick': '换源' }[action] || action;
+    const label = { 'init-world': '开始新世界', 'force-abstract': '重新抽取设定' }[action] || action;
     setStatus(`「${label}」接线随后续步骤（当前为占位）`);
 }
 
@@ -274,6 +275,76 @@ function writeSetting(key, value) {
     if (!s) return;
     s[key] = value;
     try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
+}
+
+// 第十八棒：初始化设定源自动合订（编排层）——只有自动两条路：
+// 缺省自动合订 角色卡四件套 + 世界信息/卡内置世界书（世界书全量，大书分块抽取在 abstract 层）；
+// 恢复 v1「读取当前角色卡一键初始化」手感；原生 prompt 从初始化路径清除。
+// 取数形状宽容：worldInfo 兼容 数组 / {entries} 两种 ST 形态；群聊（context.character=null）
+// 回退取群成员首位卡；失败上控制台诊断现场（形状未知时不再盲猜）。
+function collectWorldInfoEntries(ctx) {
+    const wi = ctx?.worldInfo;
+    if (Array.isArray(wi)) return wi;
+    if (wi && typeof wi === 'object' && Array.isArray(wi.entries)) return wi.entries;
+    return [];
+}
+
+function pickCharacter(ctx) {
+    const c = ctx?.character;
+    if (c && typeof c === 'object') return c;
+    const chs = ctx?.characters;
+    if (Array.isArray(chs) && chs.length) return chs[0]; // 群聊兜底：取首位成员卡
+    return null;
+}
+
+function autoComposeSource() {
+    const ctx = getCtx();
+    const res = composeInitSource({
+        character: pickCharacter(ctx),
+        worldInfoEntries: collectWorldInfoEntries(ctx),
+    });
+    if (!res.ok) {
+        try {
+            console.warn('[story-world-v2] 初始化设定源失败诊断', {
+                ctxType: ctx ? typeof ctx : null,
+                ctxKeys: ctx ? Object.keys(ctx).slice(0, 40) : null,
+                charName: pickCharacter(ctx)?.name ?? null,
+                charShape: (() => { const c = pickCharacter(ctx); return c ? { keys: Object.keys(c).slice(0, 40), hasBook: Boolean(c.character_book || c.data?.character_book) } : null; })(),
+                worldInfoType: ctx?.worldInfo ? (Array.isArray(ctx.worldInfo) ? 'array' : typeof ctx.worldInfo) : null,
+                worldInfoKeys: ctx?.worldInfo && typeof ctx.worldInfo === 'object' && !Array.isArray(ctx.worldInfo) ? Object.keys(ctx.worldInfo) : null,
+                reason: res.reason,
+            });
+        } catch (_) {}
+    }
+    return res;
+}
+
+// 抽取调用诊断包装（第十八棒）：transport 返回裸字符串（transport-http 契约）或 {text} 对象都吃——
+// K38 抽取接线曾只取 `.text`（真实 transport 返回字符串 → 恒空 →「抽取输出为空」实为接线雷，
+// 合成演练从未真跑所以未炸；worldstep.js L12 同款双形取法早已存在）。空/非 JSON 响应现场上控制台。
+function diagExtract(resolved) {
+    return async (p) => {
+        try {
+            const res = await resolved.transport(p);
+            const text = typeof res === 'string' ? res : (res && typeof res === 'object' && typeof res.text === 'string' ? res.text : '');
+            if (!text.trim()) {
+                console.warn('[story-world-v2] 抽取空响应', {
+                    promptLen: Array.from(p).length,
+                    responseType: typeof res,
+                    responseKeys: res && typeof res === 'object' ? Object.keys(res) : null,
+                    textLen: text.length,
+                });
+            } else {
+                try { JSON.parse(text); } catch (_) {
+                    console.warn('[story-world-v2] 抽取非JSON响应（原文前120字）', text.trim().replace(/\s+/g, ' ').slice(0, 120));
+                }
+            }
+            return text;
+        } catch (err) {
+            console.warn('[story-world-v2] 抽取调用异常', String(err?.message || err));
+            throw err;
+        }
+    };
 }
 
 // K36 设置页表单 ↔ extension_settings 双向：表单值由渲染 config 注入（refreshWorld cfg），
@@ -474,71 +545,37 @@ if (typeof window !== 'undefined') {
         input.click();
     };
 
-    // ---------- K38：三按钮接线（敲定稿 §3；铁律 9=编排层） ----------
-    // source-pick：设定源选择——worldinfo=ST 世界信息合订 / paste=手动粘贴（持久化 extensionSettings.worldBook）
-    bus['source-pick'] = (payload) => {
-        const src = payload?.source;
-        if (src === 'worldinfo') {
-            try {
-                const ctx = getCtx();
-                const wi = ctx?.worldInfo;
-                if (wi && Array.isArray(wi.entries) && wi.entries.length) {
-                    const text = wi.entries.map((e) => `【${e.uid || e.key || ''}】${e.content || ''}`).join('\n');
-                    writeSetting('worldBook', text);
-                    setStatus(`已取世界信息合订（${wi.entries.length} 条）为设定源——「重新抽取 / 开始新世界」用它`);
-                } else {
-                    setStatus('⚠ 当前没有可读的世界信息（为空或接口不可达）——用「手动粘贴文本」');
-                }
-            } catch (_) {
-                setStatus('⚠ 世界信息读取失败——用「手动粘贴文本」');
-            }
-            return;
-        }
-        if (src === 'paste') {
-            const got = window.prompt('粘贴世界书设定全文（将存为设定源，供初始化/重抽使用）：');
-            if (!got || !got.trim()) return;
-            writeSetting('worldBook', got);
-            setStatus(`已存设定源（${got.length} 字）——「✨ 开始新世界 / ↻ 重新抽取设定」用它`);
-            return;
-        }
-        setStatus('未知换源目标');
-    };
+    // ---------- 初始化接线（编排层） ----------
+    // 换源/worldBook 机制已于第十八棒整体废除——设定源只有自动两条路
+    //（世界信息/卡内置书 + 角色卡四件套，见 autoComposeSource）；无任何外部文本槽可言。
 
-    // init-world：新世界初始化——设定源文本 → 小调用抽取（抽象管线）→ 种子世界（书名录入席+position 集）
+    // init-world：新世界初始化——设定源自动合订 →
+    // 小调用抽取（抽象管线）→ 种子世界（书名录入席 + position 集）。零原生弹窗。
     bus['init-world'] = async () => {
         try {
             const settings = modelSettings() || {};
-            const resolved = resolveBrowserTransport(settings);
+            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS }); // 抽取独立预算（16384 提案，Diagnostic 实证 finish=length@4096）
             if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）——设定期望初始化需要它'); return; }
-            let text = settings.worldBook;
-            if (!text || !text.trim()) {
-                const got = window.prompt('输入初始化内容：\n第一行=世界名\n第二行=位置集（逗号分隔，如 江州,边关,商路）\n第三行起=世界书设定全文');
-                if (!got || !got.trim()) return;
-                text = got;
-            }
-            const lines = text.split('\n');
-            const name = (lines[0] || '').trim() || '未名世界';
-            const posLine = lines[1] || '';
-            const positions = posLine.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-            if (!positions.length) positions.push('中央');
-            const bookText = lines.slice(2).join('\n').trim() || text;
-            setStatus('正在抽取世界设定…');
+            const src = autoComposeSource();
+            if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}——把设定写进 ST 世界信息或角色卡描述，再点一次`); return; }
+            setStatus(`正在抽取世界设定（源：${src.label} · ${src.usedChars} 字符${src.truncated ? ' · 超出防御上限截余' : ''}）…`);
             const r = await extractWorldSetting({
-                sourceText: bookText,
-                extract: async (p) => (await resolved.transport(p)).text,
+                sourceText: src.text,
+                extract: diagExtract(resolved), // 第十八棒：空/非JSON 响应现场上控制台
                 force: false,
             });
-            if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}`); return; }
+            if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
             const seed = {
                 version: 1,
-                context: { world: name, tension: 0.5, positions, setting: r.setting },
+                context: { world: src.worldName || '未名世界', tension: 0.5, positions: ['中央'], setting: r.setting },
                 entities: [], weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
                 meta: { tick: 0, simLog: [] },
+                // 位置集默认单点（提案态）——多位置后续随页内表单扩展（换源机制已废）
             };
             seedBookEntities(seed);
             const had = Boolean(readHotMeta());
             writeHotMeta(hotAccountShape(seed));
-            setStatus(`✨ 新世界「${name}」已立（${(seed.entities || []).length} 实体入席 · ${positions.join('/')}）${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
+            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
             await loadWorld();
         } catch (err) {
             setStatus(`⚠ 初始化失败：${err?.message || err}`);
@@ -552,27 +589,25 @@ if (typeof window !== 'undefined') {
             const world = meta ? loadHotAccount(meta) : null;
             if (!world) { setStatus('⚠ 还没有世界——先「✨ 开始新世界」'); return; }
             const settings = modelSettings() || {};
-            const resolved = resolveBrowserTransport(settings);
+            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS });
             if (!resolved) { setStatus('⚠ 模型通道未配置（重抽需要抽取调用）'); return; }
-            let sourceText = settings.worldBook;
-            if (!sourceText || !sourceText.trim()) {
-                const got = window.prompt('粘贴世界书设定全文（将与当前设定整体替换）：');
-                if (!got || !got.trim()) return;
-                sourceText = got;
-            }
-            setStatus('正在强制重抽设定…');
+            const src = autoComposeSource();
+            if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}——把设定写进 ST 世界信息或角色卡描述，再点一次`); return; }
+            const sourceText = src.text;
+            const srcLabel = src.label;
+            setStatus(`正在强制重抽设定（源：${srcLabel} · ${src.usedChars} 字符${src.truncated ? ' · 超出防御上限截余' : ''}）…`);
             const r = await extractWorldSetting({
                 sourceText,
-                extract: async (p) => (await resolved.transport(p)).text,
+                extract: diagExtract(resolved),
                 force: true,
             });
-            if (!r.ok) { setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}`); return; }
+            if (!r.ok) { setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
             const next = applySettingToSsot(world, r.setting);
             seedBookEntities(next);
             const hot = await ensureChronicleRotated(next);
             LISTED_VOLUMES = await listOldVolumes();
             refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
-            setStatus('↻ 设定已重抽（frozen 五件套 + 书名录生效；世界账本原样保留）');
+            setStatus(`↻ 设定已重抽（frozen 五件套 + 书名录生效；世界账本原样保留 · 源=${srcLabel}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）`);
         } catch (err) {
             setStatus(`⚠ 重抽失败：${err?.message || err}`);
         }
