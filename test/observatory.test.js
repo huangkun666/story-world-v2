@@ -94,6 +94,8 @@ test('驻留：状态分布 + 摸鱼名单（活跃且闲置 ≥ LOUNGER_TICKS�
     const s = residencyStats(w);
     assert.deepEqual(s.statusCount, { active: 3, retired: 1, dead: 1 });
     assert.equal(s.activeIdle.max, 32);
+    assert.equal(s.inLens, 3, '镜头只收 active（retired/dead 出演化上下文——K37 三点过滤①）');
+    assert.equal(s.lensIdle.max, 32, '镜头内闲置口径与全册一致');
     assert.deepEqual(s.loungers, ['e_sleepy']);
     assert.equal(LOUNGER_TICKS, 30, '摸鱼判据 30 轮（提案）');
 });

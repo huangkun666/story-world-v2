@@ -143,7 +143,7 @@ test('K34 大事纪·旧卷页：里程碑卡（span/标题/ids 展开） + 卷�
 test('K34 角色与势力页：全量表（位置/影响力/兵力权位人脉耳目/谋划/最近活跃/状态徽）', () => {
     const w = world();
     const html = renderEntitiesHtml(w);
-    assert.match(html, /全部角色与势力（4 位在席 · 席位上限 32）/);
+    assert.match(html, /全部角色与势力（全册 4 · 本轮镜头 4）/);
     assert.ok(html.includes('sw2-eattr" title="兵力：硬实力'));
     assert.ok(html.includes('sw2-eattr" title="耳目：情报网有多灵'));
     assert.match(html, /sw2-ename">黄坤<small>你的棋子/);
@@ -155,7 +155,7 @@ test('K34 角色与势力页：全量表（位置/影响力/兵力权位人脉�
     // K37 席位语义：在席计数只算 active + 退休/已灭标注
     w.entities.push({ id: 'e_ret', kind: 'character', name: '归隐客', location: 'x', attrs: {}, status: 'retired' });
     const html3 = renderEntitiesHtml(w);
-    assert.match(html3, /全部角色与势力（4 位在席 · 席位上限 32） <small class="sw2-quiet-note">另 2 位退休\/已灭<\/small>/);
+    assert.match(html3, /全部角色与势力（全册 6 · 本轮镜头 4） <small class="sw2-quiet-note">另 2 位退休\/已灭<\/small>/);
 });
 
 test('第十三棒：属性维度释义与无障碍——title+视障文本双通道、注脚行、缺键零维不渲染', () => {
@@ -256,9 +256,51 @@ test('K34 防御：全空世界六页签不炸（空态合法）', () => {
     const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
     const all = renderAll(bare);
     assert.ok(all.setting.includes('尚未抽取'));
-    assert.ok(all.entities.includes('（0 位'));
+    assert.ok(all.entities.includes('（全册 0 · 本轮镜头 0）'));
     assert.ok(all.board.agendaStrip.includes('sw2-agenda-empty'));
     assert.ok(all.archive.includes('尚未入卷'));
+});
+
+test('K46 观棋·大势行与张力行并带（名实分离）', () => {
+    const w = {
+        version: 1, context: {
+            world: 'x', tension: 0.5, positions: ['x'],
+            setting: { dynamic: { tension: { polarity: '正邪相争', direction: '魔涨道消', intensity: 0.82 }, env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.15, 张力推手: 0.8 }, derivedFrom: ['浪尖:a_1@3'] } },
+        },
+        entities: [{ id: 'e_a', kind: 'faction', name: '甲宗', location: 'x', attrs: {} }], weights: { e_a: 0.9 },
+        agendas: [{ id: 'a_1', owner: 'e_a', goal: '血洗洛城', stage: '用兵', visibility: 'known', maxSteps: 3, progress: 2, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
+        events: [], chronicle: [], milestones: [], meta: { tick: 3, simLog: [] },
+    };
+    const html = renderBoardHtml(w).infoband;
+    assert.ok(html.includes('sw2-band-label">大势</div>'), '大势行在位');
+    assert.ok(html.includes('sw2-band-label">张力 · 结构性三件套'), '张力行独立成行');
+    assert.ok(!html.includes('大势 · 结构性张力'), '旧标签（大势顶张力名）废除');
+    assert.ok(html.includes('高烈度 82'), '强度带词入大势句');
+    assert.ok(html.includes('天时不作美'), '环境危险带入大势句');
+    assert.ok(html.includes('浪尖：血洗洛城'), '浪尖入大势句（目标名不露 id）');
+    assert.ok(html.includes('魔涨道消'), '方向在大势句');
+    assert.ok(html.includes('正邪相争') && html.includes('>82<'), '张力三件套数值在张力行');
+});
+
+test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）', () => {
+    const w = {
+        version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] },
+        entities: [
+            { id: 'e_f', kind: 'faction', name: '青龙会', location: 'x', attrs: { network: 0.6 }, branches: ['盐帮', '漕帮'] },
+            { id: 'e_c1', kind: 'character', name: '弟子甲', location: 'x', attrs: { network: 0.5 }, parent: '盐帮' },
+            { id: 'e_c2', kind: 'character', name: '弟子乙', location: 'x', attrs: { network: 0.4 }, parent: '青龙会' },
+        ],
+        weights: { e_f: 0.9, e_c1: 0.5, e_c2: 0.4 },
+        agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 0, simLog: [] },
+    };
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('全部角色与势力（全册 3 · 本轮镜头 3）'), '全册/镜头计数');
+    assert.ok(html.includes('在场'), '镜头徽');
+    assert.ok(html.includes('分支：盐帮、漕帮'), '分支表展示');
+    assert.ok(html.includes('隶属：盐帮') && html.includes('隶属：青龙会'), '角色隶属展示');
+    assert.ok(html.includes('麾下：弟子甲、弟子乙'), '麾下成员派生（含分支成员）');
+    const text = html.replace(/<[^>]*>/g, '');
+    for (const term of BLACKLIST) assert.ok(!text.includes(term), `实体页含禁词「${term}」`);
 });
 
 test('第十三棒锁：事件源措辞零代号——把用户实机样例（ripple 行）锁进 A-3 全局扫描', () => {

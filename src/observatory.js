@@ -8,6 +8,7 @@
 //   参考读数（probeStepAges）：当轮提议对旧事（>FAR_WINDOW tick）的引用占比——"记得你"的代理读数（演练采样用）
 // 纪律：纯函数、输入不可变；只读账，不落账、不写编年、不调 LLM。
 import { eventBornTick } from './setting.js';
+import { lensList } from './pack.js';   // K47/第十九棒：驻留读数改镜头口径（全册在册、镜头管进出——full-roster-lens-spec C5）
 
 export const REJECTION_PREFIXES = ['裁定:', '校验拒绝:'];
 export const LOUNGER_TICKS = 30;   // 提案：占座摸鱼判据（敲定稿 I 条：>30 轮告警；随 K38 报批）
@@ -63,7 +64,7 @@ export function scanDanglingRefs(world) {
     return { dangling, count: dangling.length };
 }
 
-// 三、驻留：实体状态分布 + 活跃闲置分位 + 摸鱼名单
+// 三、驻留：全册分布 + 镜头内闲置分位（K47 口径：谁的"占座摸鱼"才有意义=在镜头里不动）+ 摸鱼名单
 export function residencyStats(world) {
     const now = world.meta?.tick ?? 0;
     const rows = [];
@@ -72,18 +73,21 @@ export function residencyStats(world) {
         rows.push({ id: e.id, kind: e.kind, status: e.status || 'active', idle });
     }
     const statusCount = { active: 0, retired: 0, dead: 0 };
-    const idleActive = [];
-    for (const r of rows) {
-        statusCount[r.status] = (statusCount[r.status] ?? 0) + 1;
-        if (r.status === 'active') idleActive.push(r.idle);
-    }
-    idleActive.sort((a, b) => a - b);
+    for (const r of rows) statusCount[r.status] = (statusCount[r.status] ?? 0) + 1;
+    const idleActive = rows.filter((r) => r.status === 'active').map((r) => r.idle).sort((a, b) => a - b);
     const pct = (p) => (idleActive.length ? idleActive[Math.min(idleActive.length - 1, Math.floor(p * idleActive.length))] : null);
+    // K47：镜头内口径（lensList 引擎层同口径——谁能被"看到"由每轮镜头决定）
+    const lensIds = new Set(lensList(world).map((x) => x.e.id));
+    const idleLens = rows.filter((r) => r.status === 'active' && lensIds.has(r.id)).map((r) => r.idle).sort((a, b) => a - b);
+    const pctL = (p) => (idleLens.length ? idleLens[Math.min(idleLens.length - 1, Math.floor(p * idleLens.length))] : null);
+    const loungers = rows.filter((r) => r.status === 'active' && lensIds.has(r.id) && r.idle >= LOUNGER_TICKS).map((r) => r.id);
     return {
-        entities: rows.length,
+        entities: rows.length,               // 全册计数（标注；资格=在册）
+        inLens: lensIds.size,                // 本轮镜头人数
         statusCount,
-        activeIdle: { max: idleActive.length ? idleActive[idleActive.length - 1] : null, p50: pct(0.5), p90: pct(0.9) },
-        loungers: rows.filter((r) => r.status === 'active' && r.idle >= LOUNGER_TICKS).map((r) => r.id),
+        activeIdle: { max: idleActive.length ? idleActive[idleActive.length - 1] : null, p50: pct(0.5), p90: pct(0.9) },   // 全册口径（兼容保留）
+        lensIdle: { max: idleLens.length ? idleLens[idleLens.length - 1] : null, p50: pctL(0.5), p90: pctL(0.9) },          // 镜头内口径（判读用）
+        loungers,                            // 镜头内摸鱼名单（>LOUNGER_TICKS 轮未动仍占镜）
     };
 }
 

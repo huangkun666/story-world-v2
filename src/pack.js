@@ -43,7 +43,7 @@ export function lensList(ssot, { lensMaxTokens = LENS_DEFAULT_MAX_TOKENS, moveFa
 }
 
 // 麾下成员简表（C7 派生反查）：characters 的 parent 命中 实体名/其分支名 → 归该势力；分量序取前 LENS_MEMBERS_TOP
-function membersOf(world, faction) {
+export function membersOf(world, faction) {
     const scope = new Set([faction.name, ...(faction.branches || [])]);
     const list = (world?.entities || [])
         .filter((e) => e.kind === 'character' && e.parent && scope.has(e.parent))
