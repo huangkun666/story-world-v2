@@ -247,14 +247,18 @@ function writeHotMeta(meta) {
 }
 
 // 显式落盘（关键路径 await 后报成功）：绕过防抖立即整聊天保存；重入守卫防并发双写。
+// 返回布尔供状态条确认位（「已落盘」/「⚠ 落盘失败」）——复验一眼可判。
 async function flushHotMeta() {
     const ctx = freshCtx();
-    if (!ctx || typeof ctx.saveChat !== 'function' || sw2HotMetaFlushing) return;
+    if (!ctx || typeof ctx.saveChat !== 'function' || sw2HotMetaFlushing) return false;
     sw2HotMetaFlushing = true;
     try {
         await ctx.saveChat();
+        console.info('[story-world-v2] 热账已落盘', new Date().toISOString());
+        return true;
     } catch (err) {
         console.warn('[story-world-v2] 热账落盘失败', String(err?.message || err));
+        return false;
     } finally {
         sw2HotMetaFlushing = false;
     }
@@ -632,8 +636,8 @@ if (typeof window !== 'undefined') {
                 const store = volumeStore();
                 for (const v of res.volumes) await store.put(v);
                 await loadWorld();
-                await flushHotMeta();   // leg20 落盘修复：导入完成显式落盘再报成功
-                setStatus('已导入：世界与旧卷恢复完成');
+                const flushed = await flushHotMeta();   // leg20 落盘修复：导入完成显式落盘再报成功
+                setStatus(`已导入：世界与旧卷恢复完成${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
             } catch (err) {
                 setStatus(`⚠ 导入失败：${err?.message || err}`);
             }
@@ -673,8 +677,8 @@ if (typeof window !== 'undefined') {
             const had = Boolean(readHotMeta());
             writeHotMeta(hotAccountShape(seed));
             await loadWorld();
-            await flushHotMeta();   // leg20 落盘修复：初始化完成显式落盘再报成功
-            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
+            const flushed = await flushHotMeta();   // leg20 落盘修复：初始化完成显式落盘再报成功
+            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
         } catch (err) {
             setStatus(`⚠ 初始化失败：${err?.message || err}`);
         }
@@ -706,8 +710,8 @@ if (typeof window !== 'undefined') {
             const hot = await ensureChronicleRotated(next);
             LISTED_VOLUMES = await listOldVolumes();
             refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
-            await flushHotMeta();   // leg20 落盘修复：重抽完成显式落盘再报成功
-            setStatus(`↻ 设定已重抽（frozen 五件套 + 世情句 + 书名录含属性/种族生效；世界账本原样保留 · 源=${srcLabel}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）`);
+            const flushed = await flushHotMeta();   // leg20 落盘修复：重抽完成显式落盘再报成功
+            setStatus(`↻ 设定已重抽（frozen 五件套 + 世情句 + 书名录含属性/种族生效；世界账本原样保留 · 源=${srcLabel}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
         } catch (err) {
             setStatus(`⚠ 重抽失败：${err?.message || err}`);
         }
