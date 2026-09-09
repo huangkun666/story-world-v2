@@ -87,6 +87,17 @@ test('K33 观棋·时局句与信息带：模板拼装（极性/强度/危险带
     assert.match(infoband, /<div class="sw2-big-num">3<small>\/15<\/small>/);
 });
 
+test('leg20 世情句领大势：situation 进时局句主句与信息带（原文措辞；拼装增量保留）', () => {
+    const w = world();
+    w.context.setting.frozen.canon.situation = '大虞兵压江州，坊市暗流涌动';
+    const { digest, infoband } = renderBoardHtml(w);
+    assert.match(digest, /大虞兵压江州，坊市暗流涌动/);
+    assert.match(infoband, /大虞兵压江州，坊市暗流涌动。/);
+    assert.match(infoband, /大虞\/万法阁/);   // 张力极性仍在（三件套不丢）
+    const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
+    assert.match(renderBoardHtml(bare).digest, /大势未聚/);   // 无世情无极性 → 原回退语义不变
+});
+
 test('K33 观棋·无设定池回退：大势未聚 + 无盘算空态', () => {
     const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
     const html = renderBoardHtml(bare);

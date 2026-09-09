@@ -230,10 +230,34 @@ function readHotMeta() {
     return ctx?.chatMetadata?.[HOT_META_KEY] ?? null;
 }
 
+// 落盘修复（leg20）：ST 1.15 的 ctx.updateChatMetadata() 只改内存、不触发任何保存（public/script.js 实测），
+// 热账必须主动触发聊天保存才写进 jsonl——此前世界只活在页面内存，刷新/关机即丢。
+// 策略：写内存 + ST 自带防抖保存（saveMetadataDebounced → saveChatConditional 整聊天上盘）；
+// 关键路径（初始化/重抽/导入）用 flushHotMeta() 显式 await 落盘后再报成功。
+let sw2HotMetaFlushing = false;
+
 function writeHotMeta(meta) {
     const ctx = freshCtx();
     if (!ctx || typeof ctx.updateChatMetadata !== 'function') return;
     ctx.updateChatMetadata({ [HOT_META_KEY]: meta });
+    try {
+        if (typeof ctx.saveMetadataDebounced === 'function') ctx.saveMetadataDebounced();
+        else if (typeof ctx.saveChat === 'function') ctx.saveChat().catch(() => {});
+    } catch (_) {}
+}
+
+// 显式落盘（关键路径 await 后报成功）：绕过防抖立即整聊天保存；重入守卫防并发双写。
+async function flushHotMeta() {
+    const ctx = freshCtx();
+    if (!ctx || typeof ctx.saveChat !== 'function' || sw2HotMetaFlushing) return;
+    sw2HotMetaFlushing = true;
+    try {
+        await ctx.saveChat();
+    } catch (err) {
+        console.warn('[story-world-v2] 热账落盘失败', String(err?.message || err));
+    } finally {
+        sw2HotMetaFlushing = false;
+    }
 }
 
 function volumeStore() {
@@ -608,6 +632,7 @@ if (typeof window !== 'undefined') {
                 const store = volumeStore();
                 for (const v of res.volumes) await store.put(v);
                 await loadWorld();
+                await flushHotMeta();   // leg20 落盘修复：导入完成显式落盘再报成功
                 setStatus('已导入：世界与旧卷恢复完成');
             } catch (err) {
                 setStatus(`⚠ 导入失败：${err?.message || err}`);
@@ -647,8 +672,9 @@ if (typeof window !== 'undefined') {
             seedBookEntities(seed);
             const had = Boolean(readHotMeta());
             writeHotMeta(hotAccountShape(seed));
-            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
             await loadWorld();
+            await flushHotMeta();   // leg20 落盘修复：初始化完成显式落盘再报成功
+            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
         } catch (err) {
             setStatus(`⚠ 初始化失败：${err?.message || err}`);
         }
@@ -680,7 +706,8 @@ if (typeof window !== 'undefined') {
             const hot = await ensureChronicleRotated(next);
             LISTED_VOLUMES = await listOldVolumes();
             refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
-            setStatus(`↻ 设定已重抽（frozen 五件套 + 书名录生效；世界账本原样保留 · 源=${srcLabel}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）`);
+            await flushHotMeta();   // leg20 落盘修复：重抽完成显式落盘再报成功
+            setStatus(`↻ 设定已重抽（frozen 五件套 + 世情句 + 书名录含属性/种族生效；世界账本原样保留 · 源=${srcLabel}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）`);
         } catch (err) {
             setStatus(`⚠ 重抽失败：${err?.message || err}`);
         }

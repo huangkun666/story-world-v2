@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seedBookEntities } from '../src/abstract.js';
 import { computeWeight } from '../src/weight.js';
+import { validate } from '../src/schema.js';
+import { ssotSchema } from '../src/schemas/ssot.schema.js';
 
 function mkWorld(bookEntities, { tension = 0.5, entities = [], weights = {} } = {}) {
     return {
@@ -133,4 +135,32 @@ test('K43: 空书名录与 shape 防御', () => {
     assert.equal(r2.seeded, 0);
     assert.equal(w2.entities.length, 1);
     assert.equal(w2.weights['e_1'], computeWeight({}, 'character', 0.5));   // 既有实体也完成预填
+});
+
+test('leg20 seed 吃抽象属性/种族：attrs 合并缺键兜底、race 随实体、权重差异化、形状过 schema', () => {
+    const book = [
+        { name: '万法阁', kind: 'faction', race: '人族', attrs: { hardPower: 0.9, office: 0.8 }, evidence: '灵脉霸主' },
+        { name: '白小娥', kind: 'character' },
+    ];
+    const w = {
+        version: 1,
+        context: { world: '大荒', tension: 0.5, positions: ['中央'], setting: { frozen: { fingerprint: 'f', extractedAt: 't', canon: { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], situation: '', bookEntities: book } }, dynamic: { tension: { polarity: '正邪', direction: '', intensity: 0.5 }, env: {} } } },
+        entities: [],
+        weights: {},
+        agendas: [],
+        events: [],
+        chronicle: [],
+        milestones: [],
+        meta: { tick: 0, simLog: [] },
+    };
+    const r = seedBookEntities(w);
+    assert.equal(r.seeded, 2);
+    const f = w.entities.find((e) => e.name === '万法阁');
+    assert.equal(f.race, '人族');
+    assert.deepEqual(f.attrs, { hardPower: 0.9, office: 0.8, network: 0.25, intel: 0.25 }, '抽象属性合并，缺键按 faction 兜底');
+    const c = w.entities.find((e) => e.name === '白小娥');
+    assert.deepEqual(c.attrs, { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 }, '无属性名号按 kind 兜底');
+    assert.ok(w.weights[f.id] !== w.weights[c.id], '差异化属性 → 差异化权重（镜头排序有意义）');
+    const checked = validate(w, ssotSchema);
+    assert.equal(checked.ok, true, checked.errors.join('; '));
 });

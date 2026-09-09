@@ -14,6 +14,9 @@
 //   - dynamic.tension.intensity 不许模型拍（K29 引擎确定性计算）——净化时丢弃模型侧 intensity；
 //   - env 初值键表白名单（报批二批 #3 定案四键）+ [0,1] 钳制；缺省 = 基线 0.5（提案）；
 //   - 空 canon 合法（K24 口径：无数量约束，防编造靠纪律不靠量制）。
+// leg20（用户令）：bookEntities 条目扩可选 attrs（四维 + 原文依据）/race（种族标签）——语义理解必须
+//   LLM（自然语言），出处校验归引擎（依据/种族名 ∈ 原文，查不到即弃属性/标签并警告，实体名号不受影响）；
+//   恢复世情路径（canon.situation=当前天下大势一句，原文措辞；v1 有，K38 重写丢失）。
 import { bookFingerprint } from './fingerprint.js';
 import { ENV_KEYS } from './entropy.js';
 import { ENTITY_ATTR_DEFAULT, INBORN_ATTR_KEYS } from './settle.js';
@@ -39,7 +42,8 @@ export function buildAbstractPrompt(sourceText) {
                 society: '社会与制度格局（原文）',
                 techOrMagic: '力量/生态体系（原文）',
                 historyNotes: ['历史要点1（原文）'],
-                bookEntities: [{ name: '势力或角色的名号（原文名）', kind: 'faction|character|location（可省）', parent: '书中明述的上级势力/所属势力（原文名，可省；未明述不填）' }],   // K37 书名录 + 第十九棒：只收原文名，不收泛指称呼；地名（洲/山/谷等）标 location；隶属只认书中明述
+                situation: '当前世情：天下大势/各方态势一句（原文措辞 ≤80字；原文无全局局势则省）',
+                bookEntities: [{ name: '势力/角色/地名的名号（原文名）', kind: 'faction|character|location（可省）', parent: '书中明述的上级势力/所属势力（原文名，可省；未明述不填）', race: '种族标签（仅书中明述该名号的种族归属时填，如 人族/妖族；种族名号本身不算势力，不要给种族标 faction）', attrs: { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5, 依据: '原文原句 ≤24字' } }],   // K37 书名录 + 第十九棒：只收原文名，不收泛指称呼；地名（洲/山/谷等）标 location；隶属只认书中明述；leg20：attrs 只在原文明述实力/地位时输出且必带 依据（引擎核对原文，查不到即弃），种族做标签不算势力
                 tension: { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' },
                 env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.5, 张力推手: 0.5 },
             },
@@ -51,13 +55,40 @@ export function buildAbstractPrompt(sourceText) {
     ].join('\n');
 }
 
+// leg20：bookEntities 项可选属性净化——四维数值钳制 [0,1]；非默认属性必须有原文依据短句
+//（依据键 依据/evidence）；形状合法才落账，出处校验在书级（此层无源文本）。
+function sanitizeEntityAttrs(raw, errors, name) {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw !== 'object' || Array.isArray(raw)) {
+        errors.push(`bookEntities 项「${name}」attrs 非对象（已弃）`);
+        return null;
+    }
+    const attrs = {};
+    for (const k of INBORN_ATTR_KEYS) {
+        const v = raw[k];
+        if (v === undefined) continue;
+        if (typeof v === 'number' && Number.isFinite(v)) attrs[k] = Math.min(1, Math.max(0, v));
+        else errors.push(`bookEntities 项「${name}」attrs.${k} 非有限数（已弃该键）`);
+    }
+    const evidence = String(raw.依据 ?? raw.evidence ?? '').trim();
+    if (!Object.keys(attrs).length) {
+        if (evidence) errors.push(`bookEntities 项「${name}」attrs 无合法数值（已弃）`);
+        return null;
+    }
+    if (!evidence) {
+        errors.push(`bookEntities 项「${name}」attrs 缺原文依据（已弃属性，落引擎兜底）`);
+        return null;
+    }
+    return { attrs, evidence };
+}
+
 // 净化：形状合法为止（逐项取好弃坏，errors 记录坏项）；硬失败仅"输出非对象"。
 export function sanitizeCanon(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         return { ok: false, errors: ['抽取输出非对象（真形状净化：不可靠即拒绝）'] };
     }
     const errors = [];
-    const canon = { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], bookEntities: [] };
+    const canon = { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], situation: '', bookEntities: [] };
 
     if (Array.isArray(raw.powerScale)) {
         for (const it of raw.powerScale) {
@@ -83,8 +114,21 @@ export function sanitizeCanon(raw) {
         for (const h of raw.historyNotes) { const s = String(h ?? '').trim(); if (s) canon.historyNotes.push(s); }
     } else if (raw.historyNotes !== undefined) errors.push('historyNotes 非数组（已弃）');
 
+    // leg20 世情路径恢复（v1 有局势抽象，v2 断于 K38 重写）：situation=当前天下大势一句（原文措辞）
+    if (raw.situation === undefined) {
+        // 省略合法（原文无全局局势可引）
+    } else if (typeof raw.situation === 'string') {
+        const sit = raw.situation.trim();
+        canon.situation = sit.slice(0, 200);
+        if (sit.length > 200) errors.push('situation 超 200 字（已截断到防御上限）');
+    } else {
+        errors.push('situation 非字符串（已置空）');
+    }
+
     // K37 书名录：只提取不创作——name 原文名去重；kind 枚举净化（非法/缺省=character）
     // 第十九棒：kind 三值（location=地名不入实体池，canon 保留备位置机制）；parent 净化（书中明述才填，字符串）
+    // leg20：可选 attrs（四维 0..1 + 原文依据）与 race（种族归属标签）——形状层只取好弃坏，
+    //        出处校验（依据/种族名 ∈ 原文）在 extractWorldSetting 书级校验（此层无源文本）。
     if (Array.isArray(raw.bookEntities)) {
         const seen = new Set();
         for (const it of raw.bookEntities) {
@@ -95,7 +139,12 @@ export function sanitizeCanon(raw) {
             seen.add(name);
             const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : 'character';
             const parent = String(it.parent ?? '').trim();
-            canon.bookEntities.push(parent ? { name, kind, parent } : { name, kind });
+            const race = String(it.race ?? '').trim();
+            const detail = sanitizeEntityAttrs(it.attrs, errors, name);
+            const item = parent ? { name, kind, parent } : { name, kind };
+            if (race) item.race = race;
+            if (detail) { item.attrs = detail.attrs; item.evidence = detail.evidence; }
+            canon.bookEntities.push(item);
         }
     } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
 
@@ -137,7 +186,7 @@ export function assembleSetting({ canon, tension, env, legacyTension, fingerprin
     };
 }
 
-const EMPTY_CANON = () => ({ powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], bookEntities: [] });
+const EMPTY_CANON = () => ({ powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], situation: '', bookEntities: [] });
 
 // 单发小包装：prompt → 调用 → JSON 解析 → 净化；失败返回 {callError}
 async function callOnce(extract, text) {
@@ -193,6 +242,41 @@ function mergeCleaned(a, b) {
     return { canon: { ...a.canon, bookEntities }, tension: a.tension, env: a.env };
 }
 
+/**
+ * leg20：书名录属性/种族出处校验（只提取不创作同口径）：
+ *   attrs 必带 依据 且依据逐字 ∈ 源文本（不符则弃 attrs+evidence，实体名号保留）；
+ *   race 必须 ∈ 源文本（不符则弃标签）。
+ * 返回 {bookEntities, warnings}；warnings 计入 errors（UI 状态条可见）。
+ */
+export function validateRosterDetails(bookEntities, src) {
+    let attrsDropped = 0;
+    let raceDropped = 0;
+    const out = bookEntities.map((b) => {
+        const item = { ...b };
+        if (item.attrs) {
+            const ev = item.evidence || '';
+            if (!ev || !src.includes(ev)) {
+                attrsDropped += 1;
+                delete item.attrs;
+                delete item.evidence;
+            }
+        }
+        if (item.race) {
+            if (src.includes(item.race)) {
+                // 种族名在原文 → 保留标签
+            } else {
+                raceDropped += 1;
+                delete item.race;
+            }
+        }
+        return item;
+    });
+    const warnings = [];
+    if (attrsDropped) warnings.push(`书名录属性出处校验：${attrsDropped} 个名号的属性无原文依据（已弃，落引擎兜底）`);
+    if (raceDropped) warnings.push(`书名录种族出处校验：${raceDropped} 个种族标签未在原文出现（已弃）`);
+    return { bookEntities: out, warnings };
+}
+
 async function tryRosterChunk(extract, text, depth, probeState) {
     const r = await callOnce(extract, text);
     if (!r.callError) return { cleaned: r.cleaned };
@@ -245,6 +329,10 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         let r = await callOnce(extract, src);
         if (r.callError) r = await callOnce(extract, src);
         if (r.callError) return { ok: false, errors: [`抽取失败（已重试一次）：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`] };
+        // leg20：小书路径同过书级属性/种族出处校验（名号校验口径一致：只提取不创作）
+        const detail = validateRosterDetails(r.cleaned.canon.bookEntities, src);
+        errors.push(...detail.warnings);
+        r.cleaned.canon.bookEntities = detail.bookEntities;
         const setting = assembleSetting({ canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp });
         if (cache) cache.set(fp, { canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env }, stamp);
         return { ok: true, cached: false, fingerprint: fp, setting, errors };
@@ -292,7 +380,11 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         errors.push(`书名录全书级出处校验：${before - finalNames.length} 个名号原文未出现（疑似编造，已弃）`);
     }
 
-    const canon = { ...canonBase.canon, bookEntities: finalNames };
+    // leg20：属性/种族出处校验（依据/种族名 ∈ 原文本）
+    const detail = validateRosterDetails(finalNames, src);
+    errors.push(...detail.warnings);
+
+    const canon = { ...canonBase.canon, bookEntities: detail.bookEntities };
     if (canonR.callError && okChunks === 0 && !finalNames.length) {
         return { ok: false, errors: ['设定与书名录抽取全部失败（世界未动，可重试）'] };
     }
@@ -352,13 +444,16 @@ export function seedBookEntities(ssot) {
         if (byName.has(b.name)) return null;    // 已有（含 retired）不重建；dead 不回魂
         let n = seeded + 1;
         while ((ssot.entities || []).some((e) => e.id === `e_bk_${n}`)) n += 1;   // K45：id 防冲突（重 seed/force 场景既有 e_bk_N）
+        const entKind = b.kind === 'faction' ? 'faction' : 'character';
         const ent = {
             id: `e_bk_${n}`,
-            kind: b.kind === 'faction' ? 'faction' : 'character',
+            kind: entKind,
             name: b.name,
             location: home,
-            attrs: buildSeedAttrs(b.kind === 'faction' ? 'faction' : 'character'),
+            // leg20：抽象带出的四维属性合并（缺键落 kind 兜底）；race 种族标签随实体入账
+            attrs: { ...buildSeedAttrs(entKind), ...(b.attrs || {}) },
         };
+        if (b.race) ent.race = b.race;
         (ssot.entities = ssot.entities || []).push(ent);
         byName.set(b.name, ent);
         seeded += 1;

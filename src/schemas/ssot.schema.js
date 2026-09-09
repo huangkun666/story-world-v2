@@ -49,6 +49,7 @@ export const ssotSchema = {
                                         society: { kind: 'string' },
                                         techOrMagic: { kind: 'string' },
                                         historyNotes: { kind: 'array', items: { kind: 'string' } },
+                                        situation: { kind: 'string' },   // leg20 世情路径：当前天下大势一句（原文措辞；可选=旧世界零扰动）
                                         bookEntities: {   // K37 书名录（生通道①：书内名号实体，可选=旧世界零扰动）；第十九棒：kind 增 location（地名不入池）+ parent（书中明述的上级/所属，从属方单存）
                                             kind: 'array',
                                             items: {
@@ -59,6 +60,9 @@ export const ssotSchema = {
                                                     name: { kind: 'string', minLength: 1 },
                                                     kind: { kind: 'string', enum: ['faction', 'character', 'location'] },
                                                     parent: { kind: 'string', minLength: 1 },
+                                                    race: { kind: 'string', minLength: 1 },   // leg20：种族归属标签（书级出处校验后保留；可选）
+                                                    attrs: { kind: 'numRecord' },            // leg20：四维属性（净化钳制 [0,1]；可选）
+                                                    evidence: { kind: 'string', minLength: 1 },   // leg20：属性原文依据短句（随 attrs 保留；可选）
                                                 },
                                             },
                                         },
@@ -102,6 +106,7 @@ export const ssotSchema = {
                     name: { kind: 'string', minLength: 1 },
                     location: { kind: 'string', minLength: 1 },   // 驻点必须 ∈ context.positions（引擎校验 §3.2）
                     attrs: { kind: 'numRecord' },                 // 硬实力/职权/人脉/情报（分量公式后续）
+                    race: { kind: 'string', minLength: 1 },   // leg20：种族标签（抽象带入；可选=旧世界零扰动）
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
                     hurtWindow: { kind: 'array', minItems: 2, maxItems: 2, items: { kind: 'number' } },   // K15：近 2 tick 负向 δ 窗口 [本 tick, 上一 tick]（三态判据用；惰性写——全 0 删字段）
                     status: { kind: 'string', enum: ['active', 'retired', 'dead'] },   // K37/实体治理 §3.7 状态契约（可选=缺省 active；旧世界零扰动）；dead=终局不复归；retired=可复归

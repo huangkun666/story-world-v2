@@ -106,9 +106,13 @@ export function renderDigestHtml(world) {
     const active = (world.agendas || []).filter((a) => !a.closed);
     const hidden = active.filter((a) => a.visibility === 'concealed').length;
 
-    const main = pol
-        ? `${escapeHtml(pol)}${dir ? `，${escapeHtml(dir)}` : '，两下僵持'} · 强度${fmtPct(inten)}`
-        : '大势未聚，各方各走各的路';
+    // leg20 世情路径恢复：抽象书级 situation 为时局句主句（原文措辞），拼装句降为无世情时的回退
+    const sit = world.context?.setting?.frozen?.canon?.situation;
+    const main = sit
+        ? `${escapeHtml(sit)}${dir ? `，方向：${escapeHtml(dir)}` : ''} · 强度${fmtPct(inten)}`
+        : pol
+            ? `${escapeHtml(pol)}${dir ? `，${escapeHtml(dir)}` : '，两下僵持'} · 强度${fmtPct(inten)}`
+            : '大势未聚，各方各走各的路';
     const sub = dangerList.length || active.length
         ? `${dangerList.length ? escapeHtml(dangerList.join('、')) + '。' : ''}各方正谋划 ${active.length} 件事${hidden ? `，其中 ${hidden} 件在暗处` : ''}。`
         : '眼下没有在办的谋划，也没有越界的处境。';
@@ -137,7 +141,9 @@ export function renderInfoBandHtml(world) {
     // 张力行 = 结构性张力三件套独立成行（不再顶「大势」之名——用户 2026-09-09 指认名实错位）
     const dangerKinds = ENV_KEYS.filter((k) => envBand(k, env[k] ?? 0.5).state === 'danger').map((k) => BANDS[k].kind);
     const intWord = t.intensity == null ? '' : t.intensity < 0.4 ? '低烈度' : t.intensity < 0.7 ? '中烈度' : '高烈度';
+    const sit = world.context?.setting?.frozen?.canon?.situation;   // leg20：世情句领大势行（原文措辞）
     const trend = [
+        sit ? `${escapeHtml(sit)}。` : '',
         t.polarity ? `${escapeHtml(t.polarity)}` : '大势未聚（无主张力）',
         t.direction ? `，方向：${escapeHtml(t.direction)}` : '',
         intWord ? `（${intWord} ${fmtPct(t.intensity)}）` : '',

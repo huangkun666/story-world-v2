@@ -202,3 +202,77 @@ test('K31 落账形状过 K24 schema：applySettingToSsot 后世界全量合法�
     assert.equal(checked2.ok, true, checked2.errors.join('; '));
     assert.equal(emptyDoc.context.setting.dynamic.tension.polarity, '未聚'); // 引擎状态词兜底（非模型创作）
 });
+
+test('leg20 世情路径：situation 净化与落账（原文措辞；非法置空）', async () => {
+    const r = await extractWorldSetting({
+        sourceText: BOOK,
+        extract: fakeExtract({ ...FULL_RAW, situation: '宗门压朝廷，煞祸渐起' }),
+    });
+    assert.equal(r.setting.frozen.canon.situation, '宗门压朝廷，煞祸渐起');
+    const bad = sanitizeCanon({ situation: 42 });
+    assert.equal(bad.canon.situation, '');
+    assert.ok(bad.errors.some((e) => /situation/.test(e)));
+    const none = sanitizeCanon({});
+    assert.equal(none.canon.situation, '', '缺省=空串合法');
+});
+
+test('leg20 属性出处校验：依据不在原文 → 属性弃+警告；依据在原文 → attrs+evidence 落账', async () => {
+    const rawBook = '万法阁：灵脉霸主，掌大荒灵脉。白小娥：炼气三层。';
+    const withAttrs = {
+        ...FULL_RAW,
+        bookEntities: [
+            { name: '万法阁', kind: 'faction', attrs: { hardPower: 0.9, office: 0.8, 依据: '灵脉霸主' } },
+            { name: '白小娥', kind: 'character', attrs: { hardPower: 0.3, 依据: '无此书证' } },
+            { name: '无据客', kind: 'character', attrs: { intel: 0.6 } },
+        ],
+    };
+    const r = await extractWorldSetting({ sourceText: rawBook, extract: fakeExtract(withAttrs) });
+    assert.equal(r.ok, true);
+    const es = r.setting.frozen.canon.bookEntities;
+    const wf = es.find((b) => b.name === '万法阁');
+    assert.deepEqual(wf.attrs, { hardPower: 0.9, office: 0.8 });
+    assert.equal(wf.evidence, '灵脉霸主');
+    const xie = es.find((b) => b.name === '白小娥');
+    assert.equal(xie.attrs, undefined, '依据不在原文 → 属性弃，名号保留');
+    assert.equal(xie.evidence, undefined);
+    const noEv = es.find((b) => b.name === '无据客');
+    assert.equal(noEv.attrs, undefined, '无依据 → 属性弃（净化层）');
+    assert.ok(r.errors.some((e) => /属性出处校验/.test(e)));
+});
+
+test('leg20 种族标签出处校验 + attrs 净化形状（钳制/非对象/缺依据）', async () => {
+    // 出处（书级）：种族名必须在原文出现；种族名号不被强制清出（提示词约束为主，引擎只守诚实底线）
+    const rawBook = '妖族占据北荒。万法阁是人族宗门。';
+    const r = await extractWorldSetting({
+        sourceText: rawBook,
+        extract: fakeExtract({
+            ...FULL_RAW,
+            bookEntities: [
+                { name: '万法阁', kind: 'faction', race: '人族', attrs: { hardPower: 0.7, 依据: '人族宗门' } },
+                { name: '北荒妖庭', kind: 'faction', race: '不存在之族' },
+            ],
+        }),
+    });
+    const es = r.setting.frozen.canon.bookEntities;
+    assert.equal(es.find((b) => b.name === '万法阁').race, '人族');
+    assert.equal(es.find((b) => b.name === '北荒妖庭').race, undefined, '种族名不在原文 → 标签弃');
+    assert.ok(r.errors.some((e) => /种族出处校验/.test(e)));
+
+    // 形状：非法 attrs 弃好取坏
+    const c = sanitizeCanon({
+        bookEntities: [
+            { name: '甲', kind: 'faction', attrs: '高' },
+            { name: '乙', kind: 'faction', attrs: { hardPower: 5, intel: 0.3, 依据: '原文' } },
+            { name: '丙', kind: 'faction', attrs: { hardPower: 0.5, 依据: '原文' }, race: '人族' },
+        ],
+    });
+    assert.equal(c.canon.bookEntities.find((b) => b.name === '甲').attrs, undefined, 'attrs 非对象 → 弃');
+    const yi = c.canon.bookEntities.find((b) => b.name === '乙');
+    assert.equal(yi.attrs.hardPower, 1, '超界钳制到 1');
+    assert.equal(yi.attrs.intel, 0.3);
+    assert.equal(yi.attrs.office, undefined, '未提议键不进 attrs（seed 兜底）');
+    assert.equal(yi.evidence, '原文');
+    const bing = c.canon.bookEntities.find((b) => b.name === '丙');
+    assert.deepEqual(bing.attrs, { hardPower: 0.5 });
+    assert.equal(bing.race, '人族');
+});
