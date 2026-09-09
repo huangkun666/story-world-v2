@@ -5,8 +5,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAIN_PROMPT, MAIN_PROMPT_V, OUTPUT_TEMPLATE, assembleMainPrompt } from '../src/prompts.js';
 
-test('契约锁：主调用模板版本与新组语义显式化（v2-agenda-t1-3：K38 补差包 attrs/dialogueBook）', () => {
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-3');
+test('契约锁：主调用模板版本与新组语义显式化（v2-agenda-t1-4：K45 parent 从属 + 席位上限废除）', () => {
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-4');
+    // K45：newEntities parent 形态纪律在字段说明
+    assert.ok(MAIN_PROMPT.includes('parent=所属势力名（可省'), 'K45 parent 说明在模板');
+    assert.ok(!MAIN_PROMPT.includes('席位上限全归引擎'), '席位上限措辞已废（K45）');
     // 铁律 8：ripples 只收实体 id，事件引用走 source.type=ripple + ref
     assert.ok(MAIN_PROMPT.includes('newEvents[].ripples 只收被波及的**实体 id**'));
     assert.ok(MAIN_PROMPT.includes('绝对不是事件引用'));

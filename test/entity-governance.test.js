@@ -1,12 +1,13 @@
 // story-world-v2/test/entity-governance.test.js
 // K37（细案 §3.7 → A-10..A-12）：实体治理——生三通道（书名录 seed / newEntities 带源 / dialogueFact 依据册）、
-// 灭=模型提议+引擎复核（崩≠灭、dead 终局、玩家不可灭）、背景化 GC（条件四则/扫描周期/超席位强制）+ 自动复归、
+// 灭=模型提议+引擎复核（崩≠灭、dead 终局、玩家不可灭）、背景化 GC（条件四则/扫描周期）+ 自动复归、
 // 三点过滤断言（pack 演化上下文 / gate 点名列拆 / 门控静默面）。数字组全部提案态（铁律 2，随 K38 报批）。
+// K45（第十九棒）：超席位强制已废除（全量棋盘细案 C3）——对应断言改为"无超席强制"新语义（见 spawn-cap.test）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     settleTick, ENTITY_BIRTH_PER_TICK, ENTITY_IDLE_RETIRE_TICKS,
-    RETIRE_WEIGHT_FLOOR, ENTITY_GC_SCAN_TICKS, POOL_CAP,
+    RETIRE_WEIGHT_FLOOR, ENTITY_GC_SCAN_TICKS,
 } from '../src/settle.js';
 import { checkWorldStep } from '../src/check-step.js';
 import { gateWorldStep } from '../src/gate.js';
@@ -20,7 +21,6 @@ assert.equal(ENTITY_BIRTH_PER_TICK, 1, '单轮新生 ≤1（提案）');
 assert.equal(ENTITY_IDLE_RETIRE_TICKS, 20, '空闲 20 轮（提案）');
 assert.equal(RETIRE_WEIGHT_FLOOR, 0.05, '影响力 <0.05（提案）');
 assert.equal(ENTITY_GC_SCAN_TICKS, 20, '扫描 20 轮（提案）');
-assert.equal(POOL_CAP, 32, '席位 32（提案）');
 
 function baseWorld(extra = {}) {
     return {
@@ -180,16 +180,15 @@ test('A-10 生·单轮 ≤1：第二条入局被拒 + 警告；世界其余照�
     assert.ok(r2.stage.warnings.some((x) => x.includes('入局限额')), `警告：${r2.stage.warnings.join('; ')}`);
 });
 
-test('A-10 生·席位 ≤32：池满拒 + 警告', () => {
+test('A-10 生·无席位上限（K45）：超 32 实体世界提议照常入账（不再拒）', () => {
     const entities = [];
-    for (let i = 0; i < POOL_CAP; i += 1) entities.push({ id: `e_f${i}`, kind: 'character', name: `客${i}`, location: '临渊城', attrs: {} });
+    for (let i = 0; i < 33; i += 1) entities.push({ id: `e_f${i}`, kind: 'character', name: `客${i}`, location: '临渊城', attrs: {} });
     const w = baseWorld({ entities });
     w.weights = Object.fromEntries(entities.map((e) => [e.id, 0.6]));
     w.events = [{ id: 'ev_a', title: '甲事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }];
     const r = settleTick({ ssot: w, step: step({ newEntities: [{ name: '白小娥', location: '大营', entity: 'e_f0', source: { type: 'event', ref: 'ev_a' } }] }) });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    assert.equal(born(r.ssot).length, 0, '池满不落');
-    assert.ok(r.stage.warnings.some((x) => x.includes('席位已满')));
+    assert.equal(born(r.ssot).length, 1, '超 32 仍入账（席位上限已废·K45）');
 });
 
 test('A-10 生·静默方提议被 gate 滤除（newEntities=主动作，双面无痕）', () => {
@@ -396,21 +395,17 @@ test('A-12 三点过滤：pack 演化上下文剔除 retired/dead；gate 静默�
     // render 面（玩家可见）已在 renderEntitiesHtml 状态徽覆盖（渲染层断言见 render.test K34 方向）
 });
 
-test('A-12 超席位强制：active > POOL_CAP → 按活力低者先退 retired（跳过有在飞盘算者）', () => {
+test('A-12 K45：无超席强制——active 远超 32 不被强制退休（资格=在册，镜头管进出）', () => {
     const entities = [];
-    for (let i = 0; i < POOL_CAP + 1; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
         entities.push({ id: `e_f${i}`, kind: 'character', name: `客${i}`, location: '临渊城', attrs: {}, lastActiveTick: 0 });
     }
     const w = baseWorld({ entities });
-    w.weights = Object.fromEntries(entities.map((e) => [e.id, 0.1 + (Number(e.id.slice(3)) / 100)]));   // e_f0 最低
-    w.agendas = [{ id: 'a_keep', owner: 'e_f32', goal: '守城', stage: '布防', visibility: 'known', maxSteps: 3, progress: 1, closed: false, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }];
-    // tick 非扫描轮（t=1）：强制退仍执行（守卫在任何 tick）
+    w.weights = Object.fromEntries(entities.map((e) => [e.id, 0.1]));
     const r = settleTick({ ssot: w, step: step() });
-    assert.ok(r.ok, r.stage.warnings.join('; '));
+    assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const active = r.ssot.entities.filter((e) => !e.status || e.status === 'active');
-    assert.equal(active.length, POOL_CAP, `强制退至 ${POOL_CAP}`);
-    assert.equal(active.find((e) => e.id === 'e_f0'), undefined, '最低活力先退');
-    assert.ok(r.ssot.entities.find((e) => e.id === 'e_f32').status !== 'retired', '有在飞盘算者跳过');
-    assert.ok(r.stage.chronicle.some((c) => c.text.includes('淡出视野（席位满员）')));
+    assert.equal(active.length, 40, '40 个 active 全部保留（无强制退）');
+    assert.ok(!r.stage.chronicle.some((c) => c.text.includes('席位满员')));
     assert.equal(validate(r.ssot, ssotSchema).ok, true);
 });

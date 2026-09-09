@@ -33,7 +33,7 @@ export const ENTITY_BIRTH_PER_TICK = 1;      // 提案：单轮新生 ≤1
 export const ENTITY_IDLE_RETIRE_TICKS = 20;  // 提案：连续未活跃轮数（背景化条件）
 export const RETIRE_WEIGHT_FLOOR = 0.05;     // 提案：影响力下限（背景化条件）
 export const ENTITY_GC_SCAN_TICKS = 20;      // 提案：背景化扫描周期
-export const POOL_CAP = 32;                  // 提案：席位上限（active 计数）
+// （POOL_CAP 席位上限已于第十九棒 K45 废除——full-roster-lens-spec C3：资格=在册，镜头管进出；用户 2026-09-09 拍板「不设上限」）
 
 // ---- K38 补差包（敲定稿 D 条）：新实体入局数值——模型提议可选 attrs（[0,1] 钳制）；缺省按 kind 兜底（提案态，随 K38 报批）----
 export const ENTITY_ATTR_DEFAULT = { character: 0.15, faction: 0.25 };
@@ -578,11 +578,6 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
             warnings.push(`裁定: 入局限额（每 tick 新生 ≤${ENTITY_BIRTH_PER_TICK}）：「${ne.name}」被拒`);
             continue;
         }
-        const activeNow = world.entities.filter((e) => !e.status || e.status === 'active').length + born.length;
-        if (activeNow >= POOL_CAP) {
-            warnings.push(`裁定: 席位已满（席位 ≤${POOL_CAP}）：「${ne.name}」被拒`);
-            continue;
-        }
         if (world.entities.some((e) => e.name === ne.name)) continue;   // 重名拒（check 已查，防御）
         const kind = ne.kind || 'character';
         const proposed = ne.attrs && typeof ne.attrs === 'object' ? ne.attrs : {};
@@ -600,6 +595,13 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
             attrs,
             lastActiveTick: tick,
         };
+        // K45/C7（用户 2026-09-09 拍板：提示词约束为主）：newEntities 可带 parent=所属势力名——目标在册且为势力且未灭才落；否则弃关系+警告（照常入局）
+        const parent = typeof ne.parent === 'string' && ne.parent.trim() ? ne.parent.trim() : null;
+        if (parent) {
+            const target = world.entities.find((t) => t.name === parent);
+            if (target && target.kind === 'faction' && (target.status || 'active') !== 'dead') ent.parent = parent;
+            else warnings.push(`裁定: 「${ne.name}」的从属「${parent}」不在册/非势力/已灭——弃关系（照常入局）`);
+        }
         world.entities.push(ent);
         born.push(ent);
         const why = ne.source.type === 'event'
@@ -674,24 +676,12 @@ function reactivateNamed(world, events, tick, chronicle) {
 
 // K37 背景化 GC（细案 §3.7 → A-12）：扫描轮（每 ENTITY_GC_SCAN_TICKS）——条件=无在飞盘算 + 无未决事件/链引用
 // + 影响力 < RETIRE_WEIGHT_FLOOR（提案）+ 连续 ENTITY_IDLE_RETIRE_TICKS 轮未活跃 → status=retired
-// （名录/指针全保留；编年「淡出」一笔，kind state——处境驱动）；**超 POOL_CAP 强制**（任何 tick 检查：
-// 按活力低者先退，跳过有在飞盘算者——与 GC 条件同约束）；依据册随退休清理（其名消账）
+// （名录/指针全保留；编年「淡出」一笔，kind state——处境驱动）；依据册随退休清理（其名消账）。
+// K45（full-roster-lens-spec C3 拍板）：**超席强制退已废除**（资格=在册，镜头管进出——用户 2026-09-09 拍板）——
+// 闲置退休仍保留：长期没戏份的实体退二线（仍可在册、可被点名复归），这是"镜头进出"的引擎侧实现。
 function retireInactive(world, tick, warnings, chronicle) {
-    const activeCount = () => world.entities.filter((e) => !e.status || e.status === 'active').length;
     const canRetire = (e) => !(world.agendas || []).some((a) => a.owner === e.id && !a.closed)
         && !(world.events || []).some((ev) => !ev.closed && (ev.ripples || []).includes(e.id));
-    // 超席位强制（守卫：入局已封顶 32，此处兜历史/导入池满的世界）
-    if (activeCount() > POOL_CAP) {
-        const candidates = world.entities
-            .filter((e) => (!e.status || e.status === 'active') && canRetire(e))
-            .sort((a, b) => (world.weights[a.id] ?? 0) - (world.weights[b.id] ?? 0));
-        for (const e of candidates) {
-            if (activeCount() <= POOL_CAP) break;
-            e.status = 'retired';
-            if (world.meta?.dialogueBook) delete world.meta.dialogueBook[e.name];
-            chronicle.push({ id: `ch_${tick}_ret_${e.id}`, tick, text: `「${e.name}」淡出视野（席位满员）`, kind: 'state' });
-        }
-    }
     if (tick % ENTITY_GC_SCAN_TICKS !== 0) return;
     for (const e of world.entities) {
         if (e.status && e.status !== 'active') continue;

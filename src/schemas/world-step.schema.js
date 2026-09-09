@@ -45,7 +45,7 @@ export const worldStepSchema = {
                 },
             },
         },
-        newEntities: {   // K37/实体治理（§3.7 生通道②）：模型提议新实体入局——带源三型（book/event/dialogueFact）；出生/席位/上限全归引擎
+        newEntities: {   // K37/实体治理（§3.7 生通道②）：模型提议新实体入局——带源三型（book/event/dialogueFact）；出生/单轮上限/从属校验全归引擎（K45：席位上限已废）
             kind: 'array',
             items: {
                 kind: 'object',
@@ -56,6 +56,7 @@ export const worldStepSchema = {
                     kind: { kind: 'string', enum: ['faction', 'character'] },
                     location: { kind: 'string', minLength: 1 },
                     entity: { kind: 'string', minLength: 1 },   // 提议者实体 id（静默判定用；dialogueFact 源可填观察者）
+                    parent: { kind: 'string', minLength: 1 },   // K45/C7：所属势力名（可省——书/对话中已知的门派或势力；引擎校验目标在册且为势力，不满足弃关系）
                     attrs: { kind: 'numRecord' },   // K38 补差包 D 条：入局可选属性提议（引擎 [0,1] 钳制；缺省按 kind 兜底）
                     source: {
                         kind: 'object',

@@ -350,8 +350,10 @@ export function seedBookEntities(ssot) {
     let skippedLocation = 0;
     const pushEntity = (b) => {
         if (byName.has(b.name)) return null;    // 已有（含 retired）不重建；dead 不回魂
+        let n = seeded + 1;
+        while ((ssot.entities || []).some((e) => e.id === `e_bk_${n}`)) n += 1;   // K45：id 防冲突（重 seed/force 场景既有 e_bk_N）
         const ent = {
-            id: `e_bk_${seeded + 1}`,
+            id: `e_bk_${n}`,
             kind: b.kind === 'faction' ? 'faction' : 'character',
             name: b.name,
             location: home,

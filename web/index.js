@@ -510,7 +510,7 @@ export async function loadWorld() {
         return;
     }
     const hot = await ensureChronicleRotated(world);
-    seedBookEntities(hot);   // K37 生通道①：书名录幂等入账（书内名号实体；席位按书序优先，POOL_CAP 提案）
+    seedBookEntities(hot);   // K37 生通道① + 第十九棒 K43：书名录幂等入账（全量棋盘：无席位截断、子势力折叠、权重预填）
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
 }
