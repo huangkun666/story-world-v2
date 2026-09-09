@@ -30,7 +30,7 @@ function summarize(w, file) {
         fingerprint: s?.frozen?.fingerprint,
         polarity: t?.polarity,
         direction: t?.direction,
-        canon: c ? { powerScale: c.powerScale?.length, rules: c.rules?.length, historyNotes: c.historyNotes?.length, bookEntities: c.bookEntities?.length, society: String(c.society ?? '').slice(0, 30) } : null,
+        canon: c ? { powerScale: c.powerScale?.length, rules: c.rules?.length, historyNotes: c.historyNotes?.length, bookEntities: c.bookEntities?.length, bookKinds: (() => { const by = {}; for (const b of c.bookEntities || []) by[b.kind] = (by[b.kind] || 0) + 1; return by; })(), society: String(c.society ?? '').slice(0, 30) } : null,
         entities: w.entities?.length,
         names: (w.entities || []).slice(0, 12).map((e) => `${e.name}[${e.kind}]`).join(', '),
         simLog: w.meta?.simLog?.length,
