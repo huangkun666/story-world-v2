@@ -13,7 +13,7 @@ import {
     hotAccountShape, loadHotAccount, rotateChronicle,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
 } from '../src/storage.js';
-import { seedBookEntities } from '../src/abstract.js';
+import { seedBookEntities, extractWorldSetting, applySettingToSsot } from '../src/abstract.js';
 import { createIdbVolumeStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
@@ -364,7 +364,7 @@ export async function loadWorld() {
         // 首开空态：仍渲染六页签空壳 ——「导入恢复」不依赖世界存在（2026-09-08 冒烟发现：
         // 导入按钮在 renderSettingsHtml 内，无世界=设置页不渲染=首开导入死结；K38 前无创建链）
         refreshWorld(EMPTY_WORLD, { oldVolumes: [] });
-        setStatus('尚无世界 · 设置页「⬆ 导入恢复」可载入备份（「开始新世界」接线随 K38）');
+        setStatus('尚无世界 · 「✨ 开始新世界」（设定源就绪后可初始化）或「⬆ 导入恢复」');
         return;
     }
     const hot = await ensureChronicleRotated(world);
@@ -472,6 +472,110 @@ if (typeof window !== 'undefined') {
             }
         });
         input.click();
+    };
+
+    // ---------- K38：三按钮接线（敲定稿 §3；铁律 9=编排层） ----------
+    // source-pick：设定源选择——worldinfo=ST 世界信息合订 / paste=手动粘贴（持久化 extensionSettings.worldBook）
+    bus['source-pick'] = (payload) => {
+        const src = payload?.source;
+        if (src === 'worldinfo') {
+            try {
+                const ctx = getCtx();
+                const wi = ctx?.worldInfo;
+                if (wi && Array.isArray(wi.entries) && wi.entries.length) {
+                    const text = wi.entries.map((e) => `【${e.uid || e.key || ''}】${e.content || ''}`).join('\n');
+                    writeSetting('worldBook', text);
+                    setStatus(`已取世界信息合订（${wi.entries.length} 条）为设定源——「重新抽取 / 开始新世界」用它`);
+                } else {
+                    setStatus('⚠ 当前没有可读的世界信息（为空或接口不可达）——用「手动粘贴文本」');
+                }
+            } catch (_) {
+                setStatus('⚠ 世界信息读取失败——用「手动粘贴文本」');
+            }
+            return;
+        }
+        if (src === 'paste') {
+            const got = window.prompt('粘贴世界书设定全文（将存为设定源，供初始化/重抽使用）：');
+            if (!got || !got.trim()) return;
+            writeSetting('worldBook', got);
+            setStatus(`已存设定源（${got.length} 字）——「✨ 开始新世界 / ↻ 重新抽取设定」用它`);
+            return;
+        }
+        setStatus('未知换源目标');
+    };
+
+    // init-world：新世界初始化——设定源文本 → 小调用抽取（抽象管线）→ 种子世界（书名录入席+position 集）
+    bus['init-world'] = async () => {
+        try {
+            const settings = modelSettings() || {};
+            const resolved = resolveBrowserTransport(settings);
+            if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）——设定期望初始化需要它'); return; }
+            let text = settings.worldBook;
+            if (!text || !text.trim()) {
+                const got = window.prompt('输入初始化内容：\n第一行=世界名\n第二行=位置集（逗号分隔，如 江州,边关,商路）\n第三行起=世界书设定全文');
+                if (!got || !got.trim()) return;
+                text = got;
+            }
+            const lines = text.split('\n');
+            const name = (lines[0] || '').trim() || '未名世界';
+            const posLine = lines[1] || '';
+            const positions = posLine.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+            if (!positions.length) positions.push('中央');
+            const bookText = lines.slice(2).join('\n').trim() || text;
+            setStatus('正在抽取世界设定…');
+            const r = await extractWorldSetting({
+                sourceText: bookText,
+                extract: async (p) => (await resolved.transport(p)).text,
+                force: false,
+            });
+            if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}`); return; }
+            const seed = {
+                version: 1,
+                context: { world: name, tension: 0.5, positions, setting: r.setting },
+                entities: [], weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
+                meta: { tick: 0, simLog: [] },
+            };
+            seedBookEntities(seed);
+            const had = Boolean(readHotMeta());
+            writeHotMeta(hotAccountShape(seed));
+            setStatus(`✨ 新世界「${name}」已立（${(seed.entities || []).length} 实体入席 · ${positions.join('/')}）${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
+            await loadWorld();
+        } catch (err) {
+            setStatus(`⚠ 初始化失败：${err?.message || err}`);
+        }
+    };
+
+    // force-abstract：强制重抽设定（忽略缓存；现有世界原地替换 context.setting + 书名录幂等）
+    bus['force-abstract'] = async () => {
+        try {
+            const meta = readHotMeta();
+            const world = meta ? loadHotAccount(meta) : null;
+            if (!world) { setStatus('⚠ 还没有世界——先「✨ 开始新世界」'); return; }
+            const settings = modelSettings() || {};
+            const resolved = resolveBrowserTransport(settings);
+            if (!resolved) { setStatus('⚠ 模型通道未配置（重抽需要抽取调用）'); return; }
+            let sourceText = settings.worldBook;
+            if (!sourceText || !sourceText.trim()) {
+                const got = window.prompt('粘贴世界书设定全文（将与当前设定整体替换）：');
+                if (!got || !got.trim()) return;
+                sourceText = got;
+            }
+            setStatus('正在强制重抽设定…');
+            const r = await extractWorldSetting({
+                sourceText,
+                extract: async (p) => (await resolved.transport(p)).text,
+                force: true,
+            });
+            if (!r.ok) { setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}`); return; }
+            const next = applySettingToSsot(world, r.setting);
+            seedBookEntities(next);
+            const hot = await ensureChronicleRotated(next);
+            LISTED_VOLUMES = await listOldVolumes();
+            refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
+            setStatus('↻ 设定已重抽（frozen 五件套 + 书名录生效；世界账本原样保留）');
+        } catch (err) {
+            setStatus(`⚠ 重抽失败：${err?.message || err}`);
+        }
     };
 }
 

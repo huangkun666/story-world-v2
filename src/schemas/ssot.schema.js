@@ -251,6 +251,8 @@ export const ssotSchema = {
                             chronicle: { kind: 'number', int: true, min: 0 },
                             calls: { kind: 'number', int: true, min: 0 },
                             warnings: { kind: 'array', items: { kind: 'string' } },
+                            proposals: { kind: 'number', int: true, min: 0 },   // K38 观测台：本 tick 提议条数（拒签率分母；可选=旧账零扰动）
+                            rejected: { kind: 'number', int: true, min: 0 },    // K38 观测台：本 tick 拒签条数（静默滤除+裁定拒；分子）
                             silent: { kind: 'array', items: { kind: 'string' } },        // K2 门控审计：静默方
                             lifted: { kind: 'array', items: { kind: 'string' } },        // K2 门控审计：触发例外应答方
                             silentDropped: { kind: 'numRecord' },                        // K2 门控审计：id → 滤除条数

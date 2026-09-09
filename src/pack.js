@@ -3,6 +3,7 @@
 // 长跑防线细案 §2.1：预算常量（提案 4k tokens）+ 固定打包序 + 超限剪枝（切片版）。
 export const EVOLUTION_BUDGET_TOKENS = 4000; // 提案值，S7 冒烟曲线后报批
 export const TOKEN_RATIO = 3;                // 粗略估计：1 token ≈ 3 字符（中文）
+export const DIALOGUE_BOOK_TOP = 5;          // 提案：K38 补差包——依据册摘要进包条数上限（敲定稿 C 条）
 
 // 固定打包序：活跃实体简表 → 在飞盘算（含 memory）→ 未决事件 → 最近 2 tick 关闭事件 → 玩家落子事实 → 张力
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
@@ -23,6 +24,15 @@ export function buildEvolutionPack(ssot, moveFact) {
         id: e.id, title: e.title,
     }));
     const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
+    // K38 补差包（敲定稿 C 条）：对话依据册摘要进包——"谁反复被点名"模型看得见（dialogueFact 源/镜头依据；
+    // 只取前 TOP 条，计数+最近提及轮；依据册总量留在账上）
+    const db = ssot.meta?.dialogueBook;
+    const dialogueBook = db && typeof db === 'object'
+        ? Object.entries(db)
+            .map(([name, rec]) => ({ name, count: rec?.count ?? 0, lastTick: rec?.lastTick ?? 0 }))
+            .sort((a, b) => b.count - a.count || b.lastTick - a.lastTick)
+            .slice(0, DIALOGUE_BOOK_TOP)
+        : [];
     const pack = {
         world: ssot.context?.world,
         // 张力：有 setting 取演化层强度（引擎算），无则回退 context.tension 数字（细案 §3.1 兼容口径）
@@ -34,6 +44,7 @@ export function buildEvolutionPack(ssot, moveFact) {
         pendingEvents,
         recentClosedEvents: closedEvents,
         playerMove: moveFact || null,
+        dialogueBook,
     };
     const text = JSON.stringify(pack);
     return { pack, text, estTokens: Math.ceil(text.length / TOKEN_RATIO) };

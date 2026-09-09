@@ -22,7 +22,7 @@ const TEST_MAP = {
     'extract.js': ['extract.test.js'],
     'fingerprint.js': ['fingerprint.test.js'],
     'player-inject.js': ['player-inject.test.js'],
-    'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js', 'backdrop-smoke.test.js', 'entity-governance.test.js'],
+    'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js', 'backdrop-smoke.test.js', 'entity-governance.test.js', 'observatory.test.js'],
     'prompts.js': ['worldstep.test.js', 'streams.test.js', 'entity-governance.test.js'],
     'check-step.js': ['worldstep.test.js', 'birth.test.js', 'setting-guard.test.js', 'entity-governance.test.js'],
     'worldstep.js': ['worldstep.test.js'],
@@ -30,6 +30,7 @@ const TEST_MAP = {
     'entropy.js': ['entropy.test.js'],
     'settle.js': ['settle.test.js', 'golden-slice.test.js', 'gate.test.js', 'cause.test.js', 'decay.test.js', 'weight-smoke.test.js', 'birth.test.js', 'verdict.test.js', 'event-close.test.js', 'archive.test.js', 'shade.test.js', 'cancel.test.js', 'snapshot-replay.test.js', 'entropy.test.js', 'entity-governance.test.js'],
     'chain.js': ['chain.test.js'],
+    'observatory.js': ['observatory.test.js'],
     'streams.js': ['streams.test.js', 'shade.test.js'],
     'tick.js': ['streams.test.js', 'smoke.test.js', 'live-world.test.js', 'bystander-world.test.js'],
     'transport-http.js': ['transport-http.test.js'],
@@ -41,7 +42,7 @@ const TEST_MAP = {
     'abstract.js': ['abstract.test.js', 'browser-compat.test.js', 'entity-governance.test.js'],
     'player-setup.js': ['player-setup.test.js'],
     'render.js': ['render.test.js'],
-    'storage.js': ['storage.test.js'],
+    'storage.js': ['storage.test.js', 'observatory.test.js'],
     'async-tick.js': ['async-tick.test.js'],
 };
 

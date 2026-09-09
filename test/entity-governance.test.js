@@ -57,7 +57,8 @@ test('A-10 生·event 源：带源入局——落账（id/kind/location/活跃�
     assert.equal(batch[0].kind, 'character');
     assert.equal(batch[0].location, '大营');
     assert.equal(batch[0].lastActiveTick, 1, '入局=活跃（活跃记账）');
-    assert.ok(r.ssot.weights['e_1_1'] !== undefined, '分量重算覆盖新实体（attrs 空=公式兜底）');
+    assert.ok(r.ssot.weights['e_1_1'] !== undefined, '分量重算覆盖新实体（K38：入局按缺省已有值，非零）');
+    assert.ok(r.ssot.weights['e_1_1'] > 0, '入局即有分量（K38 D 条：不再哑巴）');
     const row = r.stage.chronicle.find((c) => c.text.includes('「白小娥」入局'));
     assert.ok(row, `编年入局笔：${JSON.stringify(r.stage.chronicle)}`);
     assert.equal(row.kind, 'major', '入局=大事');
@@ -111,6 +112,34 @@ test('A-10 生·dialogueFact 源：依据册命中才放行；依据册随落子
     assert.ok(r3.stage.chronicle.some((c) => c.text.includes('「船娘」入局（屡被提及，声名鹊起）')));
 });
 
+test('K38 生·新实体数值分配（敲定稿 D 条）：缺省按 kind 兜底；提议 attrs 钳制；非法值校验拒', () => {
+    const ev0 = { id: 'ev_1', title: '大营起事', source: { type: 'state' }, position: '大营', ripples: [], closed: false };
+    // ① character 缺省 0.15 四键（提案）
+    const w1 = baseWorld({ events: [ev0] });
+    const r1 = settleTick({ ssot: w1, step: step({ newEntities: [{ name: '船娘', kind: 'character', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_1' } }] }) });
+    assert.equal(r1.ok, true, r1.stage.warnings.join('; '));
+    const c = r1.ssot.entities.find((e) => e.name === '船娘');
+    assert.deepEqual(c.attrs, { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 }, 'character 缺省兜底（提案 0.15）');
+    assert.ok(r1.ssot.weights['e_1_1'] > 0, '入局即有分量');
+    // ② faction 缺省 0.25 + 提议键覆盖 + 越界钳制 [0,1]
+    const w2 = baseWorld({ events: [ev0] });
+    const r2 = settleTick({ ssot: w2, step: step({ newEntities: [{ name: '漕帮', kind: 'faction', location: '大营', entity: 'e_merchant', attrs: { hardPower: 5, intel: 0.3 }, source: { type: 'event', ref: 'ev_1' } }] }) });
+    assert.equal(r2.ok, true, r2.stage.warnings.join('; '));
+    const f = r2.ssot.entities.find((e) => e.name === '漕帮');
+    assert.equal(f.attrs.hardPower, 1, '提议超出 [0,1] → 钳制');
+    assert.equal(f.attrs.intel, 0.3, '提议合法值原样');
+    assert.equal(f.attrs.office, 0.25, '未提议键按 faction 缺省（提案 0.25）');
+    assert.ok(r2.stage.warnings.some((x) => x.includes('入局属性钳制')), '钳制留痕（审计）');
+    // ③ 非法值：字符串/NaN → schema 层拒（numRecord「期望数字」）；Infinity → 语义层拒（「有限数值」防御）
+    const w3 = baseWorld({ events: [ev0] });
+    const r3 = checkWorldStep(step({ newEntities: [{ name: '乱客', location: '大营', entity: 'e_merchant', attrs: { intel: '高' }, source: { type: 'event', ref: 'ev_1' } }] }), w3);
+    assert.ok(!r3.ok && r3.errors.some((e) => e.includes('期望数字')));
+    const r4 = checkWorldStep(step({ newEntities: [{ name: '乱客2', location: '大营', entity: 'e_merchant', attrs: { intel: NaN }, source: { type: 'event', ref: 'ev_1' } }] }), w3);
+    assert.ok(!r4.ok && r4.errors.some((e) => e.includes('期望数字')));
+    const r5 = checkWorldStep(step({ newEntities: [{ name: '乱客3', location: '大营', entity: 'e_merchant', attrs: { intel: Infinity }, source: { type: 'event', ref: 'ev_1' } }] }), w3);
+    assert.ok(!r5.ok && r5.errors.some((e) => e.includes('有限数值')), `Infinity 语义拒：${r5.errors.join('; ')}`);
+});
+
 test('A-10 生·book 源：书名录命中才放行；seed 幂等入账（书序优先、缺省 kind=character、位置集首个）', () => {
     const seed = sanitizeCanon({ bookEntities: [{ name: '城门卒' }, { name: '白小娥', kind: 'character' }, { name: '城门卒' }] });
     assert.equal(seed.ok, true);
@@ -122,6 +151,7 @@ test('A-10 生·book 源：书名录命中才放行；seed 幂等入账（书序
     assert.equal(s1.seeded, 2);
     assert.ok(w.entities.some((e) => e.name === '城门卒' && e.id === 'e_bk_1' && e.location === '临渊城'));
     assert.ok(w.entities.some((e) => e.name === '白小娥' && e.id === 'e_bk_2'));
+    assert.deepEqual(w.entities.find((e) => e.id === 'e_bk_1').attrs, { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 }, 'K38：seed 通道同样按 kind 缺省兜底（不再哑巴）');
     const s2 = seedBookEntities(w);
     assert.equal(s2.seeded, 0, '幂等：二次 seed 零新增');
     assert.equal(validate(w, ssotSchema).ok, true, 'seed 后世界过 SSOT schema');

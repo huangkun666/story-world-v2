@@ -100,7 +100,7 @@
 ## 5. 工具与命令手册
 
 - **运行位置**：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）。
-- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **325/325 全绿**（2026-09-08 第十五棒：上一基线 307/307 → K37 实体治理新增 `entity-governance.test.js` 18 则（A-10..A-12 + 契约锁 + 崩≠灭回归）；全部细节见台账 L120）。
+- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **334/334 全绿**（2026-09-09 第十七棒：上一基线 325/325 → K38 观测台新模块 + 新实体数值分配 + 冷档链验证新增 9 则）；
 - **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——**部署位**：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（第十三棒落位，台账 L96；v1 同层同法先例；web/ 改动免重复拷贝，ST 页面刷新即载）；重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
 - **演示**（`node demo/<名称>.js`，在项目根目录运行）：
   | 脚本 | 用途 |
@@ -214,6 +214,7 @@
 | `entropy.js` | 熵泵摩擦制造：环境推演器 + 越阈落状态源事件 + 恢复闭环（细案 §3.5，全部数字提案态） | `pulseEntropy(world, tick, chronicle)`——每 ENV_TICK 一步、引擎生成器 | setting.js（写通道） | 稳定（K27；K39 编年行盖 state 章） | entropy.test.js | K27 · K39 |
 | `streams.js` | 双流渲染（观棋三行 + RP 注入） | (ssot, stage, move) → 双流文本 | — | 稳定（K10 解挂：注入掩码真值=玩家观察者；无玩家全见 P-E） | streams.test.js | S6 · K10 |
 | `chain.js` | 因果链展开器（K40，链视图细案 §3.2 → A-15）：事件链上承（ripple 逐跳 / plot 盘算弧线 / state 终节点 / 里程碑聚合穿透）+ 下沿全分支树 + 三态防御，引擎层纯函数只读 | `expandChain(world, rootId)` → `{ok, root, up, down}`（节点：event/agenda/milestone/state-root/gap/leaf-note/terminal） | setting（eventBornTick 只读） | 稳定（K40） | chain.test.js | K40 |
+| `observatory.js` | 观测台纯函数（K38，敲定稿 I 条）：三读数+参考——拒签率（simLog new/old 双口径）/ 坏账率（全量引用扫描含里程碑穿透）/ 驻留（状态分布+闲置分位+摸鱼名单）/ 远期引用探针；零调用零创作只读账 | `rejectionStats(simLog)` / `scanDanglingRefs(world)` / `residencyStats(world)` / `probeStepAges(step, world)` / `summarizeObservatory(world)` | setting（eventBornTick） | 稳定（K38） | observatory.test.js + storage.test.js（冷档链） | K38 |
 | `render.js` | 渲染核心纯函数（K33/K34）：六页签 HTML 渲染 + 玩家语言词典 + 黑名单（第十三棒：ATTR_HINTS 属性释义 + 无障碍 sr 通道；K41 编年五筛 + 珠链视图渲染） | `renderAll(world, {config, oldVolumes, view})` → {board, chronicle, archive, entities, setting, settings, header}（同输入逐字节一致；引擎 id 只进 title 悬停；A-6 设定页与 frozen 逐字段一致；view.chronicleFilter=五筛视图态，缺省全选） | entropy（BANDS/ENV_KEYS 只读） | 稳定（K33 → K34 HTML 面；K41 五筛/链视图） | render.test.js | K33 · K34 · 第十三棒 · K41 |
 | `tick.js` | 完整 tick 编排 | ({transport, ssot, dialogue, extractCtx}) → 结果 | extract/pack/worldstep/settle/streams | 稳定 | streams + smoke + live + bystander | S6 |
 | `transport-http.js` | OpenAI 兼容传输（env 配置、base 归一化） | ({baseUrl, apiKey, model}) → transport(prompt → 文本) | — | 稳定（超时/max_tokens 缺口入队） | transport-http.test.js | S6 |

@@ -35,6 +35,14 @@ export const RETIRE_WEIGHT_FLOOR = 0.05;     // 提案：影响力下限（背�
 export const ENTITY_GC_SCAN_TICKS = 20;      // 提案：背景化扫描周期
 export const POOL_CAP = 32;                  // 提案：席位上限（active 计数）
 
+// ---- K38 补差包（敲定稿 D 条）：新实体入局数值——模型提议可选 attrs（[0,1] 钳制）；缺省按 kind 兜底（提案态，随 K38 报批）----
+export const ENTITY_ATTR_DEFAULT = { character: 0.15, faction: 0.25 };
+export const INBORN_ATTR_KEYS = ['hardPower', 'office', 'network', 'intel'];
+const defaultAttrs = (kind) => {
+    const v = ENTITY_ATTR_DEFAULT[kind] ?? ENTITY_ATTR_DEFAULT.character;
+    return Object.fromEntries(INBORN_ATTR_KEYS.map((k) => [k, v]));
+};
+
 const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
 
 const SOURCE_LABEL = null; // 已废弃（第十三棒：编年源头措辞改写名不写代号，见 chronicleEvents）
@@ -536,8 +544,10 @@ function chronicleEvents(world, step, tick, chronicle) {
     });
 }
 
-// ⑧ GC/度量（切片版）：simLog 记账（长跑细案 §2.5 四字段；K2 起含门控审计；K9 起含 playerAffected 影响审计）
-function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate, playerAffected = []) {
+// ⑧ GC/度量（切片版）：simLog 记账（长跑细案 §2.5 四字段；K2 起含门控审计；K9 起含 playerAffected 影响审计）。
+// K38 观测台（敲定稿 I 条）：entry 增 proposals（提议条数=拒签率分母）/ rejected（静默滤除+裁定拒=分子）——
+//   只在有值时写（旧账零扰动；观测台对缺字段走 warnings 兜底口径）。
+function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate, playerAffected = [], proposals = 0, rejected = 0) {
     world.meta.simLog = world.meta.simLog || [];
     const entry = {
         tick,
@@ -554,6 +564,8 @@ function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate
         entry.silentDropped = { ...gate.droppedCounts };
     }
     if (playerAffected.length) entry.playerAffected = [...playerAffected];
+    if (proposals > 0) entry.proposals = proposals;
+    if (rejected > 0) entry.rejected = rejected;
     world.meta.simLog.push(entry);
 }
 
@@ -572,12 +584,20 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
             continue;
         }
         if (world.entities.some((e) => e.name === ne.name)) continue;   // 重名拒（check 已查，防御）
+        const kind = ne.kind || 'character';
+        const proposed = ne.attrs && typeof ne.attrs === 'object' ? ne.attrs : {};
+        const attrs = {};
+        for (const [k, v] of Object.entries({ ...defaultAttrs(kind), ...proposed })) {
+            const clamped = clamp(v, ATTR_BOUNDS);
+            if (clamped !== v) warnings.push(`裁定: 入局属性钳制（${ne.name}.${k} ${v}→${clamped}）`);
+            attrs[k] = clamped;
+        }
         const ent = {
             id: `e_${tick}_${born.length + 1}`,
-            kind: ne.kind || 'character',
+            kind,
             name: ne.name,
             location: ne.location,
-            attrs: {},
+            attrs,
             lastActiveTick: tick,
         };
         world.entities.push(ent);
@@ -762,7 +782,12 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）
 
     const pack = buildEvolutionPack(world, moveFact || null);
-    recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected);
+    // K38 观测台：拒签率分子/分母记账（铁律 8：先有数，后说话）
+    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'stateChanges', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates']
+        .reduce((n, k) => n + (step[k]?.length ?? 0), 0);
+    const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)
+        + warnings.filter((w) => (w.startsWith('裁定:') || w.startsWith('校验拒绝:')) && !w.includes('入局属性钳制')).length;
+    recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected);
 
     return { ok: true, ssot: world, stage: { chronicle, warnings, events } };
 }

@@ -10,7 +10,8 @@
 // v2-ripples-1（第十三棒·真模型冒烟）：newEvents[].ripples 语义显式化——只收实体 id，
 //   实测模型把事件 id（ev_0/ev_2_1）填进 ripples，check-step 语义校验如实拒绝（未知实体）；
 //   修法=模板+铁律显式声明（项目纪律：模型行为类问题靠模板修，不开引擎洞）。
-export const MAIN_PROMPT_V = 'v2-agenda-t1-2';
+// v2-agenda-t1-3（K38 补差包）：newEntities 增可选 attrs（入局初始属性，引擎钳制+缺省）；pack 增 dialogueBook 依据册段说明
+export const MAIN_PROMPT_V = 'v2-agenda-t1-3';
 
 export const OUTPUT_TEMPLATE = `{
   "actions": [
@@ -29,7 +30,7 @@ export const OUTPUT_TEMPLATE = `{
     { "agendaId": "a_xie", "reason": "形势已变，北进无胜算" }
   ],
   "newEntities": [
-    { "name": "白小娥", "kind": "character", "location": "江州", "entity": "e_merchant", "source": { "type": "dialogueFact", "ref": "白小娥" } }
+    { "name": "白小娥", "kind": "character", "location": "江州", "entity": "e_merchant", "attrs": { "network": 0.2, "intel": 0.1 }, "source": { "type": "dialogueFact", "ref": "白小娥" } }
   ],
   "entityFates": [
     { "entity": "e_old", "verdict": "dead", "source": { "type": "event", "ref": "ev_3_1" }, "reason": "伏杀于道" }
@@ -55,7 +56,7 @@ export const MAIN_PROMPT = `你是世界模拟器。你的输入是世界自身�
 
 ${OUTPUT_TEMPLATE}
 
-字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；newEvents[].ripples=被波及的**实体 id 列表**（照抄输入实体；绝不填事件/盘算 id——事件引用走 source.type="ripple" + ref）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。stateChanges[].attr=属性名（hardPower/office/network/intel）；delta=数值增量；actor=谁造成的（实体 id，可省——缺省视为被作用方自身，静默方自我增强会被引擎拒绝）；cause=依据的事件/盘算 id（可省，但建议给——缺省会被记坏账前置警告）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；stage=起始阶段（可省）；visibility=明暗（known/concealed）；maxSteps=步数上限（1..8，可省，引擎钳制）；source.type=来源（event/parent/state）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（来自输入位置集）；entity=提议者实体 id（可省——dialogueFact 源可省略）；source.type=来源（book/event/dialogueFact）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名）。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
+字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；newEvents[].ripples=被波及的**实体 id 列表**（照抄输入实体；绝不填事件/盘算 id——事件引用走 source.type="ripple" + ref）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。stateChanges[].attr=属性名（hardPower/office/network/intel）；delta=数值增量；actor=谁造成的（实体 id，可省——缺省视为被作用方自身，静默方自我增强会被引擎拒绝）；cause=依据的事件/盘算 id（可省，但建议给——缺省会被记坏账前置警告）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；stage=起始阶段（可省）；visibility=明暗（known/concealed）；maxSteps=步数上限（1..8，可省，引擎钳制）；source.type=来源（event/parent/state）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（来自输入位置集）；entity=提议者实体 id（可省——dialogueFact 源可省略）；attrs=初始属性（可省；数值限定 0..1，省略=引擎按势力/角色给默认值）；source.type=来源（book/event/dialogueFact）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
 
 只输出 JSON 本体，不要解释。`;
 

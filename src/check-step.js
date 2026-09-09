@@ -95,6 +95,14 @@ export function checkWorldStep(step, ssot) {
         }
         if (ssot.entities.some((e) => e.name === ne.name)) errors.push(`$.newEntities[${i}].name: 账上已有同名实体「${ne.name}」（已有者不重建）`);
         if (!positions.has(ne.location)) errors.push(`$.newEntities[${i}].location: "${ne.location}" 不在世界位置集`);
+        // K38 补差包 D 条：入局属性提议必须全是有限数值（NaN/字符串拒绝——确定性第一）
+        if (ne.attrs != null) {
+            for (const [k, v] of Object.entries(ne.attrs)) {
+                if (typeof v !== 'number' || !Number.isFinite(v)) {
+                    errors.push(`$.newEntities[${i}].attrs.${k}: 入局属性必须是有限数值（当前 ${String(v)}）`);
+                }
+            }
+        }
     }
     for (const [i, f] of (step.entityFates || []).entries()) {
         const ent = f.entity && ssot.entities.find((e) => e.id === f.entity);

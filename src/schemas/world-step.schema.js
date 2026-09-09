@@ -56,6 +56,7 @@ export const worldStepSchema = {
                     kind: { kind: 'string', enum: ['faction', 'character'] },
                     location: { kind: 'string', minLength: 1 },
                     entity: { kind: 'string', minLength: 1 },   // 提议者实体 id（静默判定用；dialogueFact 源可填观察者）
+                    attrs: { kind: 'numRecord' },   // K38 补差包 D 条：入局可选属性提议（引擎 [0,1] 钳制；缺省按 kind 兜底）
                     source: {
                         kind: 'object',
                         additional: false,

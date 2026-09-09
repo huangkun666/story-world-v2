@@ -161,6 +161,15 @@ export function renderAgendaStripHtml(world) {
 
 export function renderFeedHtml(world, { limit = 8 } = {}) {
     const chronicle = world.chronicle || [];
+    // K38（敲定稿 I 条）：拒签可见——最近一轮的裁定/校验拒绝在动态流顶部露头（世界的重力，应当众；
+    // 双面无痕的静默滤除仍不可见；钳制行保留显示但不占拒签计数——口径见 settle rejected 计算）
+    const last = (world.meta?.simLog || []).slice(-1)[0];
+    const verdicts = (last?.warnings || []).filter((w) => (
+        w.startsWith('裁定:') || w.startsWith('校验拒绝:')
+    ));
+    const verdictBlock = verdicts.length
+        ? `<div class="sw2-verdict"><span class="sw2-verdict-tag">⚖ 本轮裁定 ${verdicts.length} 条</span>${escapeHtml(verdicts[0])}</div>`
+        : '';
     const rows = chronicle.slice(-limit).reverse().map((c, i) => {
         const latest = i === 0 && c.tick === world.meta?.tick;
         return `<div class="sw2-entry${latest ? ' sw2-latest' : ''}">${latest ? '<span class="sw2-now">最新</span>' : ''}`
@@ -176,7 +185,7 @@ export function renderFeedHtml(world, { limit = 8 } = {}) {
         const titles = Array.isArray(last.titles) ? last.titles : (last.title ? [last.title] : []);
         note = `<div class="sw2-milestone-strip">⚑ 更早的 <b>第 1–${msIdTick(last.id)} 轮</b>已收进大事纪「${escapeHtml(titles.slice(0, 3).join('、'))}」<span class="sw2-goto" data-view="archive">去翻旧账 →</span></div>`;
     }
-    return `<div class="sw2-col-head">动态流 · 最新在上</div><div class="sw2-feed">${rows.join('')}${note}</div>`;
+    return `<div class="sw2-col-head">动态流 · 最新在上</div>${verdictBlock}<div class="sw2-feed">${rows.join('')}${note}</div>`;
 }
 
 export function renderSideHtml(world) {

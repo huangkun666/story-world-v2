@@ -11,7 +11,7 @@
 //   - 空 canon 合法（K24 口径：无数量约束，防编造靠纪律不靠量制）。
 import { bookFingerprint } from './fingerprint.js';
 import { ENV_KEYS } from './entropy.js';
-import { POOL_CAP } from './settle.js';
+import { POOL_CAP, ENTITY_ATTR_DEFAULT, INBORN_ATTR_KEYS } from './settle.js';
 
 export const ENV_INIT_BASELINE = 0.5;      // 提案：抽取缺省环境量初值（patchDynamic 新键基线口径）
 export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时的强度初值（随长跑校准批）
@@ -169,8 +169,13 @@ export function applySettingToSsot(ssot, setting) {
 }
 
 // K37 生通道①（细案 §3.7 → A-10）：书名录初始化——frozen.canon.bookEntities 未在账实体幂等入账
-// （出处=书内条目，只提取不创作；kind 缺省 character；location 取位置集首个；attrs 空=公式兜底）；
+// （出处=书内条目，只提取不创作；kind 缺省 character；location 取位置集首个）；
+// K38（敲定稿 D 条）：attrs 按 kind 缺省兜底（与 newEntities 入口同口径——入局即有值，不再哑巴）；
 // 席位按书序优先入到 POOL_CAP 满（剩余留名录，供 book 源 newEntities 提议继续入局）；dead 同名不回魂。
+const buildSeedAttrs = (kind) => {
+    const v = ENTITY_ATTR_DEFAULT[kind] ?? ENTITY_ATTR_DEFAULT.character;
+    return Object.fromEntries(INBORN_ATTR_KEYS.map((k) => [k, v]));
+};
 export function seedBookEntities(ssot) {
     const book = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
     if (!book.length) return { seeded: 0 };
@@ -188,7 +193,7 @@ export function seedBookEntities(ssot) {
             kind: b.kind === 'faction' ? 'faction' : 'character',
             name,
             location: home,
-            attrs: {},
+            attrs: buildSeedAttrs(b.kind === 'faction' ? 'faction' : 'character'),
         });
         seeded += 1;
     }
