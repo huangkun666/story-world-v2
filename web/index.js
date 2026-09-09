@@ -295,6 +295,8 @@ async function collectWorldInfoEntries(ctx, character) {
     const seenName = new Set();
     const push = (n) => { if (n && typeof n === 'string' && n.trim() && !seenName.has(n)) { seenName.add(n); names.push(n.trim()); } };
     push(character?.world); // 卡挂世界（v1 时代同指针：大荒z → 大荒-姬元真）
+    const chatWi = ctx?.chatMetadata?.['world_info']; // 聊天级挂载（ST assignLorebookToChat 落 chat_metadata.world_info）
+    if (typeof chatWi === 'string') push(chatWi); else if (Array.isArray(chatWi)) for (const n of chatWi) push(n);
     for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
     for (const n of Object.keys(ctx?.extensionSettings?.world_info ?? {})) push(n);
     const entries = [];
