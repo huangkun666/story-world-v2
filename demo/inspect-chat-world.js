@@ -72,6 +72,16 @@ if (process.argv[2] === '--scan') {
     process.exit(0);
 }
 
+if (process.argv[2] === '--export') {
+    const f = process.argv[3];
+    let obj;
+    try { obj = JSON.parse(readFileSync(f, 'utf8')); } catch (e) { console.log('EXPORT READ/PARSE FAIL:', e.message); process.exit(0); }
+    const w = obj?.world ?? obj; // K35 导出包 {world, volumes, sha256} 或裸 SSOT
+    const sum = summarize(w, f);
+    console.log(JSON.stringify(sum, null, 1));
+    process.exit(0);
+}
+
 const file = process.argv[2] || join(DEFAULT_CHATS, '大荒z', '大荒z - 2026-09-01@00h37m41s559ms.jsonl');
 const sum = inspectFile(file, true);
 if (!sum) { console.log('NO non-empty hot world in:', file); process.exit(0); }
