@@ -575,9 +575,9 @@ export function seedBookEntities(ssot) {
             //   为什么必须守这条：`check-step` 校验实体位置 ∈ 位置集，位置不在集内会让**整步被拒**
             //   （世界停摆）。位置集此时已由 derivePositions（web 侧）按同一本书的地名建好=不误杀。
             location: (b.location && positions.includes(b.location)) ? b.location : home,
-            // 身份 + 类别入账（design-core §2.3 第 1 项）；**四维数值不预填**（leg24 片2：空着就是空着）——
-            // 账面没有这些键是事实，模型每轮提议的 stateChanges 才是它们的来源（引擎钳制落账）
-            attrs: {},
+            // 身份 + 类别入账（design-core §2.3 第 1 项）
+            // leg25 c：**`attrs: {}` 整条删除**——四维浮点不存在了，账上连空键都不该有
+            //   （书里的说法走实体 `实力` 文本态，见 spec-entity-field-lookup）。
         };
         (ssot.entities = ssot.entities || []).push(ent);
         byName.set(b.name, ent);

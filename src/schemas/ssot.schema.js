@@ -62,8 +62,9 @@ export const ssotSchema = {
                                                     parent: { kind: 'string', minLength: 1 },
                                                     location: { kind: 'string', minLength: 1 },   // leg21 补形状（此前 sanitizeCanon/关系轮已写、实体页已用，形状层漏登记 → 名册一律校验不过）；书中明述的所在/驻地
                                                     race: { kind: 'string', minLength: 1 },   // leg20：种族归属标签（书级出处校验后保留；可选）
-                                                    attrs: { kind: 'numRecord' },            // leg20：四维属性（净化钳制 [0,1]；可选）
-                                                    evidence: { kind: 'string', minLength: 1 },   // leg20：属性原文依据短句（随 attrs 保留；可选）
+                                                    // leg25 c：书名录条目的 `attrs` / `evidence`（leg20 的"从书里抄四维数值+原文依据"）
+                                                    //   **整条删除**。书里这一维到底写没写数值，已无人判读——"四维不存在"了，
+                                                    //   连"书里明写这一维"这个判据本身也失去了对象（见 settle.js 迁移注释）。
                                                 },
                                             },
                                         },
@@ -106,9 +107,14 @@ export const ssotSchema = {
                     kind: { kind: 'string', enum: ['faction', 'character'] },
                     name: { kind: 'string', minLength: 1 },
                     location: { kind: 'string', minLength: 1 },   // 驻点必须 ∈ context.positions（引擎校验 §3.2）
-                    // leg24 片2（账本换血）：attrs 由**必填改可选**——账面无数是合法状态（"空着就是空着"）。
-                    //   引擎不再预填默认值；键只在模型提议（settle 钳制落账）后才存在。
-                    attrs: { kind: 'numRecord' },                 // 硬实力/职权/人脉/情报（有据才在账；分量公式无数时取中立 floor）
+                    // leg25 c（用户令「删」）：实体 `attrs`（四维浮点：兵力/权位/人脉/耳目）**整条删除**。
+                    //   为什么：这几个概念**没法精确表示**（书里没刻度、现实里也没有），压成 0–1 是拿精确外壳
+                    //   装模糊内容；且手拍值让"编的"看起来像"算的"（design-core-leg23 §4 第 1 条）。
+                    //   书里的说法一律**照抄成文本**（实体 `实力` = 「T9渡劫巅峰」，据书；见 spec-entity-field-lookup），
+                    //   引擎不换算、不进公式、不排序、不比较。
+                    //   ⚠️ 旧账残留：`migrateLegacyAttrs` 在 loadWorld 时一次性摘除；引擎各处的 `e.attrs?.x` 守卫
+                    //   本就吃掉"字段不存在"，且校验本身不读它 ⇒ 不会因残留而拒。本键**不再接受**，防无声复活
+                    //   （实测教训：删字段只删一半最危险——引擎不写、契约仍收，看起来删了其实没有）。
                     race: { kind: 'string', minLength: 1 },   // leg20：种族标签（抽象带入；可选=旧世界零扰动）
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
                     hurtWindow: { kind: 'array', minItems: 2, maxItems: 2, items: { kind: 'number' } },   // K15：近 2 tick 负向 δ 窗口 [本 tick, 上一 tick]（三态判据用；惰性写——全 0 删字段）
@@ -249,21 +255,18 @@ export const ssotSchema = {
                     additional: true,
                     props: {},
                 },
-                playerParse: {   // K32 溯源账：由解析注入的 attrs 键（force 重解析只覆盖此集的键；手填键永不触碰）
-                    kind: 'object',
-                    additional: false,
-                    required: ['injected'],
-                    props: {
-                        injected: { kind: 'array', items: { kind: 'string' } },
-                    },
-                },
-                // leg24 片4（旧账清理·迁移留档）：migrateLegacyAttrs 一次性的两个 meta 字段。
-                //   legacyAttrsPurged      = { [entityId]: { [attr]: 删掉的值 } }（被批掉的假数不许无声消失）
-                //   legacyAttrsMigratedAt  = 一次性标记（当时 tick）；幂等闸——有此键即不再重扫。
-                // 形状：动态键 map（内层形状由迁移函数保证，schema 只查整体为对象——同 dialogueBook 口径）；
-                //   两个字段都可选（旧世界零扰动）。
+                // leg25 c：`playerParse`（K32 溯源账）**整条删除**——它记的是"哪些 attrs 键由解析注入"，
+                //   而玩家四维注入与解析两个模块（player-inject/player-setup）已随四维一并删除。
+                // leg25 c（旧账清理·迁移留档）：migrateLegacyAttrs 一次性摘除 `entity.attrs` 时写这两个字段。
+                //   legacyAttrsPurged = { [entityId]: { [attr]: 删掉的值 } }（那些数曾经摆在面板上冒充客观，
+                //     摘掉时不许无声消失——留档给审计）；形状为动态键 map（内层由迁移函数保证）。
+                //   attrsRemovedAt    = 一次性标记（当时 tick）；幂等闸——有此键即不再重扫。
+                // ⚠️ 实测补漏（子代理报回，2026-09-11）：本块原先只声明了 leg24 的 legacyAttrsMigratedAt，
+                //   而迁移函数已改用 attrsRemovedAt ⇒ 迁移产出的世界**过不了自家 schema**（additional:false）。
+                //   两个键一起留着：旧世界可能已带 legacyAttrsMigratedAt（leg24 那版写下的），删它会打破旧账。
                 legacyAttrsPurged: { kind: 'object', additional: true, props: {} },
                 legacyAttrsMigratedAt: { kind: 'number' },
+                attrsRemovedAt: { kind: 'number' },
                 // 细案 spec-entity-field-lookup §2：按需查书的**查书标记留痕**（有值 / 未查 / 未加载到 / 书未明述）。
                 //   entityFields = { [entityId]: { fields, attempts, sources } }
                 //     fields[字段]   = { value, from（查过的书条目名）, fetchedAt }        —— 只记**真落账**的值

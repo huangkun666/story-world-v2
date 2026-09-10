@@ -23,7 +23,6 @@ import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
 import { composeInitSource } from '../src/init-source.js';
-import { runPlayerSetup } from '../src/player-setup.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
 import { runEntityLookupStep } from '../src/entity-lookup.js';
@@ -376,7 +375,7 @@ export function attachPlayerPiece(world, playerName) {
         kind: 'character',
         name: nm || '你',
         location: (world.context?.positions || [])[0] || '未明',
-        attrs: {},              // 空着就是空着：只有开档描述解析出依据的维度才会落账（引擎不编数）
+        // leg25 c：玩家棋子不再带 attrs（四维已删）——它和别的实体同尺：只有身份 + 位置。
         lastActiveTick: 0,      // 头几轮不静默（与 spawnEntities 同口径）
     };
     world.entities = [...entities, ent];
@@ -878,32 +877,20 @@ if (typeof window !== 'undefined') {
             };
             seedBookEntities(seed);
             // B 组接线：世界必须真的有一枚玩家棋子（否则五条"禁写玩家"守卫、掩码、影响通道全是死的）。
-            // 名字先用占位「你」；开档描述里若写明姓名，解析后改名（不改 id，引用不断）。
+            // leg25 c：开档描述的**四维解析整段删除**（那个小调用连同 player-setup/player-inject 两个模块一起没了）
+            //   ——四维浮点已不存在（没法精确表示；手拍值让"编的"看起来像"算的"）。
+            //   玩家棋子现在只有身份与位置（结构性事实），和别的实体同尺；开档描述本身仍留在 meta 里可查。
             const piece = attachPlayerPiece(seed);
             const playerDesc = String(settings.playerDesc || '').trim();
             if (playerDesc) {
-                // 只在**第一次**（建世界这一次）用开档描述解析：四维有依据才落账；有姓名就改名。
-                try {
-                    const setup = await runPlayerSetup({
-                        ssot: seed,
-                        playerDesc,
-                        transport: diagExtract(resolved),
-                        overwrite: false,
-                    });
-                    if (setup?.ssot) seed = setup.ssot;                    // 返回新世界（不可变风格）
-                    if (setup?.parsed?.name) namePlayerPiece(seed, setup.parsed.name);
-                } catch (err) {
-                    console.warn('[story-world-v2] 玩家开档解析失败（不阻塞建世界）', String(err?.message || err));
-                }
-                seed.meta = { ...(seed.meta || {}), playerDesc };          // 让"这是第一次填的"可查（不落 extension_settings）
+                seed.meta = { ...(seed.meta || {}), playerDesc };
             }
             const playerFinal = seed.entities.find((e) => e.id === seed.context?.playerId);
             const had = Boolean(readHotMeta());
             writeHotMeta(hotAccountShape(seed));
             await loadWorld();
             const flushed = await flushHotMeta();   // leg20 落盘修复：初始化完成显式落盘再报成功
-            const pAttrs = Object.keys(playerFinal?.attrs || {});
-            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 位置集 ${seed.context.positions.length} 处 · 玩家棋子=${playerFinal?.name || piece.name}${pAttrs.length ? `（开档解析落账 ${pAttrs.length} 维）` : '（开档无数：空着就是空着）'} · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
+            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 位置集 ${seed.context.positions.length} 处 · 玩家棋子=${playerFinal?.name || piece.name} · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
         } catch (err) {
             setStatus(`⚠ 初始化失败：${err?.message || err}`);
         }

@@ -111,7 +111,9 @@ export function gateWorldStep(step, world, moveFact = null) {
     }
 
     return {
-        step: { actions, newEvents, agendaAdvances, stateChanges: step.stateChanges || [], newAgendas, agendaCancels, newEntities, entityFates: step.entityFates || [] },
+        // leg25 c：返回的新 step 里**不再拼 `stateChanges`**——契约层该字段已删，
+        //   再拼一个空数组会让下游 checkWorldStep 判"未知字段"（实测冒烟当场炸在这里）。
+        step: { actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities, entityFates: step.entityFates || [] },
         silent: [...silentSet],
         lifted,
         dropped,

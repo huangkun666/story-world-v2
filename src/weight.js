@@ -6,19 +6,27 @@
 export const NEUTRAL_TENSION = 0.5;          // 静态张力常量（切片期；大势层真值后换）
 
 // ---- 常量提案表（分量引擎细案 §3.1/§3.3/§3.4，拍板点 P1/P5/P6）----
-export const COEFFS = {
-    // 基础分 = Σ wᵢ·attrᵢ（层系数提案）
-    character: { hardPower: 0.35, office: 0.25, network: 0.25, intel: 0.15 },
-    faction:   { hardPower: 0.45, office: 0.35, network: 0.10, intel: 0.10 },
-};
-export const FACTION_BASELINE = 1.5;         // 层级基线（势力层天然分量大，对齐宏大层 ≤5 在飞上限语义）
+// leg25 c（用户令「删」）：**四维浮点整条拿掉**（兵力/权位/人脉/耳目）——`COEFFS` 与 `NEUTRAL_ATTR` 一并删除。
+//   为什么（`design-core-leg23` §4 第 1 条 + §2.2 三条硬规矩）：
+//     ① **手拍值比没有更坏：让"编的"看起来像"算的"**——书里根本没有这些刻度；
+//     ② 这几个概念**没法精确表示**：一个势力的兵力是多少？权位几品？人脉 0.6 是什么意思？
+//        书里没写、现实里也没有——压成 0–1 就是**用精确的外壳装模糊的内容**；
+//     ③ "要有依据"——原文没写就没依据，**空着就是空着**。
+//   正确表示法前几棒已立好先例：书里的说法**照抄成文本**（实体 `实力` = 「T9渡劫巅峰」，据书），
+//   引擎不换算、不进公式、不排序、不比较（`spec-entity-field-lookup` + leg25b 交接 §3 准则）。
+//   因此分量从此**不吃任何属性**：基础分＝层基线一个常数，只余静止衰减在动（时间事实，不是编的数）。
+export const FACTION_BASELINE = 0.85;        // 势力层基线：势力按**人物的 85%** 计（层级折扣，非"更大"）
+// ⚠️ 实测留档（2026-09-11）：原值 1.5（试过 1.4）会让 `layerBase × envFactor ≥ 1`，
+//   被下方 `clamp01` 吸平成 1 ⇒ 势力与人物基础分全等、本常量成了纸面常量（实测 tension 0.5 时两者都 1.0000）。
+//   另：删掉属性项后，**人物的基础分恒被钳在上界 1.0**（layerBase 1 × envFactor ∈[0.9,1.1]），
+//   所以"人物 vs 势力"的可见差是 **1.0 vs 0.85**（势力更低）；真正会动的是势力的张力项与两者的静止衰减。
+//   分量 ∈[0,1] 是既有契约（写进 schema 与多处断言），故不动 clamp，只调基线。
 export const ENV_TENSION_COEFF = 0.2;        // envFactor = 1 + 系数×(张力−0.5)
 export const DECAY = {                        // 静止衰减（沿用长跑细案 §2.3 提案，玩家同尺）
     character: { grace: 8, rate: 0.02 },     // 连续 8 tick 无动作后，每 tick −2%
     faction:   { grace: 20, rate: 0.01 },    // 连续 20 tick 无动作后，每 tick −1%
 };
-export const MASK = {                         // 可见性掩码（leg24 片3：**改成事实驱动**，不再用分量）
-    intelBase: 0.5, intelGain: 0.5,          // intelFactor = 0.5 + 0.5×情报
+export const MASK = {                         // 可见性掩码（leg25 c：**只剩位置**——"情报"那个手拍的数已删）
     posSame: 1.0, posDiff: 0.5,              // 同位置 / 异位置（位置图为符号集，二元判定为能力上限）
     threshold: 0.25,                         // m < 0.25 → 注入侧省略该事实（片3：原 0.3 是配合比值项的调参值）
 };
@@ -34,24 +42,19 @@ export const RIPPLE_TARGET_CAP = 3;
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-// leg24 片2（账本换血）：账面**没有**四维数值时，公式按**中立值**算中性 floor（character 0.5 / faction 0.75）。
-// 为什么要有这个 floor：账本不再预填任何数值（空着就是空着），若把"没有数据"当成 0，
-//   全世界开局分量全 0 → 门控把所有人判静默、掩码 obs=0 让谁都不见 → 世界直接冻死。
-// 这不是"替实体编数值"：①它不落账（账面上这些键**根本不存在**，可验证）②同 kind 一律同值，不含任何个体信息
-//   ③语义诚实——**"不知道"不等于"很弱"**（旧法把未知当 0.15，才让"没数据的角色"看起来像客观的弱者）。
-// 真值只从模型提议来（settle 钳制落账）；片3 会把"谁值得动"的排序换成确定性粗规则，届时 floor 只留作兜底。
-export const NEUTRAL_ATTR = { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 };
+// leg25 c：`NEUTRAL_ATTR`（中立属性表）**整条删除**——它存在的唯一理由是"账面没有四维数值时公式怎么算"，
+//   而四维已经不在了，没有"缺键"可谈。删掉它也顺手删掉了一个隐患：任何"缺数据就取某个默认值"的写法
+//   都是在替世界编数（§2.2 硬规矩一）。
 
-// 分量 = clamp(基础分 × 层级基线 × 环境修正, 0, 1)。缺键按**中立值**（见上）；
-// 张力缺省取静态常量。空 attrs / 缺某一维 = 该维"账面无数" → 取中立值，不取 0。
-// "客观 = 确定性计算 + 有界输入"（dev-process 红线④）：引擎只算，上游属性由模型提议、结算器钳制。
-export function computeWeight(attrs = {}, kind = 'character', tension = NEUTRAL_TENSION) {
-    const coeffs = COEFFS[kind] || COEFFS.character;
-    let base = 0;
-    for (const [name, w] of Object.entries(coeffs)) base += (attrs[name] ?? NEUTRAL_ATTR[name] ?? 0) * w;
+// 分量 = clamp(层基线 × 环境修正, 0, 1)。
+// leg25 c：**基础分不再吃任何属性**——属性项整条删除（见上）。动的那部分是 `activityFactor`
+//   （静止衰减）——那是**时间事实**（多久没出手），不是编出来的强弱。
+//   ⚠️ 实测修正（2026-09-11）：此前误写成 `clamp01(envFactor)`，**层基线从没被乘上去** ⇒ 势力与人物
+//     基础分全等、`FACTION_BASELINE` 成了纸面常量。现按原设计乘回 layerBase（1.4 / 1）。
+export function computeWeight(_attrs = {}, kind = 'character', tension = NEUTRAL_TENSION) {
     const layerBase = kind === 'faction' ? FACTION_BASELINE : 1;
     const envFactor = 1 + ENV_TENSION_COEFF * ((tension ?? NEUTRAL_TENSION) - NEUTRAL_TENSION);
-    return clamp01(base * layerBase * envFactor);
+    return clamp01(layerBase * envFactor);
 }
 
 // 静止衰减因子：宽限期内恒 1；之后 max(0, 1 − rate×(idle − grace))。active 后因子立即回 1（调用方负责归零 idle）。
@@ -61,18 +64,16 @@ export function activityFactor(idleTicks, kind = 'character') {
     return Math.max(0, 1 - p.rate * (idleTicks - p.grace));
 }
 
-// 可见性掩码（leg24 片3：**事实驱动**）：m = 情报因子 × 位置因子。
-// 旧法 m = (源分量 ÷ 观察者分量) × 情报 × 位置 × 存在感门——用户拍板删掉那个数之后：
-//   ①比值项失去意义（它拿两个"没法客观"的分数相除）；②"零分量观察者无所见"的短路会让**新世界开局
-//   玩家什么都看不见**（全员账面无数 → 观察者分量只有中立 floor，且一旦为 0 就全瞎）。
-// 现法只吃两样可查的事实：**情报关系**（有多少耳目）与**位置**（同地/异地）——都能从账本数出来，零歧义。
-// leg25（唯一真源）：调用方（streams.js）一律经本函数取掩码，**不许内联复制公式**——
-//   副本漂移过一次（streams 曾自带一份同样公式），改一处另一处不动的风险不再接受。
-//   "账面无数 → 按中立情报 0.5" 的口径属**调用方**的语言（weight 不猜账本缺键语义），由调用方传入 intel。
-export function visibilityMask({ intel = 0, sameLocation = false } = {}) {
-    const intelFactor = MASK.intelBase + MASK.intelGain * clamp01(intel ?? 0);
-    const posFactor = sameLocation ? MASK.posSame : MASK.posDiff;
-    return clamp01(intelFactor * posFactor);
+// 可见性掩码（leg24 片3 起事实驱动；leg25 c **只剩位置**）：
+//   旧法 m = (源分量 ÷ 观察者分量) × 情报 × 位置 × 存在感门。用户拍板删掉那个数之后：
+//   ①比值项失去意义（它拿两个"没法客观"的分数相除）；②"零分量观察者无所见"的短路会让新世界开局玩家什么都看不见。
+//   leg25 c 再删"情报"这一项——它也是**手拍的 0–1**（同上：没法精确表示，且让编的像算的）：
+//   世上没人能量化"你耳目多灵"，问一句就是编一个数。**剩下唯一可查的事实是位置**（同地/异地），零歧义。
+//   ⚠️ 待办（登记，勿静默发明）：片3 交付时已留的"事件位置缺失该按同地/异地/中立取哪一值"仍**未拍板**；
+//     现法沿用既有口径（缺失→按异地位，即不因数据缺失而放宽可见性），行为与删 intel 前逐字节一致
+//     （因为原式中立情报 0.5 恰好也落在 posDiff 那一侧）。
+export function visibilityMask({ sameLocation = false } = {}) {
+    return clamp01(sameLocation ? MASK.posSame : MASK.posDiff);
 }
 
 export const isVisible = (m) => m >= MASK.threshold;

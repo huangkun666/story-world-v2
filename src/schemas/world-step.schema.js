@@ -6,7 +6,7 @@
 export const worldStepSchema = {
     kind: 'object',
     additional: false,
-    required: ['actions', 'newEvents', 'agendaAdvances', 'stateChanges', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates'],
+    required: ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates'],
     props: {
         agendaCancels: {   // K18/因果链 T5：模型提议放弃盘算（带理由——提议权，裁决归引擎；与出生对称）
             kind: 'array',
@@ -57,7 +57,7 @@ export const worldStepSchema = {
                     location: { kind: 'string', minLength: 1 },
                     entity: { kind: 'string', minLength: 1 },   // 提议者实体 id（静默判定用；dialogueFact 源可填观察者）
                     parent: { kind: 'string', minLength: 1 },   // K45/C7：所属势力名（可省——书/对话中已知的门派或势力；引擎校验目标在册且为势力，不满足弃关系）
-                    attrs: { kind: 'numRecord' },   // K38 补差包 D 条：入局可选属性提议（引擎 [0,1] 钳制；缺省=这一维账面空着，引擎不填默认值——leg24 片2 删预填）
+                    // leg25 c：入局 `attrs`（四维浮点提议）**整条删除**——四维已不存在（见 ssot.schema 注释）。
                     source: {
                         kind: 'object',
                         additional: false,
@@ -143,20 +143,11 @@ export const worldStepSchema = {
                 },
             },
         },
-        stateChanges: {
-            kind: 'array',
-            items: {
-                kind: 'object',
-                additional: false,
-                required: ['entity', 'attr', 'delta'],
-                props: {
-                    entity: { kind: 'string', minLength: 1 },
-                    attr: { kind: 'string', minLength: 1 },
-                    delta: { kind: 'number' },
-                    actor: { kind: 'string' },   // K5/P7 构件：谁造成的（缺省=被作用方自身；静默方自我增强被拒）
-                    cause: { kind: 'string' },   // K5/P4：依据的事件/盘算 id（缺省记坏账前置警告）
-                },
-            },
-        },
+        // leg25 c（用户令「删」）：`stateChanges`（模型提议的属性增量：{entity, attr, delta, actor, cause}）
+        //   **整条删除**——它改的就是四维浮点（兵力/权位/人脉/耳目），而四维已不存在
+        //   （没法精确表示；手拍值让"编的"看起来像"算的"，design-core-leg23 §4 第 1 条）。
+        //   连带影响如实登记：盘算"败露"判据原吃 hurtWindow（近 2 tick 负向 δ，来源就是这里），
+        //   负向 δ 一起消失 ⇒ 败露分支失去输入（详见 settle.js adjudicate 注释）。
+        //   要恢复"败露"须另立**不依赖假精度**的判据（待拍板，未擅自发明）。
     },
 };

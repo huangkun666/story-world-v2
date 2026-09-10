@@ -29,23 +29,20 @@ export function renderStreams(world, stage, moveFact) {
     if (!playerId) {
         evLines = stage.chronicle.filter((c) => c.eventRef).map((c) => c.text);   // P-E：无玩家世界全见
     } else if (player) {
-        const intel = player.attrs?.intel ?? 0;
-        const had = player.attrs?.intel !== undefined;   // leg24 片2：账面无数 → 按中立情报（0.5）算，不再"无所见"
         evLines = stage.chronicle
             .filter((c) => {
                 if (!c.eventRef) return false;
                 const ev = world.events.find((e) => e.id === c.eventRef);
                 if (!ev) return true;   // 防御：节点不在则不过滤
-                // leg25（唯一真源）：掩码一律经 weight.visibilityMask 取——此处原有一份**内联复制**的公式，
-                //   与 weight.js 的实现是两份代码，改一处另一处不动的漂移风险不再接受（副本已删）。
-                // "账面无 intel" 的口径（按中立 0.5）留在调用方：weight 不知道账本缺键语义。
-                // 位置判定：只有在**两侧位置都在账上且相等**时才算"同地"。
+                // leg25 c：掩码**只剩位置**（"情报"那个手拍的 0–1 已删——没人能量化"你耳目多灵"）。
+                //   leg25（唯一真源）：一律经 weight.visibilityMask 取，此处不许内联复制公式。
+                //   位置判定：只有在**两侧位置都在账上且相等**时才算"同地"。
                 //   事件没给 position 时，旧写法 `ev.position === player.location` 恒假 → 被当成"确实在别处"
                 //   （把"不知道"读成了"知道在远处"）。改为显式判真：位置缺失 → 落到 posDiff 一侧，
-                //   **与"真的在别处"同值**（口径=不因数据缺失而放宽可见性），行为逐字节不变；
-                //   "未知"该按异地/同地/中立另取一值，属**待拍板**，未擅自发明（见交付说明）。
+                //   **与"真的在别处"同值**（口径=不因数据缺失而放宽可见性）。
+                //   ⚠️ "未知该按同地/异地/中立取哪一值"属**待拍板**（片3 已登记），未擅自发明。
                 const sameLocation = ev.position != null && ev.position === player.location;
-                return isVisible(visibilityMask({ intel: had ? intel : 0.5, sameLocation }));
+                return isVisible(visibilityMask({ sameLocation }));
             })
             .map((c) => c.text);
     } else {

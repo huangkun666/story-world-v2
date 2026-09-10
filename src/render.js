@@ -15,24 +15,19 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   上一版是"查书标记（缺未查）+ 位置未明徽章重复"。
 //   第二十五棒 b 追加（A1b）：张力行不再写「烈度带词 + 百分比」，改「近 N 轮事件 N 件」；
 //   麾下成员序由分量序改**名号序**（A1）。← 看到 `+a1b` 后缀即已载入这两条。
-export const PANEL_BUILD = 'leg25-lookup-4state+posdedup+a1a1b';
+export const PANEL_BUILD = 'leg25c-no-attrs';
 
-export const LABELS = {    attr: { hardPower: '兵力', office: '权位', network: '人脉', intel: '耳目' },
-    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
+export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
     visibility: { known: '明', concealed: '暗' },
     status: { active: '活跃', retired: '背景', dead: '已灭' },
 };
 
-// 属性维度释义（第十三棒，用户拍板 A 案）：玩家通词、A-3 黑名单零命中；
-// 双通道无障碍——悬停 title + 视障 sr 文本（sw2-visually-hidden），不止鼠标。
-// 机械事实依据（weight.js COEFFS/掩码）：人脉推得动事（分量）、耳目看得见事（信息半径）。
-export const ATTR_HINTS = Object.freeze({
-    hardPower: '兵力：硬实力——兵马、武备、财力这类能押上桌的东西',
-    office: '权位：官职名分，号令效力的来源',
-    network: '人脉：关系网——能动员多少人、遇事有多少缓冲',
-    intel: '耳目：情报网有多灵——决定你能看多远',
-});
+// leg25 c（用户令「删」）：`LABELS.attr` 与 `ATTR_HINTS` **整条删除**——四维浮点（兵力/权位/人脉/耳目）
+//   不存在了：它们没法精确表示（书里没刻度、现实里也没有），压成 0–1 就是拿精确的外壳装模糊的内容，
+//   而且手拍值让"编的"看起来像"算的"（design-core-leg23 §4 第 1 条）。
+//   书里的说法一律**照抄成文本**显示（实体 `实力` = 「T9渡劫巅峰」，据书；见 spec-entity-field-lookup）。
+//   面板从此不再有「有据 n/4 / 数值无据」这类说法——那些数没有了，"有几维有据"自然无从谈起。
 
 // K41/链视图细案 §3.1（A-16）：编年五筛（chips 玩家词面 ↔ kind 契约 token）
 export const CHRONICLE_FILTERS = Object.freeze([
@@ -227,15 +222,14 @@ export function renderSideHtml(world) {
         .filter((e) => !e.status || e.status === 'active')
         .map((e) => {
             const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
-            // leg24 片5：撤掉「影响力」分数条（那个数引擎已不消费）；改显示可查的事实——在办/位置/据。
-            const dims = ['hardPower', 'office', 'network', 'intel'].filter((k) => e.attrs?.[k] != null).length;
+            // leg24 片5：撤掉「影响力」分数条（那个数引擎已不消费）；改显示可查的事实——在办/位置/隶属。
+            // leg25 c：「有据 n/4」整条删除（四维不存在）；这一行只留结构性事实。
             return `<div class="sw2-entity${e.id === playerId ? ' sw2-player' : ''}">`
                 + `<div class="sw2-entity-head"><span class="sw2-entity-name">${escapeHtml(e.name)}</span>`
                 + `<span class="sw2-entity-kind">${kindLabel(e, world)}</span>`
                 + `<span class="sw2-entity-loc">${escapeHtml(e.location || '未明')}</span></div>`
                 + `<div class="sw2-fact-row">`
                 + `<span class="sw2-ev-mark${agenda ? '' : ' nodata'}">${agenda ? '在办' : '无在办'}</span>`
-                + `<span class="sw2-ev-mark${dims ? '' : ' nodata'}">${dims ? `有据 ${dims}/4` : '数值无据'}</span>`
                 + (e.parent ? `<span class="sw2-ev-mark">隶属 ${escapeHtml(e.parent)}</span>` : '')
                 + `</div>`
                 + (agenda
@@ -326,14 +320,9 @@ export function renderEntitiesHtml(world) {
     // leg24 片5（界面）：①**撤掉分量条**——那个 0-1 的数引擎已不再消费（用户拍板删），显示它等于把
     //   废数当客观给玩家看（旧法：条 + 数字）；②改成「据/无据」标记——账上真有的才算有据（设计硬规矩一）；
     //   ③属性**只有模型提议过才显示**（空着就是空着，不摆一排 0.5 冒充数据）。
-    // leg24 片5：属性 chip 保留第十三棒的双通道无障碍（悬停 title + 视障 sr 文本）与"缺键零维不渲染"语义；
-    // 只是现在"缺键"是新世界的常态（账面不预填），所以整排会空 → 显示一行"四维无数（等模型提议或查书）"。
-    const attrs = (e) => Object.entries(LABELS.attr).map(([k, label]) => {
-        const v = e.attrs?.[k];
-        if (v == null) return ''; // 账上无键=该维缺位（「世界书用不到兵力」语义：无兵世界不出现兵力列）
-        const hint = ATTR_HINTS[k] || label;
-        return `<span class="sw2-eattr" title="${escapeHtml(hint)}"><span class="sw2-visually-hidden">${escapeHtml(hint)}。</span>${label}<b>${v}</b></span>`;
-    }).join('');
+    // leg25 c（用户令「删」）：四维属性 chip（含第十三棒的双通道无障碍写法）**整段删除**——
+    //   那些数不存在了，面板上再也没有可渲染的属性列。同一行位置改由查书标记（实力/位置）承担，
+    //   书里的说法照抄成文本显示（不再是 0–1 的数）。
     const rows = (world.entities || []).map((e) => {
         const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
         const status = e.status && e.status !== 'active' ? `<span class="sw2-visible ${e.status === 'dead' ? 'v-hidden' : 'v-known'}">${LABELS.status[e.status]}</span>` : '';
@@ -357,8 +346,8 @@ export function renderEntitiesHtml(world) {
         const crewHtml = crew ? `<div class="sw2-eaffil">麾下：${escapeHtml(crew.join('、'))}</div>` : '';
         // 势力实力＝麾下成员派生显示（用户拍板：势力不写实力字段；没有成员档位就整条不显示，绝不替它算）
         const crewPowerHtml = crewPower.length ? `<div class="sw2-eaffil">麾下实力：${escapeHtml(crewPower.join('、'))}</div>` : '';
-        // leg24 片5：据/无据 —— 账上真有几维数值、有没有在办的事、位置是不是「未明」占位
-        const dims = Object.keys(LABELS.attr).filter((k) => e.attrs?.[k] != null).length;
+        // leg25 c：`dims`（账上有几维数值）**删除**——四维不存在，"有据 n/4"无从谈起。
+        //   这一行原来是"据/无据"徽章的来源；现在只剩位置/归属/在办这些**结构性事实**。
         // 细案 spec-entity-field-lookup（用户 2026-09-11）：按需查书补的字段显示**查书标记**——
         //   ①有值=原文原话（角色才有实力）②**未查**=还没轮到查它（新世界的常态，**必须显示**，
         //   否则整栏空白，用户会以为"看不到属性"就是这个插件的全部）③未加载到=查过但模型没给
@@ -379,7 +368,6 @@ export function renderEntitiesHtml(world) {
         // 位置的查书标记标签只在**角色**行给（势力行不摆实力/位置两栏，避免把"势力的实力"又摆回来）
         const posChip = e.kind === 'character' ? lookupChip('位置', '位置') : '';
         const marks = [
-            `<span class="sw2-ev-mark${dims ? '' : ' nodata'}">${dims ? `有据 ${dims}/4` : '数值无据'}</span>`,
             agenda ? '<span class="sw2-ev-mark">在办</span>' : '',
             // 第二十五棒修正（用户实拍："第一个未明是位置未明，后面还有一个位置未明是不是多了"）：
             //   位置这一列负责说"在哪"（没载到写「未载」），**查书标记标签统一收到属性区**（posChip），
@@ -394,15 +382,15 @@ export function renderEntitiesHtml(world) {
                     : (lookupState('位置') === 'absent' ? '书未明述' : '未载')   // 未查过与查过没给，都是"没载到"
             }</div>`
             + `<div class="sw2-ecert">${marks}</div>`
-            + `<div class="sw2-eattrs">${[powerChip, posChip, attrs(e)].filter(Boolean).join('') || '<span class="sw2-nodata-text">四维无数（等模型提议或查书）</span>'}</div>`
+            + `<div class="sw2-eattrs">${[powerChip, posChip].filter(Boolean).join('') || '<span class="sw2-nodata-text">实力/位置未查（轮到时会按需去世界书取原话）</span>'}</div>`
             + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${organ}${crewHtml}${crewPowerHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
     const allEnts = world.entities || [];
     const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
-    const noData = allEnts.filter((e) => !Object.keys(LABELS.attr).some((k) => e.attrs?.[k] != null)).length;
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}${noData ? ` <small class="sw2-quiet-note">其中 ${noData} 位账面无数（空着就是空着，不填默认值）</small>` : ''}<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div><div class="sw2-entity-list">${rows.join('')}</div>`
+    // leg25 c：原「其中 N 位账面无数」随四维一起删除——没有数值维度了，"账面无数"这个说法失去所指。
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div><div class="sw2-entity-list">${rows.join('')}</div>`
         + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。</div>`;
 }
 

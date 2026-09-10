@@ -8,13 +8,6 @@ import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
 import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.js';   // K29：张力强度更新 + 浪尖派生（A-5 两来源）；bornTickOf 共用契约解析器
 
-export const ATTR_BOUNDS = [0, 1];    // 属性硬边界（薄裁定器按量裁的硬结果之一）
-
-// K9：玩家影响通道系数（玩家档案细案 §3.3，提案态——K11 曲线校准后正式报批，铁律 2/8）
-export const PLAYER_IMPACT = { targeted: 0.05, rippled: 0.02 };
-
-// K14 出生裁判上限（盘算树细案 §3.2 → A-3）：每 tick 新生 / 在飞全局 / 顶层（无父）上限。
-// T2 已拍板；数字提案态——K16 冒烟曲线后正式报批（铁律 2/8）。
 export const AGENDA_CAPS = { perTick: 2, open: 15, topLevel: 5 };
 const AGENDA_STAGE_FALLBACK = '谋划';   // 新盘算缺省阶段（ssot schema 要求 stage 非空）
 export const VERDICT_HURT_THRESHOLD = 0.05;   // K15 败露判据（细案 §3.4，T3 已拍板；提案态——随 GC 数字一并报批）
@@ -38,204 +31,65 @@ export const ENTITY_IDLE_RETIRE_TICKS = 20;  // 提案：连续未活跃轮数�
 export const ENTITY_GC_SCAN_TICKS = 20;      // 提案：背景化扫描周期
 // （POOL_CAP 席位上限已于第十九棒 K45 废除——full-roster-lens-spec C3：资格=在册，镜头管进出；用户 2026-09-09 拍板「不设上限」）
 
-// ---- K38 补差包（敲定稿 D 条）原"入局数值"面；**leg24 片2 账本换血：预填整段删除** ----
-// 旧法：新实体入局按 kind 预填四维（character 0.15 / faction 0.25），名册实体也照填——
-//   病根（用户实证）：**75.2% 实体四维全默认**（导出 (5)：453/602），"全 0.5/全 0.15"看起来像客观数据，
-//   实际是我们替他填的。design-core §2.4 硬规矩一：**空着就是空着，不许填默认值冒充客观**。
-// 现法：入局**不预填任何数值**（attrs 缺省=账面空着，schema 里 attrs 由必填改可选）；
-//   数值只有一个来源=**模型每轮提议的 stateChanges/newEntities.attrs**（引擎钳制 [0,1]，留痕），
-//   加上分量公式在"账面无数"时按中立值取中性 floor（见 weight.js NEUTRAL_ATTR）。
-// 数字常量 ENTITY_ATTR_DEFAULT 已删（它唯一的用途就是那次预填）。
-export const INBORN_ATTR_KEYS = ['hardPower', 'office', 'network', 'intel'];
-
-// leg24 片4 数据迁移：旧账里那批**引擎编的假数**的一次性清理表（新代码不再产生这些数，此表只为清旧账）。
-// 出处：git d6ea94d^ 的 `ENTITY_ATTR_DEFAULT = { character: 0.15, faction: 0.25 }`（入局预填）+ `buildSeedAttrs`（名册预填）。
-// 病根（用户实证）：613 实体里 263 个全 0.15 / 67 个全 0.25（另有 37 个玩家注入 0.5——那不是本函数的面，
-//   玩家数值由 player-inject/player-setup 侧负责）。界面读"账上有键"= 「有据 4/4」→ 界面在骗人。
-//   实机复验（第二十五棒）：真正的大头是**混合行**——一维模型真值 + 其余几维旧默认，全在整行判词之外（见下）。
-// 规则：**逐维**判——该维等于本类别旧默认值 ∧ 书里没写这一维 ∧ 编年里该实体无属性变更 → 删该维 + 留档。
-export const LEGACY_ENTITY_ATTR_DEFAULTS = { character: 0.15, faction: 0.25 };
-export const LEGACY_ATTRS_MIGRATED_AT = 'legacyAttrsMigratedAt';   // meta 一次性标记（幂等闸）
-export const LEGACY_ATTRS_PURGED = 'legacyAttrsPurged';            // meta 留档：{ [entityId]: { [attr]: 删掉的值 } }
-
+// leg25 c（用户令「删」）：**入局数值面整条删除**——四维浮点（兵力/权位/人脉/耳目）不存在了。
+//   书里的说法照抄成文本（实体 `实力` = 「T9渡劫巅峰」据书），引擎不换算、不进公式。
+//   随之删除：INBORN_ATTR_KEYS 白名单、LEGACY_ENTITY_ATTR_DEFAULTS 旧默认值表、两个 meta 迁移键、
+//   ATTR_BOUNDS。旧账残留的 attrs 由 migrateLegacyAttrs（下方）一次性整键摘除，不许无声留在账上。
 const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
 
 const SOURCE_LABEL = null; // 已废弃（第十三棒：编年源头措辞改写名不写代号，见 chronicleEvents）
 
 const entityName = (world, id) => world.entities.find((e) => e.id === id)?.name || id;   // 编年渲染：id 一律成名（"棋好看"）
 
-// ---- leg24 片4 起的旧账清理（纯函数迁移；幂等；不可变风格与全库一致） ----
-// ★ 第二十五棒实机修正（用户实况：切图上"兵力怎么还存在"）：**判据从"整行全等"改成"逐维"**。
-//   旧法（整行）：四维**恰好全等**旧默认值才批 → 旧账里绝大多数脏行是**混合行**
-//     （一维是模型真值 + 其余几维是引擎默认，形如 阐教 {hardPower .25, office .5, network .25, intel .25}）
-//     → 整行判词恒假 → 一条都不清。实测用户那份 613 实体旧账：283 行带四维，**1132 维里 500 维是旧默认值**，
-//     旧法一格没动（20:37 备份实证：legacyAttrsMigratedAt=2、留档 330 条，283 行仍在）。
-//   现法（逐维）：**每个维度独立判**——该维等于本类别旧默认值 ∧ 书里没写这一维的数值 ∧ 编年里这个实体没有过
-//     属性变更 → 删这一维；否则保留。实测同一份旧账：删 500 维（兵力 71 / 权位 63 / 人脉 185 / 耳目 181），
-//     保留 632 维，**632 = 书里明写该维 632 + 编年豁免 0 + 非默认值 0**（一条真值都不掉，"宁可漏清不可错清"仍在）。
-//
-//   两条豁免各自守什么（都不是猜的，是两处可查的事实来源）：
-//   ①**书里明写这一维**：`bookEntities[].attrs[k]` 有数就是有数（旧抽取产出 attrs 与 evidence **同键集**，
-//     实测 290 条：attrs 键 ∈ evidence 键，故逐维判不需要再借助整条 evidence 串——整条 evidence 会让
-//     "有据的那一维"给另外三维当挡箭牌，正是旧法漏清 500 维的机理）。
-//   ②**编年里该实体有过属性变更**：那条 `「X」兵力 a→b` 就是这维的来路（真跑出来的数哪怕恰好是 0.25，
-//     也不许当假数删掉）——leg24 片4 的属性编年让这条判据成为可能，此前无从分辨。
-//
-//   只删键、不改形状：attrs 仍是可选 numRecord；非四维键一律不碰（不在本迁移的面）。
-const legacyDefaultOf = (kind) => LEGACY_ENTITY_ATTR_DEFAULTS[kind];
-const bookNumberFor = (bookByName, name, k) => {
-    const b = bookByName.get(name);
-    const v = b?.attrs?.[k];
-    return typeof v === 'number' && Number.isFinite(v);
-};
-// 编年里出现过属性变更的实体名（判据②；渲染写名不写代号，故用 name 对齐——与 pushAttrChronicle 同口径）
-function chronicledAttrNames(chronicle) {
-    const out = new Set();
-    for (const c of chronicle || []) {
-        const m = /^「(.+?)」(兵力|权位|人脉|耳目) /.exec(String(c?.text || ''));
-        if (m) out.add(m[1]);
-    }
-    return out;
-}
-
-/**
- * migrateLegacyAttrs(ssot) → 世界（纯函数，不改输入）
- * 旧账一次性清理：批掉"引擎替模型编的"**逐维**默认值，被批掉的值写进 meta.legacyAttrsPurged 留档，
- * meta.legacyAttrsMigratedAt 记一次性标记（= 当时 tick）保证幂等（重复跑逐字节一致、不覆盖既有留档）。
- * 只删键、不改形状：attrs 仍是可选 numRecord（旧账零扰动原则）。
- */
+// ---- 旧账清理（纯函数迁移；幂等；不可变风格与全库一致） ----
+// 历史留档（一句话版，防重走）：leg24 片4 起这里曾有一条"逐维判旧默认值"的迁移，
+//   判"这个数是不是**引擎编的**"（该维 == 本类别旧默认值 ∧ 书里没写 ∧ 编年无变更 → 删该维）；
+//   第二十五棒实机修正把它从"整行全等"改成"逐维"（旧法漏清 500 维的机理：混合行让整行判词恒假）。
+//   **leg25 c 起这条判词连同它的判据源一起删除**——因为要判的对象整体不存在了：
+//   四维浮点（兵力/权位/人脉/耳目）已被用户令删除（没法精确表示；手拍值让"编的"看起来像"算的"）。
+//   判"数是不是编的"已经没有意义，现在只判"这个维度还存不存在"。故判据塌成一行：见下。
+// 旧账迁移（leg25 c）：**把 attrs 整键摘除**。判据极简——四维不存在了，账上就不该有它。
+//   为什么要留档：那些数曾经摆在面板上冒充客观（"兵力 0.15"），删掉时不许无声消失。
+//   幂等闸：meta.attrsRemovedAt（一次性）；留档 meta.legacyAttrsPurged = { [entityId]: { [attr]: 旧值 } }。
+//   与 leg24 那条"逐维判默认值"的迁移的关系：那条判"这个数是不是引擎编的"，本条判"这个维度还存不存在"；
+//   后者一旦成立，前者不再需要——四维整体不存在了。
+export const ATTRS_REMOVED_AT = 'attrsRemovedAt';
+export const LEGACY_ATTRS_PURGED = 'legacyAttrsPurged';
 export function migrateLegacyAttrs(ssot) {
     if (!ssot || typeof ssot !== 'object') return ssot;
     const meta = ssot.meta || {};
-    if (meta[LEGACY_ATTRS_MIGRATED_AT] !== undefined) return ssot;   // 已迁过：原样返回（幂等，绝不重扫）
-    const bookByName = new Map(((ssot.context?.setting?.frozen?.canon?.bookEntities) || []).map((b) => [b?.name, b]));
-    const chronicled = chronicledAttrNames(ssot.chronicle);          // 判据②：编年里有属性变更的实体
+    if (meta[ATTRS_REMOVED_AT] !== undefined) return ssot;   // 已摘过：原样返回（幂等）
     const purged = {};
     let changed = false;
     const entities = (ssot.entities || []).map((e) => {
-        const def = legacyDefaultOf(e.kind);
-        if (def === undefined || !e.attrs || typeof e.attrs !== 'object') return e;   // 类别无旧默认表 → 不在本迁移的面
-        const kept = {};
-        const dropped = {};
-        for (const [k, v] of Object.entries(e.attrs)) {
-            if (!INBORN_ATTR_KEYS.includes(k)) { kept[k] = v; continue; }             // 非四维键不碰
-            const fake = v === def && !bookNumberFor(bookByName, e.name, k) && !chronicled.has(e.name);
-            if (fake) dropped[k] = v; else kept[k] = v;
-        }
-        if (!Object.keys(dropped).length) return e;
-        purged[e.id] = dropped;                                      // 被删的值不许无声消失（逐键留档）
+        if (!e.attrs || typeof e.attrs !== 'object' || !Object.keys(e.attrs).length) return e;
+        purged[e.id] = e.attrs;                              // 旧值留档（不许无声消失）
         changed = true;
         const next = { ...e };
-        if (Object.keys(kept).length) next.attrs = kept;
-        else delete next.attrs;                                      // 整行清空 → 账面回到"空着就是空着"（片2 口径）
+        delete next.attrs;
         return next;
     });
-    if (!changed) return ssot;                                       // 无可清即不改一字（幂等：结果字节一致）
+    if (!changed) return ssot;                                // 无可摘即不改一字（幂等：字节一致）
     return {
         ...ssot,
         entities,
-        meta: {
-            ...meta,
-            [LEGACY_ATTRS_MIGRATED_AT]: meta.tick ?? 0,
-            [LEGACY_ATTRS_PURGED]: { ...(meta[LEGACY_ATTRS_PURGED] || {}), ...purged },   // 不覆盖既有留档
-        },
+        meta: { ...meta, [ATTRS_REMOVED_AT]: meta.tick ?? 0, [LEGACY_ATTRS_PURGED]: { ...(meta[LEGACY_ATTRS_PURGED] || {}), ...purged } },
     };
 }
 
-// 属性中文名（编年措辞用；与 render.js LABELS.attr 同口径——界面侧有自己一份，故此处不跨层 import 渲染层）
-const ATTR_LABEL = { hardPower: '兵力', office: '权位', network: '人脉', intel: '耳目' };
-
-// 编年依据短句：cause 是事件/盘算引用（**不是**代号入视线的编年主体，而是"因何"的必要依据），
-// 渲染写名不写代号（A-3）：盘算 → 「目标」、事件 → 「标题」、归档事件 → 「标题」；找不到就只留原始 ref（审计价值 > 措辞洁癖）。
-function causePhrase(world, cause) {
-    if (!cause) return '';
-    const a = (world.agendas || []).find((x) => x.id === cause);
-    if (a) return `（因盘算「${a.goal}」）`;
-    const ev = (world.events || []).find((x) => x.id === cause);
-    if (ev) return `（因事件「${ev.title}」）`;
-    const m = (world.milestones || []).find((x) => (x.ids || []).includes(cause));
-    if (m) return `（因已入纪之事）`;
-    return `（依据 ${cause}）`;
-}
-
-// 属性落账编年（leg24 片4，补 leg24 片3 漏的账：**每条变更留痕**）：
-// 旧法：adjudicate 里所有属性落账路径只 warnings.push（进 simLog，不进编年）——模型把某实体
-//   intel 0.5→0.7，账上查不出**何时、因何**（cause 只是提议里的可选字段，没进账）。
-// 现法：非玩家实体的属性**实际生效变更**各写一条编年（kind=state——处境驱动的世界变化；
-//   与"淡出视野"同章），一行一次 stateChanges（不额外刷屏）；值没真变（静默被拒/无基线负向不收/
-//   钳制到同值）一律不写。玩家侧另走 applyPlayerImpact → simLog.playerAffected（红线 1：引擎独占写玩家）。
-function pushAttrChronicle(world, chronicle, c, tick, before, after, seqById) {
-    const seq = (seqById[c.entity] = (seqById[c.entity] ?? 0) + 1);
-    const label = ATTR_LABEL[c.attr] || c.attr;
-    chronicle.push({
-        id: `ch_${tick}_attr_${c.entity}_${seq}`,
-        tick,
-        text: `「${entityName(world, c.entity)}」${label} ${before}→${after}${causePhrase(world, c.cause)}`,
-        kind: 'state',
-    });
-}
-
-// ①-② 校验 + 薄裁定（硬结果：**只有属性边界钳制与"静默方自我增强被拒"**）
-// leg24 片3（拆引擎裁定）：删除"低分量动作方按分量比折减"——用户拍板「引擎不裁胜负」，
-//   而"弱的一方打强的一方伤害打折"就是最直白的裁胜负（还要靠那个没法客观的分数）。现法：提议值与边界钳制说了算。
-// K15：hurtByEntity 收集 stateChanges 负向实际生效值（三态败露判据的窗口输入）
-function adjudicate(world, step, tick, warnings, gate, hurtByEntity, chronicle) {
+// ① 校验（薄裁定器）：世界步过全部语义校验；不过 → 世界如实不动（调用方退回）。
+// leg25 c（用户令「删」）：**属性裁定整段删除**。原先此处逐条裁 `stateChanges[].attr/delta`
+//   （边界钳制、首值落账、静默方自我增强被拒、空裁定措辞、属性编年、hurtWindow 输入）——
+//   四维浮点既然不存在（没法精确表示；手拍值让"编的"看起来像"算的"，design-core §4 第 1 条），
+//   契约层连 `stateChanges` 整条都删了，这里自然无可裁。
+//   ⚠️ 连带后果（如实登记，勿当 bug）：盘算"败露"判据原本吃 hurtWindow（近 2 tick 负向 δ），
+//     负向 δ 随属性消失 ⇒ 败露分支失去输入（hurtWindow 恒为空，判据落到达成一侧）。
+//     这是"删掉那个数"的直接后果；要恢复"败露"得另立**不依赖假精度**的判据（待拍板，未擅自发明）。
+function adjudicate(world, step, tick, warnings) {
     const checked = checkWorldStep(step, world);
     if (!checked.ok) {
         for (const e of checked.errors) warnings.push(`校验拒绝: ${e}`);
         return false;
-    }
-    const silentSet = new Set(gate.silent);
-    const liftedSet = new Set(gate.lifted);
-    const attrSeq = {};   // leg24 片4：同 tick 同实体多条属性变更的编年 id 序号（确定性唯一）
-    for (const [i, c] of step.stateChanges.entries()) {
-        const e = world.entities.find((x) => x.id === c.entity);
-        if (!e) continue; // 校验层已保证存在（防御）
-        const selfSilent = !c.actor && silentSet.has(c.entity) && !liftedSet.has(c.entity);
-        let eff = c.delta;
-        if (selfSilent) {
-            eff = 0;
-            warnings.push(`裁定: 静默方自我增强被拒（${c.entity}.${c.attr} 申请 ${c.delta}）`);
-        }
-        if (!c.cause) warnings.push(`stateChanges 无 cause: ${c.entity}.${c.attr}（坏账前置，K5）`);
-        // leg24 片2（账本换血）：账面**没有**这一维时，把模型这次的提议当作**该维的初值**，
-        // 不从 0 起算增量——旧法 `?? 0` 等于引擎替它把未知维定成 0（"不知道"被当成"很弱"，
-        // 而且负向提议会被硬边界钳到 0，凭空造出一个"被打到 0"的事实）。
-        // 现法：①非负提议 = 该维第一个真值，留痕；②**负向提议（无基线可减）不收，只留痕**——
-        //   账面上"没有这一维"时，扣减无从下手；要削弱一个账面无数的实体，得先有一次正向落账。
-        if (e.attrs?.[c.attr] === undefined) {
-            if (!(eff > 0)) {
-                warnings.push(`裁定: 账面无「${c.attr}」，负向提议 ${eff} 无基线可减——不收（先有正向落账才谈削弱；leg24 片2）`);
-                continue;
-            }
-            const init = clamp(eff, ATTR_BOUNDS);
-            if (init !== eff) warnings.push(`裁定: 属性硬边界（${c.entity}.${c.attr} 初值 ${eff}→${init}）`);
-            e.attrs = e.attrs || {};
-            e.attrs[c.attr] = init;
-            warnings.push(`裁定: 账面无「${c.attr}」——本次提议记为该维初值 ${init}（不从 0 起算，leg24 片2）`);
-            pushAttrChronicle(world, chronicle, c, tick, '账上无数', init, attrSeq);   // leg24 片4：初值落账同样留痕
-            continue;
-        }
-        const before = e.attrs[c.attr];
-        const after = clamp(before + eff, ATTR_BOUNDS);
-        // 第二十五棒实机修正（用户问「属性硬边界（e_bk_1.hardPower 0→0，申请 -0.2）这是什么」）：
-        //   旧法只要"申请值越界"就报裁定——于是**已经在下界 0 的属性**被提议再扣（申请 -0.2）时，
-        //   报出一条「0→0」的空裁定：账上一格没变，却在界面上占了"本轮裁定"的位置。
-        //   实测（用户当前世界）：属性硬边界裁定 6 条里 **4 条是这种空裁定**，而每轮警告总共才 1-2 条
-        //   ⇒ 噪声占了裁定面的一半，把真该看的裁定（真被钳住的那 2 条）挤掉了。
-        //   现法：**只有钳制真的改变了落账值时**才叫边界裁定；值本来就等于钳制结果 → 记为"越界提议被忽略"
-        //   （仍是如实留痕：模型提过、引擎没收，只是不冒充"裁了个边界"）。
-        //   未变值的提议本来就不写编年（见下行 `after !== before` 守卫），两处口径现在一致了。
-        if (after === before) {
-            warnings.push(`裁定: 越界提议被忽略（${c.entity}.${c.attr} 已是 ${before}，申请 ${before + eff}）`);
-            continue;
-        }
-        if (after !== before + eff) {
-            warnings.push(`裁定: 属性硬边界（${c.entity}.${c.attr} ${before}→${after}，申请 ${before + eff}）`);
-        }
-        e.attrs[c.attr] = after;
-        if (after !== before) pushAttrChronicle(world, chronicle, c, tick, before, after, attrSeq);   // leg24 片4：钳到同值不算变更
-        if (after < before) hurtByEntity[c.entity] = (hurtByEntity[c.entity] ?? 0) + (after - before);   // K15：负向 δ（实际生效值）
     }
     return true;
 }
@@ -286,41 +140,12 @@ export function resolveEventSource({ world, ev, weights }) {
     return { source: 'world', weight: 0 };
 }
 
-// K9 影响通道（引擎独占写玩家，红线 1 代码化，玩家档案细案 §3.3）：
-// ① 他人 actions[].target === playerId → hardPower −= PLAYER_IMPACT.targeted
-// ② 新事件波及玩家 → 已有各 attrs −= PLAYER_IMPACT.rippled
-// 确定性、钳制 [0,1]、simLog 审计（playerAffected）。
-// leg24 片3：**删掉 min(1, w_src/w_player) 折减系数**——那个数用户已定不要了；影响改用报批定案的固定系数
-//   （报批 #4-9：−0.05×min(1,ratio) / −0.02×ratio 里的"ratio"部分随分量退场，系数本身仍在）。
-//   理由同 adjudicate：拿两个没法客观的分数相除来决定"玩家被影响多少"，就是引擎在裁强弱。
-function applyPlayerImpact(world, gstep, tick, playerId, playerAffected, warnings) {
-    const player = world.entities.find((e) => e.id === playerId);
-    if (!player) return;
-    const hit = (attr, amount, source) => {
-        const before = player.attrs[attr] ?? 0;
-        const after = clamp(before + amount, ATTR_BOUNDS);
-        // 第二十五棒实机修正（与 adjudicate 同一把尺）：值已在边界、影响再往下压 → 记"越界提议被忽略"，
-        //   不冒充"裁了个边界"（同族空裁定噪声）。
-        //   **但记录照写**：playerAffected 的 `delta: 0` = "世界伸手碰了玩家、被吃住了"——那是模型要看见的
-        //   事实（K9 影响通道的审计面），不是噪声，所以这里只动措辞、不动记录。
-        if (after === before) {
-            warnings.push(`裁定: 越界提议被忽略（${playerId}.${attr} 已是 ${before}，申请 ${before + amount}）`);
-        } else if (after !== before + amount) {
-            warnings.push(`裁定: 属性硬边界（${playerId}.${attr} ${before}→${after}，申请 ${before + amount}）`);
-        }
-        player.attrs[attr] = after;
-        playerAffected.push({ tick, source, attr, delta: after - before });
-    };
-    for (const a of gstep.actions) {
-        if (a.target !== playerId) continue;
-        hit('hardPower', -PLAYER_IMPACT.targeted, a.entity);
-    }
-    for (const ev of gstep.newEvents) {
-        if (!(ev.ripples || []).includes(playerId)) continue;
-        const { source } = resolveEventSource({ world, ev, weights: world.weights || {} });
-        for (const attr of Object.keys(player.attrs)) hit(attr, -PLAYER_IMPACT.rippled, source);
-    }
-}
+// K9 影响通道（引擎独占写玩家，红线 1 代码化，玩家档案细案 §3.3）——**leg25 c：整段删除**。
+//   原法：① 他人 actions[].target === playerId → 玩家 hardPower −= PLAYER_IMPACT.targeted
+//         ② 新事件波及玩家 → 玩家各 attrs −= PLAYER_IMPACT.rippled
+//   它扣的是**四维浮点**，而账上已经没有这些数了（没法精确表示；手拍值让"编的"像"算的"）。
+//   红线 1（引擎独占写玩家）本身不变，只是"可写的内容"没了；`playerAffected` 记录**照旧留着**
+//   并照旧进 simLog（审计面不缩水——它的语义是"世界伸手碰了玩家"；将来若有新的可写事实，仍从这里走）。
 
 // 执行债（events.closed 关闭路径最小面，2026-09-07 顺手清）+ K19 闭环三型（因果链细案 §3.1 → A-1）：
 // ① 源结清：盘算终结/取消 → 其 plot 源事件全部闭环（closedAt 记落账 tick——归档判龄）；
@@ -491,7 +316,7 @@ function recomputeWeights(world, tick) {
     world.weights = {};
     for (const e of world.entities) {
         const idle = tick - (e.lastActiveTick ?? 0);   // 旧夹具无历史按 tick 计；宽限期（人物 8/势力 20）内因子恒 1
-        world.weights[e.id] = computeWeightAtTick(e.attrs, e.kind, tension, idle);
+        world.weights[e.id] = computeWeightAtTick(null, e.kind, tension, idle);
     }
     return world.weights;
 }
@@ -735,21 +560,12 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
         }
         if (world.entities.some((e) => e.name === ne.name)) continue;   // 重名拒（check 已查，防御）
         const kind = ne.kind || 'character';
-        // leg24 片2：**不再按 kind 预填四维**——没提议就是没数据（空着就是空着），
-        // 引擎只在模型真提议了数值时钳制落账（有据才留痕）。
-        const proposed = ne.attrs && typeof ne.attrs === 'object' ? ne.attrs : {};
-        const attrs = {};
-        for (const [k, v] of Object.entries(proposed)) {
-            const clamped = clamp(v, ATTR_BOUNDS);
-            if (clamped !== v) warnings.push(`裁定: 入局属性钳制（${ne.name}.${k} ${v}→${clamped}）`);
-            attrs[k] = clamped;
-        }
+        // leg25 c：入局**不再落任何数值**——四维已不存在（书里的说法走 `实力` 文本态）。
         const ent = {
             id: `e_${tick}_${born.length + 1}`,
             kind,
             name: ne.name,
             location: ne.location,
-            attrs,
             lastActiveTick: tick,
         };
         // K45/C7（用户 2026-09-09 拍板：提示词约束为主）：newEntities 可带 parent=所属势力名——目标在册且为势力且未灭才落；否则弃关系+警告（照常入局）
@@ -905,7 +721,11 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     }
     const events = hangEvents(world, gstep, tick);
     // K9 影响通道：引擎独占写玩家（他人 targeting / 新事件波及 → 分量比影响，落账在重算前——分量当轮反映）
-    if (playerId) applyPlayerImpact(world, gstep, tick, playerId, playerAffected, warnings);
+    // leg25 c：K9 影响通道（被人打/被事件波及 → 扣玩家的属性）**随属性一并删除**——
+    //   它扣的是 hardPower/各 attrs，而账上已经没有这些数了。
+    //   红线 1（引擎独占写玩家）本身不变，只是"写"的内容没了；`playerAffected` 记录照旧留着
+    //   并照旧进 simLog（审计面不缩水——它的语义是"世界伸手碰了玩家"，将来若有了新的可写事实，
+    //   仍从这条通道走、仍写这里）。
     checkConsistency(world, gstep, warnings);
     // K3 活跃记账：落账主动作方（actions/盘算推进/plot 事件属主）记 lastActiveTick；被打击/被波及的客体不计
     // K11 玩家同尺：有落子轮（moveFact.verb 非空）= active；OOC/静默轮不记 → 站桩权力照萎缩（长跑 §2.3）
