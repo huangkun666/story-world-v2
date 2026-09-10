@@ -60,6 +60,7 @@ export const ssotSchema = {
                                                     name: { kind: 'string', minLength: 1 },
                                                     kind: { kind: 'string', enum: ['faction', 'character', 'location'] },
                                                     parent: { kind: 'string', minLength: 1 },
+                                                    location: { kind: 'string', minLength: 1 },   // leg21 补形状（此前 sanitizeCanon/关系轮已写、实体页已用，形状层漏登记 → 名册一律校验不过）；书中明述的所在/驻地
                                                     race: { kind: 'string', minLength: 1 },   // leg20：种族归属标签（书级出处校验后保留；可选）
                                                     attrs: { kind: 'numRecord' },            // leg20：四维属性（净化钳制 [0,1]；可选）
                                                     evidence: { kind: 'string', minLength: 1 },   // leg20：属性原文依据短句（随 attrs 保留；可选）
@@ -112,6 +113,7 @@ export const ssotSchema = {
                     status: { kind: 'string', enum: ['active', 'retired', 'dead'] },   // K37/实体治理 §3.7 状态契约（可选=缺省 active；旧世界零扰动）；dead=终局不复归；retired=可复归
                     parent: { kind: 'string', minLength: 1 },   // 第十九棒/C7：从属方单存——character→所属势力/分支名，faction→上级势力名（书中明述；可选=旧世界零扰动）
                     branches: { kind: 'array', items: { kind: 'string', minLength: 1 } },   // 第十九棒/C8：势力实体分支表（子势力名号平铺；可选=旧世界零扰动）
+                    organs: { kind: 'array', items: { kind: 'string', minLength: 1 } },     // leg23：势力实体名下机构/部门（书里明述、但不作为独立棋手入池的名号；可选=旧世界零扰动）
                 },
             },
         },

@@ -73,11 +73,17 @@ test('K49 runRelationRound：parent 只在册且为势力才落账；first-wins 
     assert.equal(names[2].race, '人族', 'race 补缺');
     assert.equal(names[2].location, '剑冢', 'location 补缺');
 
-    // 场景二：parent 在册但是角色（非势力）→ 同样弃
+    // 场景二（leg23 改口径）：parent 在册但是角色 → 照挂（书里「统辖: 人帝姬元真」就是指向人）
     const n2 = [{ name: '天庭百官', kind: 'faction' }, { name: '薛铁衣', kind: 'character' }];
     const errs2 = await runRelationRound(rows, n2, async () => JSON.stringify({ bookEntities: [{ name: '天庭百官', parent: '薛铁衣' }] }));
-    assert.equal(n2[0].parent, undefined, 'parent 非势力 → 弃关系');
-    assert.ok(errs2.some((e) => /非势力/.test(e)), '弃置原因如实留痕');
+    assert.equal(n2[0].parent, '薛铁衣', 'leg23：在册即可（含角色）——旧口径「须为势力」实测扔掉了真关系');
+    assert.deepEqual(errs2, [], '合法落账零警告');
+
+    // 场景二·补：parent 不在册 → 仍弃（诚实底线不动），留痕按名号去重（不刷屏）
+    const n2b = [{ name: '天庭百官', kind: 'faction' }];
+    const errs2b = await runRelationRound(rows, n2b, async () => JSON.stringify({ bookEntities: [{ name: '天庭百官', parent: '界渊长城' }] }));
+    assert.equal(n2b[0].parent, undefined, '不在册 → 弃关系（不新建实体、不猜测）');
+    assert.equal(errs2b.filter((e) => /不在册/.test(e)).length, 1, '弃置留痕一次（按名号去重）');
 
     // 场景三：parent 在册且为势力 → 落账，零留痕
     const n3 = [{ name: '天庭百官', kind: 'faction' }, { name: '天庭', kind: 'faction' }];

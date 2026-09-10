@@ -64,6 +64,7 @@ export function buildEvolutionPack(ssot, moveFact) {
         const row = { id: e.id, kind: e.kind, name: e.name, location: e.location };
         if (e.parent) row.parent = e.parent;                      // C7：从属（角色→势力/分支）
         if (e.kind === 'faction' && e.branches?.length) row.branches = e.branches;   // C8：分支表
+        if (e.kind === 'faction' && e.organs?.length) row.organs = e.organs;         // leg23：名下机构/部门（书里明述）
         if (e.kind === 'faction') {
             const members = membersOf(ssot, e);                   // C7：麾下成员简表（派生）
             if (members) row.members = members;

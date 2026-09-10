@@ -104,7 +104,8 @@
 ## 5. 工具与命令手册
 
 - **运行位置**：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）。
-- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载）。当前 **334/334 全绿**（2026-09-09 第十七棒：上一基线 325/325 → K38 观测台新模块 + 新实体数值分配 + 冷档链验证新增 9 则）；
+- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载；**且须在项目目录内运行**，在仓库根跑会连带跑到旧项目 `plugins/story-world` 的测试）。当前 **403/403 全绿**（2026-09-10 第二十三棒：396 → 403，新增 `test/book-tags.test.js` 7 则——照书办/声明扫描/关系轮口径放宽）；
+  ⚠ 另注：仓库根 `node --test` 会跑出旧项目 v1 的 swv 守卫失败（v1 自身"改了代码没跑它的部署脚本"所致，与本项目无关，勿误判）。
 - **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——**部署位**：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（第十三棒落位，台账 L96；v1 同层同法先例；web/ 改动免重复拷贝，ST 页面刷新即载）；重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
 - **演示**（`node demo/<名称>.js`，在项目根目录运行）：
   | 脚本 | 用途 |

@@ -28,7 +28,7 @@ const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'setti
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260910-fix';
+const CSS_VERSION = '20260910-leg23';
 
 // leg21 增量补抽会话态：防重入 + 「已试过仍无果」名号记忆（书指纹变化时清空——防旧书补新账）
 let refining = false;

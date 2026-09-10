@@ -310,9 +310,13 @@ export function renderEntitiesHtml(world) {
         const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
         const status = e.status && e.status !== 'active' ? `<span class="sw2-visible ${e.status === 'dead' ? 'v-hidden' : 'v-known'}">${LABELS.status[e.status]}</span>` : '';
         const lensBadge = lens.has(e.id) && (!e.status || e.status === 'active') ? '<span class="sw2-visible v-known">在场</span>' : '';
-        const affil = e.parent ? `<div class="sw2-eaffil">隶属：${escapeHtml(e.parent)}</div>` : '';
+        // leg23：势力挂到统治者/上级时用「上级」措辞（角色仍是「隶属」）；名下机构/部门单列一行
+        const affil = e.parent ? `<div class="sw2-eaffil">${e.kind === 'faction' ? '上级' : '隶属'}：${escapeHtml(e.parent)}</div>` : '';
         const branch = e.kind === 'faction' && e.branches?.length
             ? `<div class="sw2-eaffil">分支：${escapeHtml(e.branches.join('、'))}</div>` : '';
+        // leg23：名下机构/部门（书里明述归它管）——势力与统治者（角色）都可能有；旧世界无此字段则零扰动
+        const organ = e.organs?.length
+            ? `<div class="sw2-eaffil">机构：${escapeHtml(e.organs.join('、'))}</div>` : '';
         const crew = e.kind === 'faction' ? membersOf(world, e) : null;
         const crewHtml = crew ? `<div class="sw2-eaffil">麾下：${escapeHtml(crew.join('、'))}</div>` : '';
         return `<div class="sw2-entity-row${e.id === world.context?.playerId ? ' sw2-player' : ''}">`
@@ -320,7 +324,7 @@ export function renderEntitiesHtml(world) {
             + `<div class="sw2-eloc">${escapeHtml(e.location || '')}</div>`
             + `<div class="sw2-eweight"><span class="sw2-wbar"><i style="width:${fmtPct(world.weights?.[e.id])}%"></i></span><span class="sw2-wval">${fmtPct(world.weights?.[e.id])}</span></div>`
             + `<div class="sw2-eattrs">${attrs(e)}${rosterNames.has(e.name) ? `<button class="sw2-chainbtn" data-action="refine-entity" data-entity="${escapeHtml(e.id)}" title="按书内原文补抽该实体的属性（不重抽全量设定）">补抽</button>` : ''}</div>`
-            + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${crewHtml}</div>`
+            + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${organ}${crewHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
