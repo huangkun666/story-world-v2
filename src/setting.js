@@ -39,9 +39,22 @@ export const TENSION_FREQ_DIV = 4;     // 定案（报批二批 #10）：频次�
 export const TENSION_INERTIA = 0.9;    // 定案（报批二批 #11）：每 tick 惯性衰减（记忆系数——冷清时强度不骤跌）
 export const TENSION_BLEND = { freq: 0.6, rival: 0.4 };   // 定案（报批二批 #12）：压力合成权重
 
+// 近 TENSION_WINDOW 轮内出生的事件数（唯一一份口径）——供强度公式与**渲染层**共用。
+// 为什么提到模块级：面板上原写「烈度带词 + 百分比」，而 rival 腿实测恒为满值（见下方注释），
+//   那个 %% 实际只反映**事件密度**。与其让面板摆一个要解码的数，不如直说这个可验证的事实。
+//   `world.meta.tick` 与强度更新用的 tick 同源（settle 先自增 meta.tick 再调 updateTensionIntensity），
+//   故两处读数必然一致——不会出现"面板数与公式不同步"。
+export function recentEventCount(world, tick = world?.meta?.tick ?? 0) {
+    return (world?.events || []).filter((e) => tick - eventBornTick(e.id) <= TENSION_WINDOW).length;
+}
+
 export function computeTensionIntensity(world, tick) {
-    const recent = (world.events || []).filter((e) => tick - eventBornTick(e.id) <= TENSION_WINDOW).length;
-    const freq = Math.min(1, recent / TENSION_FREQ_DIV);
+    const freq = Math.min(1, recentEventCount(world, tick) / TENSION_FREQ_DIV);
+    // ⚠️ 已知失真（leg25 b 实测，登记为 A1b）：rival 是"去掉一个 w1 之后的并列者"，只要有并列就恒为 1；
+    //   而 leg24 片2 之后势力四维普遍为空 → 同取中立 floor → 必然并列 ⇒ **实测 100 tick 里 t10–t80 恒为 1.0000**
+    //   （均值 0.9913、并列者平均 96.2 个）。即这条腿等价于一个 +0.4 的**常数偏置**，"两强对峙"没被真正度量。
+    //   它不属于定案要砍的面（定案只砍「裁胜负 + 排序」；切片细案 §3 结论句明写"算能见度/范围不算被禁"），
+    //   且数字已报批（二批 #9-12）——故**保留计算不动**，只在渲染层把说法改诚实（不再叫「烈度」）。
     const ws = Object.values(world.weights || {}).sort((a, b) => b - a);
     const w1 = ws[0] ?? 0;
     const w2 = ws[1] ?? 0;

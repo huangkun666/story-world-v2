@@ -86,7 +86,9 @@ test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世�
     assert.match(infoband, /sw2-env-val">0\.44</);
     assert.match(infoband, /sw2-env-row sw2-danger/);              // 天时 0.15 与时局 0.8 危险带
     assert.match(infoband, /大虞\/万法阁/);                       // 张力极在张力行（三件套不丢）
-    assert.match(infoband, />72</);                               // 强度数字在张力行
+    // leg25 b（A1b）：张力行由「强度百分比」改说「近 N 轮事件数」（那个 % 实测只反映事件密度）
+    assert.match(infoband, /近10轮事件 0 件/);                    // 本夹具 events 为空 → 0 件
+    assert.ok(!infoband.includes('>72<'), '推导出的强度数字不再上面板');
     assert.match(infoband, /逼黄坤入洗煞之局（第32轮）/);         // 浪尖 → 盘算目标（id 不透传）
     assert.match(infoband, /<div class="sw2-big-num">3<small>\/15<\/small>/);
 });
@@ -360,10 +362,13 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
     assert.ok(!infoband.includes('大势 · 结构性张力'), '旧标签（大势顶张力名）废除');
     assert.ok(infoband.includes('大势未聚（无主张力）。'), '无世情时大势行=未聚（不拼张力）');
     assert.ok(infoband.includes('浪尖：血洗洛城'), '浪尖入大势句（目标名不露 id）');
-    assert.ok(infoband.includes('（高烈度）') && infoband.includes('>82<'), '强度带词+数值归张力行');
-    assert.ok(infoband.includes('魔涨道消（原文方向）'), '方向在张力行');
+    // leg25 b（A1b）：张力行不再写「烈度带词 + 百分比」——那个 % 实测只反映事件密度（rival 腿恒为满值），
+    //   带词会暗示"引擎判断了天下张力"。改为直说可验证的事实：近 N 轮事件几件。
+    assert.ok(!infoband.includes('烈度'), '张力行不再用「烈度」带词（它暗示引擎判断了张力）');
+    assert.ok(infoband.includes('近10轮事件 0 件'), '张力行改说可验证事实：近 N 轮事件数（本夹具 events 为空）');
+    assert.ok(!infoband.includes('>82<'), '推导出的百分比不再上面板（它只反映事件密度）');
+    assert.ok(infoband.includes('魔涨道消（原文方向）'), '方向在张力行（原文措辞）');
     assert.ok(infoband.includes('正邪相争'), '张力极在张力行');
-    assert.ok(!infoband.includes('高烈度 82'), '烈度不再拼进大势句');
     assert.match(digest, /天时不作美/, '环境危险带经时局句副句（世情面，不属张力）');
 });
 

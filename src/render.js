@@ -7,12 +7,15 @@
 //   禁：分量/熵泵/里程碑/上溯/波及/指纹/派生源/强度参数名/hardPower…/tick/裸 id。
 import { BANDS, ENV_KEYS } from './entropy.js';
 import { lensList, membersOf } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
+import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张力行改说可验证事实（近 N 轮事件数），与公式共用同一口径
 
 // 面板构建号（自证用）：用户实机常遇到"改了代码但页面还是旧的"（浏览器缓存 web/index.js）。
 //   这个号随每次功能落地递增，渲染进面板页脚——Ctrl+F5 后一眼就能判断载的是哪一版。
 //   判据（第二十五棒）：`有值/未查/未加载到/书未明述` 查书标记 + 位置列去重 = 本轮；
 //   上一版是"查书标记（缺未查）+ 位置未明徽章重复"。
-export const PANEL_BUILD = 'leg25-lookup-4state+posdedup';
+//   第二十五棒 b 追加（A1b）：张力行不再写「烈度带词 + 百分比」，改「近 N 轮事件 N 件」；
+//   麾下成员序由分量序改**名号序**（A1）。← 看到 `+a1b` 后缀即已载入这两条。
+export const PANEL_BUILD = 'leg25-lookup-4state+posdedup+a1a1b';
 
 export const LABELS = {    attr: { hardPower: '兵力', office: '权位', network: '人脉', intel: '耳目' },
     env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -152,7 +155,10 @@ export function renderInfoBandHtml(world) {
     };
     // K46（细案 C4）+ leg21（用户指认）：大势行 = 真·天下大势一句（世情句领；无世情=未聚——张力不再混入）；
     // 张力行 = 结构性张力三件套独立成行（极/方向/强度带词全部归此行）
-    const intWord = t.intensity == null ? '' : t.intensity < 0.4 ? '低烈度' : t.intensity < 0.7 ? '中烈度' : '高烈度';
+    // leg25 b（A1b）：原为「低/中/高烈度 + 百分比」。实测 rival 腿恒为满值 ⇒ 那个 % 实际只反映**事件密度**，
+    //   而「烈度」这个词在暗示"引擎判断了天下张力"——它没做到。改为直说可验证的事实：近 10 轮事件几件。
+    //   强度数字仍在（setting 页摆原值，且照旧喂模型），只是不再用带词包装它。
+    const recentEvents = recentEventCount(world);
     const sit = world.context?.setting?.frozen?.canon?.situation;   // leg20：世情句领大势行（原文措辞）
     const trend = [
         sit ? `${escapeHtml(sit)}。` : '大势未聚（无主张力）。',
@@ -162,7 +168,7 @@ export function renderInfoBandHtml(world) {
         + `<div class="sw2-band-block"><div class="sw2-band-label">世情 · 四键${baselineHint}</div><div class="sw2-env">${envRows.join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">大势</div><div class="sw2-trend">${trend}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">张力 · 结构性三件套</div>`
-        + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')}${intWord ? `（${intWord}）` : ''} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
+        + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')}<small class="sw2-quiet-note">近${TENSION_WINDOW}轮事件 ${recentEvents} 件</small></div>`
         + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">浪尖 · 刚收尾的大动作</div><div class="sw2-tides">${tides.map((x) => `<div class="sw2-tide">${x}</div>`).join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">盘算</div>`
@@ -426,7 +432,8 @@ export function renderSettingHtml(world) {
         + `<div class="sw2-sv-grid">`
         + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>张力现状（演变层 · 引擎算 · 每轮随动）</h4>`
         + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
-        + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')}</div>`
+        + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')} · 近${TENSION_WINDOW}轮事件 ${recentEventCount(world)} 件</div>`
+        + `<div style="margin-top:6px;font-size:12px;color:var(--sw2-text-faint)">上面这个数是引擎每轮重算的读数（惯性平滑，0–1）。<b>它目前主要由"近${TENSION_WINDOW}轮事件数"驱动</b>——公式里的"两强对峙度"一项实测恒为满值（势力四维普遍为空时会全体同值），所以它并不表示"引擎判断了天下张力"。</div>`
         + `<div class="sw2-env">${envRows}</div>`
         + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div>`
         + `<div style="margin-top:10px"><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button><span class="sw2-hint">只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div></div>`
