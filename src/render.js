@@ -296,6 +296,9 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 export function renderEntitiesHtml(world) {
     // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、镜头徽、分支/隶属
     const lens = new Set(lensList(world).map((x) => x.e.id));
+    // leg21 增量抽象：名册条目名 → 行内「补抽」按钮资格；头部批量按钮带候选计数（无 attrs 条目数）
+    const rosterNames = new Set((world.context?.setting?.frozen?.canon?.bookEntities || []).map((b) => b.name));
+    const pendingN = (world.context?.setting?.frozen?.canon?.bookEntities || []).filter((b) => !b.attrs).length;
     const attrs = (e) => Object.entries(LABELS.attr).map(([k, label]) => {
         const v = e.attrs?.[k];
         if (v == null) return ''; // 账上无键=该维缺位（「世界书用不到兵力」语义：无兵世界不出现兵力列）
@@ -315,14 +318,14 @@ export function renderEntitiesHtml(world) {
             + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}</small>${lensBadge}</div>`
             + `<div class="sw2-eloc">${escapeHtml(e.location || '')}</div>`
             + `<div class="sw2-eweight"><span class="sw2-wbar"><i style="width:${fmtPct(world.weights?.[e.id])}%"></i></span><span class="sw2-wval">${fmtPct(world.weights?.[e.id])}</span></div>`
-            + `<div class="sw2-eattrs">${attrs(e)}</div>`
+            + `<div class="sw2-eattrs">${attrs(e)}${rosterNames.has(e.name) ? `<button class="sw2-chainbtn" data-action="refine-entity" data-entity="${escapeHtml(e.id)}" title="按书内原文补抽该实体的属性（不重抽全量设定）">补抽</button>` : ''}</div>`
             + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${crewHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
     const allEnts = world.entities || [];
     const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}${pendingN ? `<button class="sw2-chainbtn" data-action="refine-pending" title="按书内原文批量补抽未抽到的实体属性（不重抽全量设定）">补抽未抽属性（${pendingN}）</button>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
         + `<div class="sw2-hint">势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。</div>`;
 }
 
@@ -362,7 +365,8 @@ export function renderSettingHtml(world) {
         + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
         + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')}</div>`
         + `<div class="sw2-env">${envRows}</div>`
-        + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div></div>`
+        + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div>`
+        + `<div style="margin-top:10px"><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button><span class="sw2-hint">只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div></div>`
         + `<div class="sw2-set-card"><h4>力量谱系（${(canon.powerScale || []).length} 档 · 取全）</h4>${scaleRows || '<div class="sw2-sv-row"><span>（无）</span></div>'}</div>`
         + `<div class="sw2-set-card"><h4>法则（${(canon.rules || []).length} 条）</h4>${ruleRows || '<div class="sw2-sv-row"><span>（无）</span></div>'}</div>`
         + `<div class="sw2-set-card"><h4>社会格局 · 力量体系</h4><p class="sw2-sv-para">${escapeHtml(canon.society || '（无）')}</p><p class="sw2-sv-para">${escapeHtml(canon.techOrMagic || '（无）')}</p></div>`

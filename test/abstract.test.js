@@ -13,6 +13,9 @@ import {
     assembleSetting,
     extractWorldSetting,
     applySettingToSsot,
+    applyRosterAttrs,
+    refineEntityAttrs,
+    resetDynamicLayer,
     ENV_INIT_BASELINE,
     TENSION_INIT_BASELINE,
 } from '../src/abstract.js';
@@ -275,4 +278,82 @@ test('leg20 种族标签出处校验 + attrs 净化形状（钳制/非对象/缺
     const bing = c.canon.bookEntities.find((b) => b.name === '丙');
     assert.deepEqual(bing.attrs, { hardPower: 0.5 });
     assert.equal(bing.race, '人族');
+});
+
+// ============ leg21 增量抽象（docs/incremental-refine-spec.md） ============
+
+test('leg21 applyRosterAttrs：默认值占位可被有据值覆盖，非默认不回改；race 补缺；分量重算；幂等', () => {
+    const mk = () => ({
+        context: { tension: 0.6, positions: ['x'], setting: { frozen: { canon: { bookEntities: [
+            { name: '白小娥', kind: 'character', attrs: { hardPower: 0.4 }, evidence: '原句' },
+            { name: '万法阁', kind: 'faction', attrs: { hardPower: 0.9, office: 0.5 }, evidence: '原句', race: '人族' },
+        ] } } } },
+        entities: [
+            { id: 'e1', kind: 'character', name: '白小娥', location: 'x', attrs: { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 } },
+            { id: 'e2', kind: 'faction', name: '万法阁', location: 'x', attrs: { hardPower: 0.8, office: 0.25, network: 0.25, intel: 0.25 } },
+        ],
+        weights: {},
+    });
+    const ssot = mk();
+    const r = applyRosterAttrs(ssot);
+    assert.equal(r.updated, 2);
+    const xiao = ssot.entities.find((e) => e.id === 'e1');
+    assert.equal(xiao.attrs.hardPower, 0.4, '默认值占位（0.15）被有据值覆盖');
+    assert.equal(xiao.attrs.office, 0.15, 'roster 无 office → 保持默认');
+    const wf = ssot.entities.find((e) => e.id === 'e2');
+    assert.equal(wf.attrs.hardPower, 0.8, '非默认值（0.8）不回改');
+    assert.equal(wf.attrs.office, 0.5, '默认值占位（0.25）被有据值覆盖');
+    assert.equal(wf.race, '人族', 'race 补缺');
+    assert.ok(ssot.weights.e1 > 0 && ssot.weights.e2 > 0, '分量重算在位');
+    assert.equal(applyRosterAttrs(ssot).updated, 0, '幂等：再跑零更新');
+});
+
+test('leg21 refineEntityAttrs 单实体补抽：行邻域定位 → 小调用 → 出处校验 → 名册+实体合并；无谓据弃置', async () => {
+    const src = '【甲】白小娥：炼气三层，一身轻功。\n【乙】无关路过的行：路人甲，路人乙。\n【丙】万法阁：灵脉霸主，掌大荒灵脉。';
+    const calls = [];
+    const ssot = () => ({
+        context: { tension: 0.6, positions: ['x'], setting: { frozen: { canon: { bookEntities: [{ name: '白小娥', kind: 'character' }] } } } },
+        entities: [{ id: 'e1', kind: 'character', name: '白小娥', location: 'x', attrs: { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 } }],
+        weights: {},
+    });
+    const r = await refineEntityAttrs(ssot(), {
+        name: '白小娥', src,
+        extract: async (prompt) => { calls.push(prompt); return JSON.stringify({ bookEntities: [{ name: '白小娥', attrs: { hardPower: 0.3, intel: 0.6, 依据: '炼气三层' } }] }); },
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.updated, 2, '名册 1 + 实体 1');
+    assert.ok(calls[0].includes('炼气三层'), '上下文=名号所在行邻域');
+    assert.ok(!calls[0].includes('万法阁'), '上下文不含无关条目行');
+    const s1 = ssot();
+    await refineEntityAttrs(s1, { name: '白小娥', src, extract: async () => JSON.stringify({ bookEntities: [{ name: '白小娥', attrs: { hardPower: 0.3, intel: 0.6, 依据: '炼气三层' } }] }) });
+    assert.deepEqual(s1.context.setting.frozen.canon.bookEntities[0].attrs, { hardPower: 0.3, intel: 0.6 });
+    assert.equal(s1.context.setting.frozen.canon.bookEntities[0].evidence, '炼气三层');
+    assert.equal(s1.entities[0].attrs.hardPower, 0.3, '实体默认占位被覆盖');
+    // 依据不在原文 → 弃 + 警告，账不动
+    const s2 = ssot();
+    const r2 = await refineEntityAttrs(s2, { name: '白小娥', src, extract: async () => JSON.stringify({ bookEntities: [{ name: '白小娥', attrs: { hardPower: 0.9, 依据: '四处编造' } }] }) });
+    assert.equal(r2.ok, true);
+    assert.equal(r2.updated, 0, '出处校验不过 → 不合并');
+    assert.ok(r2.warnings.some((w) => /出处校验/.test(w)), '弃置留痕');
+    assert.equal(s2.context.setting.frozen.canon.bookEntities[0].attrs, undefined);
+    // 全失败（空输出重试两次）→ ok:false
+    const s3 = ssot();
+    const r3 = await refineEntityAttrs(s3, { name: '白小娥', src, extract: async () => '' });
+    assert.equal(r3.ok, false);
+    assert.match(r3.errors[0], /已重试一次/);
+});
+
+test('leg21 resetDynamicLayer：强度/env 回基线、derivedFrom 清空、极性方向保留、frozen 不动', () => {
+    const setting = {
+        frozen: { fingerprint: 'f', extractedAt: 't', canon: {} },
+        dynamic: { tension: { polarity: '正邪', direction: '邪压正', intensity: 0.82 }, env: { 民生度: 0.2, 动乱度: 0.9, 天时: 0.1, 张力推手: 0.7 }, derivedFrom: ['浪尖:a_1@3'] },
+    };
+    const next = resetDynamicLayer(setting);
+    assert.equal(next.frozen, setting.frozen, 'frozen 引用不动');
+    assert.equal(next.dynamic.tension.polarity, '正邪');
+    assert.equal(next.dynamic.tension.direction, '邪压正');
+    assert.equal(next.dynamic.tension.intensity, TENSION_INIT_BASELINE);
+    assert.deepEqual(next.dynamic.env, { 民生度: ENV_INIT_BASELINE, 动乱度: ENV_INIT_BASELINE, 天时: ENV_INIT_BASELINE, 张力推手: ENV_INIT_BASELINE });
+    assert.deepEqual(next.dynamic.derivedFrom, []);
+    assert.equal(next.dynamic.tension.intensity, 0.5, '基线=0.5');
 });

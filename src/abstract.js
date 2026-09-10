@@ -381,7 +381,7 @@ function nameInRow(name, row) {
     }
     return re.test(row);
 }
-async function runAttrsRound(rows, names, extract) {
+export async function runAttrsRound(rows, names, extract) {
     const errors = [];
     if (!names.length) return errors;
     const idx = new Map(names.map((b) => [b.name, b]));
@@ -620,4 +620,90 @@ export function seedBookEntities(ssot) {
         if (ssot.weights[e.id] === undefined) ssot.weights[e.id] = computeWeight(e.attrs, e.kind, tension);
     }
     return { seeded, folded, skippedLocation, warnings };
+}
+
+// ============ leg21 增量抽象（docs/incremental-refine-spec.md）：清除演化层 / 名册→实体补缺 / 单实体补抽 ============
+
+// 清除演化层（纯函数，不可变）：intensity/env 回基线、derivedFrom 清空；polarity/direction 保留
+//（它们是书抽的设定面，不属演化）；frozen 一概不动。不触发任何抽取调用。
+export function resetDynamicLayer(setting) {
+    const dyn = setting?.dynamic || {};
+    const t = dyn.tension || {};
+    return {
+        ...setting,
+        dynamic: {
+            tension: {
+                polarity: String(t.polarity || '').trim() || '未聚',
+                direction: String(t.direction || '').trim(),
+                intensity: TENSION_INIT_BASELINE,
+            },
+            env: Object.fromEntries(ENV_KEYS.map((k) => [k, ENV_INIT_BASELINE])),
+            derivedFrom: [],
+        },
+    };
+}
+
+// 名册条目 attrs/race → 实体键级补缺 + 分量重算（增量补抽落账面；seedBookEntities 的初始全量合并语义不动）。
+// 覆盖规则（细案 §2.4 定案）：键缺失 或 现值恰等于类别默认（character 0.15 / faction 0.25）→ 可被有据值覆盖；
+// 真实非默认值永不回改（幂等）。
+export function applyRosterAttrs(ssot) {
+    let updated = 0;
+    const byName = new Map((ssot.entities || []).map((e) => [e.name, e]));
+    for (const b of ssot.context?.setting?.frozen?.canon?.bookEntities || []) {
+        if (!b.attrs) continue;
+        const ent = byName.get(b.name);
+        if (!ent) continue;
+        const def = ENTITY_ATTR_DEFAULT[ent.kind] ?? ENTITY_ATTR_DEFAULT.character;
+        let changed = false;
+        for (const k of INBORN_ATTR_KEYS) {
+            const v = b.attrs[k];
+            if (v === undefined) continue;
+            if (ent.attrs?.[k] === undefined || ent.attrs[k] === def) {
+                ent.attrs = ent.attrs || {};
+                ent.attrs[k] = v;
+                changed = true;
+            }
+        }
+        if (b.race && !ent.race) { ent.race = b.race; changed = true; }
+        if (changed) {
+            ssot.weights = ssot.weights || {};
+            ssot.weights[ent.id] = computeWeight(ent.attrs, ent.kind, ssot.context?.tension ?? 0.5);
+            updated += 1;
+        }
+    }
+    return { updated };
+}
+
+// 单实体补抽（细案 §2.1 → A-1）：名号 → 书文行邻域定位 → 一次小调用（空/失败重试一次）→ 净化 →
+// 书级出处校验（依据/种族 ∈ 全书原文）→ 名册条目合并（无 attrs 才并入，first-wins）→ 实体补缺+分量重算。
+// 返回 {ok, updated, warnings, errors}；ssot 原地更新（编排层调用方持克隆态，与 seedBookEntities 同风格）。
+export async function refineEntityAttrs(ssot, { name, src, extract }) {
+    const errors = [];
+    const rows = src.split('\n').map((s) => s.trim()).filter(Boolean);
+    const hits = [];
+    for (let i = 0; i < rows.length; i += 1) if (nameInRow(name, rows[i])) hits.push(i);
+    let text;
+    if (hits.length) {
+        const from = Math.max(0, hits[0] - 1);
+        const to = Math.min(rows.length, hits[hits.length - 1] + 2);
+        text = rows.slice(from, to).join('\n');           // 命中行 ±1 行邻域
+    } else {
+        text = Array.from(src).slice(0, CANON_SRC_CHAR).join('');   // 兜底：头 3 万字符
+    }
+    let r = await callOnce(extract, buildAttrsPrompt([name], text));
+    if (r.callError) r = await callOnce(extract, buildAttrsPrompt([name], text));
+    if (r.callError) return { ok: false, updated: 0, warnings: [], errors: [`补抽失败（已重试一次）：${r.callError}`] };
+    const it = r.cleaned.canon.bookEntities.find((x) => x.name === name);
+    if (!it || (!it.attrs && !it.race)) return { ok: true, updated: 0, warnings: ['该名号本次没有抽到属性（无把握，引擎兜底不变）'], errors };
+    const detail = validateRosterDetails([it], src);   // 书级出处校验（单条；依据/种族 ∈ 原文）
+    const warnings = [...detail.warnings];
+    const item = detail.bookEntities[0];
+    let updated = 0;
+    const entry = (ssot.context?.setting?.frozen?.canon?.bookEntities || []).find((b) => b.name === name);
+    if (entry) {
+        if (item.attrs && !entry.attrs) { entry.attrs = item.attrs; entry.evidence = item.evidence; updated += 1; }
+        if (item.race && !entry.race) { entry.race = item.race; }
+    }
+    updated += applyRosterAttrs(ssot).updated;
+    return { ok: true, updated, warnings, errors };
 }

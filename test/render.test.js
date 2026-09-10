@@ -346,6 +346,25 @@ function filterWorld() {
     return w;
 }
 
+test('leg21 增量抽象入口：实体页行内补抽按钮（名册对应条目）+ 头部批量按钮（候选计数）+ 设定页清除演化层', () => {
+    const w = world();
+    w.context.setting.frozen.canon.bookEntities = [
+        { name: '薛铁衣', kind: 'character' },
+        { name: '大虞偏将', kind: 'character' },
+    ];
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('data-action="refine-pending"'), '头部批量按钮在位');
+    assert.ok(html.includes('补抽未抽属性（2）'), '候选计数=名册无 attrs 条数');
+    assert.ok(html.includes('data-action="refine-entity" data-entity="e_xie"'), '行内补抽按钮（名册有对应条目）');
+    assert.equal(html.split('data-action="refine-entity"').length - 1, 2, '名册对应实体各带一枚');
+    const set = renderSettingHtml(w);
+    assert.ok(set.includes('data-action="clear-evolution"'), '设定页清除演化层按钮在位');
+    // A-3：新文案零禁词（全局视面扫描）
+    const all = renderAll(w, { config: CONFIG, oldVolumes: VOLUMES });
+    const text = deepStrings(all).map(textOnly).join('\n');
+    for (const term of BLACKLIST) assert.ok(!text.includes(term), `含禁词「${term}」`);
+});
+
 test('K41/A-16②：五筛命中面——chips 全量、多选并集=行选择、无 kind 旧账恒显示 + 计数提示', () => {
     const all = renderChronicleHtml(filterWorld());
     assert.match(all, /sw2-ch-filter/);
