@@ -1,6 +1,6 @@
 # K38 数字组 · 报批清单（2026-09-09 · 铁律 2/8）
 
-> **状态：全部提案态，待拍板**——拍板后回填台账并生效。依据：敲定稿 `docs/sim-ratification-list-2026-09-09.md` + 100t 报告 `docs/reports/k38-observatory-100t-2026-09-09.md`。
+> **状态：全部提案态，待拍板**——拍板后回填台账并生效。依据：敲定稿 `docs/archive/sim-ratification-list-2026-09-09.md` + 100t 报告 `docs/reports/k38-observatory-100t-2026-09-09.md`。
 > **第十九棒修订（2026-09-09，`docs/full-roster-lens-spec.md` 全案拍板，K43-K48 已实施，377/377）**：
 > - **#4 席位 32 → 废除**（用户拍板：不设池顶；实体无上限入账，超量→重新抽取重建；`POOL_CAP` 常量已删、超席强制退已删、newEntities 无限额；全册计数=观测台 `entities`）；
 > - **#2 主调用 max_tokens 4096 → 16384**（同模型同通道抽取实证 finish=length@4096 / stop@16384；随镜头 30k 放大）；

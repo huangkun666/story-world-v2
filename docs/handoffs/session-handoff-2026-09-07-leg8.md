@@ -1,6 +1,6 @@
 # 会话交接 · story-world v2 · 第八棒（2026-09-07 · 报批定案 + 设定大势层实施完成 + A-1..A-8 验收）
 
-> ⚠️ **本文件是 story-world v2 的第八份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册——流程/纪律/模块地图/队列，先读它再读其余）③本文件 ④`docs/ledger.md`（工程台账，本棒 L65-L75）⑤本棒产物：`docs/backdrop-layer-spec.md`（**已实施完成 v1.0**）+ `docs/ratification-batch-2026-09-07.md`（**已定案**）。
+> ⚠️ **本文件是 story-world v2 的第八份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册——流程/纪律/模块地图/队列，先读它再读其余）③本文件 ④`docs/ledger.md`（工程台账，本棒 L65-L75）⑤本棒产物：`docs/backdrop-layer-spec.md`（**已实施完成 v1.0**）+ `docs/archive/ratification-batch-2026-09-07.md`（**已定案**）。
 > 状态：**报批支线 15 项一处定案 + 设定大势层 K24-K29 全入（判据 A-1..A-8 验收通过，216/216 全绿）。下一棒首个闸门：现场事务（bystander 补跑 + capture-demo 升级 + C2，你在场）→ 报批二批（大势层数字，曲线在手）→ 双流 UI 阶段（等指令）。**
 
 ---

@@ -1,6 +1,6 @@
 # 会话交接 · story-world v2 · 第十七棒（2026-09-09 · K38 端到端收口 · 观测台首报 + 报批待拍板）
 
-> ⚠️ **本文件是 story-world v2 的第十七份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册）③本文件 ④`docs/ledger.md`（工程台账，本棒 L123）⑤**`docs/sim-ratification-list-2026-09-09.md`（敲定稿·放行包——本棒一切施工的依据）**⑥`docs/ratification-batch-k38-2026-09-09.md`（报批清单，等拍板）⑦`docs/reports/k38-observatory-100t-2026-09-09.md`（第一座观测台报告）。
+> ⚠️ **本文件是 story-world v2 的第十七份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册）③本文件 ④`docs/ledger.md`（工程台账，本棒 L123）⑤**`docs/archive/sim-ratification-list-2026-09-09.md`（敲定稿·放行包——本棒一切施工的依据）**⑥`docs/ratification-batch-k38-2026-09-09.md`（报批清单，等拍板）⑦`docs/reports/k38-observatory-100t-2026-09-09.md`（第一座观测台报告）。
 > 状态：**施工棒——K38 端到端收口全案交付**：三按钮接线（init-world/force-abstract/source-pick）+ 补差包两件（依据册广播进包 / 新实体数值分配 clamp+缺省）+ 观测台三读数+远期引用参考（新模块 src/observatory.js）+ 拒签可见（动态流裁定条）+ 100t 合成曲线 + 冷档链验证（轮转后坏账重扫 0）。**334/334 全绿（本棒实测）**。**报批数字组待拍板**（10 项，`docs/ratification-batch-k38-2026-09-09.md`）；二期药单（小卡/焦点/日历）全部挂读数，未放行。
 
 ---
@@ -11,7 +11,7 @@
 
 ## 1. 本棒主线
 
-- **敲定稿放行**（`docs/sim-ratification-list-2026-09-09.md`）：三方对照（用户带回三方案 vs 讨论稿收敛 vs 红线）→ 敲定 A-J 十条 + 不做清单 + 主角不特殊化（影响传播归模型，撤回"玩家受阻账"）+ 衰减双轨=口径预留（效果待二期曲线）→ 用户放行 → K38 开工令。
+- **敲定稿放行**（`docs/archive/sim-ratification-list-2026-09-09.md`）：三方对照（用户带回三方案 vs 讨论稿收敛 vs 红线）→ 敲定 A-J 十条 + 不做清单 + 主角不特殊化（影响传播归模型，撤回"玩家受阻账"）+ 衰减双轨=口径预留（效果待二期曲线）→ 用户放行 → K38 开工令。
 - **K38 收口四块**：
   1. 补差包（leg15 缺口①②实码落账）：`pack.dialogueBook` 依据册摘要段（TOP5 提案）+ prompts v2-agenda-t1-3；`newEntities.attrs` 可选 + 有限数值校验（schema 拒 NaN/字符串、check 拒 Infinity）+ 入局 clamp [0,1] + kind 缺省 0.15/0.25（提案），`seedBookEntities` 同口径——**两条入局通道都不再哑巴**；
   2. 观测台：`src/observatory.js` 纯函数（拒签率/坏账率/驻留/远期引用）+ `simLog.proposals/rejected` 记账（钳制行不计拒签，口径钉死）；

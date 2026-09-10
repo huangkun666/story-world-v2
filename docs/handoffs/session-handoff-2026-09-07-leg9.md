@@ -1,6 +1,6 @@
 # 会话交接 · story-world v2 · 第九棒（2026-09-07 · 八棒收口后自主预备：报批二批包 + 队列簿记巡检 + C2 备料）
 
-> ⚠️ **本文件是 story-world v2 的第九份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册——流程/纪律/模块地图/队列，先读它再读其余）③本文件 ④`docs/ledger.md`（工程台账，本棒 L65-L78）⑤本棒产物：`docs/ratification-batch-b2-2026-09-07.md`（**报批二批包，16 项待点头**）。
+> ⚠️ **本文件是 story-world v2 的第九份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册——流程/纪律/模块地图/队列，先读它再读其余）③本文件 ④`docs/ledger.md`（工程台账，本棒 L65-L78）⑤本棒产物：`docs/archive/ratification-batch-b2-2026-09-07.md`（**报批二批包，16 项待点头**）。
 > 状态：**报批 15 项定案 + 设定大势层 K24-K29 全入（判据 A-1..A-8 验收通过，216/216 全绿）+ 报批二批包在案（16 项数字带证据索引）+ 队列簿记巡检完成。下一棒首个闸门：报批二批点头 → C2 决断 → 现场事务（你在场）→ 双流 UI（等指令）。**
 
 ---
@@ -50,7 +50,7 @@
 
 - 运行位置：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）；git 仓 = `F:\deepseek\plugins`（v1 + v2 同仓）。
 - **测试**：`node --test`（**必须无参**）。**快速查看**：`node demo/status.js` → 深看：dev-process §9 模块地图。
-- **报批二批包**：`docs/ratification-batch-b2-2026-09-07.md`（16 项 + 证据索引 + 报批后动作）。
+- **报批二批包**：`docs/archive/ratification-batch-b2-2026-09-07.md`（16 项 + 证据索引 + 报批后动作）。
 - **大势层曲线复现**：`test/backdrop-smoke.test.js`（100t 设定池世界全断言组；数值口径见台账 L70-L73）。
 - 演示/真模型传输/活档/快照/酒馆预设：与前两棒 §5 完全一致（env 优先 → 酒馆预设兜底；活档先 cp 副本再解析；`--world` 一次一个）。
 - **土规矩不变**：`snapshots/` 未入 .gitignore——真跑落新快照时为未跟踪文件（触发=下次真跑前处置）。

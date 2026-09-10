@@ -1,6 +1,6 @@
 # 会话交接 · story-world v2 · 第十棒（2026-09-08 · 报批二批定案 + 玩家注入改版实施 + C2 进货 + 现场事务收口）
 
-> ⚠️ **本文件是 story-world v2 的第十份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册——流程/纪律/模块地图/队列，先读它再读其余）③本文件 ④`docs/ledger.md`（工程台账，本棒 L79-L84）⑤本棒产物：`docs/ratification-batch-b2-2026-09-07.md`（**已定案 13 项 + 撤销 3 项**）、`docs/backdrop-layer-spec.md`（§3.4 v1.1 **LLM 解析版**，T7 已拍已实施）。
+> ⚠️ **本文件是 story-world v2 的第十份交接入口。接手前必读（按序）**：①`ANCHOR.md`（唯一尺子，状态行指下一阶段）②`docs/dev-process.md`（执行手册——流程/纪律/模块地图/队列，先读它再读其余）③本文件 ④`docs/ledger.md`（工程台账，本棒 L79-L84）⑤本棒产物：`docs/archive/ratification-batch-b2-2026-09-07.md`（**已定案 13 项 + 撤销 3 项**）、`docs/backdrop-layer-spec.md`（§3.4 v1.1 **LLM 解析版**，T7 已拍已实施）。
 > 状态：**报批二批 #1-13 已定案（#14-16 注入词表撤销）+ T7 玩家注入改版已实施 + C2 已进货 + 现场事务三件全收口（bystander 补跑缺口①、capture-demo 升级缺口②）**。下一棒首个闸门：**双流 UI 主线（等指令）**。
 
 ---
