@@ -6,7 +6,7 @@
 //   势力实体附「麾下成员」简表（parent 派生反查，含分支成员）；分量数字仍不入包（P3 不变）。
 export const EVOLUTION_BUDGET_TOKENS = 30000; // 用户 2026-09-09 定案（"现在的大模型绝对有这个能力"）；镜头容量=预算内自适应
 export const LENS_DEFAULT_MAX_TOKENS = 30000; // 镜头（实体段）独立上限（同值；测试可注入小值验证截断机制）
-export const LENS_MEMBERS_TOP = 8;            // 势力麾下成员简表条数上限（份内按分量序；超出记「等 N 人」）
+export const LENS_MEMBERS_TOP = 8;            // 势力麾下成员简表条数上限（份内按**名号序**，leg25 b 前为分量序；超出记「等 N 人」）
 export const TOKEN_RATIO = 3;                // 粗略估计：1 token ≈ 3 字符（中文）
 export const DIALOGUE_BOOK_TOP = 5;          // 提案：K38 补差包——依据册摘要进包条数上限（敲定稿 C 条）
 
@@ -66,12 +66,20 @@ export function lensList(ssot, { lensMaxTokens = LENS_DEFAULT_MAX_TOKENS, moveFa
     return out;
 }
 
-// 麾下成员简表（C7 派生反查）：characters 的 parent 命中 实体名/其分支名 → 归该势力；分量序取前 LENS_MEMBERS_TOP
+// 麾下成员简表（C7 派生反查）：characters 的 parent 命中 实体名/其分支名 → 归该势力；
+//   取前 LENS_MEMBERS_TOP（按名号字典序，同值按 id 兜底——**确定性**）。
+// leg25 b（A1）：排序键由 `world.weights`（那个 0-1 的数）改**名号序**——片3 定案「引擎不拿数值排序」的
+//   最后一处残留。旧法在 leg24 片2 之后必然退化：势力成员普遍四维为空 → 同取中立 floor → 分量全等 →
+//   排序结果随底层数组顺序漂移，面板「麾下：」名单每次重算都可能换位。现在名号序逐字节稳定。
 export function membersOf(world, faction) {
     const scope = new Set([faction.name, ...(faction.branches || [])]);
     const list = (world?.entities || [])
         .filter((e) => e.kind === 'character' && e.parent && scope.has(e.parent))
-        .sort((a, b) => (world.weights?.[b.id] ?? 0) - (world.weights?.[a.id] ?? 0));
+        .sort((a, b) => {
+            const an = String(a.name ?? ''), bn = String(b.name ?? '');
+            if (an !== bn) return an < bn ? -1 : 1;                   // ① 名号序（人可读，确定性）
+            return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;            // ② 同名兜底：id 序
+        });
     if (!list.length) return null;
     const heads = list.slice(0, LENS_MEMBERS_TOP).map((e) => e.name);
     if (list.length > LENS_MEMBERS_TOP) heads.push(`等${list.length}人`);

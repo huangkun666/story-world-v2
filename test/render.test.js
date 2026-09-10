@@ -383,7 +383,9 @@ test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）'
     assert.ok(html.includes('在场'), '镜头徽');
     assert.ok(html.includes('分支：盐帮、漕帮'), '分支表展示');
     assert.ok(html.includes('隶属：盐帮') && html.includes('隶属：青龙会'), '角色隶属展示');
-    assert.ok(html.includes('麾下：弟子甲、弟子乙'), '麾下成员派生（含分支成员）');
+    // leg25 b（A1）：麾下成员序由「分量序」改**名号序**（确定性；片3「引擎不拿数值排序」的最后一处）。
+    //   注意名号序是 **Unicode 码点序**（不是拼音序）：乙 U+4E59 < 甲 U+7532，故乙在前。
+    assert.ok(html.includes('麾下：弟子乙、弟子甲'), '麾下成员派生（含分支成员，按名号序）');
     const text = html.replace(/<[^>]*>/g, '');
     for (const term of BLACKLIST) assert.ok(!text.includes(term), `实体页含禁词「${term}」`);
 });

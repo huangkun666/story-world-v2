@@ -82,7 +82,7 @@ test('K44: 镜头预算截断机制——小预算只留前缀（首名保底，
     assert.equal(lens[0].e.name, '名0');
 });
 
-test('K44: 麾下成员打包——parent=势力名/分支名 双向归属，分量序 top8+等N人；无成员不带字段', () => {
+test('K44: 麾下成员打包——parent=势力名/分支名 双向归属，名号序 top8+等N人；无成员不带字段', () => {
     const members = Array.from({ length: 12 }, (_, i) => ent(`m_${i}`, `弟子${i}`, 'character', { parent: i % 2 === 0 ? '青龙会' : '盐帮' }));
     const entities = [
         ent('f_main', '青龙会', 'faction', { branches: ['盐帮', '漕帮'] }),
@@ -90,13 +90,15 @@ test('K44: 麾下成员打包——parent=势力名/分支名 双向归属，分
         ...members,
     ];
     const weights = {};
-    members.forEach((m, i) => { weights[m.id] = (12 - i) / 100; });
+    // 故意让分量序 **反向** 于名号序：若实现偷偷按分量排，下面的断言必红（leg25 b A1 的守卫）
+    members.forEach((m, i) => { weights[m.id] = i / 100; });
     weights.f_main = 0.9; weights.f_other = 0.9;
     const w = mkWorld({ entities, weights });
     const p = buildEvolutionPack(w, null);
     const row = p.pack.entities.find((x) => x.name === '青龙会');
     assert.ok(row.members, '青龙会应有麾下成员');
-    assert.equal(row.members[0], '弟子0');                       // 分量最高者（弟子0=12/100 最高且 parent=青龙会）
+    // 名号序（Unicode 码点序）：弟子0 < 弟子1 < 弟子10 < 弟子11 < 弟子2 …
+    assert.deepEqual(row.members.slice(0, 5), ['弟子0', '弟子1', '弟子10', '弟子11', '弟子2'], '麾下序=名号序（与分量无关）');
     assert.equal(row.members.length, 9);                          // top8 + 「等N人」
     assert.equal(row.members[8], '等12人');
     assert.ok(row.branches.length === 2);
