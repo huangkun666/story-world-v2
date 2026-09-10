@@ -8,10 +8,10 @@
 //   （蟠桃园→瑶池 因瑶池被判 location 而弃；天庭百官→人帝姬元真 因人帝姬元真不在册而弃）。
 // 本步口径：①书标了是势力 → 就按势力入账（标签权威高于名字形态猜测）
 //           ②书把上级写进标签 → 直接照抄该边（零模型调用）
-//           ③关系不再要求"上级必须是势力"，改"在册即可"；不在册的丢弃且不重复刷警告。
+// leg24 片1（停抄书）后：**模型侧的关系轮已删**——上级只从书标签照抄；书里没标的一律空着（用到时查书）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scanBookDeclarations, buildRosterPrompt, runRelationRound } from '../src/abstract.js';
+import { scanBookDeclarations, buildRosterPrompt } from '../src/abstract.js';
 
 // 书条目：首行标签 + 正文（与真实世界书同形态）
 const entry = (tag, body = '正文若干字。') => `<${tag}>\n${body}`;
@@ -74,7 +74,7 @@ test('照书办②：书把上级写进标签 → 名册里直接落 parent（�
             // 模型本轮只报了上级、把两个下级漏了 → 照书办必须把它们补回来
             return JSON.stringify({ bookEntities: [{ name: '渡虚帝', kind: 'character' }, { name: '太素帝', kind: 'character' }] });
         }
-        if (prompt.includes('关系抽取器') || prompt.includes('属性抽取器')) return JSON.stringify({ bookEntities: [] });
+        // leg24 片1：关系轮/属性轮已删——除名册轮与五件套轮外不再有其他调用
         return JSON.stringify({ powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], bookEntities: [], tension: {}, env: {} });
     };
     const { extractWorldSetting } = await import('../src/abstract.js');
@@ -91,28 +91,7 @@ test('照书办②：书把上级写进标签 → 名册里直接落 parent（�
     assert.ok(r.errors.some((e) => /照书办/.test(e)), '照书办留痕（补入册/改判计数）');
 });
 
-test('照书办③：关系轮改「在册即可」——上级是角色也照挂（不再因非势力而扔）', async () => {
-    const rows = ['【天庭百官】天庭辖下百官。', '【人帝姬元真】人帝。', '【瑶池】瑶池。'];
-    const names = [
-        { name: '天庭百官', kind: 'faction' },
-        { name: '人帝姬元真', kind: 'character' },
-        { name: '瑶池', kind: 'faction' },
-    ];
-    const errs = await runRelationRound(rows, names, async () => JSON.stringify({
-        bookEntities: [{ name: '天庭百官', parent: '人帝姬元真' }],
-    }));
-    assert.equal(names[0].parent, '人帝姬元真', '在册角色也能当上级（实证：书里就是「统辖: 人帝姬元真」）');
-    assert.deepEqual(errs, [], '合法落账零警告');
-
-    const n2 = [{ name: '天庭百官', kind: 'faction' }];
-    const errs2 = await runRelationRound(rows, n2, async () => JSON.stringify({
-        bookEntities: [{ name: '天庭百官', parent: '不在册的上级' }],
-    }));
-    assert.equal(n2[0].parent, undefined, '不在册 → 仍弃（诚实底线不动）');
-    assert.equal(errs2.filter((e) => /不在册/.test(e)).length, 1, '不在册照旧留痕一次');
-});
-
-test('照书办③：上级是角色（统治者）→ 名号独立入账 + 记为名下机构（不误折叠）', async () => {
+test('照书办③：标签里的上级是角色（统治者）→ 名号独立入账 + 记为名下机构（不误折叠）', async () => {
     const { seedBookEntities } = await import('../src/abstract.js');
     const mk = (book) => ({ context: { tension: 0.5, positions: ['未明'], setting: { frozen: { canon: { bookEntities: book } } } }, entities: [], weights: {} });
     const w = mk([
@@ -129,7 +108,7 @@ test('照书办③：上级是角色（统治者）→ 名号独立入账 + 记�
     assert.deepEqual(w.entities.find((e) => e.name === '渡虚帝').organs, ['界渊长城'], '名义势力的名下机构落账（实体页可见）');
 });
 
-test('照书办③：上级是地名 → 仍弃（诚实底线：地名不是上级）', async () => {
+test('照书办③：上级是地名 → 仍弃（诚实底线：地名不是上级）；判词按原因分措辞（片1 修正）', async () => {
     const { seedBookEntities } = await import('../src/abstract.js');
     const w = { context: { tension: 0.5, positions: ['未明'], setting: { frozen: { canon: { bookEntities: [
         { name: '某堂', kind: 'faction', parent: '某洲' },
@@ -139,4 +118,15 @@ test('照书办③：上级是地名 → 仍弃（诚实底线：地名不是上
     assert.equal(r.folded, 0);
     assert.ok(w.entities.some((e) => e.name === '某堂'), '名号仍入账');
     assert.equal(r.warnings.length, 1, '弃关系留痕一次');
+    assert.match(r.warnings[0], /是地名/, '上级在册但是地名 → 说"是地名"（不许说成"未明述"）');
+
+    // 上级**不在册**（书里没它的条目）：判词要说清是"不在册"，不是"未明述为独立势力"
+    const w2 = { context: { tension: 0.5, positions: ['未明'], setting: { frozen: { canon: { bookEntities: [
+        { name: '界渊长城', kind: 'faction', parent: '渡虚帝' },
+    ] } } } }, entities: [], weights: {} };
+    const r2 = seedBookEntities(w2);
+    assert.equal(r2.warnings.length, 1);
+    assert.match(r2.warnings[0], /不在册/, '上级不在册 → 判词如实说"不在册"');
+    assert.equal(w2.entities.find((e) => e.name === '界渊长城').parent, undefined, '关系不落账（隶属空着）');
+    assert.ok(w2.entities.some((e) => e.name === '界渊长城'), '名号照常入账');
 });

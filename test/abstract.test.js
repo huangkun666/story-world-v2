@@ -13,12 +13,12 @@ import {
     assembleSetting,
     extractWorldSetting,
     applySettingToSsot,
-    applyRosterAttrs,
-    refineEntityAttrs,
     resetDynamicLayer,
     ENV_INIT_BASELINE,
     TENSION_INIT_BASELINE,
 } from '../src/abstract.js';
+// leg24 片1（停抄书）：applyRosterAttrs / refineEntityAttrs 随抄书流水线删除，不再导入——
+// 其退场有专门的"删除位锁"测试（test/abstract-chunk.test.js）+ 本文件末尾的名册形状锁。
 
 const BOOK = '大荒世界：宗门林立。灵脉有主，煞气为祸。……力量分五等：凝煞、化神、元婴、金丹、炼气。';
 
@@ -219,129 +219,47 @@ test('leg20 世情路径：situation 净化与落账（原文措辞；非法置�
     assert.equal(none.canon.situation, '', '缺省=空串合法');
 });
 
-test('leg20 属性出处校验：依据不在原文 → 属性弃+警告；依据在原文 → attrs+evidence 落账', async () => {
+test('leg24 片1 停抄书：抽取输出只留 name/kind/parent——attrs/race/location/evidence 一律不入册', async () => {
     const rawBook = '万法阁：灵脉霸主，掌大荒灵脉。白小娥：炼气三层。';
-    const withAttrs = {
+    const withExtras = {
         ...FULL_RAW,
         bookEntities: [
-            { name: '万法阁', kind: 'faction', attrs: { hardPower: 0.9, office: 0.8, 依据: '灵脉霸主' } },
-            { name: '白小娥', kind: 'character', attrs: { hardPower: 0.3, 依据: '无此书证' } },
+            { name: '万法阁', kind: 'faction', parent: '大虞', attrs: { hardPower: 0.9, office: 0.8, 依据: '灵脉霸主' }, race: '人族', location: '昆仑山' },
+            { name: '白小娥', kind: 'character', attrs: { hardPower: 0.3, 依据: '炼气三层' } },
             { name: '无据客', kind: 'character', attrs: { intel: 0.6 } },
         ],
     };
-    const r = await extractWorldSetting({ sourceText: rawBook, extract: fakeExtract(withAttrs) });
+    const r = await extractWorldSetting({ sourceText: rawBook, extract: fakeExtract(withExtras) });
     assert.equal(r.ok, true);
     const es = r.setting.frozen.canon.bookEntities;
-    const wf = es.find((b) => b.name === '万法阁');
-    assert.deepEqual(wf.attrs, { hardPower: 0.9, office: 0.8 });
-    assert.equal(wf.evidence, '灵脉霸主');
-    const xie = es.find((b) => b.name === '白小娥');
-    assert.equal(xie.attrs, undefined, '依据不在原文 → 属性弃，名号保留');
-    assert.equal(xie.evidence, undefined);
-    const noEv = es.find((b) => b.name === '无据客');
-    assert.equal(noEv.attrs, undefined, '无依据 → 属性弃（净化层）');
-    assert.ok(r.errors.some((e) => /属性出处校验/.test(e)));
+    for (const name of ['万法阁', '白小娥', '无据客']) {
+        const item = es.find((b) => b.name === name);
+        assert.ok(item, `${name} 名号仍入册（身份是主键，不随停抄书而丢）`);
+        assert.equal(item.attrs, undefined, `${name}: 不再抄书里的四维属性`);
+        assert.equal(item.race, undefined, `${name}: 不再抄种族标签`);
+        assert.equal(item.location, undefined, `${name}: 不再抄所在（位置改为用到时查书）`);
+        assert.equal(item.evidence, undefined, `${name}: 不再留属性原文依据`);
+    }
+    assert.equal(es.find((b) => b.name === '万法阁').parent, '大虞', 'parent 字段在形状上留着（照书办要照抄书标签里的上级）');
+    // 净化层同口径：不问也不存（旧世界的这些字段仍合法，只是引擎不再生产/不读）
+    const c = sanitizeCanon({ bookEntities: [{ name: '甲', kind: 'faction', attrs: { hardPower: 5 }, race: '人族', location: '某洲' }] });
+    assert.deepEqual(c.canon.bookEntities[0], { name: '甲', kind: 'faction' }, '净化为 name/kind 两种键（无可选字段）');
 });
 
-test('leg20 种族标签出处校验 + attrs 净化形状（钳制/非对象/缺依据）', async () => {
-    // 出处（书级）：种族名必须在原文出现；种族名号不被强制清出（提示词约束为主，引擎只守诚实底线）
-    const rawBook = '妖族占据北荒。万法阁是人族宗门。';
+test('leg24 片1 停抄书：不再产生属性/种族/所在三类出处校验警告（那些字段已经不抽了）', async () => {
     const r = await extractWorldSetting({
-        sourceText: rawBook,
+        sourceText: '妖族占据北荒。万法阁是人族宗门。',
         extract: fakeExtract({
             ...FULL_RAW,
-            bookEntities: [
-                { name: '万法阁', kind: 'faction', race: '人族', attrs: { hardPower: 0.7, 依据: '人族宗门' } },
-                { name: '北荒妖庭', kind: 'faction', race: '不存在之族' },
-            ],
+            bookEntities: [{ name: '万法阁', kind: 'faction', attrs: { hardPower: 0.7, 依据: '人族宗门' }, race: '不存在之族' }],
         }),
     });
-    const es = r.setting.frozen.canon.bookEntities;
-    assert.equal(es.find((b) => b.name === '万法阁').race, '人族');
-    assert.equal(es.find((b) => b.name === '北荒妖庭').race, undefined, '种族名不在原文 → 标签弃');
-    assert.ok(r.errors.some((e) => /种族出处校验/.test(e)));
-
-    // 形状：非法 attrs 弃好取坏
-    const c = sanitizeCanon({
-        bookEntities: [
-            { name: '甲', kind: 'faction', attrs: '高' },
-            { name: '乙', kind: 'faction', attrs: { hardPower: 5, intel: 0.3, 依据: '原文' } },
-            { name: '丙', kind: 'faction', attrs: { hardPower: 0.5, 依据: '原文' }, race: '人族' },
-        ],
-    });
-    assert.equal(c.canon.bookEntities.find((b) => b.name === '甲').attrs, undefined, 'attrs 非对象 → 弃');
-    const yi = c.canon.bookEntities.find((b) => b.name === '乙');
-    assert.equal(yi.attrs.hardPower, 1, '超界钳制到 1');
-    assert.equal(yi.attrs.intel, 0.3);
-    assert.equal(yi.attrs.office, undefined, '未提议键不进 attrs（seed 兜底）');
-    assert.equal(yi.evidence, '原文');
-    const bing = c.canon.bookEntities.find((b) => b.name === '丙');
-    assert.deepEqual(bing.attrs, { hardPower: 0.5 });
-    assert.equal(bing.race, '人族');
-});
-
-// ============ leg21 增量抽象（docs/incremental-refine-spec.md） ============
-
-test('leg21 applyRosterAttrs：默认值占位可被有据值覆盖，非默认不回改；race 补缺；分量重算；幂等', () => {
-    const mk = () => ({
-        context: { tension: 0.6, positions: ['x'], setting: { frozen: { canon: { bookEntities: [
-            { name: '白小娥', kind: 'character', attrs: { hardPower: 0.4 }, evidence: '原句' },
-            { name: '万法阁', kind: 'faction', attrs: { hardPower: 0.9, office: 0.5 }, evidence: '原句', race: '人族' },
-        ] } } } },
-        entities: [
-            { id: 'e1', kind: 'character', name: '白小娥', location: 'x', attrs: { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 } },
-            { id: 'e2', kind: 'faction', name: '万法阁', location: 'x', attrs: { hardPower: 0.8, office: 0.25, network: 0.25, intel: 0.25 } },
-        ],
-        weights: {},
-    });
-    const ssot = mk();
-    const r = applyRosterAttrs(ssot);
-    assert.equal(r.updated, 2);
-    const xiao = ssot.entities.find((e) => e.id === 'e1');
-    assert.equal(xiao.attrs.hardPower, 0.4, '默认值占位（0.15）被有据值覆盖');
-    assert.equal(xiao.attrs.office, 0.15, 'roster 无 office → 保持默认');
-    const wf = ssot.entities.find((e) => e.id === 'e2');
-    assert.equal(wf.attrs.hardPower, 0.8, '非默认值（0.8）不回改');
-    assert.equal(wf.attrs.office, 0.5, '默认值占位（0.25）被有据值覆盖');
-    assert.equal(wf.race, '人族', 'race 补缺');
-    assert.ok(ssot.weights.e1 > 0 && ssot.weights.e2 > 0, '分量重算在位');
-    assert.equal(applyRosterAttrs(ssot).updated, 0, '幂等：再跑零更新');
-});
-
-test('leg21 refineEntityAttrs 单实体补抽：行邻域定位 → 小调用 → 出处校验 → 名册+实体合并；无谓据弃置', async () => {
-    const src = '【甲】白小娥：炼气三层，一身轻功。\n【乙】无关路过的行：路人甲，路人乙。\n【丙】万法阁：灵脉霸主，掌大荒灵脉。';
-    const calls = [];
-    const ssot = () => ({
-        context: { tension: 0.6, positions: ['x'], setting: { frozen: { canon: { bookEntities: [{ name: '白小娥', kind: 'character' }] } } } },
-        entities: [{ id: 'e1', kind: 'character', name: '白小娥', location: 'x', attrs: { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 } }],
-        weights: {},
-    });
-    const r = await refineEntityAttrs(ssot(), {
-        name: '白小娥', src,
-        extract: async (prompt) => { calls.push(prompt); return JSON.stringify({ bookEntities: [{ name: '白小娥', attrs: { hardPower: 0.3, intel: 0.6, 依据: '炼气三层' } }] }); },
-    });
     assert.equal(r.ok, true);
-    assert.equal(r.updated, 2, '名册 1 + 实体 1');
-    assert.ok(calls[0].includes('炼气三层'), '上下文=名号所在行邻域');
-    assert.ok(!calls[0].includes('万法阁'), '上下文不含无关条目行');
-    const s1 = ssot();
-    await refineEntityAttrs(s1, { name: '白小娥', src, extract: async () => JSON.stringify({ bookEntities: [{ name: '白小娥', attrs: { hardPower: 0.3, intel: 0.6, 依据: '炼气三层' } }] }) });
-    assert.deepEqual(s1.context.setting.frozen.canon.bookEntities[0].attrs, { hardPower: 0.3, intel: 0.6 });
-    assert.equal(s1.context.setting.frozen.canon.bookEntities[0].evidence, '炼气三层');
-    assert.equal(s1.entities[0].attrs.hardPower, 0.3, '实体默认占位被覆盖');
-    // 依据不在原文 → 弃 + 警告，账不动
-    const s2 = ssot();
-    const r2 = await refineEntityAttrs(s2, { name: '白小娥', src, extract: async () => JSON.stringify({ bookEntities: [{ name: '白小娥', attrs: { hardPower: 0.9, 依据: '四处编造' } }] }) });
-    assert.equal(r2.ok, true);
-    assert.equal(r2.updated, 0, '出处校验不过 → 不合并');
-    assert.ok(r2.warnings.some((w) => /出处校验/.test(w)), '弃置留痕');
-    assert.equal(s2.context.setting.frozen.canon.bookEntities[0].attrs, undefined);
-    // 全失败（空输出重试两次）→ ok:false
-    const s3 = ssot();
-    const r3 = await refineEntityAttrs(s3, { name: '白小娥', src, extract: async () => '' });
-    assert.equal(r3.ok, false);
-    assert.match(r3.errors[0], /已重试一次/);
+    assert.ok(!r.errors.some((e) => /出处校验/.test(e)), `不应再出现属性/种族/所在出处校验警告：${r.errors.join('; ')}`);
+    assert.deepEqual(Object.keys(r.setting.frozen.canon.bookEntities[0]).sort(), ['kind', 'name'], '名册条目只有身份两项');
 });
+
+// ============ leg24 片1 收尾：名册形状锁（旧世界兼容 + 新抽取口径） ============
 
 test('leg21 resetDynamicLayer：强度/env 回基线、derivedFrom 清空、极性方向保留、frozen 不动', () => {
     const setting = {

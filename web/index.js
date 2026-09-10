@@ -13,8 +13,10 @@ import {
     hotAccountShape, loadHotAccount, rotateChronicle,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
 } from '../src/storage.js';
-import { seedBookEntities, extractWorldSetting, applySettingToSsot, runAttrsRound, runRelationRound, applyRosterAttrs, refineEntityAttrs, resetDynamicLayer } from '../src/abstract.js';
-import { bookFingerprint } from '../src/fingerprint.js';
+import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer } from '../src/abstract.js';
+// leg24 片1（停抄书）：runAttrsRound / runRelationRound / applyRosterAttrs / refineEntityAttrs 四个入口随
+// 「抄书流水线」整条删除（名册里不再有从书里抄来的属性/隶属，补抽按钮与 bus 动作同批下掉）。
+// bookFingerprint 的浏览器侧唯一用途是补抽前的指纹守卫，随之删除（书指纹仍由 extractWorldSetting 写进 setting）。
 import { createIdbVolumeStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
@@ -28,16 +30,9 @@ const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'setti
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260910-leg23';
+const CSS_VERSION = '20260911-leg24';
 
-// leg21 增量补抽会话态：防重入 + 「已试过仍无果」名号记忆（书指纹变化时清空——防旧书补新账）
-let refining = false;
-let refinedFailed = new Set();
-let refinedFp = null;
-function syncRefinedFp(world) {
-    const fp = world?.context?.setting?.frozen?.fingerprint;
-    if (fp && fp !== refinedFp) { refinedFailed.clear(); refinedFp = fp; }
-}
+// leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;
 export function sw2TabState(name, active) {
@@ -208,7 +203,7 @@ function dispatchAction(action, payload, event) {
         sw2TickQueue.advance().catch(() => {}); // K36 手动补推（A-4 手动路径）
         return;
     }
-    const label = { 'init-world': '开始新世界', 'force-abstract': '重新抽取设定' }[action] || action;
+    const label = { 'init-world': '开始新世界' }[action] || action;
     setStatus(`「${label}」接线随后续步骤（当前为占位）`);
 }
 
@@ -694,39 +689,6 @@ if (typeof window !== 'undefined') {
         }
     };
 
-    // force-abstract：强制重抽设定（忽略缓存；现有世界原地替换 context.setting + 书名录幂等）
-    bus['force-abstract'] = async () => {
-        try {
-            const meta = readHotMeta();
-            const world = meta ? loadHotAccount(meta) : null;
-            if (!world) { setStatus('⚠ 还没有世界——先「✨ 开始新世界」'); return; }
-            const settings = modelSettings() || {};
-            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS });
-            if (!resolved) { setStatus('⚠ 模型通道未配置（重抽需要抽取调用）'); return; }
-            const src = await autoComposeSource();
-            if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}——把设定写进 ST 世界信息或角色卡描述，再点一次`); return; }
-            const sourceText = src.text;
-            const srcLabel = src.label;
-            setStatus(`正在强制重抽设定（源：${srcLabel} · ${src.usedChars} 字符${src.truncated ? ' · 超出防御上限截余' : ''}）…`);
-            const r = await extractWorldSetting({
-                sourceText,
-                extract: diagExtract(resolved),
-                force: true,
-            });
-            logInitDiagnostics(getCtx(), src, r); // 第十九棒：悬案实证——重抽路径同款常驻诊断
-            if (!r.ok) { setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
-            const next = applySettingToSsot(world, r.setting);
-            seedBookEntities(next);
-            const hot = await ensureChronicleRotated(next);
-            LISTED_VOLUMES = await listOldVolumes();
-            refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
-            const flushed = await flushHotMeta();   // leg20 落盘修复：重抽完成显式落盘再报成功
-            setStatus(`↻ 设定已重抽（frozen 五件套 + 世情句 + 书名录含属性/种族生效；世界账本原样保留 · 源=${srcLabel}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
-        } catch (err) {
-            setStatus(`⚠ 重抽失败：${err?.message || err}`);
-        }
-    };
-
     // ---------- leg21 增量抽象（docs/incremental-refine-spec.md） ----------
 
     // 清除演化层：dynamic 回基线（张力强度/env/浪尖），设定与极性方向不动；不触发抽取调用
@@ -743,85 +705,6 @@ if (typeof window !== 'undefined') {
             setStatus(`演化层已清除（张力强度/环境量回基线 · 极性方向保留 · 设定不动）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
         } catch (err) {
             setStatus(`⚠ 清除失败：${err?.message || err}`);
-        }
-    };
-
-    // 单实体补抽：名号 → 行邻域小调用 → 书级出处校验 → 名册+实体合并 → 落盘
-    bus['refine-entity'] = async (payload) => {
-        try {
-            const meta = readHotMeta();
-            const world = meta ? loadHotAccount(meta) : null;
-            if (!world) { setStatus('⚠ 还没有世界'); return; }
-            const eid = payload?.entity;
-            const ent = (world.entities || []).find((e) => e.id === eid);
-            if (!ent) { setStatus('⚠ 实体不存在（世界已变化？可刷新面板）'); return; }
-            const settings = modelSettings() || {};
-            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS });
-            if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）'); return; }
-            const src = await autoComposeSource();
-            if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}`); return; }
-            if (bookFingerprint(src.text) !== world.context?.setting?.frozen?.fingerprint) { setStatus('⚠ 设定源已变化（书指纹不符）——请先「↻ 重新抽取设定」再补抽'); return; }
-            syncRefinedFp(world);
-            setStatus(`正在补抽「${ent.name}」的属性（书内原文出处）…`);
-            const r = await refineEntityAttrs(world, { name: ent.name, src: src.text, extract: diagExtract(resolved) });
-            if (!r.ok) { setStatus(`⚠ 补抽失败：${(r.errors || []).join('; ')}`); return; }
-            const hot = await ensureChronicleRotated(world);
-            LISTED_VOLUMES = await listOldVolumes();
-            refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
-            const flushed = await flushHotMeta();
-            setStatus(`补抽完成：${r.updated ? `「${ent.name}」属性已更新（依据原文）` : `「${ent.name}」本次未抽到新属性`}${r.warnings.length ? ` · 警告 ${r.warnings.length} 条` : ''}${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
-        } catch (err) {
-            setStatus(`⚠ 补抽失败：${err?.message || err}`);
-        }
-    };
-
-    // 批量补抽（K49 并轨）：候选=名册无属性条目 ∪ 无隶属的势力条目（地名不入实体池不计；已试过无果的会话内跳过）
-    // → 关系轮（补隶属/所在/种族）+ 属性轮（leg21 同机制）→ 名册落账 + 幂等 seed（父侧分支表即时出名）→ 落盘
-    bus['refine-pending'] = async () => {
-        if (refining) { setStatus('⚠ 补抽进行中，稍候…'); return; }
-        try {
-            const meta = readHotMeta();
-            const world = meta ? loadHotAccount(meta) : null;
-            if (!world) { setStatus('⚠ 还没有世界'); return; }
-            const canon = world.context?.setting?.frozen?.canon;
-            if (!canon?.bookEntities?.length) { setStatus('⚠ 还没有设定池（先「开始新世界」）'); return; }
-            syncRefinedFp(world);
-            const isFaction = (b) => b.kind === 'faction';
-            const candidates = canon.bookEntities.filter((b) => b.kind !== 'location' && !refinedFailed.has(b.name)
-                && (!b.attrs || (isFaction(b) && !b.parent)));
-            if (!candidates.length) { setStatus('名册条目已全部带属性与隶属——无需补抽'); return; }
-            const attrTargets = candidates.filter((b) => !b.attrs);
-            const relTargets = candidates.filter((b) => isFaction(b) && !b.parent);
-            const settings = modelSettings() || {};
-            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS });
-            if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）'); return; }
-            const src = await autoComposeSource();
-            if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}`); return; }
-            if (bookFingerprint(src.text) !== world.context?.setting?.frozen?.fingerprint) { setStatus('⚠ 设定源已变化（书指纹不符）——请先「↻ 重新抽取设定」再补抽'); return; }
-            refining = true;
-            try {
-                setStatus(`正在补抽 ${candidates.length} 个名号（属性 ${attrTargets.length} · 势力隶属 ${relTargets.length}，书内原文出处）…`);
-                const rows = src.text.split('\n').map((s) => s.trim()).filter(Boolean);
-                const extract = diagExtract(resolved);
-                const parentBefore = canon.bookEntities.filter((b) => b.parent).length;
-                const errs = [];
-                errs.push(...(await runRelationRound(rows, relTargets, extract)));   // K49 关系轮先行（隶属是折叠的原料）
-                errs.push(...(await runAttrsRound(rows, attrTargets, extract)));
-                const relFilled = canon.bookEntities.filter((b) => b.parent).length - parentBefore;
-                const applied = applyRosterAttrs(world);
-                seedBookEntities(world);   // K49：补到的隶属即时在父势力分支表出名（幂等——与初始 seed 折叠同源，零新机制）
-                for (const c of candidates) if (!c.attrs && (!isFaction(c) || c.parent)) refinedFailed.add(c.name);   // 无果名号入会话记忆（防重复空跑）
-                const hot = await ensureChronicleRotated(world);
-                LISTED_VOLUMES = await listOldVolumes();
-                refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
-                const flushed = await flushHotMeta();
-                setStatus(`补抽完成：属性更新 ${applied.updated} 个实体 · 隶属补全 ${relFilled} 条（候选 ${candidates.length} 名号${errs.length ? ` · 警告 ${errs.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
-            } finally {
-                refining = false;
-            }
-        } catch (err) {
-            refining = false;
-            setStatus(`⚠ 补抽失败：${err?.message || err}`);
         }
     };
 }

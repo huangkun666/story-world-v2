@@ -206,7 +206,7 @@ test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指�
     assert.match(html, /灵脉与煞气相生相克/);
     assert.match(html, /太岁陨落北山/);
     assert.match(html, /已冻结/);
-    assert.match(html, /data-action="force-abstract"/);
+    assert.match(html, /data-action="clear-evolution"/);
     assert.match(html, /浪尖（派生源）/);
     // 未抽取态
     const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
@@ -224,7 +224,6 @@ test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表�
     assert.match(html, /id="sw2_model" value="gemini-3\.1-pro-preview"/);
     assert.match(html, /data-action="init-world"/);
     assert.match(html, /data-action="advance-world"/);
-    assert.match(html, /data-action="force-abstract"/);
     assert.match(html, /自动入卷阈值/);
     assert.match(html, /data-action="export-world"/);
     assert.match(html, /data-action="import-world"/);
@@ -346,19 +345,21 @@ function filterWorld() {
     return w;
 }
 
-test('leg21 增量抽象入口：实体页行内补抽按钮（名册对应条目）+ 头部批量按钮（候选计数）+ 设定页清除演化层', () => {
+test('leg24 片1：抄书入口在界面下掉（补抽两枚 + 重抽一枚）+ 设定页清除演化层仍在', () => {
     const w = world();
     w.context.setting.frozen.canon.bookEntities = [
         { name: '薛铁衣', kind: 'character' },
         { name: '大虞偏将', kind: 'character' },
     ];
     const html = renderEntitiesHtml(w);
-    assert.ok(html.includes('data-action="refine-pending"'), '头部批量按钮在位');
-    assert.ok(html.includes('补抽未抽属性/隶属（2）'), '候选计数=名册无属性/无隶属条目数（K49 口径）');
-    assert.ok(html.includes('data-action="refine-entity" data-entity="e_xie"'), '行内补抽按钮（名册有对应条目）');
-    assert.equal(html.split('data-action="refine-entity"').length - 1, 2, '名册对应实体各带一枚');
+    assert.ok(!html.includes('data-action="refine-pending"'), '头部批量补抽按钮已下掉');
+    assert.ok(!html.includes('data-action="refine-entity"'), '行内补抽按钮已下掉');
+    assert.ok(!html.includes('补抽'), '「补抽」字样零残留（书随时可查，不需要按需抄）');
     const set = renderSettingHtml(w);
-    assert.ok(set.includes('data-action="clear-evolution"'), '设定页清除演化层按钮在位');
+    assert.ok(set.includes('data-action="clear-evolution"'), '设定页清除演化层按钮仍在（它管引擎自己的演化层，不是抄书）');
+    assert.ok(!set.includes('data-action="force-abstract"'), '「重新抽取设定」按钮已下掉（书变自动发现）');
+    const settings = renderSettingsHtml(w, { config: CONFIG });
+    assert.ok(!settings.includes('data-action="force-abstract"'), '设置页重抽按钮同批下掉');
     // A-3：新文案零禁词（全局视面扫描）
     const all = renderAll(w, { config: CONFIG, oldVolumes: VOLUMES });
     const text = deepStrings(all).map(textOnly).join('\n');

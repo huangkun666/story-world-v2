@@ -296,10 +296,9 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 export function renderEntitiesHtml(world) {
     // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、镜头徽、分支/隶属
     const lens = new Set(lensList(world).map((x) => x.e.id));
-    // leg21 增量抽象：名册条目名 → 行内「补抽」按钮资格；头部批量按钮带候选计数
-    // K49：候选口径与编排层同源——无属性条目 ∪ 无隶属的势力条目（地名不入实体池，不计入）
-    const rosterNames = new Set((world.context?.setting?.frozen?.canon?.bookEntities || []).map((b) => b.name));
-    const pendingN = (world.context?.setting?.frozen?.canon?.bookEntities || []).filter((b) => b.kind !== 'location' && (!b.attrs || (b.kind === 'faction' && !b.parent))).length;
+    // leg24 片1（停抄书）：行内「补抽」与头部「补抽未抽属性/隶属」两枚按钮下掉——
+    // 它们是"按需从书里抄属性/隶属"的入口（leg21/K49），而这条流水线已整条删除。
+    // 名册权威只用于身份（名字+类别）与照书办的结构声明，不再作为按钮候选口径。
     const attrs = (e) => Object.entries(LABELS.attr).map(([k, label]) => {
         const v = e.attrs?.[k];
         if (v == null) return ''; // 账上无键=该维缺位（「世界书用不到兵力」语义：无兵世界不出现兵力列）
@@ -323,14 +322,14 @@ export function renderEntitiesHtml(world) {
             + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}</small>${lensBadge}</div>`
             + `<div class="sw2-eloc">${escapeHtml(e.location || '')}</div>`
             + `<div class="sw2-eweight"><span class="sw2-wbar"><i style="width:${fmtPct(world.weights?.[e.id])}%"></i></span><span class="sw2-wval">${fmtPct(world.weights?.[e.id])}</span></div>`
-            + `<div class="sw2-eattrs">${attrs(e)}${rosterNames.has(e.name) ? `<button class="sw2-chainbtn" data-action="refine-entity" data-entity="${escapeHtml(e.id)}" title="按书内原文补抽该实体的属性（不重抽全量设定）">补抽</button>` : ''}</div>`
+            + `<div class="sw2-eattrs">${attrs(e)}</div>`
             + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${organ}${crewHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
     const allEnts = world.entities || [];
     const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}${pendingN ? `<button class="sw2-chainbtn" data-action="refine-pending" title="按书内原文批量补抽未抽到的实体属性与势力隶属（不重抽全量设定）">补抽未抽属性/隶属（${pendingN}）</button>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
         + `<div class="sw2-hint">势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。</div>`;
 }
 
@@ -344,8 +343,7 @@ export function renderSettingHtml(world) {
     if (!frozen) {
         return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界设定</div>`
             + `<div class="sw2-sv-sub">尚未抽取——设定池未就绪。</div></div>`
-            + `<div class="sw2-sv-cards"><span class="sw2-sv-chip stale">未抽取</span>`
-            + `<button class="sw2-btn sw2-danger" data-action="force-abstract">↻ 重新抽取设定</button></div></div>`;
+            + `<div class="sw2-sv-cards"><span class="sw2-sv-chip stale">未抽取</span></div></div>`;
     }
     const envRows = ENV_KEYS.map((k) => {
         const v = env[k] ?? 0.5;
@@ -363,8 +361,7 @@ export function renderSettingHtml(world) {
 
     return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界设定 · ${escapeHtml(world.context?.world || '')}</div>`
         + `<div class="sw2-sv-sub">书指纹 ${escapeHtml(frozen.fingerprint)} · 抽取于 ${escapeHtml(frozen.extractedAt)} · 全部条目取自原文，未增写一句（只提取不创作）</div></div>`
-        + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ok">✓ 已冻结 · 设定未变不重抽</span>`
-        + `<button class="sw2-btn sw2-danger" data-action="force-abstract">↻ 重新抽取设定</button></div></div>`
+        + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ok">✓ 已冻结 · 设定未变不重抽</span></div></div>`
         + `<div class="sw2-sv-grid">`
         + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>张力现状（演变层 · 引擎算 · 每轮随动）</h4>`
         + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
@@ -388,8 +385,8 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
     return `<div class="sw2-settings">`
         + `<div class="sw2-set-card"><h4>世界设定（书的来源）</h4>`
         + `<div class="sw2-source-line"><span class="sw2-source-tag">来源：角色卡 + 世界信息（自动合订）</span>`
-        + `<span class="sw2-source-note">自动读取：卡四件套 + 世界信息/卡内置世界书（世界书全量摄入，大书分块多次抽取）；设定没变就不重复抽取（书指纹）</span></div>`
-        + `<div class="sw2-hint" style="margin-top:10px">设定全文（力量谱系/法则/社会格局/力量体系/史略 + 张力现状）在「设定」页阅览，「重新抽取」也在那里。</div></div>`
+        + `<span class="sw2-source-note">自动读取：卡四件套 + 世界信息/卡内置世界书（世界书全量摄入，大书分块多次抽取）；抽取只拿三样——设定五件套 · 世情句 · 名号与类别（书里的上级/所在/属性不抄，用到时现查）</span></div>`
+        + `<div class="sw2-hint" style="margin-top:10px">设定全文（力量谱系/法则/社会格局/力量体系/史略 + 张力现状）在「设定」页阅览；书变了会自动重新识别（书指纹），不用手动重抽。</div></div>`
         + `<div class="sw2-set-card"><h4>你的开档描述</h4>`
         + `<div class="sw2-field"><label>写一段"你是谁"（自然语言 · ≤2000 字提案）</label>`
         + `<textarea id="sw2_player_desc" data-action="player-desc">${escapeHtml(cfg.playerDesc || '')}</textarea>`
@@ -401,9 +398,8 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         + `<div class="sw2-field"><label>单轮演算上限（提案：120 秒 / 4096 字）</label><input class="sw2-input" id="sw2_limits" value="120s · 4096" readonly title="提案值展示 · 随 K38 报批联动后生效"><div class="sw2-hint">提案态：报批前不视为定案，此处仅展示。</div></div></div>`
         + `<div class="sw2-set-card"><h4>操作</h4><div class="sw2-actions">`
         + `<button class="sw2-btn sw2-primary" data-action="init-world">✨ 开始新世界</button>`
-        + `<button class="sw2-btn" data-action="advance-world">▶ 手动推进一步</button>`
-        + `<button class="sw2-btn sw2-danger" data-action="force-abstract">↻ 重新抽取设定</button></div>`
-        + `<div class="sw2-hint" style="margin-top:10px">每轮对话后世界自动推进；此按钮是手动补推。<br>「重新抽取」会忽略缓存强行重抽设定，并重读你的开档描述。<br>演算失败时世界原样不动，状态条会报错，可重试。</div></div>`
+        + `<button class="sw2-btn" data-action="advance-world">▶ 手动推进一步</button></div>`
+        + `<div class="sw2-hint" style="margin-top:10px">每轮对话后世界自动推进；此按钮是手动补推。<br>设定不用手动重抽：书变了（书指纹变化）自动重新识别，已定的设定不会自己飘。<br>演算失败时世界原样不动，状态条会报错，可重试。</div></div>`
         + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>旧卷与存储</h4>`
         + `<div class="sw2-cold-mgmt"><div class="sw2-row"><span>编年体积 · 当前</span><b>${(world.chronicle || []).length ? `${(JSON.stringify(world.chronicle).length / 1024).toFixed(1)}KB` : '0KB'}</b><em>每 100 轮约 21.7KB（实测）</em></div>`
         + `<div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">${cfg.limitsTicks ?? '500'} 轮 或 ${cfg.limitsBytesMB ?? '5'}MB</b><em>提案态 · 随本阶段报批</em></div>`
