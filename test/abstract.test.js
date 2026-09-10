@@ -99,16 +99,20 @@ test('K31 无 legacy tension：强度初值 = 基线 0.5（引擎算的前置，
     assert.equal(r.setting.dynamic.tension.intensity, TENSION_INIT_BASELINE);
 });
 
-test('K31 env 缺省/非法键：一律落基线；表外键不入 env', async () => {
+test('K31 env 缺省/非法键（leg24 片5 口径）：书没给的键**不入账**（空着就是空着）；表外键不入 env', async () => {
     const r = await extractWorldSetting({
         sourceText: BOOK,
-        extract: fakeExtract({ rules: ['只有一条法则'], env: { 民生度: 0.5, '异想天开键': 0.9 } }),
+        extract: fakeExtract({ rules: ['只有一条法则'], env: { 民生度: 0.5, '异想天开键': 0.9, 动乱度: '乱' } }),
     });
-    assert.equal(r.setting.dynamic.env['民生度'], 0.5);
-    assert.equal(r.setting.dynamic.env['动乱度'], ENV_INIT_BASELINE);
-    assert.equal(r.setting.dynamic.env['天时'], ENV_INIT_BASELINE);
-    assert.equal(r.setting.dynamic.env['张力推手'], ENV_INIT_BASELINE);
+    assert.equal(r.setting.dynamic.env['民生度'], 0.5, '书给了 → 照收');
+    assert.equal(r.setting.dynamic.env['动乱度'], undefined, '非法值 → 弃键（旧法落基线 0.5，那是默认值冒充客观）');
+    assert.equal(r.setting.dynamic.env['天时'], undefined, '书未明述 → 键不存在（不是 0.5）');
+    assert.equal(r.setting.dynamic.env['张力推手'], undefined, '同上');
     assert.ok(!('异想天开键' in r.setting.dynamic.env)); // 键表白名单（定案 #3）
+    assert.ok(r.errors.some((e) => /动乱度/.test(e) || e.includes('env.')), `非法值留痕：${r.errors.join('; ')}`);
+    // 空 env 合法（schema 允许空记录）：熵泵按基线 0.5 使用，界面显示「书未明述」
+    const emptyEnv = await extractWorldSetting({ sourceText: BOOK, extract: fakeExtract({ rules: ['一'] }) });
+    assert.deepEqual(emptyEnv.setting.dynamic.env, {}, '整本没给环境量 → 空对象（不伪造四键）');
 });
 
 test('K31 指纹命中零调用：同文本二次抽取不发调用，命中值深拷贝互不污染', async () => {

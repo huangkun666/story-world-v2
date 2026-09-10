@@ -9,7 +9,7 @@ import path from 'node:path';
 import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
-    renderChainViewHtml, escapeHtml, BLACKLIST,
+    renderChainViewHtml, renderInfoBandHtml, escapeHtml, BLACKLIST,
 } from '../src/render.js';
 import { expandChain } from '../src/chain.js';
 
@@ -120,12 +120,16 @@ test('K33 观棋·动态流：倒序 + 最新徽 + 引擎 id 只进 title 悬停
     assert.match(feed, /data-view="archive"/);
 });
 
-test('K33 观棋·位置速览：影响力百分比 / 暗徽 / 你的棋子 / 已灭实体过滤', () => {
+test('K33/leg24 片5 观棋·位置速览：事实标记（在办/据）取代影响力分数条 / 暗徽 / 你的棋子 / 已灭实体过滤', () => {
     const w = world();
-    w.weights.e_xie = 0.87975;
+    w.weights.e_xie = 0.87975;   // 账上仍留着旧的分量缓存——界面**不许再显示它**（那个数引擎已不消费）
     const side = renderBoardHtml(w).side;
     assert.match(side, /sw2-entity-name">薛铁衣</);
-    assert.match(side, /sw2-wval">88</);
+    assert.ok(!side.includes('sw2-wval'), '片5：影响力分数条已撤（分数不参与决策，不摆给玩家看）');
+    assert.ok(!side.includes('sw2-weight-row'), '整行影响力组件下架');
+    assert.match(side, /sw2-ev-mark/, '改为事实标记');
+    assert.match(side, /在办|无在办/, '在办与否可见');
+    assert.match(side, /有据 \d\/4|数值无据/, '据/无据可见（空着就是空着）');
     assert.match(side, /sw2-entity sw2-player/);
     assert.match(side, /你的棋子/);
     w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', attrs: {}, status: 'dead' });
@@ -182,7 +186,7 @@ test('第十三棒：属性维度释义与无障碍——title+视障文本双�
     assert.ok(html.includes('class="sw2-visually-hidden">兵力：硬实力——兵马、武备、财力这类能押上桌的东西。<'));
     assert.ok(html.includes('class="sw2-visually-hidden">耳目：情报网有多灵——决定你能看多远。<'));
     // 势力/角色差异注脚（机制事实：COEFFS 层差）
-    assert.ok(html.includes('势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。'));
+    assert.ok(html.includes('账上只记玩出来的东西'), '片5：注脚改写——空着的地方是真没有据，不是漏抽');
     // 缺键零维不渲染：账上只有兵力的世界，不出现权位/人脉/耳目任何 chip（「无兵世界」语义闭环）
     const bareAttrs = world();
     for (const e of bareAttrs.entities) e.attrs = {};
@@ -192,6 +196,31 @@ test('第十三棒：属性维度释义与无障碍——title+视障文本双�
     assert.ok(!html2.includes('title="权位'));
     assert.ok(!html2.includes('title="人脉'));
     assert.ok(!html2.includes('title="耳目'));
+});
+
+test('leg24 片5：账面无数与位置未明都要看得见（不填默认值冒充客观）；环境键书没给就标「书未明述」', () => {
+    const w = world();
+    // 全部实体清空数值 → 四维无数是真状态，界面要点明
+    for (const e of w.entities) e.attrs = {};
+    w.entities.forEach((e) => { e.location = '未明'; });
+    const html = renderEntitiesHtml(w);
+    assert.match(html, /数值无据/, '无数值 → 明说"数值无据"');
+    assert.match(html, /位置未明/, '位置占位 → 明说"位置未明"');
+    assert.match(html, /四维无数（等模型提议或查书）/, '整排属性空着 → 一句人话解释');
+    assert.ok(!/0\.15|0\.25/.test(html), '不出现任何默认值冒充的数据');
+    // 环境四键：书没给的显示「书未明述（无据）」，不给 0.5
+    const bare = structuredClone(w);
+    bare.context.setting.dynamic.env = {};             // 书整本没给环境量（新世界常态）
+    const band = renderInfoBandHtml(bare);
+    assert.match(band, /书未明述/);
+    assert.match(band, /sw2-env-unknown/, '未知环境量用空心条');
+    assert.ok(!/0\.50/.test(band), '不再出现"四键 0.50"这种看起来像原值的数');
+    // 书给了值的那一键照常显示数值（本夹具四键都有值）
+    const band2 = renderInfoBandHtml(w);
+    assert.match(band2, /0\.62/);
+    assert.ok(!/书未明述/.test(band2), '有值就不标未明述');
+    // 分数（影响力条）在实体页彻底消失
+    assert.ok(!html.includes('sw2-wval') && !html.includes('sw2-eweight'), '片5：分量条不再渲染');
 });
 
 test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指纹/时间/五件套原文全量），重抽按钮在位', () => {

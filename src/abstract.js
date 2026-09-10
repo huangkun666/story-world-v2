@@ -260,15 +260,20 @@ export function sanitizeCanon(raw) {
     };
     if (raw?.tension?.intensity !== undefined) errors.push('tension.intensity 由引擎计算，模型输出已丢弃');
 
-    // 环境量初值：键表白名单 + [0,1] 钳制；非法/缺省 → 基线
+    // 环境量初值（leg24 片5 口径修正）：**书里给了才落账**——键表白名单 + [0,1] 钳制；
+    //   书没给的键**不入 env**（空着就是空着）；熵泵/掩码按基线 0.5 使用（不落账面），界面显示「（书未明述）」。
+    //   旧法把缺失键一律写成 0.5 落账 → "四键 0.50"看起来像书的原值（用户实机反馈过），正是默认值冒充客观。
     const env = {};
     for (const key of ENV_KEYS) {
         const v = raw?.env?.[key];
         if (typeof v === 'number' && Number.isFinite(v)) env[key] = Math.min(1, Math.max(0, v));
-        else if (v !== undefined) { errors.push(`env.${key} 非有限数（已落基线）`); env[key] = ENV_INIT_BASELINE; }
-        else env[key] = ENV_INIT_BASELINE;
+        else if (v !== undefined) errors.push(`env.${key} 非有限数（已弃该键，账面留空）`);
+        // v === undefined：书未明述 → 不写键（旧法落基线 0.5）
     }
-    return { ok: true, canon, tension, env, errors };
+    // leg24 片5（留痕收口）：净化层的坏项（非法 env/坏 bookEntities 项等）**上报到调用方的 errors**——
+    // 旧法只在 callOnce 内部消化，`ok` 时静默丢弃：账面上少了东西却没有任何提示（"每条变更留痕"的反面）。
+    const shapeWarnings = errors.slice();
+    return { ok: true, canon, tension, env, errors, shapeWarnings };
 }
 
 export function assembleSetting({ canon, tension, env, legacyTension, fingerprint, extractedAt }) {
@@ -311,7 +316,7 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt) {
     }
     const cleaned = sanitizeCanon(raw);
     if (!cleaned.ok) return { callError: cleaned.errors.join('; ') };
-    return { cleaned };
+    return { cleaned, shapeWarnings: cleaned.shapeWarnings || [] };   // 净化坏项上报（leg24 片5 留痕收口）
 }
 
 // 行级分块：按累计字符 ≤ maxChar 切块（保行完整；超长单行自成一块）
@@ -415,6 +420,7 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         const r = await callOnceWithDeclared(extract, src, smallDeclared)
             .then((first) => (first.callError ? callOnceWithDeclared(extract, src, smallDeclared) : first));   // 空/失败重试一次（v1 瞬时网关教训）
         if (r.callError) return { ok: false, errors: [`抽取失败（已重试一次）：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`] };
+        errors.push(...(r.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
         const applied = applyDeclaredToRoster(r.cleaned.canon.bookEntities, smallDeclared);
         if (smallDeclared.length) {
             errors.push(`照书办: 本书标签声明 ${smallDeclared.length} 个名号（补入册 ${applied.added} / 改判类别 ${applied.fixed}）`);
@@ -431,6 +437,7 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     if (canonR.callError) {
         errors.push(`设定五件套抽取失败（已降级空 canon）：${canonR.callError}`);
     }
+    errors.push(...(canonR.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
     const canonBase = canonR.cleaned ?? { canon: EMPTY_CANON(), tension: { polarity: '', direction: '' }, env: {} };
 
     // 书名录：全条目分块多调用（全量覆盖，v1 教训：人名藏在条目深处，不许头截断）

@@ -115,19 +115,29 @@ export function renderDigestHtml(world) {
     return `<div class="sw2-digest"><div class="sw2-digest-line">${main}</div><div class="sw2-digest-sub">${sub}</div></div>`;
 }
 
+// 环境量一行（信息带/设定页共用；leg24 片5）：**书里没给的键不冒充数字**——显示「书未明述」+ 空心条。
+// 熵泵照旧按基线推进（引擎内部值，不落账面），所以读数仍可读，只是标明来源。
+export function envRowHtml(k, env) {
+    const raw = env?.[k];
+    if (typeof raw !== 'number') {
+        return `<div class="sw2-env-row sw2-nodata"><span class="sw2-env-name">${LABELS.env[k]}</span>`
+            + `<span class="sw2-env-bar sw2-env-unknown"></span>`
+            + `<span class="sw2-env-val">书未明述<small class="sw2-nodata-tag">无据</small></span></div>`;
+    }
+    const band = envBand(k, raw);
+    return `<div class="sw2-env-row${band.state === 'danger' ? ' sw2-danger' : ''}">`
+        + `<span class="sw2-env-name">${LABELS.env[k]}</span>`
+        + `<span class="sw2-env-bar"><i style="width:${Math.round(raw * 100)}%;background:${band.state === 'danger' ? 'var(--sw2-red)' : band.state === 'recover' ? 'var(--sw2-green)' : 'var(--sw2-amber)'}"></i></span>`
+        + `<span class="sw2-env-val">${raw.toFixed(2)}</span></div>`;
+}
+
 export function renderInfoBandHtml(world) {
     const dyn = world.context?.setting?.dynamic;
     const env = dyn?.env || {};
     const pre = !world.meta || world.meta.tick === 0;   // leg21：未演化态诚实标注（基线值非事实值）
     const baselineHint = pre ? ' <span class="sw2-baseline-hint">基线值 · 首轮后随世界演化</span>' : '';
-    const envRows = ENV_KEYS.map((k) => {
-        const v = env[k] ?? 0.5;
-        const band = envBand(k, v);
-        return `<div class="sw2-env-row${band.state === 'danger' ? ' sw2-danger' : ''}">`
-            + `<span class="sw2-env-name">${LABELS.env[k]}</span>`
-            + `<span class="sw2-env-bar"><i style="width:${Math.round(v * 100)}%;background:${band.state === 'danger' ? 'var(--sw2-red)' : band.state === 'recover' ? 'var(--sw2-green)' : 'var(--sw2-amber)'}"></i></span>`
-            + `<span class="sw2-env-val">${v.toFixed(2)}</span></div>`;
-    });
+    // leg24 片5：环境四键**只在书里给过值时才落账面**；没给的显示「书未明述（无据）」
+    const envRows = ENV_KEYS.map((k) => envRowHtml(k, env));
     const t = dyn?.tension || {};
     const tides = (dyn?.derivedFrom || []).slice(-3).reverse().map((x) => tideLabel(world, x));
     const counts = {
@@ -202,23 +212,26 @@ export function renderFeedHtml(world, { limit = 8 } = {}) {
 
 export function renderSideHtml(world) {
     const playerId = world.context?.playerId;
-    const weights = world.weights || {};
     const cards = world.entities
         .filter((e) => !e.status || e.status === 'active')
         .map((e) => {
             const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
+            // leg24 片5：撤掉「影响力」分数条（那个数引擎已不消费）；改显示可查的事实——在办/位置/据。
+            const dims = ['hardPower', 'office', 'network', 'intel'].filter((k) => e.attrs?.[k] != null).length;
             return `<div class="sw2-entity${e.id === playerId ? ' sw2-player' : ''}">`
                 + `<div class="sw2-entity-head"><span class="sw2-entity-name">${escapeHtml(e.name)}</span>`
                 + `<span class="sw2-entity-kind">${kindLabel(e, world)}</span>`
-                + `<span class="sw2-entity-loc">${escapeHtml(e.location || '')}</span></div>`
-                + `<div class="sw2-weight-row"><span class="sw2-wlabel">影响力</span>`
-                + `<span class="sw2-wbar"><i style="width:${fmtPct(weights[e.id])}%"></i></span>`
-                + `<span class="sw2-wval">${fmtPct(weights[e.id])}</span></div>`
+                + `<span class="sw2-entity-loc">${escapeHtml(e.location || '未明')}</span></div>`
+                + `<div class="sw2-fact-row">`
+                + `<span class="sw2-ev-mark${agenda ? '' : ' nodata'}">${agenda ? '在办' : '无在办'}</span>`
+                + `<span class="sw2-ev-mark${dims ? '' : ' nodata'}">${dims ? `有据 ${dims}/4` : '数值无据'}</span>`
+                + (e.parent ? `<span class="sw2-ev-mark">隶属 ${escapeHtml(e.parent)}</span>` : '')
+                + `</div>`
                 + (agenda
                     ? `<div class="sw2-agenda"><b>${escapeHtml(agenda.goal)}</b>${agenda.visibility === 'concealed' ? ' <span class="sw2-visible v-hidden">暗</span>' : ''}</div>`
                     : `<div class="sw2-agenda">${e.id === playerId ? '眼下没有在办的盘算——你的每一步从对话里来。' : '眼下没有在办的盘算。'}</div>`)
                 + `<div class="sw2-stage"><span class="sw2-stagetext">${agenda ? `${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (typeof e.lastActiveTick === 'number' ? `最近活跃：${fmtTick(e.lastActiveTick)}` : '')}</span></div>`
-                + (e.id === playerId ? '<div class="sw2-note">被大局牵动会伤筋动骨；硬碰大势力会被折减。</div>' : '')
+                + (e.id === playerId ? '<div class="sw2-note">被大局牵动会伤筋动骨；账上没有的数就是没有据。</div>' : '')
                 + `</div>`;
         });
     return `<div class="sw2-col-head">位置与动作 · 速览</div><div class="sw2-side">${cards.join('')}</div>`;
@@ -299,6 +312,11 @@ export function renderEntitiesHtml(world) {
     // leg24 片1（停抄书）：行内「补抽」与头部「补抽未抽属性/隶属」两枚按钮下掉——
     // 它们是"按需从书里抄属性/隶属"的入口（leg21/K49），而这条流水线已整条删除。
     // 名册权威只用于身份（名字+类别）与照书办的结构声明，不再作为按钮候选口径。
+    // leg24 片5（界面）：①**撤掉分量条**——那个 0-1 的数引擎已不再消费（用户拍板删），显示它等于把
+    //   废数当客观给玩家看（旧法：条 + 数字）；②改成「据/无据」标记——账上真有的才算有据（设计硬规矩一）；
+    //   ③属性**只有模型提议过才显示**（空着就是空着，不摆一排 0.5 冒充数据）。
+    // leg24 片5：属性 chip 保留第十三棒的双通道无障碍（悬停 title + 视障 sr 文本）与"缺键零维不渲染"语义；
+    // 只是现在"缺键"是新世界的常态（账面不预填），所以整排会空 → 显示一行"四维无数（等模型提议或查书）"。
     const attrs = (e) => Object.entries(LABELS.attr).map(([k, label]) => {
         const v = e.attrs?.[k];
         if (v == null) return ''; // 账上无键=该维缺位（「世界书用不到兵力」语义：无兵世界不出现兵力列）
@@ -318,19 +336,28 @@ export function renderEntitiesHtml(world) {
             ? `<div class="sw2-eaffil">机构：${escapeHtml(e.organs.join('、'))}</div>` : '';
         const crew = e.kind === 'faction' ? membersOf(world, e) : null;
         const crewHtml = crew ? `<div class="sw2-eaffil">麾下：${escapeHtml(crew.join('、'))}</div>` : '';
+        // leg24 片5：据/无据 —— 账上真有几维数值、有没有在办的事、位置是不是「未明」占位
+        const dims = Object.keys(LABELS.attr).filter((k) => e.attrs?.[k] != null).length;
+        const marks = [
+            `<span class="sw2-ev-mark${dims ? '' : ' nodata'}">${dims ? `有据 ${dims}/4` : '数值无据'}</span>`,
+            agenda ? '<span class="sw2-ev-mark">在办</span>' : '',
+            (!e.location || e.location === '未明') ? '<span class="sw2-ev-mark nodata">位置未明</span>' : '',
+            !e.parent && !(e.organs?.length) && !(e.branches?.length) ? '<span class="sw2-ev-mark nodata">归属空着</span>' : '',
+        ].join('');
         return `<div class="sw2-entity-row${e.id === world.context?.playerId ? ' sw2-player' : ''}">`
             + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}</small>${lensBadge}</div>`
-            + `<div class="sw2-eloc">${escapeHtml(e.location || '')}</div>`
-            + `<div class="sw2-eweight"><span class="sw2-wbar"><i style="width:${fmtPct(world.weights?.[e.id])}%"></i></span><span class="sw2-wval">${fmtPct(world.weights?.[e.id])}</span></div>`
-            + `<div class="sw2-eattrs">${attrs(e)}</div>`
+            + `<div class="sw2-eloc">${escapeHtml(e.location || '未明')}</div>`
+            + `<div class="sw2-ecert">${marks}</div>`
+            + `<div class="sw2-eattrs">${attrs(e) || '<span class="sw2-nodata-text">四维无数（等模型提议或查书）</span>'}</div>`
             + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${organ}${crewHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             + `</div>`;
     });
     const allEnts = world.entities || [];
     const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
-        + `<div class="sw2-hint">势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。</div>`;
+    const noData = allEnts.filter((e) => !Object.keys(LABELS.attr).some((k) => e.attrs?.[k] != null)).length;
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}${noData ? ` <small class="sw2-quiet-note">其中 ${noData} 位账面无数（空着就是空着，不填默认值）</small>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
+        + `<div class="sw2-hint">账上只记玩出来的东西：书随时可查，所以这里空着的地方是**真没有据**，不是漏抽。</div>`;
 }
 
 // ============ 设定档案页（A-6：展示与 setting.frozen 逐字段一致） ============
@@ -345,13 +372,7 @@ export function renderSettingHtml(world) {
             + `<div class="sw2-sv-sub">尚未抽取——设定池未就绪。</div></div>`
             + `<div class="sw2-sv-cards"><span class="sw2-sv-chip stale">未抽取</span></div></div>`;
     }
-    const envRows = ENV_KEYS.map((k) => {
-        const v = env[k] ?? 0.5;
-        const band = envBand(k, v);
-        return `<div class="sw2-env-row${band.state === 'danger' ? ' sw2-danger' : ''}"><span class="sw2-env-name">${LABELS.env[k]}</span>`
-            + `<span class="sw2-env-bar"><i style="width:${Math.round(v * 100)}%;background:${band.state === 'danger' ? 'var(--sw2-red)' : 'var(--sw2-amber)'}"></i></span>`
-            + `<span class="sw2-env-val">${v.toFixed(2)}</span></div>`;
-    }).join('');
+    const envRows = ENV_KEYS.map((k) => envRowHtml(k, env)).join('');
     const tides = (dyn?.derivedFrom || []).slice(-5).reverse().map((x) => tideLabel(world, x)).join('<br>');
     const canon = frozen.canon || {};
     const scaleRows = (canon.powerScale || []).map((p) => `<div class="sw2-sv-row"><b>${escapeHtml(p.level)}</b><span>${escapeHtml(p.note)}</span></div>`).join('');

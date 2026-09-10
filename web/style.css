@@ -130,11 +130,16 @@
 .sw2-entity-name{font-weight:700;font-size:14px;}
 .sw2-entity-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
 .sw2-entity-loc{font-size:12px;color:var(--sw2-text-dim);margin-left:auto;}
-.sw2-weight-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.sw2-weight-row .sw2-wlabel{font-size:11.5px;color:var(--sw2-text-faint);flex:none;}
-.sw2-weight-row .sw2-wbar{flex:1;height:6px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
-.sw2-weight-row .sw2-wbar i{display:block;height:100%;background:var(--sw2-amber);border-radius:3px;opacity:.85;}
-.sw2-weight-row .sw2-wval{font-size:11px;color:var(--sw2-text-dim);flex:none;font-family:"Cascadia Mono",Consolas,monospace;}
+/* leg24 片5：影响力分数条（.sw2-weight-row/.sw2-wval）已从渲染中撤掉——分数不再参与决策，不摆给玩家看。
+   下面这组是替代它的事实标记：在办/据/无据（空着就是空着，用中性灰点明"真没有据"）。 */
+.sw2-fact-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+.sw2-ev-mark{font-size:10.5px;line-height:1.6;padding:0 6px;border-radius:8px;border:1px solid var(--sw2-line-soft);color:var(--sw2-text-dim);white-space:nowrap;}
+.sw2-ev-mark.nodata{color:var(--sw2-text-faint);border-style:dashed;}
+.sw2-nodata-text{font-size:11.5px;color:var(--sw2-text-faint);font-style:italic;}
+.sw2-env-row.sw2-nodata .sw2-env-val{color:var(--sw2-text-faint);font-size:11px;}
+.sw2-env-bar.sw2-env-unknown{background:transparent;border:1px dashed var(--sw2-line-soft);}
+.sw2-nodata-tag{margin-left:5px;font-size:10px;padding:0 4px;border:1px dashed var(--sw2-line-soft);border-radius:7px;}
+.sw2-ecert{display:flex;flex-wrap:wrap;gap:5px;}
 .sw2-agenda{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);margin-bottom:6px;}
 .sw2-agenda b{color:var(--sw2-text);font-weight:600;}
 .sw2-stage{display:flex;align-items:center;gap:6px;}
@@ -181,10 +186,7 @@
 .sw2-ename{font-weight:700;font-size:14px;}
 .sw2-ename small{display:block;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
 .sw2-eloc{font-size:12px;color:var(--sw2-text-dim);}
-.sw2-eweight{display:flex;align-items:center;gap:7px;}
-.sw2-eweight .sw2-wbar{flex:1;height:6px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
-.sw2-eweight .sw2-wbar i{display:block;height:100%;background:var(--sw2-amber);border-radius:3px;}
-.sw2-eweight .sw2-wval{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-amber);}
+.sw2-ecert{display:flex;flex-wrap:wrap;gap:5px;}
 .sw2-eattrs{display:flex;gap:5px;flex-wrap:wrap;}
 .sw2-eattr{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
 .sw2-eattr b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;margin-left:3px;}
