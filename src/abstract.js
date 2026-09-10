@@ -30,6 +30,7 @@ export const CANON_SRC_CHAR = 30000;       // 设定五件套抽取：书文前 
 export const ROSTER_CHUNK_CHAR = 60000;    // 书名录分块尺寸（字符级累计；v1 参数翻烧饼史终值）
 export const ROSTER_CHUNK_DEPTH = 4;       // 块失败对半拆递归深度上限（v1 同款；条目数 ≤1 时不再拆）
 export const ATTRS_BATCH_MAX = 100;        // 提案：属性轮单批名号上限（leg21 拆轮——名册轮瘦身后属性独立抽取，批内输出体积有界）
+export const ROUND_BATCH_CHAR = 60000;     // 提案：关系轮/属性轮单批文本字符上限（K49——防超长条目书（3k+/条）单批输入失控）
 
 export function buildAbstractPrompt(sourceText) {
     return [
@@ -59,31 +60,19 @@ export function buildAbstractPrompt(sourceText) {
 // leg21（用户令「把之前的问题修了」）：名册轮专用提示词——瘦身。
 // 背景（数据实证）：leg20 把 attrs/依据/race 塞进名册轮后，同书名册 504→106——
 // 每名号输出膨胀 3-4 倍超 16384 输出预算（思考型模型 reasoning 还占盘）→ JSON 截断 → 拆半降级。
-// 名册轮职责收窄为：名号 + kind/parent/location/race（轻量形状，"块级只收书名录"注释的本来意图）；
-// 属性（四维+依据）拆到 runAttrsRound 独立轮（见下）。出处校验（名号/依据/种族/所在 ∈ 原文）仍在书级。
+// K49（词档细案 §2.1）**再瘦身到最轻形态 {name, kind}**：可选字段（隶属/所在/种族）在名册规模压力下
+// 最易被模型省略——导出 (3) 实证 504 名册 parent 覆盖率 82%，600 版「天庭百官」无 parent 独立入账；
+// 故三字段整体移出到独立关系轮（buildRelationPrompt/runRelationRound，名册定稿后按批补）。
+// 属性（四维+依据）仍在 runAttrsRound 独立轮（见下）。出处校验（名号/依据/种族/所在 ∈ 原文）仍在书级。
 export function buildRosterPrompt(sourceText) {
     return [
         '你是世界设定的名册抽取器。只提取不创作：只从给定原文里提取名号，不创作、不润色、不补全、不重排。',
         '输出严格 JSON（只输出 bookEntities 一组，形状如下；可省字段不写 null）：',
-        JSON.stringify(
-            {
-                bookEntities: [
-                    {
-                        name: '势力/角色/地名的名号（原文名）',
-                        kind: 'faction|character|location（可省）',
-                        parent: '书中明述的上级势力/所属势力（原文名，可省；未明述不填）',
-                        location: '书中明述的所在/驻地（原文，可省；未明述不填）',
-                        race: '种族标签（仅书中明述该名号的种族归属时填，如 人族/妖族）',
-                    },
-                ],
-            },
-            null,
-            2,
-        ),
+        JSON.stringify({ bookEntities: [{ name: '势力/角色/地名的名号（原文名）', kind: 'faction|character|location（可省）' }] }, null, 2),
         '纪律：',
         '1. 只收原文名，不收泛指称呼；地名（洲/山/谷/城等）标 location。',
         '2. 纯种族的群体名号（如 人族、妖族、鬼族、魔族、灵族、仙族、神族等）不算势力——不要给它们标 faction；它们是种族标签的来源。只有书中明述的组织（如某族的宗族、门派、联盟、国度）才是势力。',
-        '3. 隶属（parent）/所在（location）/种族（race）只在原文明述时填，未明述一律省略。',
+        '3. 本轮只负责名号与类别：隶属、所在、种族另有专轮负责，这里一律不要输出。',
         '———— 设定原文如下 ————',
         sourceText,
     ].join('\n');
@@ -104,6 +93,27 @@ export function buildAttrsPrompt(names, sourceText) {
         '———— 设定原文如下 ————',
         sourceText,
         '———— 待抽取属性的名号 ————',
+        names.join('、'),
+    ].join('\n');
+}
+
+// K49（词档细案 §2.1）：关系轮专用提示词——只按名号列表抽「隶属/所在/种族」（名册轮已瘦到 {name,kind}）。
+// 起因=大名册下可选字段最先被省略（导出 (3)：504 名册 parent 覆盖率 82%；600 版「天庭百官」无 parent
+// → 子势力未归并、独立入账）。模板示例逐字给出「天庭百官 → parent: 天庭」的判读样例（细案 §2.1 要求）。
+// 输出体积与批内名号数成正比（ATTRS_BATCH_MAX 控），批文本 ≤ROUND_BATCH_CHAR；出处校验在书级。
+export function buildRelationPrompt(names, sourceText) {
+    return [
+        '你是世界设定的实体关系抽取器。只提取不创作：只针对列出的名号，从设定原文里提取它们的隶属、所在、种族。',
+        '输出严格 JSON（只输出 bookEntities 一组；没有把握的名号直接省略，不要硬凑）：',
+        JSON.stringify({ bookEntities: [{ name: '名号（原文名）', parent: '书中明述的上级势力（原文名；未明述不填）', location: '书中明述的所在/驻地（原文；未明述不填）', race: '种族标签（仅书中明述该名号的种族归属时填，如 人族/妖族）' }] }, null, 2),
+        '示例（原文写明天庭辖下百官）：{"name":"天庭百官","parent":"天庭"}——隶属只认书中明述的上下级，不按名号字样猜。',
+        '纪律：',
+        '1. 只针对列出的名号输出条目；名号不在列表中的条目不得输出；每个名号最多一个条目；',
+        '2. 隶属（parent）/所在（location）/种族（race）三项只在原文明述时填，未明述一律省略——宁可省略，不许猜；',
+        '3. parent 必须是书中真实存在的上级势力名号（原文名），不得拿"天庭百官""众神"这类集合称呼当上级。',
+        '———— 设定原文如下 ————',
+        sourceText,
+        '———— 待抽取关系的名号 ————',
         names.join('、'),
     ].join('\n');
 }
@@ -381,25 +391,37 @@ function nameInRow(name, row) {
     }
     return re.test(row);
 }
+// K49：轮批次切分（属性轮/关系轮共用一处定义·写一次读两处）——按行推进，批内累计命中名号 ≤ maxNames
+// **且**批文本 ≤ maxChar 字符（细案 §2.1 K49 限流：防超长条目书（3k+/条）单批输入失控）；
+// 无命中名号的行只作上下文，缓冲超限即弃（不留无主缓冲，防上下文无界膨胀）。
+function batchRowsByName(rows, names, maxNames, maxChar) {
+    const list = names.map((b) => b.name);
+    const batches = [];
+    let buf = [];
+    let bufNames = [];
+    let bufChars = 0;
+    const flush = () => {
+        if (bufNames.length) batches.push([bufNames.slice(), buf.join('\n')]);
+        buf = [];
+        bufNames = [];
+        bufChars = 0;
+    };
+    for (const row of rows) {
+        buf.push(row);
+        bufChars += Array.from(row).length + 1;
+        for (const n of list) if (!bufNames.includes(n) && nameInRow(n, row)) bufNames.push(n);
+        if (bufNames.length >= maxNames || (bufNames.length > 0 && bufChars >= maxChar)) flush();
+        else if (!bufNames.length && bufChars >= maxChar) { buf = []; bufChars = 0; }
+    }
+    flush();
+    return batches;
+}
+
 export async function runAttrsRound(rows, names, extract) {
     const errors = [];
     if (!names.length) return errors;
     const idx = new Map(names.map((b) => [b.name, b]));
-    const batches = [];
-    let buf = [];
-    let bufNames = [];
-    for (const row of rows) {
-        buf.push(row);
-        for (const n of idx.keys()) {
-            if (nameInRow(n, row) && !bufNames.includes(n)) bufNames.push(n);
-        }
-        if (bufNames.length >= ATTRS_BATCH_MAX) {
-            batches.push([bufNames.slice(), buf.join('\n')]);
-            buf = [];
-            bufNames = [];
-        }
-    }
-    if (buf.length) batches.push([bufNames.slice(), buf.join('\n')]);
+    const batches = batchRowsByName(rows, names, ATTRS_BATCH_MAX, ROUND_BATCH_CHAR);
     let okBatches = 0;
     for (const [ns, text] of batches) {
         if (!ns.length) continue;
@@ -415,6 +437,39 @@ export async function runAttrsRound(rows, names, extract) {
         }
     }
     if (okBatches === 0) errors.push('属性抽取全部失败（名册保留，属性全部落引擎兜底）');
+    return errors;
+}
+
+// K49（词档细案 §2.1）：关系轮——名册定稿后独立补「隶属/所在/种族」（与 runAttrsRound 同构：
+// 按批 ≤ATTRS_BATCH_MAX 名号、批文本 ≤ROUND_BATCH_CHAR、行邻域上下文、空/失败重试一次、first-wins 合并）。
+// 「只提取不创作」落在引擎侧：parent 必须**在册且为 faction**，否则弃关系 + 留痕（名号保留、照常入账）；
+// race/location 的逐字出处校验由 validateRosterDetails 在书级统一收口（与属性轮同口径）。
+// 原料补齐即生效：seedBookEntities 的折叠逻辑零改动（"天庭百官"→ 天庭.branches）。
+export async function runRelationRound(rows, names, extract) {
+    const errors = [];
+    if (!names.length) return errors;
+    const idx = new Map(names.map((b) => [b.name, b]));
+    const kindOf = new Map(names.map((b) => [b.name, b.kind === 'faction' ? 'faction' : 'character']));
+    const batches = batchRowsByName(rows, names, ATTRS_BATCH_MAX, ROUND_BATCH_CHAR);
+    let okBatches = 0;
+    for (const [ns, text] of batches) {
+        if (!ns.length) continue;
+        let r = await callOnce(extract, buildRelationPrompt(ns, text));
+        if (r.callError) r = await callOnce(extract, buildRelationPrompt(ns, text));
+        if (r.callError) { errors.push(`关系抽取失败（已重试一次）：${r.callError}——本批名号关系保持缺省`); continue; }
+        okBatches += 1;
+        for (const it of r.cleaned.canon.bookEntities) {
+            const item = idx.get(it.name);
+            if (!item) continue;
+            if (it.parent && !item.parent) {
+                if (kindOf.get(it.parent) === 'faction') item.parent = it.parent;
+                else errors.push(`关系轮: 「${item.name}」的隶属「${it.parent}」不在册或非势力（已弃关系，名号保留）`);
+            }
+            if (it.race && !item.race) item.race = it.race;
+            if (it.location && !item.location) item.location = it.location;
+        }
+    }
+    if (okBatches === 0) errors.push('关系抽取全部失败（名册保留，隶属/所在/种族保持缺省；「重新抽取」可补回）');
     return errors;
 }
 
@@ -498,6 +553,9 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     if (finalNames.length < before) {
         errors.push(`书名录全书级出处校验：${before - finalNames.length} 个名号原文未出现（疑似编造，已弃）`);
     }
+
+    // K49：关系轮——名册定稿后独立补隶属/所在/种族（名册轮已瘦到 {name,kind}；大名册下可选字段最易被省略）
+    errors.push(...(await runRelationRound(rows, finalNames, extract)));
 
     // leg21：属性轮——名册定稿后独立抽四维（依据/种族/所在出处校验统一在下方收口）
     errors.push(...(await runAttrsRound(rows, finalNames, extract)));

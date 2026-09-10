@@ -13,7 +13,7 @@ import {
     hotAccountShape, loadHotAccount, rotateChronicle,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
 } from '../src/storage.js';
-import { seedBookEntities, extractWorldSetting, applySettingToSsot, runAttrsRound, applyRosterAttrs, refineEntityAttrs, resetDynamicLayer } from '../src/abstract.js';
+import { seedBookEntities, extractWorldSetting, applySettingToSsot, runAttrsRound, runRelationRound, applyRosterAttrs, refineEntityAttrs, resetDynamicLayer } from '../src/abstract.js';
 import { bookFingerprint } from '../src/fingerprint.js';
 import { createIdbVolumeStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
@@ -775,7 +775,8 @@ if (typeof window !== 'undefined') {
         }
     };
 
-    // 批量补抽：候选=名册无 attrs 条目（已试过无果的会话内跳过）→ runAttrsRound（leg21 属性轮同机制）→ 落盘
+    // 批量补抽（K49 并轨）：候选=名册无属性条目 ∪ 无隶属的势力条目（地名不入实体池不计；已试过无果的会话内跳过）
+    // → 关系轮（补隶属/所在/种族）+ 属性轮（leg21 同机制）→ 名册落账 + 幂等 seed（父侧分支表即时出名）→ 落盘
     bus['refine-pending'] = async () => {
         if (refining) { setStatus('⚠ 补抽进行中，稍候…'); return; }
         try {
@@ -785,8 +786,12 @@ if (typeof window !== 'undefined') {
             const canon = world.context?.setting?.frozen?.canon;
             if (!canon?.bookEntities?.length) { setStatus('⚠ 还没有设定池（先「开始新世界」）'); return; }
             syncRefinedFp(world);
-            const candidates = canon.bookEntities.filter((b) => !b.attrs && !refinedFailed.has(b.name));
-            if (!candidates.length) { setStatus('名册条目已全部带属性——无需补抽'); return; }
+            const isFaction = (b) => b.kind === 'faction';
+            const candidates = canon.bookEntities.filter((b) => b.kind !== 'location' && !refinedFailed.has(b.name)
+                && (!b.attrs || (isFaction(b) && !b.parent)));
+            if (!candidates.length) { setStatus('名册条目已全部带属性与隶属——无需补抽'); return; }
+            const attrTargets = candidates.filter((b) => !b.attrs);
+            const relTargets = candidates.filter((b) => isFaction(b) && !b.parent);
             const settings = modelSettings() || {};
             const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS });
             if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）'); return; }
@@ -795,16 +800,22 @@ if (typeof window !== 'undefined') {
             if (bookFingerprint(src.text) !== world.context?.setting?.frozen?.fingerprint) { setStatus('⚠ 设定源已变化（书指纹不符）——请先「↻ 重新抽取设定」再补抽'); return; }
             refining = true;
             try {
-                setStatus(`正在补抽 ${candidates.length} 个名号的属性（书内原文出处）…`);
+                setStatus(`正在补抽 ${candidates.length} 个名号（属性 ${attrTargets.length} · 势力隶属 ${relTargets.length}，书内原文出处）…`);
                 const rows = src.text.split('\n').map((s) => s.trim()).filter(Boolean);
-                const errs = await runAttrsRound(rows, candidates, diagExtract(resolved));
+                const extract = diagExtract(resolved);
+                const parentBefore = canon.bookEntities.filter((b) => b.parent).length;
+                const errs = [];
+                errs.push(...(await runRelationRound(rows, relTargets, extract)));   // K49 关系轮先行（隶属是折叠的原料）
+                errs.push(...(await runAttrsRound(rows, attrTargets, extract)));
+                const relFilled = canon.bookEntities.filter((b) => b.parent).length - parentBefore;
                 const applied = applyRosterAttrs(world);
-                for (const c of candidates) if (!c.attrs) refinedFailed.add(c.name);   // 无果名号入会话记忆（防重复空跑）
+                seedBookEntities(world);   // K49：补到的隶属即时在父势力分支表出名（幂等——与初始 seed 折叠同源，零新机制）
+                for (const c of candidates) if (!c.attrs && (!isFaction(c) || c.parent)) refinedFailed.add(c.name);   // 无果名号入会话记忆（防重复空跑）
                 const hot = await ensureChronicleRotated(world);
                 LISTED_VOLUMES = await listOldVolumes();
                 refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
                 const flushed = await flushHotMeta();
-                setStatus(`补抽完成：${applied.updated} 个实体属性已更新（候选 ${candidates.length} 名号${errs.length ? ` · 警告 ${errs.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
+                setStatus(`补抽完成：属性更新 ${applied.updated} 个实体 · 隶属补全 ${relFilled} 条（候选 ${candidates.length} 名号${errs.length ? ` · 警告 ${errs.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
             } finally {
                 refining = false;
             }

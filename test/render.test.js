@@ -354,7 +354,7 @@ test('leg21 增量抽象入口：实体页行内补抽按钮（名册对应条�
     ];
     const html = renderEntitiesHtml(w);
     assert.ok(html.includes('data-action="refine-pending"'), '头部批量按钮在位');
-    assert.ok(html.includes('补抽未抽属性（2）'), '候选计数=名册无 attrs 条数');
+    assert.ok(html.includes('补抽未抽属性/隶属（2）'), '候选计数=名册无属性/无隶属条目数（K49 口径）');
     assert.ok(html.includes('data-action="refine-entity" data-entity="e_xie"'), '行内补抽按钮（名册有对应条目）');
     assert.equal(html.split('data-action="refine-entity"').length - 1, 2, '名册对应实体各带一枚');
     const set = renderSettingHtml(w);

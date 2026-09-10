@@ -296,9 +296,10 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 export function renderEntitiesHtml(world) {
     // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、镜头徽、分支/隶属
     const lens = new Set(lensList(world).map((x) => x.e.id));
-    // leg21 增量抽象：名册条目名 → 行内「补抽」按钮资格；头部批量按钮带候选计数（无 attrs 条目数）
+    // leg21 增量抽象：名册条目名 → 行内「补抽」按钮资格；头部批量按钮带候选计数
+    // K49：候选口径与编排层同源——无属性条目 ∪ 无隶属的势力条目（地名不入实体池，不计入）
     const rosterNames = new Set((world.context?.setting?.frozen?.canon?.bookEntities || []).map((b) => b.name));
-    const pendingN = (world.context?.setting?.frozen?.canon?.bookEntities || []).filter((b) => !b.attrs).length;
+    const pendingN = (world.context?.setting?.frozen?.canon?.bookEntities || []).filter((b) => b.kind !== 'location' && (!b.attrs || (b.kind === 'faction' && !b.parent))).length;
     const attrs = (e) => Object.entries(LABELS.attr).map(([k, label]) => {
         const v = e.attrs?.[k];
         if (v == null) return ''; // 账上无键=该维缺位（「世界书用不到兵力」语义：无兵世界不出现兵力列）
@@ -325,7 +326,7 @@ export function renderEntitiesHtml(world) {
     });
     const allEnts = world.entities || [];
     const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}${pendingN ? `<button class="sw2-chainbtn" data-action="refine-pending" title="按书内原文批量补抽未抽到的实体属性（不重抽全量设定）">补抽未抽属性（${pendingN}）</button>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}${pendingN ? `<button class="sw2-chainbtn" data-action="refine-pending" title="按书内原文批量补抽未抽到的实体属性与势力隶属（不重抽全量设定）">补抽未抽属性/隶属（${pendingN}）</button>` : ''}</div><div class="sw2-entity-list">${rows.join('')}</div>`
         + `<div class="sw2-hint">势力的影响力更吃兵力与权位；角色的影响力更吃人脉与耳目。</div>`;
 }
 

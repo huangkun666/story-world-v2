@@ -54,18 +54,19 @@ test('chunkRows：行级分块按累计字符，超长单行自成一块', () =>
     assert.deepEqual(chunkRows(rows, 100), [rows.join('\n')]);
 });
 
-test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次 + 属性轮批量，全量覆盖（尾部名号不丢）', async () => {
+test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次 + 关系轮批量 + 属性轮批量，全量覆盖（尾部名号不丢）', async () => {
     const src = makeBook(2000); // ≈ 42 万字符（含尾部 字 填充）——超 3 万触发分块
     const lenA = Array.from(src).length;
     assert.ok(lenA > CANON_SRC_CHAR, '前置：确为大书');
     const calls = [];
     const r = await extractWorldSetting({ sourceText: src, extract: makeExtract({ calls }), cache: null });
     assert.equal(r.ok, true);
-    // 1 次 canon（头 3 万）+ ceil(全量/块) 次名册块调用 + ceil(全量名号/批) 次属性轮调用（leg21 拆轮后）
+    // 1 次 canon（头 3 万）+ ceil(全量/块) 次名册块调用 + 关系轮批 + 属性轮批（leg21 拆轮 + K49 关系轮）
     assert.ok(calls.length >= 2, `应多次调用（实际 ${calls.length} 次）`);
     const expectChunks = Math.ceil(lenA / ROSTER_CHUNK_CHAR);
+    const expectRelation = Math.ceil(2000 / ATTRS_BATCH_MAX);
     const expectAttrs = Math.ceil(2000 / ATTRS_BATCH_MAX);
-    assert.equal(calls.length, 1 + expectChunks + expectAttrs, `1 次五件套 + ${expectChunks} 块 + ${expectAttrs} 属性批`);
+    assert.equal(calls.length, 1 + expectChunks + expectRelation + expectAttrs, `1 次五件套 + ${expectChunks} 块 + ${expectRelation} 关系批 + ${expectAttrs} 属性批`);
     // 五件套来源 = 头 3 万单发：首个 prompt 的原文段 ≤ 3 万
     const names = r.setting.frozen.canon.bookEntities.map((b) => b.name);
     assert.ok(names.includes('名号1999'), '尾部条目名号全量覆盖（v1 教训：名字密集段不许头截断）');
@@ -76,8 +77,8 @@ test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次 + 属性轮
     assert.ok(r.setting.frozen.canon.powerScale.length === 1, '五件套仍出自 canon 单发');
 });
 
-test('leg21 名册轮 prompt 瘦身：块调用不再问五件套/张力/属性，带种族禁令与所在字段', async () => {
-    const src = makeBook(200); // ≈ 4.2 万字符 → 大书路径（1 块 + 属性轮）
+test('leg21/K49 名册轮 prompt 瘦身：块调用不再问五件套/张力/属性，且模板只剩 {name,kind}', async () => {
+    const src = makeBook(200); // ≈ 4.2 万字符 → 大书路径（1 块 + 关系轮 + 属性轮）
     const rosterPrompts = [];
     const extract = async (prompt) => {
         if (prompt.includes('名册抽取器')) rosterPrompts.push(prompt);
@@ -90,7 +91,10 @@ test('leg21 名册轮 prompt 瘦身：块调用不再问五件套/张力/属性�
     assert.ok(rosterPrompts.length >= 1, '名册轮确实发起块调用');
     const p = rosterPrompts[0];
     assert.match(p, /不要给它们标 faction/, '种族禁令名单式强化在位（人族/妖族/鬼族…不算势力）');
-    assert.match(p, /location/, '所在字段入名册轮（位置诚实化）');
+    // K49 再瘦身锁：模板逐键 = name+kind（隶属/所在/种族移到关系轮）
+    const tpl = JSON.parse(p.match(/\{[\s\S]*?\n\}/)[0]);
+    assert.deepEqual(Object.keys(tpl.bookEntities[0]), ['name', 'kind'], '名册轮模板只剩 name+kind（瘦身锁）');
+    assert.ok(!/"parent"|"race"|"location"/.test(p), '隶属/种族/所在字段不入名册轮（K49 移出到关系轮）');
     assert.ok(!p.includes('powerScale'), '名册轮不再问力量谱系');
     assert.ok(!p.includes('situation'), '名册轮不再问世情句');
     assert.ok(!p.includes('intensity'), '名册轮不再问张力强度');
