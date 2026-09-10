@@ -663,9 +663,9 @@
       "world": null,
       "expect": {
         "warnings": [
-          "裁定: 属性硬边界（e_xie.hardPower 1→1，申请 1.1）",
+          "裁定: 越界提议被忽略（e_xie.hardPower 已是 1，申请 1.1）",
           "stateChanges 无 cause: e_wanfa.hardPower（坏账前置，K5）",
-          "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.1）"
+          "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.1）"
         ],
         "gate": {
           "silent": [],
@@ -778,8 +778,8 @@
       "world": null,
       "expect": {
         "warnings": [
-          "裁定: 属性硬边界（e_xie.hardPower 1→1，申请 1.1）",
-          "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.1）"
+          "裁定: 越界提议被忽略（e_xie.hardPower 已是 1，申请 1.1）",
+          "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.1）"
         ],
         "gate": {
           "silent": [],
@@ -887,7 +887,7 @@
       "world": null,
       "expect": {
         "warnings": [
-          "裁定: 属性硬边界（e_xie.hardPower 1→1，申请 1.2）",
+          "裁定: 越界提议被忽略（e_xie.hardPower 已是 1，申请 1.2）",
           "stateChanges 无 cause: e_dayu.intel（坏账前置，K5）"
         ],
         "gate": {

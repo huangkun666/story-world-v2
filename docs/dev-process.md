@@ -104,7 +104,7 @@
 ## 5. 工具与命令手册
 
 - **运行位置**：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）。
-- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载；**且须在项目目录内运行**，在仓库根跑会连带跑到旧项目 `plugins/story-world` 的测试）。当前 **403/403 全绿**（2026-09-10 第二十三棒：396 → 403，新增 `test/book-tags.test.js` 7 则——照书办/声明扫描/关系轮口径放宽）；
+- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载；**且须在项目目录内运行**，在仓库根跑会连带跑到旧项目 `plugins/story-world` 的测试）。当前 **471/471 全绿**（2026-09-11 第二十五棒 b 落盘后的基线。来历：第二十三棒 396 → 403〔新增 `test/book-tags.test.js` 7 则——照书办/声明扫描/关系轮口径放宽〕；leg24 五片重基线 403 → 393〔片1 停抄书：删 `test/relation-round.test.js` 6 则 + `abstract.test.js` 2 则 + `abstract-chunk.test.js` 3 则、新增 6 则〕→ 394〔片2 账本换血〕→ 395〔片3 拆引擎裁定〕→ 396〔片5 界面〕；leg25 A–H 八组 396 → 439〔新增 43 则：`player-wiring` 6 / `positions` 5 / `storage-rotation-persist` 7 + 各组回归〕→ **445**〔旧账清理判据 整行→逐维：`settle.test.js` 净增 6 则〕→ **448**〔上级名号净化：`abstract.test.js` +3 则〕→ **471**〔leg25 b 按需查书落地：`entity-lookup.test.js` 19 则 + `render.test.js` 2 则 + 空裁定措辞 2 则〕；逐行见 `docs/ledger.md` leg24/leg25 段）；
   ⚠ 另注：仓库根 `node --test` 会跑出旧项目 v1 的 swv 守卫失败（v1 自身"改了代码没跑它的部署脚本"所致，与本项目无关，勿误判）。
 - **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——**部署位**：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（第十三棒落位，台账 L96；v1 同层同法先例；web/ 改动免重复拷贝，ST 页面刷新即载）；重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
 - **演示**（`node demo/<名称>.js`，在项目根目录运行）：
@@ -232,7 +232,7 @@
 | `async-tick.js` | 异步可靠性编排（K36 → 第十三棒）：回合推进串行队列（防重入锁）/ 失败世界不动 / 异常兜底 / 手动补推语义（save 允许异步，await 后 refresh；save 抛错=落账失败回执可重试） | `createTickQueue({tick,load,save,refresh,onStatus})` → {advance, busy}（advance → {ok, tick?}/ {ok:false, skipped?, error?, save?}） | —（注入面：tick/load/save/refresh 全由调用方接；save 可 async） | 稳定（K36 → 第十三棒） | async-tick.test.js | K36 · 第十三棒 |
 | `web/idb-backend.js` | IndexedDB 卷库适配（K35，浏览器专属）：chatId+卷号键，接口与 store 注入面同构 | `createIdbVolumeStore(chatId)` → {list, put, get} | —（顶层零 indexedDB，Node 冒烟安全） | 稳定（K35） | —（storage.test 内存 mock 同接口覆盖） | K35 |
 | `smoke.js` | 合成冒烟 + 断言器 | 50/100 tick → 断言结果 | tick | 稳定（K6 泛化：stepGen + 门控统计 + 曲线采样；K11 增 dialogueGen 落子段；K20 归档后断言语义=台阶修订；K29 张力强度/熵泵种子采样） | smoke + weight-smoke + tree-smoke + backdrop-smoke | K6 · K11 · K20 · K29 |
-| `weight.js` / `gate.js` | 分量公式 / 主动作权门控 | 见分量引擎细案 K1/K2 | settle | K1-K6 已落（公式/衰减/掩码/半径/门控/审计，提案态）· K18 agendaCancels 透传与静默滤除 | weight + gate + decay + weight-smoke | K1·K2·K6·K18 |
+| `weight.js` / `gate.js` | 分量公式 / 主动作权门控 | 见分量引擎细案 K1/K2 | settle | K1-K6 已落（公式/衰减/掩码/半径/门控/审计，提案态）· K18 agendaCancels 透传与静默滤除 | weight + gate + decay + weight-smoke | K1·K2·K6·K18（leg24 片3 起那个数已退出判据：门控/镜头序/裁定全换结构事实，见 `docs/slice3-verdict-teardown-spec.md`；但 `computeWeight*` 尚有调用点——seed 预填 `abstract.js`、账面重算 `settle.js`、张力强度 `setting.js`、麾下成员序 `pack.js membersOf`，勿当"已无消费者"） |
 | `demo/status.js` | 一键状态总览（本表与台账的聚合视图） | — → 阶段/健康度/模块覆盖/队列 | 只读文档与源码 | 稳定 | —（自校验：node demo/status.js） | 第三棒 |
 
 **模块契约 = schema 边界**：各模块唯一共享物是 SSOT 形状 + 世界步形状 + prompt 模板（都在契约层）——契约变更走拍板（P4 即范例）。维护视角：地图定位模块 → 读该文件 + 它的测试 → 完成，不必读全项目。施工序按模块拆步（K1 weight.js → K2 gate.js → ……），跨模块的一步拆两步。

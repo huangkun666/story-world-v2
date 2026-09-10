@@ -26,7 +26,10 @@ export const MASK = {                         // 可见性掩码（leg24 片3：
 //   它当年修的是"obs→0 断崖"这个**只存在于比值公式里**的毛病；比值没了，毛病也就不存在了。
 export const RADIUS_BASE = 1;                 // 因果传播半径：radius = 1 + 3×weight
 export const RADIUS_GAIN = 3;
-export const RIPPLE_TARGET_CAP = 3;           // 提案（片3）：一次事件波及目标数上限（原 ceil(2×分量)→固定值）
+// 提案（片3）：一次事件波及目标数上限（原 ceil(2×分量)→固定值）。
+// leg25（死代码修复）：本常量是**唯一真源**——写入侧由 check-step 强制（newEvents[].ripples 超限即拒整步）；
+//   原 `maxRippleTargets()` 包装函数生产 0 调用（唯一用处就是返回本值），已随接线一并删除（消灭纸面机制）。
+export const RIPPLE_TARGET_CAP = 3;
 
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -63,7 +66,10 @@ export function activityFactor(idleTicks, kind = 'character') {
 //   ①比值项失去意义（它拿两个"没法客观"的分数相除）；②"零分量观察者无所见"的短路会让**新世界开局
 //   玩家什么都看不见**（全员账面无数 → 观察者分量只有中立 floor，且一旦为 0 就全瞎）。
 // 现法只吃两样可查的事实：**情报关系**（有多少耳目）与**位置**（同地/异地）——都能从账本数出来，零歧义。
-export function visibilityMask({ intel = 0, sameLocation = false }) {
+// leg25（唯一真源）：调用方（streams.js）一律经本函数取掩码，**不许内联复制公式**——
+//   副本漂移过一次（streams 曾自带一份同样公式），改一处另一处不动的风险不再接受。
+//   "账面无数 → 按中立情报 0.5" 的口径属**调用方**的语言（weight 不猜账本缺键语义），由调用方传入 intel。
+export function visibilityMask({ intel = 0, sameLocation = false } = {}) {
     const intelFactor = MASK.intelBase + MASK.intelGain * clamp01(intel ?? 0);
     const posFactor = sameLocation ? MASK.posSame : MASK.posDiff;
     return clamp01(intelFactor * posFactor);
@@ -74,11 +80,6 @@ export const isVisible = (m) => m >= MASK.threshold;
 // 因果传播半径（§3.1）：单调随分量增长；影响范围 = 波及目标数上限。
 export function spreadRadius(weight) {
     return RADIUS_BASE + RADIUS_GAIN * clamp01(weight);
-}
-
-// 波及目标数上限（leg24 片3）：由 ceil(2×分量) 改为**固定提案值**——用户拍板删掉那个数。
-export function maxRippleTargets() {
-    return RIPPLE_TARGET_CAP;
 }
 
 // 供结算器用的衰减后分量：weight' = 公式分 × activityFactor（衰减只作用分量缓存，不改属性——动量分离，长跑 §2.3）。

@@ -9,9 +9,9 @@ import { computeWeight } from '../src/weight.js';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 
-function mkWorld(bookEntities, { tension = 0.5, entities = [], weights = {} } = {}) {
+function mkWorld(bookEntities, { tension = 0.5, entities = [], weights = {}, positions = ['中央'] } = {}) {
     return {
-        context: { tension, positions: ['中央'], setting: { frozen: { canon: { bookEntities } } } },
+        context: { tension, positions, setting: { frozen: { canon: { bookEntities } } } },
         entities: [...entities],
         weights: { ...weights },
     };
@@ -22,12 +22,14 @@ test('leg21: 名册所在优先入账——书内明述的 location 随实体，
         { name: '昆仑道宫', kind: 'faction', location: '昆仑山' },
         { name: '散修甲', kind: 'character' },
     ];
-    const w = mkWorld(book);
+    // leg25 D 组：名册所在必须 ∈ 位置集，否则落兜底词——所以夹具的位置集要含那个地名
+    //（真实链路上位置集由 web 侧 derivePositions 按同一本书的地名建好，不会误杀）。
+    const w = mkWorld(book, { positions: ['中央', '昆仑山'] });
     const r = seedBookEntities(w);
     assert.equal(r.seeded, 2);
     assert.equal(w.entities.find((e) => e.name === '昆仑道宫').location, '昆仑山', '名册所在优先');
     assert.equal(w.entities.find((e) => e.name === '散修甲').location, '中央', '无所在 → 位置集首个（测试夹具自设）');
-    const w2 = mkWorld(book);
+    const w2 = mkWorld(book, { positions: ['中央', '昆仑山'] });
     w2.context.positions = [];
     const r2 = seedBookEntities(w2);
     assert.equal(r2.seeded, 2);

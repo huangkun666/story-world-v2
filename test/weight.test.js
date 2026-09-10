@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    computeWeight, computeWeightAtTick, activityFactor, visibilityMask, isVisible, spreadRadius, maxRippleTargets,
+    computeWeight, computeWeightAtTick, activityFactor, visibilityMask, isVisible, spreadRadius,
     DECAY, MASK, NEUTRAL_TENSION, RIPPLE_TARGET_CAP,
 } from '../src/weight.js';
 
@@ -130,11 +130,16 @@ test('掩码（片3）：删掉的 obsFloor 修边不再需要（比值项已不
     assert.equal(visibilityMask({ intel: 1, sameLocation: true }), visibilityMask({ intel: 1, sameLocation: true }));
 });
 
-test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限改固定提案值', () => {
+test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限=固定提案常量（leg25 起由校验侧强制）', () => {
     assert.equal(spreadRadius(0), 1);
     assert.equal(spreadRadius(1), 4);
     assert.ok(spreadRadius(0.6) > spreadRadius(0.4), '半径那把尺还在（尽管已无调用者）');
-    assert.equal(maxRippleTargets(), RIPPLE_TARGET_CAP, '不再随分量变：固定值');
-    assert.equal(maxRippleTargets(0), RIPPLE_TARGET_CAP, '传参也不影响（旧法 ceil(2×0)=0）');
-    assert.equal(maxRippleTargets(1), RIPPLE_TARGET_CAP);
+    // leg25：删掉 `maxRippleTargets()` 包装函数的三则断言——该函数生产 0 调用（唯一用处是返回本常量），
+    //   上限的强制点已改在 check-step（校验 newEvents[].ripples 条数），常量本体仍在此锁值。
+    assert.equal(RIPPLE_TARGET_CAP, 3, '波及目标数上限=固定提案值（不再随分量变：旧法 ceil(2×分量)）');
+});
+
+test('掩码（leg25）：入参缺省不抛（唯一真源被多方调用，鲁棒性）', () => {
+    assert.equal(visibilityMask(), 0.25, '缺省 intel=0 异地 → 0.25（门槛线）');
+    assert.equal(visibilityMask({ intel: 1, sameLocation: true, 未知字段: 1 }), 1, '多余入参不影响（分量参数退场后仍容忍旧调用形状）');
 });

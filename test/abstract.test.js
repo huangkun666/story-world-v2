@@ -14,6 +14,8 @@ import {
     extractWorldSetting,
     applySettingToSsot,
     resetDynamicLayer,
+    normalizeParentName,
+    applyDeclaredToRoster,
     ENV_INIT_BASELINE,
     TENSION_INIT_BASELINE,
 } from '../src/abstract.js';
@@ -264,6 +266,45 @@ test('leg24 片1 停抄书：不再产生属性/种族/所在三类出处校验�
 });
 
 // ============ leg24 片1 收尾：名册形状锁（旧世界兼容 + 新抽取口径） ============
+
+// ★ 第二十五棒实机修正（用户："归属也没回写"）：上级名号净化。
+//   病根实况：模型把书里的层级路径照抄成 `/太素帝` → 名册索引按原名查不到 →
+//   seedBookEntities 判「上级不在册」→ 弃隶属 → 界面 623 行「归属空着」。
+//   实测（用户真世界书）：9 条带上级的势力**全是** `/X帝` 形态，去前导符后 9/9 都在册。
+test('第二十五棒修正：上级名号净化——`/太素帝` 这类带前导层级符的写法必须还原成名号', () => {
+    assert.equal(normalizeParentName('/太素帝'), '太素帝', '前导斜杠（模型照抄层级路径）');
+    assert.equal(normalizeParentName('／渡虚帝'), '渡虚帝', '全角斜杠');
+    assert.equal(normalizeParentName('  / 织命帝  '), '织命帝', '斜杠后带空格');
+    assert.equal(normalizeParentName('- 噬天帝'), '噬天帝', '列表符前缀');
+    assert.equal(normalizeParentName('沉星帝'), '沉星帝', '正常名号一字不动');
+    assert.equal(normalizeParentName(''), '', '空串仍是空串（不造名号）');
+    assert.equal(normalizeParentName(null), '', 'null → 空串');
+    assert.equal(normalizeParentName('人帝姬元真'), '人帝姬元真', '名字本体不许改（书里写什么就是什么）');
+});
+
+test('第二十五棒修正：净化层对 bookEntities.parent 生效（模型四处照抄的层级路径在这里收口）', () => {
+    const c = sanitizeCanon({
+        bookEntities: [
+            { name: '太昊仙洲', kind: 'faction', parent: '/太素帝' },
+            { name: '界渊长城', kind: 'faction', parent: '／渡虚帝' },
+            { name: '无念禅境', kind: 'faction', parent: '   ' },
+        ],
+    });
+    const es = c.canon.bookEntities;
+    assert.equal(es.find((b) => b.name === '太昊仙洲').parent, '太素帝', '斜杠剥掉，名号留下');
+    assert.equal(es.find((b) => b.name === '界渊长城').parent, '渡虚帝', '全角斜杠同口径');
+    assert.deepEqual(es.find((b) => b.name === '无念禅境'), { name: '无念禅境', kind: 'faction' }, '净化后为空 → 不写 parent 键（不留空串）');
+});
+
+test('第二十五棒修正：照书办落上级时同口径净化（标签声明的上级照旧照抄）', () => {
+    const list = [{ name: '蟠桃园', kind: 'faction' }];
+    const applied = applyDeclaredToRoster(list, [{ name: '蟠桃园', kind: 'faction', parent: '/瑶池' }]);
+    assert.equal(applied.bookEntities.find((b) => b.name === '蟠桃园').parent, '瑶池', '照书办写进去的上级也过同一把尺');
+    const list2 = [];
+    const applied2 = applyDeclaredToRoster(list2, [{ name: '界渊长城', kind: 'faction', parent: '/渡虚帝' }]);
+    assert.equal(applied2.bookEntities[0].parent, '渡虚帝', '补入册路径同口径');
+    assert.equal(applied2.added, 1);
+});
 
 test('leg21 resetDynamicLayer：强度/env 回基线、derivedFrom 清空、极性方向保留、frozen 不动', () => {
     const setting = {

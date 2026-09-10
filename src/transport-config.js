@@ -3,9 +3,11 @@
 // 链：settings（extension_settings，浏览器侧持有）→ null（面板报"未配置"）。
 // Node 侧链（env → 酒馆预设）保持 st-preset.resolveWorldTransport 不变——两链互不干扰。
 // 密钥纪律：settings 为运行时读取（用户本机输入），不落日志、不打印、不进代码。
-import { createHttpTransport, EXTRACTION_MAX_TOKENS } from './transport-http.js';
+import { createHttpTransport, EXTRACTION_MAX_TOKENS, PROPOSED_CALL_LIMITS } from './transport-http.js';
 
-// 第十八棒：抽取预算透传（init-world/force-abstract 用 16384 提案，主调用保持 4096 提案不变）
+// 第十八棒：抽取预算透传（init-world/force-abstract 用 16384）。
+// 审计修复 E3：主调用缺省同步改为 16384（同模型同通道同一份 finish=length 实证）——
+//   两侧不再分档；本行注释旧口径「主调用保持 4096」已随修复作废。
 export { EXTRACTION_MAX_TOKENS };
 
 export function resolveBrowserTransport(settings, { maxTokens } = {}) {

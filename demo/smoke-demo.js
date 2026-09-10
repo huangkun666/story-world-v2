@@ -2,6 +2,7 @@
 // 冒烟演示：50 tick 曲线 + GC 数字实证 + 结论。运行：node demo/smoke-demo.js
 import { readFileSync } from 'node:fs';
 import { runSmoke, assertSmoke } from '../src/smoke.js';
+import { EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
 
 const GOLDEN = JSON.parse(readFileSync(new URL('../test/fixtures/golden-world.min.json', import.meta.url), 'utf8'));
 const EXTRACT_FIX = JSON.parse(readFileSync(new URL('../test/fixtures/extract-samples.json', import.meta.url), 'utf8'));
@@ -12,7 +13,7 @@ const check = assertSmoke({ world, metrics });
 console.log('── 合成冒烟 50 tick · 曲线 ──');
 for (const p of metrics.bytes) console.log(`${String(p.tick).padStart(3)} tick → ${p.bytes} 字节`);
 console.log('── 实测 ──');
-console.log(`输入峰值      ${metrics.maxPackTokens} tokens（预算提案 4000）`);
+console.log(`输入峰值      ${metrics.maxPackTokens} tokens（真实预算 ${EVOLUTION_BUDGET_TOKENS}，读 EVOLUTION_BUDGET_TOKENS；旧文案写死"提案 4000"是过期数字）`);
 console.log(`在飞盘算峰    ${metrics.peakOpenAgendas}（≤15 提案）`);
 console.log(`新生盘算      ${metrics.newbornsTotal}/tick（≤2 提案；切片无创建路径）`);
 console.log(`a_1 满步结算  tick ${metrics.closedAtTick}（1/4 → 4/4，强制结算生效）`);

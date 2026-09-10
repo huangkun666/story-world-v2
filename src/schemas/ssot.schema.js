@@ -116,6 +116,13 @@ export const ssotSchema = {
                     parent: { kind: 'string', minLength: 1 },   // 第十九棒/C7：从属方单存——character→所属势力/分支名，faction→上级势力名（书中明述；可选=旧世界零扰动）
                     branches: { kind: 'array', items: { kind: 'string', minLength: 1 } },   // 第十九棒/C8：势力实体分支表（子势力名号平铺；可选=旧世界零扰动）
                     organs: { kind: 'array', items: { kind: 'string', minLength: 1 } },     // leg23：势力实体名下机构/部门（书里明述、但不作为独立棋手入池的名号；可选=旧世界零扰动）
+                    // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：**按需查书补字段**的落点。
+                    //   实力 = **文本**（不是分档枚举）：分段境界的书抄档位原话（T9渡劫巅峰），不分段的书抄它
+                    //     自己的写法（剑术通神/三万铁骑）；只有**角色**有这一栏（势力不写实力——用户拍板，
+                    //     势力的实力在面板上用麾下成员派生显示）。引擎**不读**它：不进分量/掩码/裁定/镜头。
+                    //   可选键（旧世界零扰动）；键名用中文与 v1 字段/界面标签一致（账本已有中文键先例 ENV_KEYS）。
+                    实力: { kind: 'string', minLength: 1 },
+                    //   位置沿用既有英文键 location（账本里已有，不改旧名）：查书补的是"书里明述的所在"。
                 },
             },
         },
@@ -248,6 +255,32 @@ export const ssotSchema = {
                     required: ['injected'],
                     props: {
                         injected: { kind: 'array', items: { kind: 'string' } },
+                    },
+                },
+                // leg24 片4（旧账清理·迁移留档）：migrateLegacyAttrs 一次性的两个 meta 字段。
+                //   legacyAttrsPurged      = { [entityId]: { [attr]: 删掉的值 } }（被批掉的假数不许无声消失）
+                //   legacyAttrsMigratedAt  = 一次性标记（当时 tick）；幂等闸——有此键即不再重扫。
+                // 形状：动态键 map（内层形状由迁移函数保证，schema 只查整体为对象——同 dialogueBook 口径）；
+                //   两个字段都可选（旧世界零扰动）。
+                legacyAttrsPurged: { kind: 'object', additional: true, props: {} },
+                legacyAttrsMigratedAt: { kind: 'number' },
+                // 细案 spec-entity-field-lookup §2：按需查书的**查书标记留痕**（有值 / 未查 / 未加载到 / 书未明述）。
+                //   entityFields = { [entityId]: { fields, attempts, sources } }
+                //     fields[字段]   = { value, from（查过的书条目名）, fetchedAt }        —— 只记**真落账**的值
+                //     attempts[字段] = { count, lastTriedAt, state: 'ok'|'pending'|'absent' }
+                //       ★ pending = "模型没给这一栏"（可能只是漏抽）——**绝不用空值反推"书里没有"**；
+                //         absent 只在**引擎**确认"书里没有任何相关条目"时才允许记。
+                //     sources        = 查过哪几条世界书条目（审计用；防"无声地查了个寂寞"）
+                //   entityLookup = { fails, lastFailAt, disabledUntil } —— 连续失败熔断（世界推进优先）
+                //   形状为动态键 map（内层由 entity-lookup.js 保证，schema 只查整体对象——同 legacyAttrsPurged 口径）。
+                entityFields: { kind: 'object', additional: true, props: {} },
+                entityLookup: {
+                    kind: 'object',
+                    additional: false,
+                    props: {
+                        fails: { kind: 'number', int: true, min: 0 },
+                        lastFailAt: { kind: 'number', int: true, min: 0 },
+                        disabledUntil: { kind: 'number', int: true, min: 0 },
                     },
                 },
                 simLog: {   // 逐轮模拟台账（长跑防线细案 §2.5 四字段 + 警告）

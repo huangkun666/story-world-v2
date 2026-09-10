@@ -186,7 +186,7 @@ test('第十三棒：属性维度释义与无障碍——title+视障文本双�
     assert.ok(html.includes('class="sw2-visually-hidden">兵力：硬实力——兵马、武备、财力这类能押上桌的东西。<'));
     assert.ok(html.includes('class="sw2-visually-hidden">耳目：情报网有多灵——决定你能看多远。<'));
     // 势力/角色差异注脚（机制事实：COEFFS 层差）
-    assert.ok(html.includes('账上只记玩出来的东西'), '片5：注脚改写——空着的地方是真没有据，不是漏抽');
+    assert.ok(html.includes('账上只记查到的与玩出来的东西'), '片5 注脚 + 细案查书标记改写：有值/未加载到/书未明述 三句分清');
     // 缺键零维不渲染：账上只有兵力的世界，不出现权位/人脉/耳目任何 chip（「无兵世界」语义闭环）
     const bareAttrs = world();
     for (const e of bareAttrs.entities) e.attrs = {};
@@ -198,6 +198,43 @@ test('第十三棒：属性维度释义与无障碍——title+视障文本双�
     assert.ok(!html2.includes('title="耳目'));
 });
 
+test('细案 spec-entity-field-lookup：实力/位置查书标记在面板上是三句不同的话；势力不显示实力栏', () => {
+    const w = world();
+    const faction = w.entities[0];                              // fixture 里三条都是势力
+    // 加一个**角色**（实力是角色字段；势力不写实力——用户拍板）
+    w.entities.push({ id: 'e_c1', kind: 'character', name: '玄一道祖', location: '未明', parent: faction.name, '实力': 'T9渡劫巅峰' });
+    w.entities.push({ id: 'e_c2', kind: 'character', name: '无名客', location: '未明' });
+    faction['实力'] = '三万铁骑';                                 // 势力即便账上有值也不该渲染实力栏
+    w.meta.entityFields = {
+        e_c2: { attempts: { 实力: { count: 1, state: 'pending' } }, fields: {}, sources: ['昆仑道宫'] },
+        e_wanfa: { attempts: { 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] },
+    };
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('实力<b>T9渡劫巅峰</b>'), '①有值 → 显示原文原话（文本类型，不做任何加工）');
+    assert.ok(!html.includes('三万铁骑'), '②势力不显示实力栏（哪怕账上有值也不渲染——用户拍板）');
+    assert.ok(html.includes('实力<b>未加载到</b>'), '③查过但模型没给 → 明说"未加载到"（绝不写成"书里没有"）');
+    assert.ok(html.includes('书未明述'), '④书里确实没写 → 才说"书未明述"');
+    // ★第二十五棒修正（用户实拍"根本看不到属性"）：从没查过的那一栏也必须显形，否则整栏空白=用户以为没这功能
+    const w2 = world();
+    w2.entities.push({ id: 'e_c3', kind: 'character', name: '从没查过的人', location: '未明' });
+    const html2 = renderEntitiesHtml(w2);
+    assert.ok(html2.includes('实力<b>未查</b>'), '★没查过 → 显示"实力：未查"（不是空白）');
+    assert.ok(html2.includes('位置<b>未查</b>'), '★位置同理：没查过显示"位置：未查"');
+    assert.ok(html2.includes('账上只记查到的与玩出来的东西'), '注脚把查书标记讲清');
+});
+
+test('细案 spec-entity-field-lookup：势力的实力由麾下成员派生显示（不替它算总档）', () => {
+    const w = world();
+    const faction = w.entities.find((e) => e.kind === 'faction');
+    const member = { id: 'e_m1', kind: 'character', name: '玄一道祖', location: '未明', parent: faction.name, '实力': 'T9渡劫巅峰' };
+    w.entities.push(member);
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('麾下实力：玄一道祖（T9渡劫巅峰）'), '势力行显示麾下各成员的档位原话（派生，不落势力字段）');
+    // 势力自己那格不得出现实力 chip：把该势力的行切出来单独看
+    const row = html.split(`<div class="sw2-entity-row`).find((seg) => seg.includes(`>${faction.name}<`));
+    assert.ok(row && !row.includes('实力<b>'), `势力行内不得渲染实力 chip：${String(row).slice(0, 80)}`);
+});
+
 test('leg24 片5：账面无数与位置未明都要看得见（不填默认值冒充客观）；环境键书没给就标「书未明述」', () => {
     const w = world();
     // 全部实体清空数值 → 四维无数是真状态，界面要点明
@@ -205,7 +242,10 @@ test('leg24 片5：账面无数与位置未明都要看得见（不填默认值�
     w.entities.forEach((e) => { e.location = '未明'; });
     const html = renderEntitiesHtml(w);
     assert.match(html, /数值无据/, '无数值 → 明说"数值无据"');
-    assert.match(html, /位置未明/, '位置占位 → 明说"位置未明"');
+    // 第二十五棒修正（用户实拍："第一个未明是位置未明，后面还有一个位置未明是不是多了"）：
+    //   位置列已经说明"没载到"，标记列不再重复打「位置未明」徽章；位置列本身写「未载」。
+    assert.match(html, /sw2-eloc">未载</, '位置没载到 → 位置列写「未载」（不再显示重复的"未明"）');
+    assert.ok(!html.includes('位置未明'), '★撤销重复的「位置未明」徽章（同一事实不再说两遍）');
     assert.match(html, /四维无数（等模型提议或查书）/, '整排属性空着 → 一句人话解释');
     assert.ok(!/0\.15|0\.25/.test(html), '不出现任何默认值冒充的数据');
     // 环境四键：书没给的显示「书未明述（无据）」，不给 0.5

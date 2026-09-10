@@ -4,6 +4,9 @@
 import { validate } from './schema.js';
 import { worldStepSchema } from './schemas/world-step.schema.js';
 import { isSettingRef } from './setting.js';   // K25：设定池保留键空间判词
+import { RIPPLE_TARGET_CAP } from './weight.js';   // leg25：波及上限唯一真源（此前该上限生产 0 强制点=纸面机制）
+import { checkAgendaInvolvement } from './entity-lookup.js';   // 细案 §6 R2：单盘算一轮涉及实体 ≤15（唯一真源）
+import { INBORN_ATTR_KEYS } from './settle.js';   // leg24 片4：四维白名单唯一真源（不写第二份字面量清单）
 
 // ids 索引
 function indexIds(ssot) {
@@ -16,6 +19,7 @@ function indexIds(ssot) {
 
 export function checkWorldStep(step, ssot) {
     const errors = [];
+    const world = ssot;   // 别名：本函数沿用 ssot 命名，涉及面计算读 world.agendas/events
 
     // ① 形状：真 schema 强制
     const r = validate(step, worldStepSchema);
@@ -33,6 +37,19 @@ export function checkWorldStep(step, ssot) {
     for (const [i, c] of step.stateChanges.entries()) {
         if (playerId && c.entity === playerId) errors.push(`$.stateChanges[${i}].entity: 模型禁写玩家 "${playerId}"（红线 1 代码化）`);
         if (!entityIds.has(c.entity)) errors.push(`$.stateChanges[${i}].entity: 未知实体 "${c.entity}"`);
+        // leg24 片4 补漏（账本污染）：attr 原先只查"非空字符串"——`{attr:'气运'}` 照样落账（settle 对任意键照写
+        //   e.attrs[k]），账上从此躺着一个没人读的键，还进每轮输入包与导出，且无清除通道。
+        //   四维是**唯一**合法属性空间（INBORN_ATTR_KEYS = 唯一真源）→ 白名单外一律拒整步（与其它语义校验同口径）。
+        if (!INBORN_ATTR_KEYS.includes(c.attr)) {
+            errors.push(`$.stateChanges[${i}].attr: "${c.attr}" 不在四维属性白名单（${INBORN_ATTR_KEYS.join('/')}）——账上只记这四维`);
+        }
+        // leg24 片4 补漏（可绕过门控）：actor 原先完全不校验——模型把 actor 填成不存在的 id（或拼错），
+        //   settle 的 selfSilent（`!c.actor && ...`）就把它当成"他人施加"合法落账，静默方自我增强被绕过，
+        //   账上还留下一个不存在的行为人。现法：actor 若出现必须 ∈ 账上实体（缺省仍合法=被作用方自身）。
+        //   例外：设定池保留键留给 ⑥ 的专章判词（那条文案是既定契约，见 setting-guard.test），此处不重复报。
+        if (c.actor !== undefined && !entityIds.has(c.actor) && !isSettingRef(c.actor)) {
+            errors.push(`$.stateChanges[${i}].actor: 未知实体 "${c.actor}"——actor 必须是在册实体（缺省=被作用方自身）`);
+        }
     }
 
     // ②b 盘算树（K13/T1）：新盘算提议——实体存在；event 源必引未决事件；parent 源必引在飞盘算；state 源不带 ref
@@ -96,8 +113,12 @@ export function checkWorldStep(step, ssot) {
         if (ssot.entities.some((e) => e.name === ne.name)) errors.push(`$.newEntities[${i}].name: 账上已有同名实体「${ne.name}」（已有者不重建）`);
         if (!positions.has(ne.location)) errors.push(`$.newEntities[${i}].location: "${ne.location}" 不在世界位置集`);
         // K38 补差包 D 条：入局属性提议必须全是有限数值（NaN/字符串拒绝——确定性第一）
+        // leg24 片4：键同样限四维白名单（`attrs:{'气运':0.4}` 此前照落账，同上账本污染面）
         if (ne.attrs != null) {
             for (const [k, v] of Object.entries(ne.attrs)) {
+                if (!INBORN_ATTR_KEYS.includes(k)) {
+                    errors.push(`$.newEntities[${i}].attrs.${k}: 不在四维属性白名单（${INBORN_ATTR_KEYS.join('/')}）——账上只记这四维`);
+                }
                 if (typeof v !== 'number' || !Number.isFinite(v)) {
                     errors.push(`$.newEntities[${i}].attrs.${k}: 入局属性必须是有限数值（当前 ${String(v)}）`);
                 }
@@ -146,14 +167,30 @@ export function checkWorldStep(step, ssot) {
         }
     }
 
-    // ⑤ 波及：ripples 必须是存在的实体
+    // ⑤ 波及：ripples 必须是存在的实体；且**条数 ≤ 上限**（leg25：RIPPLE_TARGET_CAP 自此有强制点——
+    //    此前"一次事件波及 ≤3"只是 weight.js 里一个没人调用的函数返回值，校验侧对条数只字未提＝纸面机制；
+    //    超限**拒整步**（世界如实不动），上限值从 weight.js 导入，不写死字面量）
     for (const [i, ev] of step.newEvents.entries()) {
-        for (const [j, rid] of (ev.ripples || []).entries()) {
+        const ripples = ev.ripples || [];
+        if (ripples.length > RIPPLE_TARGET_CAP) {
+            errors.push(`$.newEvents[${i}].ripples: 一次事件波及目标数上限 ${RIPPLE_TARGET_CAP}（当前 ${ripples.length} 个：${ripples.join('/')}）`);
+        }
+        for (const [j, rid] of ripples.entries()) {
             if (!entityIds.has(rid)) errors.push(`$.newEvents[${i}].ripples[${j}]: 未知实体 "${rid}"`);
         }
     }
 
-    // ⑥ 设定池保留键空间（K25/大势层 → A-4）：context.setting 全池（frozen+dynamic）引擎持有、
+    // ⑥ 盘算涉及面上限（细案 spec-entity-field-lookup §6 R2，用户 2026-09-11 拍板）：
+    //    单个盘算**一轮内**涉及的实体（属主 + 行动方/目标 + 被波及方）≤ AGENDA_INVOLVED_CAP(15)，
+    //    逐轮算、不新增存储字段（agenda 里没有涉及名单，加字段=加机制）；超限**拒整步**
+    //    （用户拍板取 (a)：与 ripples 超限同款——上限不拒绝就是纸面机制，leg25 G 组的教训）。
+    //    与 RIPPLE_TARGET_CAP(3) 并存不冲突：一个盘算可有多个事件，各自 ≤3，合计 ≤15 由本闸兜住。
+    const involved = checkAgendaInvolvement(step, world);
+    for (const v of involved.violations) {
+        errors.push(`$.actions: 盘算「${v.agendaId}」一轮内涉及实体上限 ${involved.cap}（当前 ${v.count} 个：${v.sample.join('/')}…）`);
+    }
+
+    // ⑦ 设定池保留键空间（K25/大势层 → A-4）：context.setting 全池（frozen+dynamic）引擎持有、
     //    模型不可写——任何世界步实体引用字段命中保留键空间即拒绝（校验拒绝、世界如实不动；
     //    命名空间恒定保留，与设定池是否已落账无关；dynamic 的引擎写通道在 src/setting.js，模型无直写路径）
     const refFields = [

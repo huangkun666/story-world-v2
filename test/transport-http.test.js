@@ -2,7 +2,7 @@
 // HTTP 传输单测（注入假 fetch，不联网）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHttpTransport, createEnvTransport } from '../src/transport-http.js';
+import { createHttpTransport, createEnvTransport, PROPOSED_CALL_LIMITS, EXTRACTION_MAX_TOKENS } from '../src/transport-http.js';
 
 test('HTTP 传输：请求形状正确（URL/鉴权/payload）且透传内容', async () => {
     let captured;
@@ -54,18 +54,30 @@ test('K36/A-5 超时防线：超时（AbortController）→ 竞态中止并抛�
     assert.equal(await t2('x'), '{"a":1}');
 });
 
-test('K36/A-5 max_tokens 上限：默认带提案值 4096；显式传参可覆盖/关闭', async () => {
+test('K36/A-5 max_tokens 上限：默认带定案值 16384；显式传参可覆盖/关闭', async () => {
     let bodies = [];
     const capture = async (url, opts) => { bodies.push(JSON.parse(opts.body)); return { ok: true, text: async () => '', json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
     const t1 = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture });
     await t1('p');
-    assert.equal(bodies[0].max_tokens, 4096); // 提案默认
+    assert.equal(bodies[0].max_tokens, 16384); // 审计修复 E3：4096 → 16384（三处定案文档：decision-index:70 / full-roster-lens-spec / ratification-batch-k38 #2）
     const t2 = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture, maxTokens: 2048 });
     await t2('p');
     assert.equal(bodies[1].max_tokens, 2048);
     const t3 = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture, maxTokens: 0 });
     await t3('p');
     assert.equal(bodies[2].max_tokens, undefined); // 0=不写
+});
+
+test('E3 主调用与抽取调用同预算：默认 maxTokens 与 EXTRACTION_MAX_TOKENS 均为 16384（同一份实证）', async () => {
+    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, 16384, '主调用默认=定案 16384');
+    assert.equal(EXTRACTION_MAX_TOKENS, 16384, '抽取侧 16384（第十八棒实证，未变）');
+    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, EXTRACTION_MAX_TOKENS, '两侧统一到同一值（不再 4096/16384 分档）');
+
+    const seen = [];
+    const capture = async (url, opts) => { seen.push(JSON.parse(opts.body).max_tokens); return { ok: true, text: async () => '', json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
+    await createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture })('主调用');
+    await createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture, maxTokens: EXTRACTION_MAX_TOKENS })('抽取调用');
+    assert.deepEqual(seen, [16384, 16384], '两次真实请求体的 max_tokens 都是 16384');
 });
 
 test('HTTP 传输：env 齐备时可用，缺配置返回 null', () => {

@@ -13,15 +13,20 @@ export function normalizeBase(base) {
 }
 
 // 提案数字（铁律 2：提案态，标注待报批；细案 §3.3/§6）
+// 审计修复 E3：maxTokens 4096 → 16384——第十九棒用户拍板「主调用 max_tokens 4096→16384 随幅改」
+// （全量棋盘镜头 30k 定案连带；docs/decision-index.md:70 / docs/full-roster-lens-spec.md §42·§98·§102 /
+//  docs/ratification-batch-k38-2026-09-09.md #2 三处定案），代码此前漏改，抽取侧早已 16384。
 export const PROPOSED_CALL_LIMITS = Object.freeze({
     timeoutMs: 120_000, // 主调用超时（提案）
-    maxTokens: 4096,    // 单轮演算输出上限（提案）
+    maxTokens: 16384,   // 单轮演算输出上限（定案 16384：与抽取侧同值，见 EXTRACTION_MAX_TOKENS）
 });
 
-// 第十八棒：抽取调用独立输出上限（提案）。诊断实证（demo/diag-init-extract.js）：
+// 第十八棒：抽取调用独立输出上限（审计修复 E3：**与主调用同值 16384**——两侧本就同模型同通道，
+// 同一份预算实证，此前主调用 4096 是漏改；抽取侧保留独立常量只为「哪一侧用了它」可读）。
+// 诊断实证（demo/diag-init-extract.js）：
 // 思考型模型（reasoning_content）推理与输出共享预算，63k 输入 @4096 → finish=length 截断（推理 4024 吃光）；
-// 同输入 @16384 → finish=stop 完整。v1「80k 段连续空回复」同源（预算饿死，非网关）——抽取统一提额。
-export const EXTRACTION_MAX_TOKENS = 16384;
+// 同输入 @16384 → finish=stop 完整。v1「80k 段连续空回复」同源（预算饿死，非网关）——两侧统一提额。
+export const EXTRACTION_MAX_TOKENS = PROPOSED_CALL_LIMITS.maxTokens;
 
 export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = fetch, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;

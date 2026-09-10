@@ -34,14 +34,14 @@ test('K30 设置链：缺任一字段 → null（不建传输、不抛）', () =
     assert.equal(resolveBrowserTransport(undefined), null);
 });
 
-test('第十八棒：抽取调用独立预算透传——maxTokens 参数进请求体，默认仍为主调用提案 4096', async () => {
+test('第十八棒 + E3：抽取预算透传——maxTokens 参数进请求体；默认（主调用）同为 16384，两侧统一', async () => {
     let captured;
     const opts = { baseUrl: 'https://gw.example', apiKey: 'k', model: 'm', fetchImpl: async (url, o) => { captured = o; return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; } };
-    assert.equal(EXTRACTION_MAX_TOKENS, 16384, '抽取提案预算');
+    assert.equal(EXTRACTION_MAX_TOKENS, 16384, '抽取预算');
     await resolveBrowserTransport(opts, { maxTokens: EXTRACTION_MAX_TOKENS }).transport('p');
     assert.equal(captured.body.includes('"max_tokens":16384'), true, '抽取预算透传进请求体');
     await resolveBrowserTransport(opts).transport('p');
-    assert.equal(JSON.parse(captured.body).max_tokens, 4096, '默认保持主调用提案 4096');
+    assert.equal(JSON.parse(captured.body).max_tokens, 16384, '审计修复 E3：默认=主调用 16384（旧断言 4096 是漏改的实现，定案文档三处均为 16384）');
 });
 
 test('K30 浏览器安全守卫：createEnvTransport 无参调用不抛（浏览器无 process）', () => {

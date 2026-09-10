@@ -395,7 +395,7 @@
    "world": null,
    "expect": {
     "warnings": [
-     "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.3）",
+     "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.3）",
      "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）"
     ],
     "gate": {
@@ -500,7 +500,7 @@
    "world": null,
    "expect": {
     "warnings": [
-     "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.3）",
+     "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.3）",
      "裁定: 分量比折减 0.387（e_wanfa→e_dayu.hardPower）",
      "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
      "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
@@ -584,7 +584,7 @@
    "expect": {
     "warnings": [
      "裁定: 分量比折减 0.398（e_wanfa→e_dayu.hardPower）",
-     "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.3）",
+     "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.3）",
      "行动↔盘算不一致: e_dayu 无在飞盘算仍然行动（烟雾报警）",
      "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
     ],
@@ -665,7 +665,7 @@
    "world": null,
    "expect": {
     "warnings": [
-     "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.2）",
+     "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.2）",
      "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）",
      "行动↔盘算不一致: e_wanfa 无在飞盘算仍然行动（烟雾报警）"
     ],
@@ -747,7 +747,7 @@
    "world": null,
    "expect": {
     "warnings": [
-     "裁定: 属性硬边界（e_wanfa.hardPower 0→0，申请 -0.2）",
+     "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.2）",
      "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）",
      "行动↔盘算不一致: e_wanfa 无在飞盘算仍然行动（烟雾报警）"
     ],

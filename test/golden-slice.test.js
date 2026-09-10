@@ -70,7 +70,7 @@ test('黄金样本：标准 tick 后的世界锚点', () => {
     assert.equal(w.events.length, 1);
     assert.equal(w.events[0].id, 'ev_1_1');
     assert.equal(w.agendas[0].progress, 2);
-    assert.equal(w.chronicle.length, 2, '推进 1 条 + 事件 1 条');
+    assert.equal(w.chronicle.length, 3, '推进 1 条 + 事件 1 条 + 属性变更 1 条（leg24 片4「每条变更留痕」：stateChanges 落账入编年，此前只进 simLog 警告）');
     assert.equal(w.meta.simLog.length, 1);
     // 锚点更新（K2 重算切真公式）：重算在 stateChanges 落账后 → attrs 0.5/0.4/0.65/0.4 → base 0.47 × 基线 1.5 = 0.705
     assert.ok(Math.abs(w.weights.e_merchant - 0.705) < 1e-9, `权重应为公式值 0.705，实际 ${w.weights.e_merchant}`);

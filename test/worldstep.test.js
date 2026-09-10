@@ -11,6 +11,7 @@ import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import { worldStepSchema } from '../src/schemas/world-step.schema.js';
 import { gateWorldStep } from '../src/gate.js';
+import { RIPPLE_TARGET_CAP } from '../src/weight.js';
 
 const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
 const EXTRACT_FIX = JSON.parse(readFileSync(new URL('./fixtures/extract-samples.json', import.meta.url), 'utf8'));
@@ -72,6 +73,33 @@ test('校验：动作位置越界拒绝；未知实体/盘算/波及拒绝', () 
     const step4 = validStep();
     step4.newEvents[0].ripples = ['e_ghost'];
     assert.equal(checkWorldStep(step4, GOLDEN).ok, false);
+});
+
+test('校验（leg25）：一次事件波及目标数上限——≤RIPPLE_TARGET_CAP 过，超限**拒整步**（上限唯一真源在 weight.js）', () => {
+    // 上限值不写字面量：直接读真源常量，改上限则本用例随之成立
+    // 黄金夹具只有 1 个实体 → 就地补足（克隆具名，避免重定义夹具文件）
+    const world = JSON.parse(JSON.stringify(GOLDEN));
+    const base = world.entities[0];
+    for (let i = world.entities.length; i <= RIPPLE_TARGET_CAP; i++) {
+        world.entities.push({ ...base, id: `e_extra_${i}`, name: `${base.name}${i}` });
+    }
+    const ids = world.entities.map((e) => e.id);
+    assert.ok(ids.length > RIPPLE_TARGET_CAP, '夹具实体数足够构造超限用例');
+
+    const atCap = validStep();
+    atCap.newEvents[0].ripples = ids.slice(0, RIPPLE_TARGET_CAP);
+    const rPass = checkWorldStep(atCap, world);
+    assert.equal(rPass.ok, true, rPass.errors.join('; '));   // 恰好等于上限 → 过（边界含等号）
+
+    const over = validStep();
+    over.newEvents[0].ripples = ids.slice(0, RIPPLE_TARGET_CAP + 1);   // 4 个 → 拒
+    const rOver = checkWorldStep(over, world);
+    assert.equal(rOver.ok, false, '超限必须拒整步（世界如实不动）');
+    assert.ok(
+        rOver.errors.some((e) => e.includes('波及目标数上限') && e.includes(String(RIPPLE_TARGET_CAP))),
+        `拒绝文案应带上限值：${rOver.errors.join('; ')}`,
+    );
+    assert.ok(rOver.errors.some((e) => e.includes('$.newEvents[0].ripples')), '错误路径指向 ripples');
 });
 
 // ---------- 主调用管线（伪造 transport） ----------

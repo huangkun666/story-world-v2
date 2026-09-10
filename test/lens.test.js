@@ -3,7 +3,9 @@
 // 麾下成员打包（含分支成员）、P3 分量不泄漏、确定性锁。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildEvolutionPack, lensList, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
+import { readFileSync } from 'node:fs';
+import { buildEvolutionPack, lensList, trimPack, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
+import { runTick } from '../src/tick.js';
 
 function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick = 0, moveFact = null } = {}) {
     return {
@@ -106,4 +108,124 @@ test('K44: P3 保持——分量数字不随行泄漏（包文本零 weight 键�
     const w = mkWorld({ entities, weights: { e_a: 0.9 } });
     const p = buildEvolutionPack(w, null);
     assert.ok(!JSON.stringify(p.pack).includes('weight'));
+});
+
+// ---------- leg25：总预算强制（trimPack 死代码接线）----------
+
+test('leg25: 超预算输入 → 按固定剪枝序裁剪、estTokens 落回预算内、pack.trimmed 留痕（机器可读）', () => {
+    // 规模对标"名册增长吃掉余量"的真实轨迹：900 实体 + 300 未决事件 + 300 在飞盘算（带 memory）
+    const ents = Array.from({ length: 900 }, (_, i) => ent(`e_${i}`, `名号${i}号长名为了吃预算`, 'character'));
+    const events = Array.from({ length: 300 }, (_, i) => ({
+        id: `ev_${i}`, title: `未决事件${i}`, source: { type: 'plot', ref: 'a_0' }, position: '中央', closed: false,
+    }));
+    events.push({ id: 'ev_c1', title: '已闭一', source: { type: 'plot', ref: 'a_0' }, position: '中央', closed: true });
+    events.push({ id: 'ev_c2', title: '已闭二', source: { type: 'plot', ref: 'a_0' }, position: '中央', closed: true });
+    const agendas = Array.from({ length: 300 }, (_, i) => ({
+        id: `a_${i}`, owner: `e_${i}`, goal: `谋划第${i}件事的长目标描述`, stage: '阶段', visibility: 'known',
+        progress: 1, maxSteps: 4, parentId: null, closed: false,
+        memory: { promises: ['旧诺言甲', '旧诺言乙'], done: [], blocked: ['受阻原因'], turnsAlive: 3 },
+    }));
+    const mk = () => mkWorld({ entities: ents, events, agendas, tick: 10 });
+    // 前提断言：这份输入确实**超过整包预算**（否则本用例什么都没测）。
+    // 注意不能拿 p.pack 量——裁剪是就地改的，出包后 pack 里已是降级后的实体段；
+    // 这里用同一镜头重建"未裁剪实体行"（与 pack.js 的 entityRow 同形），**先量体**再出包。
+    const fullEntities = lensList(mk(), { moveFact: null }).map(({ e }) => {
+        const row = { id: e.id, kind: e.kind, name: e.name, location: e.location };
+        if (e.parent) row.parent = e.parent;
+        if (e.kind === 'faction' && e.branches?.length) row.branches = e.branches;
+        if (e.kind === 'faction' && e.organs?.length) row.organs = e.organs;
+        return row;
+    });
+    const fullBody = { world: '测试', tension: 0.5, positions: ['中央'], entities: fullEntities, agendas, pendingEvents: events.filter((e) => !e.closed).map((e) => ({ id: e.id, title: e.title, source: e.source, position: e.position })), recentClosedEvents: [], playerMove: null, dialogueBook: [] };
+    const fullEst = Math.ceil(JSON.stringify(fullBody).length / 3);
+    assert.ok(fullEst > EVOLUTION_BUDGET_TOKENS, `夹具必须真的超预算（未裁剪 est=${fullEst}）`);
+
+    const p = buildEvolutionPack(mk(), null);
+    assert.ok(p.estTokens <= EVOLUTION_BUDGET_TOKENS, `裁剪后 est=${p.estTokens} 应 ≤ ${EVOLUTION_BUDGET_TOKENS}`);
+    assert.ok(Array.isArray(p.pack.trimmed) && p.pack.trimmed.length > 0, `裁剪标记应非空：${JSON.stringify(p.pack.trimmed)}`);
+    assert.ok(!p.pack.trimmed.includes('budgetOverrun'), '固定剪枝序应足够压进预算（不留越界痕迹）');
+    // 固定剪枝序：必须是固定序的**前缀**（前项成立后续项才有意义）
+    const order = ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail'];
+    assert.deepEqual(p.pack.trimmed, order.slice(0, p.pack.trimmed.length), `裁剪必须是固定序前缀：${JSON.stringify(p.pack.trimmed)}`);
+    // 痕迹与内容一致：被裁的段确实是降级后的形态
+    if (p.pack.trimmed.includes('entities.slim')) {
+        assert.ok(!('members' in p.pack.entities[0]) && !('branches' in p.pack.entities[0]), '重可选字段已逐出');
+    }
+    if (p.pack.trimmed.includes('entities.idOnly')) {
+        assert.deepEqual(Object.keys(p.pack.entities[0]), ['id', 'name'], '实体行只剩 id+name（人数=视野不丢）');
+        assert.equal(p.pack.entities.length, 900, '镜头人数不变——裁的是细节，不是"谁在棋盘上"');
+    }
+    if (p.pack.trimmed.includes('recentClosedEvents')) {
+        assert.deepEqual(Object.keys(p.pack.recentClosedEvents[0]), ['id']);
+    }
+    if (p.pack.trimmed.includes('pendingEvents')) {
+        assert.deepEqual(Object.keys(p.pack.pendingEvents[0]), ['id', 'title']);
+    }
+    if (p.pack.trimmed.includes('agendas.detail')) {
+        assert.deepEqual(Object.keys(p.pack.agendas[0]), ['id', 'goal', 'progress']);
+        assert.equal(p.pack.agendas[0].memory, undefined, '盘算 memory（最重的一段）被裁');
+    }
+    // 确定性：同一输入两次出包逐字节一致（含 trimmed 痕迹）
+    const p2 = buildEvolutionPack(mk(), null);
+    assert.equal(JSON.stringify(p.pack), JSON.stringify(p2.pack), '裁剪结果逐字节确定');
+});
+
+test('leg25: 固定剪枝序用尽仍越界 → 留 budgetOverrun 痕迹（不许"已强制"变成空话）', () => {
+    // 直接喂 trimPack 一个不可能达成的预算：三刀（实体降级 ×2 + 三段细节）用尽后仍越界
+    const pack = {
+        world: 'w', positions: ['中央'],
+        entities: [{ id: 'e1', kind: 'character', name: '甲', location: '中央' }],
+        agendas: [], pendingEvents: [], recentClosedEvents: [], playerMove: null, dialogueBook: [],
+    };
+    const cut = trimPack(pack, 1);
+    assert.deepEqual(cut, ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail', 'budgetOverrun'], '固定序走完仍越界 → 追加越界痕迹');
+    assert.deepEqual(pack.trimmed, cut, '痕迹写进包里（机器可读）');
+    assert.equal(pack.entities.length, 1, '越界也不清空视野（镜头人数不丢）');
+});
+
+test('leg25: 未超预算 → pack.trimmed 缺省（不写该键）、输出与旧版逐字节一致（防回归）', () => {
+    const w = mkWorld({
+        entities: [ent('e_a', '甲', 'character'), ent('e_b', '乙', 'faction')],
+        events: [{ id: 'ev_1', title: '事', source: { type: 'plot', ref: 'a_1' }, position: '中央', closed: false }],
+        agendas: [{ id: 'a_1', owner: 'e_a', goal: '谋划', stage: 's', visibility: 'known', progress: 1, maxSteps: 3, closed: false, memory: { turnsAlive: 1 } }],
+        tick: 3,
+    });
+    const p = buildEvolutionPack(w, null);
+    assert.ok(p.estTokens <= EVOLUTION_BUDGET_TOKENS);
+    assert.equal('trimmed' in p.pack, false, '未裁剪不写 trimmed（缺省即"没删过"）');
+    assert.deepEqual(p.pack.agendas[0].memory, { turnsAlive: 1 }, '盘算 memory 原样保留（未被裁）');
+    assert.deepEqual(Object.keys(p.pack.pendingEvents[0]), ['id', 'title', 'source', 'position'], '未决事件详情原样保留');
+    // 逐字节锁：与手工构造的"旧版出包形状"一致（键序=对象字面量序，无 trimmed 插入）
+    assert.deepEqual(Object.keys(p.pack), ['world', 'tension', 'setting', 'positions', 'entities', 'agendas', 'pendingEvents', 'recentClosedEvents', 'playerMove', 'dialogueBook']);
+});
+
+// ---------- leg25：**端到端**裁剪路径（真实 runTick 车道，不只是直调 buildEvolutionPack）----------
+// 为什么要有这一则：裁剪只在"真的超预算"时才执行，小世界冒烟/现有集成用例永远走不到那条分支，
+//   于是裁剪路径上的任何错误（悬空的辅助名、写错的字段）都会在单测里隐形、只在真实长跑里炸。
+//   本用例把超预算世界喂进 runTick（tick.js:14 → buildEvolutionPack → trimPack），端到端锁死该路径。
+test('leg25: runTick 端到端——超预算世界不炸且全程落在预算内（裁剪路径进集成车道）', async () => {
+    const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
+    const world = structuredClone(GOLDEN);
+    const base = world.entities[0];                          // e_merchant（大荒商帮 @ 临渊城）
+    const pad = Array.from({ length: 1500 }, (_, i) => ({
+        ...structuredClone(base), id: `e_pad_${i}`, name: `守卫${i}号长名为了吃预算`,
+    }));
+    world.entities = [...world.entities, ...pad];
+    world.weights = Object.fromEntries(world.entities.map((e) => [e.id, 0.5]));
+
+    const p0 = buildEvolutionPack(world, null);              // 前提：这份世界真的超预算
+    assert.ok(p0.pack.trimmed?.length > 0, `夹具必须真的超预算（trimmed=${JSON.stringify(p0.pack.trimmed)}）`);
+
+    const step = {
+        actions: [{ entity: 'e_merchant', verb: '沿商路北上巡查', position: '商路' }],
+        newEvents: [{ title: '守将允诺通关', source: { type: 'plot', ref: 'a_1' }, position: '边关', ripples: ['e_merchant'] }],
+        agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
+        stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05, cause: 'a_1' }],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+    };
+    const r = await runTick({ transport: async () => ({ text: JSON.stringify(step) }), ssot: world, dialogue: '（继续）' });
+    assert.equal(r.ok, true, `超预算世界的 tick 不应炸：${r.error || ''}`);
+    assert.ok(r.pack.estTokens <= EVOLUTION_BUDGET_TOKENS, `主调用输入 est=${r.pack.estTokens} 必须 ≤ 预算`);
+    assert.ok(Array.isArray(r.pack.pack.trimmed) && r.pack.pack.trimmed.length > 0, '裁剪痕迹随包透出（模型/调试者可见）');
+    assert.ok(r.streams.observer.length > 0, '双流照常渲染');
 });

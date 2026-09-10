@@ -567,7 +567,7 @@
         "warnings": [
           "stateChanges 无 cause: e_dayu.hardPower（坏账前置，K5）",
           "裁定: 属性硬边界（e_player.hardPower 0.010000000000000012→0，申请 -0.039999999999999994）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
           "裁定: 属性硬边界（e_player.office 0.010000000000000002→0，申请 -0.009999999999999998）"
         ],
         "gate": {
@@ -725,12 +725,12 @@
       "world": null,
       "expect": {
         "warnings": [
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）"
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.office 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.office 已是 0，申请 -0.02）"
         ],
         "gate": {
           "silent": [
@@ -944,14 +944,14 @@
       "world": null,
       "expect": {
         "warnings": [
-          "裁定: 属性硬边界（e_dayu.hardPower 1→1，申请 2）",
+          "裁定: 越界提议被忽略（e_dayu.hardPower 已是 1，申请 2）",
           "裁定: 属性硬边界（e_wanfa.intel 0.9999999999999999→1，申请 2）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）"
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.office 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.office 已是 0，申请 -0.02）"
         ],
         "gate": {
           "silent": [
@@ -1145,9 +1145,9 @@
       "expect": {
         "warnings": [
           "裁定: 属性硬边界（e_xie.hardPower 0.9→1，申请 1.1）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.05）",
-          "裁定: 属性硬边界（e_player.hardPower 0→0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.office 0→0，申请 -0.02）"
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
+          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
+          "裁定: 越界提议被忽略（e_player.office 已是 0，申请 -0.02）"
         ],
         "gate": {
           "silent": [

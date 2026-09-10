@@ -9,8 +9,9 @@
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
 import { renderAll, renderVolumeReadHtml, renderChainViewHtml } from '../src/render.js';
 import { expandChain } from '../src/chain.js';
+import { migrateLegacyAttrs } from '../src/settle.js';   // leg24 片4：旧账一次性清理（读到热账后、渲染前）
 import {
-    hotAccountShape, loadHotAccount, rotateChronicle,
+    hotAccountShape, loadHotAccount, planChronicleRotation, countLedgerEntries,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
 } from '../src/storage.js';
 import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer } from '../src/abstract.js';
@@ -22,6 +23,10 @@ import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
 import { composeInitSource } from '../src/init-source.js';
+import { runPlayerSetup } from '../src/player-setup.js';
+// 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
+// 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
+import { runEntityLookupStep } from '../src/entity-lookup.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
@@ -284,6 +289,7 @@ let sw2LastSettings = null;
 let sw2PrevChronicle = null;      // 上一渲染的编年行数（第十三棒：进展计数用）
 let sw2ChronicleFilter = null;    // K41 编年五筛视图态（kind Set；null=全选；纯视图态——不落 SSOT、不落盘，重绘保留，关面板重置）
 let sw2LastWorld = null;          // K41 链视图入口的世界引用缓存（同一对象引用，非第二份状态）
+let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单（选人调用失败时退回它，再退兜底名单）
 
 function modelSettings() {
     const ctx = freshCtx();
@@ -308,6 +314,90 @@ function writeSetting(key, value) {
     if (!s) return;
     s[key] = value;
     try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
+}
+
+// ---------- leg25 检察官审计处置（B 组）：玩家棋子接线：建世界时真的给世界一枚玩家实体 ----------
+// 审计发现（旧法）：`context.playerId` **生产路径从不产生**（只有 test/ 与 demo/ 赋过值）→
+//   ①check-step 五条"模型禁写玩家"守卫全是 `if (playerId && …)` 恒假；②streams 走"无玩家"分支降级全见、
+//   掩码永不生效；③settle 的 K9 影响通道整体失效；④extractCtx 为空 → 对话依据册恒空 → dialogueFact 入局永不合法。
+// 现法：开新世界时**总是**建一枚玩家实体（书本名册里的玩家角色优先复用，否则新建 e_p<N>）并写 context.playerId；
+//   开档描述（设置页「你的开档描述」）**只在第一次**用来解析四维，之后冻结（引擎与模型都不再改它）。
+function nextPlayerId(entities = []) {
+    let max = 0;
+    for (const e of entities) {
+        const m = /^e_p(\d+)$/.exec(String(e?.id || ''));
+        if (m) max = Math.max(max, Number(m[1]));
+    }
+    return `e_p${max + 1}`;
+}
+
+// ---------- leg25 检察官审计处置（D 组）：位置集从书里现成的地名建 ----------
+// 审计发现（旧法）：`context.positions` 建账时写死 `['未明']`、建账后**全仓无写入点** →
+//   613 个实体位置全落「未明」、位置校验退化为单值比较、"移动"在结构上不可能。
+// 来源不用新机制、不用模型猜：书里**本来就有**地名与驻点——canon.bookEntities 的 kind='location'
+//   条目（书的地名条目）+ 各条目的 location 串（书中明述的所在/驻地）。
+// 纪律：兜底词「未明」永远在集内（名册没带 location 的实体落在它上面，诚实表达"书没说"）；
+//   不发明新地名（集内每一个都来自书里的一行字）；上限只做防御（防超长书把位置列表灌爆 prompt）。
+export const POSITIONS_CAP = 60;   // 提案：位置集上限（超出按书序截断；防巨书灌爆输入）
+
+export function derivePositions(setting, { fallback = '未明', cap = POSITIONS_CAP } = {}) {
+    const book = setting?.frozen?.canon?.bookEntities || [];
+    const seen = [];
+    const push = (v) => {
+        const s = String(v || '').trim();
+        if (!s || seen.includes(s)) return;
+        seen.push(s);
+    };
+    for (const b of book) {
+        // 书里明述"它坐落在哪"时，**这个条目贡献的是那个地方**（它自己的名字不是地方）
+        if (b?.location) { push(b.location); continue; }
+        if (b?.kind === 'location') {
+            // 结构标签（`<X帝麾下_Y>` 这类）不是地名——见 abstract 的 scanBookDeclarations 形态判据
+            if (String(b.name || '').includes('_')) continue;
+            push(b.name);
+        }
+    }
+    return [fallback, ...seen.filter((s) => s !== fallback).slice(0, Math.max(0, cap - 1))];
+}
+
+// 建玩家棋子：名册里已有同名者则复用（把 playerId 指过去），否则新建 e_p<N>。
+// 返回 {created, reused, playerId, name}（就地改 world —— 与 seedBookEntities 同风格）。
+export function attachPlayerPiece(world, playerName) {
+    const nm = String(playerName || '').trim();
+    const entities = world.entities || [];
+    const existing = nm ? entities.find((e) => e.name === nm) : null;
+    if (existing) {
+        world.context = { ...(world.context || {}), playerId: existing.id };
+        return { created: false, reused: true, playerId: existing.id, name: existing.name };
+    }
+    const id = nextPlayerId(entities);
+    const ent = {
+        id,
+        kind: 'character',
+        name: nm || '你',
+        location: (world.context?.positions || [])[0] || '未明',
+        attrs: {},              // 空着就是空着：只有开档描述解析出依据的维度才会落账（引擎不编数）
+        lastActiveTick: 0,      // 头几轮不静默（与 spawnEntities 同口径）
+    };
+    world.entities = [...entities, ent];
+    world.context = { ...(world.context || {}), playerId: id };
+    return { created: true, reused: false, playerId: id, name: ent.name };
+}
+
+// 开档描述里写明姓名 → 给玩家棋子改名（id 不变：盘算/事件/编年里的引用都不受影响）。
+// 同名已存在（书里就有这个角色）→ 不新建、把棋子指过去（复用那条账）。
+export function namePlayerPiece(world, parsedName) {
+    const nm = String(parsedName || '').trim();
+    const pid = world.context?.playerId;
+    if (!nm || !pid) return { renamed: false };
+    const others = (world.entities || []).find((e) => e.name === nm && e.id !== pid);
+    if (others) {
+        world.context = { ...world.context, playerId: others.id };
+        world.entities = world.entities.filter((e) => e.id !== pid);   // 空棋子不留（它一格数据都没有）
+        return { renamed: true, mergedInto: others.id, name: others.name };
+    }
+    world.entities = world.entities.map((e) => (e.id === pid ? { ...e, name: nm } : e));
+    return { renamed: true, name: nm };
 }
 
 // 第十八棒：初始化设定源自动合订（编排层）——只有自动两条路：
@@ -479,6 +569,33 @@ function bindSettingsForm() {
     win.addEventListener('change', onField);
 }
 
+// 细案 spec-entity-field-lookup §3：查书用的**世界书原文**（编排层不读文件，由本层按名号取）。
+// 取数口径：账上实体名 → 世界书条目（comment 全等 或 key 含该名 或 comment 含该名）。
+//   实测（用户世界 235 条 × 账上 623 实体）：comment 全等命中 67、key 含名命中 533、comment 含名 104；
+//   同一名号可能命中多条 → 全给模型（宁多勿漏；"取最长的一条"这类取舍留给模型，引擎不替它选）。
+// 失败（世界书不可读）→ 返回空数组 = 引擎确认"书里没有该名号的条目" → entity-lookup 记 absent（不再重查）。
+async function bookTextForEntity(entity) {
+    const ctx = getCtx();
+    const character = pickCharacter(ctx);
+    try {
+        const { entries } = await collectWorldInfoEntries(ctx, character);
+        const name = String(entity?.name || '').trim();
+        if (!name) return [];
+        const hit = (entries || []).filter((e) => {
+            const comment = String(e?.comment || '').trim();
+            const keys = Array.isArray(e?.key) ? e.key : [e?.key];
+            return comment === name || comment.includes(name) || keys.map((k) => String(k ?? '').trim()).includes(name);
+        });
+        return hit.slice(0, 4).map((e) => ({
+            name: String(e?.comment || name).trim(),
+            text: String(e?.content || '').slice(0, 1200),   // 单条截断防御（防巨条目灌爆查询 prompt）
+        })).filter((x) => x.text);
+    } catch (err) {
+        console.warn('[story-world-v2] 查书取原文失败（视为书里无该条目）', String(err?.message || err));
+        return [];
+    }
+}
+
 async function advanceTick({ world, dialogue }) {
     const settings = modelSettings();
     sw2LastSettings = settings;
@@ -486,7 +603,30 @@ async function advanceTick({ world, dialogue }) {
     if (!resolved) {
         return { ok: false, error: '模型通道未配置（设置页填写服务地址/密钥/模型）' };
     }
-    const res = await runTick({ transport: resolved.transport, ssot: world, dialogue, extractCtx: {} });
+    const res = await runTick({
+        transport: resolved.transport, ssot: world, dialogue, extractCtx: {},
+        // 前置步：① 选本轮上场实体（LLM，≤15）→ ② 只对缺字段者查书（模型）→ ③ 引擎回写查书标记。
+        // 失败零阻塞：任一步失败都退回引擎镜头，世界照常推进（细案 §4）。
+        preStep: async ({ ssot: cur, move }) => runEntityLookupStep({
+            ssot: cur,
+            transport: diagExtract(resolved),
+            bookText: bookTextForEntity,
+            tick: cur?.meta?.tick ?? 0,
+            moveFact: move,
+            prevPicks: sw2LastPicks,
+        }),
+        // 落盘点：前置步的新字段**必须落盘**，否则 Ctrl+F5 一次就重查一遍（细案 §7）。
+        onPreStep: async (pre) => {
+            if (!pre?.ssot) return;
+            if (pre.picks) sw2LastPicks = pre.picks;
+            if (pre.warning) console.warn('[story-world-v2] 查书前置步:', pre.warning);
+            const shapeBefore = readHotMeta()?.world;
+            if (shapeBefore && pre.ssot.meta?.entityFields !== shapeBefore.meta?.entityFields) {
+                writeHotMeta(hotAccountShape(pre.ssot));   // 内存与盘上一致（导出/刷新读的就是这里）
+                await flushHotMeta();
+            }
+        },
+    });
     return res;
 }
 
@@ -497,7 +637,13 @@ export function setupAsyncTicks(ctx) {
     sw2TickQueue = createTickQueue({
         tick: advanceTick,
         load: () => loadHotAccount(readHotMeta()),
-        save: (ssot) => ensureChronicleRotated(ssot),
+        // E2：轮转失败不再当成功——抛给队列（async-tick 的 save 失败面：报「落账失败…可重试」、
+        // 不 refresh、世界原样；旧实现返回原世界被当 succeed → 界面报「已同步」而盘上什么都没写）。
+        save: async (ssot) => {
+            const rot = await ensureChronicleRotated(ssot);
+            if (!rot.ok) throw new Error(rot.error);
+            return rot.hot;
+        },
         refresh: (hot) => { refreshWorld(hot, { oldVolumes: LISTED_VOLUMES }); },
         onStatus: setStatus,
     });
@@ -520,15 +666,44 @@ async function listOldVolumes() {
 // 幂等冷档轮转 + 热账写回：编年超阈值 → 前置段入卷；且**无论是否轮转都写热账**。
 // （第十三棒修复：原实现只在入卷分支 writeHotMeta——无轮转路径推进后的世界从不落盘，
 //  只活在内存/DOM，刷新即回滚到推进前。loadWorld 也走此入口，幂等无副作用。）
+// 审计修复 E1：卷号从热账读（nextVolume，跨页面刷新延续）→ 卷库实有清单校正 →
+//   写回 hotAccountShape(带新 nextVolume)，第二卷起不再覆盖第一卷。
+// 审计修复 E2（执行序纪律）：**先入卷库、成功后才允许剥段写回**——volumeStore().put 抛错时
+//   绝不写热账、绝不返回剥了段的世界；返回 {ok:false} 由调用方如实上报（旧实现 catch 掉异常
+//   返回原世界，界面照报「已同步」= 内存改了、盘上没写、界面说成功）。
+// 返回 {ok, hot, volume}：ok:false = world 原样（热账/内存一致，无静默失败面）。
 async function ensureChronicleRotated(world) {
+    const nextVolume = nextVolumeOfHotMeta();
+    let volumes = [];
     try {
-        const { hot, volume } = rotateChronicle(world);
-        if (volume) await volumeStore().put(volume);
-        writeHotMeta(hotAccountShape(hot));
-        return hot;
-    } catch (_) {
-        return world;
+        volumes = await volumeStore().list();   // 卷库清单（也作卷号校正依据）
+    } catch (err) {
+        return { ok: false, hot: world, error: `卷库不可读：${shortErr(err)}` };
     }
+    const plan = planChronicleRotation({ world, nextVolume, volumes });
+    if (!plan.mustRotate) {
+        writeHotMeta(hotAccountShape(world));   // 无轮转也写回（第十三棒语义不变）
+        return { ok: true, hot: world, volume: null };
+    }
+    try {
+        await volumeStore().put(plan.volume);   // 先落卷：只有它成功，才允许提交"剥了段"的世界
+    } catch (err) {
+        // 写失败 = 世界不动（热账一行不少、内存与盘上一致），如实上报给调用方
+        return { ok: false, hot: world, error: `卷「${plan.volume.id}」入卷失败：${shortErr(err)}` };
+    }
+    // E2 执行序收口：落卷成功之后才用 applied（剥段后 + nextVolume 已 +1）覆盖热账
+    writeHotMeta(hotAccountShape(plan.applied));
+    return { ok: true, hot: plan.applied, volume: plan.volume };
+}
+
+// 热账里的下一卷号（E1：旧账无此字段 → 1；planChronicleRotation 再用卷库清单兜底校正）
+function nextVolumeOfHotMeta() {
+    const meta = readHotMeta();
+    return Number.isInteger(meta?.nextVolume) && meta.nextVolume > 0 ? meta.nextVolume : 1;
+}
+
+function shortErr(err) {
+    return String(err?.message || err || '未知错误');
 }
 
 // 世界注入入口（K36 推进后 / 导入后 / 加载热账后调用）
@@ -542,10 +717,32 @@ export async function loadWorld() {
         setStatus('尚无世界 · 「✨ 开始新世界」（设定源就绪后可初始化）或「⬆ 导入恢复」');
         return;
     }
-    const hot = await ensureChronicleRotated(world);
-    seedBookEntities(hot);   // K37 生通道① + 第十九棒 K43：书名录幂等入账（全量棋盘：无席位截断、子势力折叠、权重预填）
+    const rot = await ensureChronicleRotated(world);
+    if (!rot.ok) {
+        // E2：轮转失败如实上报——热账未剥段（编年完整），世界原样渲染，不许报「已同步」
+        LISTED_VOLUMES = await listOldVolumes();
+        refreshWorld(rot.hot, { oldVolumes: LISTED_VOLUMES });
+        setStatus(`⚠ 冷档轮转失败：${rot.error}——世界原样未动（热账未剥段，编年完整保留），可重试`);
+        return;
+    }
+    const hot = rot.hot;
+    // leg24 片4（旧账清理）：热账读到之后、渲染之前——一次把旧代码替模型编的四维默认值
+    //   （character 全 0.15 / faction 全 0.25，且书里无据者）批掉，界面"有据 4/4"不再骗人。
+    //   纯函数 + 幂等（meta.legacyAttrsMigratedAt 为闸）；被批的值留档在 meta.legacyAttrsPurged。
+    const migrated = migrateLegacyAttrs(hot);
+    const hotWorld = migrated;   // 迁移返回新对象（不可变风格）——后续一律用迁移后的世界
+    // 审计修复 E4：名册入账只改内存（seedBookEntities 就地 push 实体 + 预填权重）→ 账本真变了就落盘。
+    // 变没变只认 countLedgerEntries 前后差（幂等：没变不写盘，不产生无谓写盘）。
+    const before = countLedgerEntries(hotWorld);
+    const seed = seedBookEntities(hotWorld);   // K37 生通道① + 第十九棒 K43：书名录幂等入账（全量棋盘：无席位截断、子势力折叠、权重预填）
+    const seededDelta = countLedgerEntries(hotWorld) - before;
+    if (seed.seeded > 0 || seededDelta > 0 || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
+        writeHotMeta(hotAccountShape(hotWorld));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
+        const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
+        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta });
+    }
     LISTED_VOLUMES = await listOldVolumes();
-    refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
+    refreshWorld(hotWorld, { oldVolumes: LISTED_VOLUMES });
 }
 
 // ---------- K35：真实动作总线（阅卷/导出/导入；其余按钮随 K36 接调度） ----------
@@ -671,19 +868,42 @@ if (typeof window !== 'undefined') {
             });
             logInitDiagnostics(getCtx(), src, r); // 第十九棒：悬案实证——取数/抽取实况常驻上控制台
             if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
-            const seed = {
+            let seed = {
                 version: 1,
-                context: { world: src.worldName || '未名世界', tension: 0.5, positions: ['未明'], setting: r.setting },
+                context: { world: src.worldName || '未名世界', tension: 0.5, positions: derivePositions(r.setting), setting: r.setting },
                 entities: [], weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
                 meta: { tick: 0, simLog: [] },
-                // 位置集默认单点（提案态）——多位置后续随页内表单扩展（换源机制已废）
+                // D 组修复（leg25）：位置集 = 书里现成的地名（kind='location' 条目 + 各条目明述的所在）
+                // + 兜底词「未明」永远在集内。旧法写死 ['未明'] → 全员同位置、移动不可能。
             };
             seedBookEntities(seed);
+            // B 组接线：世界必须真的有一枚玩家棋子（否则五条"禁写玩家"守卫、掩码、影响通道全是死的）。
+            // 名字先用占位「你」；开档描述里若写明姓名，解析后改名（不改 id，引用不断）。
+            const piece = attachPlayerPiece(seed);
+            const playerDesc = String(settings.playerDesc || '').trim();
+            if (playerDesc) {
+                // 只在**第一次**（建世界这一次）用开档描述解析：四维有依据才落账；有姓名就改名。
+                try {
+                    const setup = await runPlayerSetup({
+                        ssot: seed,
+                        playerDesc,
+                        transport: diagExtract(resolved),
+                        overwrite: false,
+                    });
+                    if (setup?.ssot) seed = setup.ssot;                    // 返回新世界（不可变风格）
+                    if (setup?.parsed?.name) namePlayerPiece(seed, setup.parsed.name);
+                } catch (err) {
+                    console.warn('[story-world-v2] 玩家开档解析失败（不阻塞建世界）', String(err?.message || err));
+                }
+                seed.meta = { ...(seed.meta || {}), playerDesc };          // 让"这是第一次填的"可查（不落 extension_settings）
+            }
+            const playerFinal = seed.entities.find((e) => e.id === seed.context?.playerId);
             const had = Boolean(readHotMeta());
             writeHotMeta(hotAccountShape(seed));
             await loadWorld();
             const flushed = await flushHotMeta();   // leg20 落盘修复：初始化完成显式落盘再报成功
-            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
+            const pAttrs = Object.keys(playerFinal?.attrs || {});
+            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 位置集 ${seed.context.positions.length} 处 · 玩家棋子=${playerFinal?.name || piece.name}${pAttrs.length ? `（开档解析落账 ${pAttrs.length} 维）` : '（开档无数：空着就是空着）'} · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
         } catch (err) {
             setStatus(`⚠ 初始化失败：${err?.message || err}`);
         }
@@ -698,9 +918,14 @@ if (typeof window !== 'undefined') {
             const world = meta ? loadHotAccount(meta) : null;
             if (!world?.context?.setting?.dynamic) { setStatus('⚠ 还没有演化层可清除（先初始化世界）'); return; }
             world.context.setting = resetDynamicLayer(world.context.setting);
-            const hot = await ensureChronicleRotated(world);
+            const rot = await ensureChronicleRotated(world);
             LISTED_VOLUMES = await listOldVolumes();
-            refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
+            refreshWorld(rot.hot, { oldVolumes: LISTED_VOLUMES });
+            if (!rot.ok) {
+                // E2：轮转失败=热账未写（内存里清了演化层但盘上没写）——如实报，不做「已落盘」确认位
+                setStatus(`⚠ 冷档轮转失败：${rot.error}——演化层只在内存生效、未落盘（可重试）`);
+                return;
+            }
             const flushed = await flushHotMeta();
             setStatus(`演化层已清除（张力强度/环境量回基线 · 极性方向保留 · 设定不动）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
         } catch (err) {

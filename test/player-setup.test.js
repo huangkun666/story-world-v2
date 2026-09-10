@@ -44,12 +44,13 @@ function worldWith({ player = true, canon = true } = {}) {
     return w;
 }
 
-test('K32 提示词：只提取不创作 + 四字段形状 + 描述入 prompt，确定性', () => {
+test('K32 提示词：只提取不创作 + 四维形状 + 姓名可选（leg25 接线）+ 描述入 prompt，确定性', () => {
     const p = buildPlayerParsePrompt(DESC);
     assert.match(p, /只提取不创作/);
-    assert.match(p, /没有依据的字段一律不输出/);
+    assert.match(p, /没有依据的一律不输出/);
     assert.match(p, /hardPower/);
     assert.match(p, /network/);
+    assert.match(p, /name/, 'leg25：解析顺带取姓名（建世界时给棋子命名）');
     assert.ok(p.includes(DESC));
     assert.equal(buildPlayerParsePrompt(DESC), buildPlayerParsePrompt(DESC));
 });
@@ -170,19 +171,20 @@ test('K32 幂等回归：无 overwrite 的二次注入无二次变化（v1.1 语
     assert.deepEqual(second.ssot, first.ssot); // 含溯源账在内逐字节一致
 });
 
-test('K32 无 transport：不进小调用，全默认零阻塞（编排侧降级）', async () => {
+test('K32（leg24 重基线）无 transport：不进小调用，**什么都不写**（旧法落定案默认，已作废）', async () => {
     const r = await runPlayerSetup({ ssot: worldWith(), playerDesc: DESC });
     const player = r.ssot.entities.find((e) => e.id === 'e_player');
-    assert.deepEqual(player.attrs, { ...PLAYER_INJECT_DEFAULTS });
+    assert.deepEqual(player.attrs, {}, '引擎不替玩家编数：没解析就没数');
 });
 
-test('K32 注入器溯源回归：overwrite 不覆盖非解析来源但已是注入后值的键（不做来源升级骗局）', () => {
+test('K32 注入器溯源回归：手填键永不被 force 覆盖（leg24 重基线：不再有"默认值落账"这种中间态）', () => {
     const w = worldWith();
-    // 首轮注入器直调：只有 hardPower 有依据
+    // 首轮注入器直调：只有 hardPower 有依据；intel 是**手填**（非解析来源）
     const w1 = injectPlayerAttrs(w, { playerDesc: DESC, parse: () => ({ hardPower: 0.6 }) });
     assert.deepEqual(w1.meta.playerParse.injected, ['hardPower']);
-    assert.equal(w1.entities.find((e) => e.id === 'e_player').attrs.intel, PLAYER_INJECT_DEFAULTS.intel);
-    // force：解析给硬 intel——但 intel 之前是默认落账（非解析来源），不得覆盖
-    const w2 = injectPlayerAttrs(w1, { playerDesc: DESC, parse: () => ({ intel: 0.9 }), overwrite: true });
-    assert.equal(w2.entities.find((e) => e.id === 'e_player').attrs.intel, PLAYER_INJECT_DEFAULTS.intel);
+    w1.entities.find((e) => e.id === 'e_player').attrs.intel = 0.9;   // 手填
+    // force：解析给出 intel——但它是手填键，不得覆盖（不做来源升级骗局）
+    const w2 = injectPlayerAttrs(w1, { playerDesc: DESC, parse: () => ({ intel: 0.3 }), overwrite: true });
+    assert.equal(w2.entities.find((e) => e.id === 'e_player').attrs.intel, 0.9, '手填值不被 force 覆盖');
+    assert.deepEqual(w2.meta.playerParse.injected, ['hardPower'], '溯源账不因手填键扩张');
 });

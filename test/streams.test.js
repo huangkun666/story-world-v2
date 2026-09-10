@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runTick } from '../src/tick.js';
 import { renderStreams } from '../src/streams.js';
+import { visibilityMask, MASK } from '../src/weight.js';
 
 const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
 const EXTRACT_FIX = JSON.parse(readFileSync(new URL('./fixtures/extract-samples.json', import.meta.url), 'utf8'));
@@ -156,4 +157,28 @@ test('K10（片3）：玩家账面没有情报值时按中立情报（0.5）算�
     player.attrs = {};                       // 账面无数（片2 起新世界常态）
     const r = renderStreams(w, stage3, null);
     assert.ok(hasLine(r.injection, '近处大事'), '账面无数 → 中立情报 0.5 → 同位置 0.75 可见');
+});
+
+test('K10（leg25）：事件位置缺失 → 按"异地"一侧算（不得因缺数据反而放宽可见性）；判定改为显式判真', () => {
+    // 事实：MASK.posDiff=0.5、阈值 0.25 → 无情报观察者的异地 m 恰为门槛 0.25（正因如此"异地"仍在注入里）。
+    // 所以"缺位置 vs 真异地"在**输出可见性**上分不开，用**掩码数值**分辨：两者必须都取 posDiff 一侧。
+    const w = maskWorld({ intel: 0 });
+    const evMid = w.events.find((e) => e.id === 'ev_mid');   // 位置=北山（异地）
+    const evSrc = w.events.find((e) => e.id === 'ev_src');   // 位置=黄府（同地，玩家在黄府）
+    const r = renderStreams(w, stage3, null);
+    assert.ok(hasLine(r.injection, '远处琐事'), '真异地 m=0.25 ≥ 阈值 → 可见');
+    assert.ok(hasLine(r.injection, '近处大事'), '真同地 m=0.5 → 可见');
+
+    delete evSrc.position;                                   // 位置缺失（旧写法 `undefined === '黄府'` 恒假 → 也是异地，行为逐字节一致）
+    const r2 = renderStreams(w, stage3, null);
+    assert.equal(
+        JSON.stringify(r2.injection.replace('近处大事', 'X')), JSON.stringify(r.injection.replace('近处大事', 'X')),
+        '缺位置的那条与"真异地"的判定结果完全一致（同一条动向照常注入）',
+    );
+    assert.ok(hasLine(r2.injection, '近处大事'), '缺位置 → 按异地一侧 → m=0.25（门槛）→ 照常可见');
+    // 反向对照：若把"缺位置"误判成**同地**，m 会变成 0.5 → 与"真异地"的那条**不同值**。
+    // 用掩码数值直接锁死口径（避免只靠可见性看不见差别）：
+    assert.equal(visibilityMask({ intel: 0, sameLocation: false }), 0.25, '异地一侧 = 0.25');
+    assert.equal(visibilityMask({ intel: 0, sameLocation: true }), 0.5, '同地一侧 = 0.5');
+    assert.equal(MASK.threshold, 0.25, '阈值 0.25（异地恰好门槛）');
 });

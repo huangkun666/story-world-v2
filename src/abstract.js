@@ -164,6 +164,14 @@ export function scanBookDeclarations(src) {
 // leg24 片1 删除位（原 leg20 `sanitizeEntityAttrs`）：不再净化书抽来的四维属性/原文依据。
 // 账本里若还有旧世界的 attrs（旧账字段保留、schema 不动），本轮一概不读、不写、不覆盖。
 
+// 第二十五棒实机修正：上级名号净化（模型常把书里的层级路径**照抄**成 `/太素帝`、`／太素帝`、`- 太素帝`）。
+//   实况（用户真实世界书 + 账本）：9 条带上级的势力全部是 `/X帝` 形态 → 名册索引按原名查不到 →
+//   `seedBookEntities` 判"上级不在册" → 弃隶属（界面 623 行「归属空着」）。去前导符号后 9/9 都在册。
+//   纪律：只剥**前导层级符号/空白**，不改名字本体（书里写的是什么名，账上就必须是什么名）。
+export function normalizeParentName(raw) {
+    return String(raw ?? '').trim().replace(/^[/／\\>·>\-—–\s]+/, '').trim();
+}
+
 // leg23 照书办②：书声明的名号**强制并册** + 照标签定类别 + 照标签落上级（一处定义，大书/小书共用）。
 // 语义：缺失 → 补入册（书声明过的名号不许丢）；已在册但类别与书标签不符 → 照书改判；
 //       parent 仅在名册尚无该键时写入（first-wins——书正文/模型读到的明述优先，标签只补缺）。
@@ -173,16 +181,17 @@ export function applyDeclaredToRoster(bookEntities, declared) {
     let added = 0;
     let fixed = 0;
     for (const d of declared) {
+        const parent = normalizeParentName(d.parent);
         const mine = list.find((b) => b.name === d.name);
         if (!mine) {
             const item = { name: d.name, kind: d.kind };
-            if (d.parent) item.parent = d.parent;
+            if (parent) item.parent = parent;
             list.push(item);
             added += 1;
             continue;
         }
         if (d.kind && mine.kind !== d.kind) { mine.kind = d.kind; fixed += 1; }
-        if (d.parent && !mine.parent) mine.parent = d.parent;
+        if (parent && !mine.parent) mine.parent = parent;
     }
     return { bookEntities: list, added, fixed };
 }
@@ -239,6 +248,9 @@ export function sanitizeCanon(raw) {
     // leg24 片1（停抄书）：抽取输出**只收 name/kind/parent**——parent 仅存于「照书办」（书标签声明的上级，
     //        applyDeclaredToRoster 照抄进来），模型侧不再抽上级；attrs/race/location/evidence 一概不读
     //        （旧账里可能还有这些字段：schema 保留、引擎不读不写不覆盖，旧世界零扰动）。
+    // 第二十五棒实机修正（用户："归属也没回写"）：parent 必须过 normalizeParentName——
+    //   实况：模型把书里的层级路径写成 `/太素帝`（带前导斜杠），9 条真归属因此全部对不上册、
+    //   `seedBookEntities` 判"上级不在册 → 弃隶属"，界面 623 行「归属空着」。去斜杠后 9/9 名号都在册。
     if (Array.isArray(raw.bookEntities)) {
         const seen = new Set();
         for (const it of raw.bookEntities) {
@@ -248,7 +260,7 @@ export function sanitizeCanon(raw) {
             if (seen.has(name)) continue;
             seen.add(name);
             const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : 'character';
-            const parent = String(it.parent ?? '').trim();
+            const parent = normalizeParentName(it.parent);
             canon.bookEntities.push(parent ? { name, kind, parent } : { name, kind });
         }
     } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
@@ -558,7 +570,11 @@ export function seedBookEntities(ssot) {
             id: `e_bk_${n}`,
             kind: entKind,
             name: b.name,
-            location: b.location || home,   // leg21：名册带出的所在优先；leg24 片1 起新抽取不再产 location（旧账仍读=零扰动）
+            // leg21：名册带出的所在优先；leg24 片1 起新抽取不再产 location（旧账仍读=零扰动）。
+            // leg25 D 组（位置集从书里建）：带出的所在必须 ∈ 位置集——否则落 home。
+            //   为什么必须守这条：`check-step` 校验实体位置 ∈ 位置集，位置不在集内会让**整步被拒**
+            //   （世界停摆）。位置集此时已由 derivePositions（web 侧）按同一本书的地名建好=不误杀。
+            location: (b.location && positions.includes(b.location)) ? b.location : home,
             // 身份 + 类别入账（design-core §2.3 第 1 项）；**四维数值不预填**（leg24 片2：空着就是空着）——
             // 账面没有这些键是事实，模型每轮提议的 stateChanges 才是它们的来源（引擎钳制落账）
             attrs: {},

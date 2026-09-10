@@ -17,11 +17,23 @@ export const PROPOSED_LIMITS = Object.freeze({
 export const HOT_FORMAT = 'story-world-v2-hot';
 export const HOT_VERSION = 1;
 
+// 卷号计数器规范形（审计修复 E1）：非正/非整/NaN → 1（缺省=第 1 卷）。
+// 旧账（无 nextVolume 字段）读回 1：与 K35 起「volumeSeq 缺省 1」的历史行为逐字一致=旧账零扰动。
+// 兜底：编排层在真正入卷前会用卷库实有清单校正（见 planChronicleRotation 的 volumes 参数），
+//   所以即便旧账丢了计数、盘上已有卷，也只会往后接号，不会回头覆盖。
+export function normalizeVolumeSeq(v) {
+    return Number.isInteger(v) && v > 0 ? v : 1;
+}
+
 export function hotAccountShape(ssot) {
     return {
         format: HOT_FORMAT,
         version: HOT_VERSION,
         savedAt: new Date().toISOString(),
+        // E1：下一个卷号随热账持久化（跨页面刷新延续；此前卷号恒 1 → 第二卷覆盖第一卷第
+        // 一次轮转写同一个 `chatId:卷1` 键，热账前置段已剥而盘上被覆盖=永久丢失）。
+        // 挂世界之外（不混进 SSOT schema），loadHotAccount 只读 world 面=旧调用方零扰动。
+        nextVolume: normalizeVolumeSeq(ssot?.nextVolume),
         world: ssot,
     };
 }
@@ -51,13 +63,16 @@ function splitOffOldest(rows, { ticks, bytes }) {
 }
 
 /**
- * rotateChronicle(world, { limits, store, volumeSeq, volumeCount, now })
+ * rotateChronicle(world, { limits, volumeSeq, now })
  * → { hot, volume|null }：
  *   hot      = 剥离前置段后的新世界（milestones/events 原引用不动=断链防线）
  *   volume   = 入卷段 {id, info, rows}（rows 与热账完全无共享）
  * 不改写入参 world（纯函数）；limits 缺省提案值（待报批）。
+ * E1：volumeSeq 缺省取 world.nextVolume（热账持久化的下一卷号，缺省 1）；发生轮转时
+ *   返回的 hot 上 nextVolume = 本卷号 + 1（编排层随热账落盘即完成跨刷新延续）。
  */
-export function rotateChronicle(world, { limits = PROPOSED_LIMITS, volumeSeq = 1, now = new Date().toISOString().slice(0, 10) } = {}) {
+export function rotateChronicle(world, { limits = PROPOSED_LIMITS, volumeSeq, now = new Date().toISOString().slice(0, 10) } = {}) {
+    const seq = normalizeVolumeSeq(volumeSeq ?? world?.nextVolume);
     const rows = Array.isArray(world.chronicle) ? world.chronicle : [];
     if (rows.length === 0) return { hot: world, volume: null };
     const sorted = [...rows].sort((a, b) => chronTick(a) - chronTick(b));
@@ -71,12 +86,12 @@ export function rotateChronicle(world, { limits = PROPOSED_LIMITS, volumeSeq = 1
 
     const volSet = new Set(volRows);
     const hotRows = rows.filter((r) => !volSet.has(r)); // 保持原数组顺序，零扰动可见面
-    const hot = { ...world, chronicle: hotRows };
+    const hot = { ...world, nextVolume: seq + 1, chronicle: hotRows };
     const volRowsCopy = volRows.map((r) => ({ ...r }));
     const fromTick = chronTick(volRowsCopy[0]);
     const toTick = chronTick(volRowsCopy[volRowsCopy.length - 1]);
     const volume = {
-        id: `卷${volumeSeq}`,
+        id: `卷${seq}`,
         info: `第 ${fromTick}–${toTick} 轮 · ${(chronBytes(volRowsCopy) / 1024).toFixed(1)}KB · 收在插件本地 · ${now} 入卷`,
         rows: volRowsCopy,
         fromTick,
@@ -85,6 +100,43 @@ export function rotateChronicle(world, { limits = PROPOSED_LIMITS, volumeSeq = 1
         archivedAt: now,
     };
     return { hot, volume };
+}
+
+/**
+ * planChronicleRotation({ world, nextVolume, volumes, limits, now })
+ * → { mustRotate, volumeSeq, hot, applied, volume|null, error|null }
+ * 编排层执行序的前半：只决定「该不该轮转、卷号是几、卷内容是什么」，**不产生任何写副作用、也不预先剥段**
+ * （审计修复 E1/E2）。字段纪律：
+ *   hot     = **原世界**（未剥段）——卷库写失败时调用方拿到的就是它，编年一行不少（"失败=世界不动"）。
+ *   applied = 剥段后的世界（含 nextVolume+1）——**只有卷库 put 成功之后**才允许用它覆盖热账。
+ *   volume  = 要落卷的前置段。
+ * 这条纪律来自 E2 的实测教训：旧实现把剥了段的 hot 直接交出去，put 抛错被 catch 吞掉 → 内存剥了段、
+ *   盘上没写、界面还报「已同步」——一次失败永久丢一段编年。
+ * volumeSeq 校正（E1 兜底）：热账计数与卷库实有清单取大值——旧账无计数而盘上已有卷时
+ *   （卷号恒 1 直写的存量账），下一卷接着排，不回头覆盖。
+ */
+export function planChronicleRotation({ world, nextVolume, volumes, limits = PROPOSED_LIMITS, now } = {}) {
+    const listed = Array.isArray(volumes) ? volumes.length : 0;
+    const seq = Math.max(normalizeVolumeSeq(nextVolume), listed + 1);
+    const { hot: applied, volume } = rotateChronicle(world, { limits, volumeSeq: seq, ...(now ? { now } : {}) });
+    return {
+        mustRotate: volume != null,
+        volumeSeq: seq,
+        hot: world,          // 未剥段：写失败时的安全态
+        applied,             // 剥段后的世界：put 成功后才准许落盘
+        volume,
+        error: null,
+    };
+}
+
+/**
+ * countLedgerEntries(world) → 账本「有内容」计数（实体 + 权重 + 编年）。
+ * 审计修复 E4 的判据面：名册入账（seedBookEntities 就地 push 实体 + 预填权重）到底改没改账本，
+ *   只认这个数——变了才落盘，没变保持幂等不写盘。
+ */
+export function countLedgerEntries(world) {
+    const n = (v) => (Array.isArray(v) ? v.length : (v && typeof v === 'object' ? Object.keys(v).length : 0));
+    return n(world?.entities) + n(world?.weights) + n(world?.chronicle);
 }
 
 // ---------- 阅卷还原：卷段 → 编年渲染行（复用 render 的编年行形状） ----------
