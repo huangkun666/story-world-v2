@@ -17,17 +17,17 @@ export const DECAY = {                        // 静止衰减（沿用长跑细�
     character: { grace: 8, rate: 0.02 },     // 连续 8 tick 无动作后，每 tick −2%
     faction:   { grace: 20, rate: 0.01 },    // 连续 20 tick 无动作后，每 tick −1%
 };
-export const MASK = {                         // 可见性掩码（分量 × 情报 × 位置，§3.4）
+export const MASK = {                         // 可见性掩码（leg24 片3：**改成事实驱动**，不再用分量）
     intelBase: 0.5, intelGain: 0.5,          // intelFactor = 0.5 + 0.5×情报
     posSame: 1.0, posDiff: 0.5,              // 同位置 / 异位置（位置图为符号集，二元判定为能力上限）
-    threshold: 0.3,                          // m < 0.3 → 注入侧省略该事实
-    obsFloor: 0.05,                          // 观察者存在感门（2026-09-07 评审修边，提案态，随掩码系数报批）：
-                                             // obs < ε → m' = m×obs/ε —— 消除"obs→0 饱和全见 vs obs=0 全瞎"断崖，
-                                             // obs→0 连续趋 0（"零分量无所见"语义连续化）；obs ≥ ε → 原公式。
+    threshold: 0.25,                         // m < 0.25 → 注入侧省略该事实（片3：原 0.3 是配合比值项的调参值）
 };
+// leg24 片3 删除位：`obsFloor`（观察者存在感门 ε=0.05 修边）随比值项一并删除——
+//   它当年修的是"obs→0 断崖"这个**只存在于比值公式里**的毛病；比值没了，毛病也就不存在了。
 export const RADIUS_BASE = 1;                 // 因果传播半径：radius = 1 + 3×weight
 export const RADIUS_GAIN = 3;
-export const RIPPLE_TARGET_GAIN = 2;          // 影响范围 = 事件可波及目标数上限 ceil(2×weight)
+export const RIPPLE_TARGET_CAP = 3;           // 提案（片3）：一次事件波及目标数上限（原 ceil(2×分量)→固定值）
+
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -58,16 +58,15 @@ export function activityFactor(idleTicks, kind = 'character') {
     return Math.max(0, 1 - p.rate * (idleTicks - p.grace));
 }
 
-// 可见性掩码：m = clamp(事件源分量 ÷ 观察者分量 × 情报因子 × 位置因子, 0, 1)。
-// 观察者分量 ≤ 0 → 0（零分量即无所见——同尺，无特殊路径）。
-export function visibilityMask({ srcWeight, obsWeight, intel = 0, sameLocation = false }) {
-    if (!(obsWeight > 0) || !(srcWeight > 0)) return 0;
+// 可见性掩码（leg24 片3：**事实驱动**）：m = 情报因子 × 位置因子。
+// 旧法 m = (源分量 ÷ 观察者分量) × 情报 × 位置 × 存在感门——用户拍板删掉那个数之后：
+//   ①比值项失去意义（它拿两个"没法客观"的分数相除）；②"零分量观察者无所见"的短路会让**新世界开局
+//   玩家什么都看不见**（全员账面无数 → 观察者分量只有中立 floor，且一旦为 0 就全瞎）。
+// 现法只吃两样可查的事实：**情报关系**（有多少耳目）与**位置**（同地/异地）——都能从账本数出来，零歧义。
+export function visibilityMask({ intel = 0, sameLocation = false }) {
     const intelFactor = MASK.intelBase + MASK.intelGain * clamp01(intel ?? 0);
     const posFactor = sameLocation ? MASK.posSame : MASK.posDiff;
-    // 修边（2026-09-07）：比值部分 clamp 后乘观察者存在感门 min(1, obs/ε)——比值饱和在极小观察者段被线性压回，
-    // obs→0 连续趋 0（不再"0.001 全见、恰 0 全瞎"）；obs ≥ ε 时门=1，原公式不变（锁定断言不受影响）。
-    const presence = Math.min(1, obsWeight / MASK.obsFloor);
-    return clamp01((srcWeight / obsWeight) * intelFactor * posFactor) * presence;
+    return clamp01(intelFactor * posFactor);
 }
 
 export const isVisible = (m) => m >= MASK.threshold;
@@ -77,8 +76,9 @@ export function spreadRadius(weight) {
     return RADIUS_BASE + RADIUS_GAIN * clamp01(weight);
 }
 
-export function maxRippleTargets(weight) {
-    return Math.ceil(RIPPLE_TARGET_GAIN * clamp01(weight));
+// 波及目标数上限（leg24 片3）：由 ceil(2×分量) 改为**固定提案值**——用户拍板删掉那个数。
+export function maxRippleTargets() {
+    return RIPPLE_TARGET_CAP;
 }
 
 // 供结算器用的衰减后分量：weight' = 公式分 × activityFactor（衰减只作用分量缓存，不改属性——动量分离，长跑 §2.3）。

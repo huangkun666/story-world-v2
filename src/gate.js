@@ -5,41 +5,60 @@
 // 纯函数：不改输入 step/world，返回过滤后的世界步与滤除统计。
 // 语义：静默 = 不主动（actions/盘算推进/plot 事件/入局提议），不是消失——静默方始终是合法客体；
 //       被点名可应答（未决事件波及 ∪ 其他实体动作目标 ∪ 玩家落子事实对象），下一轮重新判定。
-export const SILENCE_THRESHOLD = { character: 0.25, faction: 0.50 };   // 提案态（细案 P2，K6 曲线后复校）
+//
+// ============================ leg24 片3「拆引擎裁定」============================
+// 旧法：**分量 < SILENCE_THRESHOLD（人物 0.25 / 势力 0.50）→ 静默**——拿那个 0-1 的分数当判据。
+// 用户 2026-09-11 拍板：那个数不要了（它没法客观，而且在暗地里替引擎做决定）。
+// 实测（全量棋盘 346 实体 100t，见 docs/slice3-verdict-teardown-spec.md §2）：**静默线以下 345/346**——
+//   静止衰减（久未出手就扣分）把"没出手过的在册实体"一路磨到 0 → 全体越线 → 引擎基本禁止所有人出手。
+// 新法（结构三条件，全部可从账本数出来、零阈值调参）：
+//   **同时满足三条才静默**：①手上没有在办的盘算（无未决 agenda）
+//                          ②久未出手（lastActiveTick 不存在或距今 ≥ QUIET_TICKS）
+//                          ③无人点名（不在未决事件波及里、不是本轮动作目标/落子对象）
+//   任一不成立 → 活跃。设计依据：重心＝盘算（design-core §3.4）——手上没在办的事、又久没露面、
+//   又没人提到你，这一轮确实没有你出手的理由；反过来只要有一条成立，你就该被放进门。
+//   `lastActiveTick` 不存在 = **从没出过手**（不是"很久以前出过手"）：同属②，语义上更该让路。
+// ============================ leg24 片3「拆引擎裁定」============================
+export const QUIET_TICKS = 3;   // 提案（片3 新增）：静默判定里"久未出手"的轮数门（原 SILENCE_THRESHOLD 已删）
 
 export function gateWorldStep(step, world, moveFact = null) {
-    const weights = world.weights || {};
-    const kindOf = new Map(world.entities.map((e) => [e.id, e.kind]));
     const agendaOwner = new Map((world.agendas || []).map((a) => [a.id, a.owner]));
     // K37：状态面（active 才算门控成员；retired/dead 从点名/静默/提议面剔除）
     const statusOf = new Map(world.entities.map((e) => [e.id, e.status || 'active']));
     const gated = (e) => (statusOf.get(e.id) ?? 'active') === 'active';
 
-    // top-1 永不静默（并列取实体序首个）：世界里永远有人在动，防全静默。
-    let topId = null;
-    let topW = -1;
-    for (const e of world.entities) {
-        if (!gated(e)) continue;
-        const w = weights[e.id] ?? 0;
-        if (w > topW) { topW = w; topId = e.id; }
-    }
-
-    const silentSet = new Set();
-    for (const e of world.entities) {
-        if (!gated(e)) continue;
-        if (e.id === topId) continue;
-        const th = SILENCE_THRESHOLD[kindOf.get(e.id)] ?? SILENCE_THRESHOLD.character;
-        if ((weights[e.id] ?? 0) < th) silentSet.add(e.id);
-    }
-
-    // 触发例外：本轮输入中点名静默方 → 解除静默（可应答）。
-    // 点名列拆（K37/三点过滤②）：ripples/动作目标/落子对象指向 retired/dead 实体不算"点名"（不解除静默）。
+    // 本轮"点名"面（③的输入，同时是触发例外的依据）
     const named = new Set();
     for (const ev of world.events || []) {
         if (!ev.closed) for (const r of ev.ripples || []) if (gated({ id: r })) named.add(r);
     }
     for (const a of step.actions || []) if (a.target && gated({ id: a.target })) named.add(a.target);
     if (moveFact?.object && gated({ id: moveFact.object })) named.add(moveFact.object);
+
+    // 结构三条件（片3）：无在办盘算 ∧ 久未出手 ∧ 无人点名
+    const tick = world?.meta?.tick ?? 0;
+    const hasOpenAgenda = new Set((world.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    const actedRecently = (id) => {
+        const e = (world.entities || []).find((x) => x.id === id);
+        return typeof e?.lastActiveTick === 'number' && (tick - e.lastActiveTick) < QUIET_TICKS;
+    };
+
+    // top-1 保送（原"永不静默"防全静默；判据由分量改为实体序首个 active 实体——确定性、无分数）
+    let topId = null;
+    for (const e of world.entities) {
+        if (!gated(e)) continue;
+        topId = e.id;
+        break;
+    }
+
+    const silentSet = new Set();
+    for (const e of world.entities) {
+        if (!gated(e)) continue;
+        if (e.id === topId) continue;                       // 保送：世界里永远至少有人可动
+        if (hasOpenAgenda.has(e.id)) continue;              // ① 手上有在办的事 → 不静默
+        if (actedRecently(e.id)) continue;                  // ② 刚出过手 → 不静默
+        silentSet.add(e.id);                                // 结构上静默（③"被点名"在下一段解除，语义与原版一致）
+    }
     const lifted = [...silentSet].filter((id) => named.has(id));
     const liftedSet = new Set(lifted);
     const active = (id) => !silentSet.has(id) || liftedSet.has(id);

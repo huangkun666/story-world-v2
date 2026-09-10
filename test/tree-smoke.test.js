@@ -53,17 +53,35 @@ test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 
     assert.ok(metrics.peakTopLevel <= SLICE_TOP_CAP, `顶层峰 ${metrics.peakTopLevel}`);
     assert.equal(metrics.rejectedTotal, 1, '唯一拒建 = t1 超编提议 C（盘算大厦顶 ×1）');
     assert.equal(metrics.warningsTotal, 1, '警告精确集合：恰 1 条（t1 大厦顶）；无一致性/裁定/坏账警告');
-    // A-2 静默滤除（双面无痕统计）：a_son2（静默常驻盘算）每 tick 3 类滤除 ×100 + e_min 新盘算提议 ×10
-    assert.equal(metrics.droppedTotal, 310, `滤除累计 ${metrics.droppedTotal}`);
+    // A-2 静默滤除（双面无痕统计）：**leg24 片3 判据换成结构三条件后，滤除量从 310 掉到 8**——
+    //   旧法靠"分量低于阈值"把大批实体摁成静默；新法里"手上有在办盘算"就活跃（a_son2 正因此在飞），
+    //   只有真正三条件齐（无在办 ∧ 久未出手 ∧ 无人点名）的少数提议被滤。这正是用户要的方向。
+    assert.equal(metrics.droppedTotal, 8, `滤除累计 ${metrics.droppedTotal}（片3：结构判据，只剩真正"没你的事"的提议）`);
     assert.equal(metrics.liftedTotal, 0, '无点名样本 → 零应答');
     // A-4 树形态：委派落账（parentId 存在）+ 父 promises 写 + 兑现落痕 + 变形托孤
+    // leg24 片3：带 parentId 的落账 11 → 2——同一台生成器，但门控换了判据：**周期提议方在提议那一刻
+    //   已经"结构静默"**（手上无在办盘算 + 超过 QUIET_TICKS 没出手 + 无人点名），提议被如实滤除；
+    //   落下来的 2 条正是"提议时其父盘算仍开着"的委派样本。断言改为结构性质（委派能落账且带父链）。
     const withParent = world.agendas.filter((a) => a.parentId);
-    assert.ok(withParent.length >= 9, `委派落账 ≥9 条，实际 ${withParent.length}`);
+    assert.ok(withParent.length >= 2, `委派落账 ≥2 条（片3 口径），实际 ${withParent.length}`);
     const son2 = world.agendas.find((a) => a.id === 'a_son2');
-    assert.equal(son2.parentId, undefined, 'a_root 变形 → a_son2 断父链转独立（不悬挂死父）');
-    assert.ok(son2.memory.promises.length >= 9, 'a_son2 收委派（promises 写入）');
-    assert.ok(son2.memory.done.some((d) => d.includes('兑现')), '委派子达成 → 兑现落痕（done）');
-    assert.ok(world.chronicle.some((c) => c.text.includes('变形') && c.text.includes('事业移交诸子')), '变形编年（a_root 托孤）');
+    // leg24 片3 语义变化（旧断言"a_son2 断父链转独立"不再成立，原因值得记住）：
+    //   旧法 a_son2 长期静默 → 它的推进全被滤 → 永远停在 1/3 → 父终结时它仍"在飞" → 走托孤断链分支；
+    //   新法它活跃、按步推进、与父同轮满步 → **它是"达成"而不是"被托孤"**，故 closed=true 且保留 parentId。
+    //   真正要守的不变式是：**不能留下"还开着、却挂着一个已终结的父亲"的盘算**（悬挂死父）。改锁这一条。
+    assert.equal(son2.closed, true, '片3：a_son2 照常按步推进 → 满步达成');
+    assert.ok(son2.progress >= son2.maxSteps, `达成证据 ${son2.progress}/${son2.maxSteps}`);
+    const dangling = world.agendas.filter((a) => !a.closed && a.parentId
+        && (world.agendas.find((p) => p.id === a.parentId)?.closed ?? false));
+    assert.deepEqual(dangling.map((a) => a.id), [], '无"开着却挂着已终结之父"的悬挂盘算（托孤不变式）');
+    // 委派契约（片3 口径）：凡带父链的盘算，其父必须在册；且**至少有一个父盘算记下了委派**（promises 写入）。
+    //   （旧断言"a_son2.promises ≥9"绑定的是旧门控下"a_son2 是唯一在飞顶层"的偶然事实，片3 换判据后不再成立。）
+    for (const a of withParent) {
+        assert.ok(world.agendas.some((p) => p.id === a.parentId), `父链可回溯：${a.id} → ${a.parentId}`);
+    }
+    assert.ok(world.agendas.some((a) => (a.memory?.promises?.length ?? 0) >= 1), '有父盘算记下了委派（promises 写入）');
+    assert.ok(world.agendas.some((a) => (a.memory?.done ?? []).some((d) => d.includes('兑现'))), '有委派子达成 → 兑现落痕（done）');
+    assert.ok(world.chronicle.some((c) => c.text.includes('变形') && c.text.includes('事业移交诸子')), '变形编年（托孤分支别处照常触发）');
     assert.ok(world.chronicle.some((c) => c.text.includes('达成')), '达成编年存在');
     assert.ok(!world.chronicle.some((c) => c.text.includes('败露')), '零伤害冒烟无败露（语义精确区分）');
     // V9 延续：预算 / 体积（事件池无裁剪=已知队列项，随因果链强化阶段——界 80KB 防膨胀回归）
@@ -71,7 +89,7 @@ test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 
     const sizes = metrics.bytes.map((b) => b.bytes);
     for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] >= sizes[i - 1], `字节单调 ${sizes[i]} < ${sizes[i - 1]}`);
     assert.ok(sizes[sizes.length - 1] < 80000, `终态 ${sizes[sizes.length - 1]}B < 80KB`);
-    console.log(`[K16 曲线] 树 100t: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 顶层峰 ${metrics.peakTopLevel}/≤5 · 新生 ${metrics.newbornsTotal}（每 tick 峰 ${metrics.maxPerTickBirths}/≤2） · 拒建 ${metrics.rejectedTotal} · 滤除 ${metrics.droppedTotal}（a_son2 300 + e_min 10） · 委派 ${withParent.length} · 警告 ${metrics.warningsTotal} · 终态 ${sizes[sizes.length - 1]}B`);
+    console.log(`[K16 曲线] 树 100t（leg24 片3 结构门控）: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 顶层峰 ${metrics.peakTopLevel}/≤5 · 新生 ${metrics.newbornsTotal}（每 tick 峰 ${metrics.maxPerTickBirths}/≤2） · 拒建 ${metrics.rejectedTotal} · 滤除 ${metrics.droppedTotal}（旧判据下 310） · 委派 ${withParent.length}（旧 11） · 警告 ${metrics.warningsTotal} · 终态 ${sizes[sizes.length - 1]}B`);
 });
 
 test('K16 树冒烟：确定性（两次 100 tick 逐字节一致）', async () => {

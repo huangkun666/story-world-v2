@@ -1,198 +1,200 @@
 {
- "name": "bystander-2026-09-07T14-05-51-725Z",
- "sourceWorld": "bystander-world.json",
- "meta": {
-  "era": "post"
- },
- "steps": [
-  {
-   "tick": 1,
-   "step": {
-    "actions": [
-     {
-      "entity": "e_xie",
-      "verb": "试探大盘谷阵眼",
-      "target": "e_wanfa",
-      "position": "大盘谷",
-      "note": "寻找破阵之机"
-     },
-     {
-      "entity": "e_wanfa",
-      "verb": "全面开启护宗大阵",
-      "position": "北山",
-      "note": "应对多方威胁闭门死守"
-     },
-     {
-      "entity": "e_dayu",
-      "verb": "拔营向北山进发",
-      "target": "e_wanfa",
-      "position": "北山",
-      "note": "以武力配合接管文书施压"
-     }
-    ],
-    "newEvents": [
-     {
-      "title": "薛部猛攻阵眼",
-      "source": {
-       "type": "plot",
-       "ref": "a_xie"
+  "name": "bystander-2026-09-07T14-05-51-725Z",
+  "sourceWorld": "bystander-world.json",
+  "meta": {
+    "era": "post"
+  },
+  "steps": [
+    {
+      "tick": 1,
+      "step": {
+        "actions": [
+          {
+            "entity": "e_xie",
+            "verb": "试探大盘谷阵眼",
+            "target": "e_wanfa",
+            "position": "大盘谷",
+            "note": "寻找破阵之机"
+          },
+          {
+            "entity": "e_wanfa",
+            "verb": "全面开启护宗大阵",
+            "position": "北山",
+            "note": "应对多方威胁闭门死守"
+          },
+          {
+            "entity": "e_dayu",
+            "verb": "拔营向北山进发",
+            "target": "e_wanfa",
+            "position": "北山",
+            "note": "以武力配合接管文书施压"
+          }
+        ],
+        "newEvents": [
+          {
+            "title": "薛部猛攻阵眼",
+            "source": {
+              "type": "plot",
+              "ref": "a_xie"
+            },
+            "position": "大盘谷",
+            "ripples": [
+              "e_xie",
+              "e_wanfa"
+            ]
+          },
+          {
+            "title": "大虞军列阵北山",
+            "source": {
+              "type": "plot",
+              "ref": "a_dayu"
+            },
+            "position": "北山",
+            "ripples": [
+              "e_dayu",
+              "e_wanfa"
+            ]
+          }
+        ],
+        "agendaAdvances": [
+          {
+            "agendaId": "a_xie",
+            "step": "前锋试探阵眼薄弱处",
+            "stage": "强攻阵眼"
+          },
+          {
+            "agendaId": "a_dayu",
+            "step": "大军开拔北山",
+            "stage": "武力威压"
+          },
+          {
+            "agendaId": "a_wanfa",
+            "step": "开启护宗大阵",
+            "stage": "死守"
+          }
+        ],
+        "newAgendas": [],
+        "stateChanges": [
+          {
+            "entity": "e_wanfa",
+            "attr": "hardPower",
+            "delta": -0.1,
+            "actor": "e_xie",
+            "cause": "a_xie"
+          },
+          {
+            "entity": "e_wanfa",
+            "attr": "network",
+            "delta": -0.1,
+            "actor": "e_dayu",
+            "cause": "a_dayu"
+          }
+        ],
+        "agendaCancels": [],
+        "newEntities": [],
+        "entityFates": []
       },
-      "position": "大盘谷",
-      "ripples": [
-       "e_xie",
-       "e_wanfa"
-      ]
-     },
-     {
-      "title": "大虞军列阵北山",
-      "source": {
-       "type": "plot",
-       "ref": "a_dayu"
-      },
-      "position": "北山",
-      "ripples": [
-       "e_dayu",
-       "e_wanfa"
-      ]
-     }
-    ],
-    "agendaAdvances": [
-     {
-      "agendaId": "a_xie",
-      "step": "前锋试探阵眼薄弱处",
-      "stage": "强攻阵眼"
-     },
-     {
-      "agendaId": "a_dayu",
-      "step": "大军开拔北山",
-      "stage": "武力威压"
-     },
-     {
-      "agendaId": "a_wanfa",
-      "step": "开启护宗大阵",
-      "stage": "死守"
-     }
-    ],
-    "newAgendas": [],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.1,
-      "actor": "e_xie",
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "network",
-      "delta": -0.1,
-      "actor": "e_dayu",
-      "cause": "a_dayu"
-     }
-    ],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
-   },
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [],
-    "gate": {
-     "silent": [],
-     "lifted": []
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [],
+        "gate": {
+          "silent": [],
+          "lifted": []
+        },
+        "player": null
+      }
     },
-    "player": null
-   }
-  },
-  {
-   "tick": 2,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  },
-  {
-   "tick": 3,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  },
-  {
-   "tick": 4,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  },
-  {
-   "tick": 5,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  },
-  {
-   "tick": 6,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  },
-  {
-   "tick": 7,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  },
-  {
-   "tick": 8,
-   "step": null,
-   "moveFact": null,
-   "world": null,
-   "expect": {
-    "warnings": [
-     "传输失败: HTTP 429"
-    ],
-    "gate": null,
-    "player": null
-   }
-  }
- ]
+    {
+      "tick": 2,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    },
+    {
+      "tick": 3,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    },
+    {
+      "tick": 4,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    },
+    {
+      "tick": 5,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    },
+    {
+      "tick": 6,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    },
+    {
+      "tick": 7,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    },
+    {
+      "tick": 8,
+      "step": null,
+      "moveFact": null,
+      "world": null,
+      "expect": {
+        "warnings": [
+          "传输失败: HTTP 429"
+        ],
+        "gate": null,
+        "player": null
+      }
+    }
+  ]
 }

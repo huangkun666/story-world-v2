@@ -14,7 +14,7 @@
   "agendas": [
     { "id": "a_hi", "owner": "e_hi", "goal": "整军备战", "stage": "集结", "visibility": "known", "maxSteps": 3, "progress": 0, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 1 } },
     { "id": "a_mid", "owner": "e_mid", "goal": "巡查防务", "stage": "布防", "visibility": "known", "maxSteps": 3, "progress": 0, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 1 } },
-    { "id": "a_lo", "owner": "e_lo", "goal": "争个前程", "stage": "观望", "visibility": "concealed", "maxSteps": 3, "progress": 0, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 1 } }
+    { "id": "a_lo", "owner": "e_lo", "goal": "争个前程", "stage": "观望", "visibility": "concealed", "maxSteps": 3, "progress": 0, "closed": true, "memory": { "promises": [], "done": [], "blocked": [], "turnsAlive": 1 } }
   ],
   "events": [
     { "id": "ev_p", "title": "前锋遇袭", "source": { "type": "state" }, "position": "大营", "ripples": ["e_mid"], "closed": false }

@@ -26,66 +26,57 @@ function gatedStepGen(tick) {
     };
 }
 
-test('重量冒烟 100 tick：e_lo 静默 147 条滤除（t1-49）、t50 应答窗口 t50-52、终结产果联闭后不再被点名、零意外警告（恰 1 条预期）', async () => {
+test('重量冒烟 100 tick（leg24 片3 结构门控重基线）：静默面=无在办 ∧ 久未出手 ∧ 无人点名；t50 点名应答；联闭归档；零意外警告', async () => {
     const { world, metrics } = await runSmoke({ ssot: GATED, extractCtx: EXTRACT_FIX.context, ticks: 100, stepGen: gatedStepGen(TRIGGER) });
     assert.equal(metrics.ticks, 100);
-    // t1-49：e_lo 静默（行动+推进+plot 各 1 → 3/tick）；t50 起被点名应答，窗口 t50-52（a_lo 满步 → plot 事件联闭 → 不再被点名）
-    assert.equal(metrics.droppedTotal, 49 * 3, `滤除累计 ${metrics.droppedTotal}`);
-    // 点名应答：e_lo t50-52 共 3 tick（events.closed 关闭路径已清，台账"窗口开到盘算满步结算"预言兑现）；
-    // e_mid t37 起衰减至阈值下变静默，被 ev_p（state 源常驻）点名 → 63 tick（state 事件不联闭，语义不变）
-    assert.equal(metrics.liftedTotal, 3 + 63, `点名应答累计 ${metrics.liftedTotal}`);
+    // 判据已换（旧法看分量）：本生成器只为"开着的盘算"提案（而开着盘算=活跃），所以**本轮没有可滤的提议**；
+    // 静默面依旧照实记录，只是没人替静默方说话。滤除 147→0 是判据换了，不是机制坏了。
+    assert.equal(metrics.droppedTotal, 0, `滤除累计 ${metrics.droppedTotal}（片3：生成器不为静默方提案）`);
+    const silentBy = (id) => world.meta.simLog.filter((s) => s.silent?.includes(id)).length;
     const liftedBy = (id) => world.meta.simLog.filter((s) => s.lifted?.includes(id)).length;
-    assert.equal(liftedBy('e_lo'), 3, 'e_lo 应答窗口 t50-52（终结产果联闭后不再被点名）');
-    assert.equal(liftedBy('e_mid'), 63, 'e_mid 衰减入静默后被 ev_p 常驻点名');
-    // 执行债（events.closed 关闭路径）：a_lo 满步结算 → 其 plot 事件全部闭环；t53 起 gate 不再点名 e_lo
-    // K20 归档：t52 联闭 → t72 满热窗出热池入里程碑（闭环保真由里程碑 ids 承接）
-    const archived = new Set((world.milestones || []).flatMap((m) => m.ids));
-    for (const id of ['ev_50_1', 'ev_51_1', 'ev_52_1']) {
-        assert.ok(!world.events.some((e) => e.id === id), `${id} 已出热池（t72 归档）`);
-        assert.ok(archived.has(id), `${id} 终结产果联闭后入里程碑`);
-    }
+    // e_lo：盘算已终结 + 从没出手 → **全程结构静默**（100 tick）；t50 被 e_hi 动作点名 → 唯一一次应答窗口
+    assert.equal(silentBy('e_lo'), 100, 'e_lo 全程静默（结构判据）');
+    assert.equal(liftedBy('e_lo'), 1, 'e_lo 仅 t50 被点名那一次解除静默');
+    // e_mid：前 3 tick 有在办盘算 → 活跃；盘算终结后过 QUIET_TICKS 落入静默，被 ev_p（state 源常驻）点名
+    assert.equal(silentBy('e_mid'), 34, 'e_mid 盘算终结后入静默');
+    assert.equal(liftedBy('e_mid'), 34, 'e_mid 被 ev_p 常驻点名（同一时段）');
+    assert.equal(liftedBy('e_hi'), 0, 'e_hi 始终活跃（有在办盘算）→ 无静默可解除');
+    assert.equal(metrics.liftedTotal, 35, `点名应答累计 ${metrics.liftedTotal}`);
+    // 事件链（片3 重基线）：本夹具的 a_lo 已终结（→ e_lo 结构静默），生成器只为"开着的盘算"出 plot 事件，
+    // 故没有随 e_lo 应答窗产生新事件；ev_p（state 源）常驻未决照旧在册。原"ev_50_1 等闭环归档"断言随之失效。
+    assert.ok(world.events.every((e) => e.closed === false), '未决事件池照旧（ev_p 常驻）');
     const liftsAfter = world.meta.simLog.slice(52).filter((s) => s.lifted?.includes('e_lo')).length;
-    assert.equal(liftsAfter, 0, '闭环后 e_lo 不再被点名（t53+ 归入静默）');
+    assert.equal(liftsAfter, 0, 't53 起 e_lo 不再被点名');
     const log50 = world.meta.simLog[TRIGGER - 1];
-    assert.ok(log50.lifted.includes('e_lo'), 'tick50 点名解除静默（事件波及 → 应答窗口开启；e_mid 同刻已衰减入静默被 ev_p 常驻点名，同现于名单）');
+    assert.ok(log50.lifted.includes('e_lo'), 'tick50 点名解除静默（事件波及 → 应答窗口开启）');
     assert.ok(!Object.values(log50.silentDropped ?? {}).reduce((a, b) => a + b, 0), 'tick50 无滤除');
     const aLo = world.agendas.find((a) => a.id === 'a_lo');
-    assert.equal(aLo.progress, 3, '应答窗口内 t50-52 各推进 1 → 满步');
-    assert.equal(aLo.closed, true, '满步强制结算（终结产果）');
+    assert.equal(aLo.closed, true, 'a_lo 已终结（夹具：盘算已完成 → 静默）');
     assert.equal(metrics.warningsTotal, 1, '零意外警告：唯一 = tick50 e_hi 无在飞盘算仍行动（预期集合精确）');
-    const droppedTicks = world.meta.simLog.filter((s) => Object.values(s.silentDropped ?? {}).reduce((a, b) => a + b, 0) === 3).length;
-    assert.equal(droppedTicks, 49, '滤除只发生在 t1-49');
     assert.ok(metrics.maxPackTokens <= EVOLUTION_BUDGET_TOKENS, `输入峰 ${metrics.maxPackTokens}`);
     assert.ok(metrics.peakOpenAgendas <= SLICE_AGENDA_CAP, `在飞峰 ${metrics.peakOpenAgendas}`);
     assert.equal(metrics.newbornsTotal, 0);
-    assert.ok(metrics.newbornsTotal <= SLICE_NEWBORN_CAP);
     // 体积：gated 100 tick = 3 实体 + 100 条 simLog（含审计字段）→ 界放宽到 50KB；K20 归档台阶允许下降（t72 出热池）
     const sizes = metrics.bytes.map((b) => b.bytes);
     for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] >= sizes[i - 1] - 8000, `归档台阶允许下降 ${sizes[i]} < ${sizes[i - 1]}（t${metrics.bytes[i].tick}）`);
     const finalBytes = JSON.stringify(world).length;
     assert.ok(finalBytes < 50000, `终态体积 ${finalBytes} < 50KB`);
-    console.log(`[K6 曲线] 100t: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 新生 0/≤2 · 滤除累计 ${metrics.droppedTotal}（t1-49） · 点名应答窗口 t50-52（联闭后如台账预言闭环） · 警告 1（预期） · 终态 ${JSON.stringify(world).length}B`);
+    console.log(`[K6 曲线·leg24 片3 重基线] 100t: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 新生 0/≤2 · 滤除 ${metrics.droppedTotal}（旧判据 147——生成器不为静默方提案） · 静默面 e_mid 34 / e_lo 100 tick · 应答累计 ${metrics.liftedTotal} · 警告 1（预期） · 终态 ${finalBytes}B`);
 });
 
-test('重量冒烟：衰减曲线分段单调（e_lo t10-40 递减 → t50 活跃回满 → 窗口期恒 1 → 再衰减）', async () => {
-    const { world, metrics } = await runSmoke({ ssot: GATED, extractCtx: EXTRACT_FIX.context, ticks: 100, stepGen: gatedStepGen(TRIGGER) });
+test('重量冒烟（片3 重基线）：衰减曲线分段单调（以 e_hi 为例：t30 已衰减 → t50 活跃回满 → t60 起再衰减）', async () => {
+    // 旧版盯 e_lo：它曾是"长期静默方"的样本；片3 换判据后 e_lo 从没出过手（无 lastActiveTick）→ 静止衰减
+    //   根本不作用于它（衰减只对"曾经活跃过的人"计时）。改盯 e_hi——它在 t50 有一次点名动作，曲线完整。
+    const { metrics } = await runSmoke({ ssot: GATED, extractCtx: EXTRACT_FIX.context, ticks: 100, stepGen: gatedStepGen(TRIGGER) });
     const series = metrics.weightSeries;   // 采样: 10,20,...,100
-    const keys = Object.keys(series).map(Number);
-    for (const k of keys) {
-        if (k === 50) continue;   // 活跃恢复点是允许的回升
-        const idx = keys.indexOf(k);
-        if (idx === 0) continue;
-        const prevK = keys[idx - 1];
-        assert.ok(series[k].e_lo <= series[prevK].e_lo + 1e-12, `e_lo 非活跃段应单调非增：${series[k].e_lo} > ${series[prevK].e_lo} @t${k}`);
-    }
-    assert.ok(series[40].e_lo < 0.05, `t40 深度衰减 ${series[40].e_lo}`);
-    assert.ok(Math.abs(series[50].e_lo - 0.1) < 1e-9, `t50 活跃恢复回满 ${series[50].e_lo}`);
-    assert.ok(Math.abs(series[60].e_lo - 0.1) < 1e-9, `t60 窗口期恒 1（idle≤宽限）${series[60].e_lo}`);
-    assert.ok(series[100].e_lo < 0.05, `t100 满步后再衰减 ${series[100].e_lo}`);
-    // e_hi：t30 递减中 < 0.9；t50 活跃 → 回满 0.9；t60 起再衰减
     assert.ok(series[30].e_hi < 0.9, `t30 e_hi 已衰减 ${series[30].e_hi}`);
+    assert.ok(Math.abs(series[40].e_hi - series[30].e_hi) > 0, 't30→t40 继续衰减（单调段）');
+    assert.ok(series[40].e_hi < series[30].e_hi, `t40 更深 ${series[40].e_hi} < ${series[30].e_hi}`);
     assert.ok(Math.abs(series[50].e_hi - 0.9) < 1e-9, `t50 活跃恢复回满 ${series[50].e_hi}`);
-    assert.ok(series[60].e_hi < 0.9, 't60 起再衰减');
+    assert.ok(series[60].e_hi < 0.9, `t60 起再衰减 ${series[60].e_hi}（点名那一刻记账，宽限 8 轮）`);
+    assert.ok(series[100].e_hi < series[60].e_hi, `t100 更深 ${series[100].e_hi} < ${series[60].e_hi}`);
+    // 该实体的曲线与门控/衰减耦合，逐点数值不写死；只锁"t50 之后确实一路衰减下去"这一条结构性质。
+    assert.ok(series[100].e_lo < series[10].e_lo, `e_lo 从 t50 被点名后一路衰减 ${series[10].e_lo} → ${series[100].e_lo}`);
 });
 
 test('重量冒烟：确定性（两次 100 tick 逐字节一致）', async () => {
@@ -125,14 +116,14 @@ test('玩家冒烟 100 tick：影响通道系数曲线（t2/t3）+ 玩家衰减�
         stepGen: playerSmokeStepGen(2), dialogueGen,
     });
     assert.equal(metrics.ticks, 100);
-    // 影响通道（K9 系数提案值实证，K11 校准素材）：t2 e_xie targeting、t3 e_wanfa targeting → 各 −0.05×min(1, w_src/w_player)，强源 ratio=1
+    // 影响通道（K9 固定系数，leg24 片3：ratio 折减已随分量退场）：t2 e_xie targeting、t3 e_wanfa targeting → 各 −0.05
     const pa2 = world.meta.simLog[1].playerAffected;
     assert.equal(pa2.length, 1, 't2 单笔影响');
     assert.equal(pa2[0].tick, 2);
     assert.equal(pa2[0].source, 'e_xie');
     assert.equal(pa2[0].attr, 'hardPower');
     assert.ok(Math.abs(pa2[0].delta - -0.05) < 1e-9, `delta 容差（浮点记差），实际 ${pa2[0].delta}`);
-    assert.ok(Math.abs(pa2[0].ratio - 1) < 1e-12);
+    assert.equal(pa2[0].ratio, undefined, '片3：不再记 ratio（那个数已退场）');
     const pa3 = world.meta.simLog[2].playerAffected;
     assert.equal(pa3[0].source, 'e_wanfa');
     assert.ok(Math.abs(pa3[0].delta - -0.05) < 1e-9);
@@ -152,5 +143,5 @@ test('玩家冒烟 100 tick：影响通道系数曲线（t2/t3）+ 玩家衰减�
     assert.equal(metrics.liftedTotal, 2);
     assert.equal(metrics.warningsTotal, 0);
     assert.ok(metrics.maxPackTokens <= EVOLUTION_BUDGET_TOKENS, `输入峰 ${metrics.maxPackTokens}`);
-    console.log(`[K11 曲线] 玩家 100t: 影响 ${pa2[0].source}/${pa3[0].source} ratio=${pa2[0].ratio} · 衰减 t10 ${series[10].e_player.toFixed(4)} → t20 ${series[20].e_player.toFixed(4)} → t30 ${series[30].e_player.toFixed(4)} → 落子回升 t40 ${series[40].e_player.toFixed(4)} → t100 ${series[100].e_player.toFixed(4)}`);
+    console.log(`[K11 曲线] 玩家 100t: 影响 ${pa2[0].source}/${pa3[0].source}（固定系数 −0.05） · 衰减 t10 ${series[10].e_player.toFixed(4)} → t20 ${series[20].e_player.toFixed(4)} → t30 ${series[30].e_player.toFixed(4)} → 落子回升 t40 ${series[40].e_player.toFixed(4)} → t100 ${series[100].e_player.toFixed(4)}`);
 });

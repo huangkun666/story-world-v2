@@ -274,13 +274,15 @@ export const ssotSchema = {
                                 items: {
                                     kind: 'object',
                                     additional: false,
-                                    required: ['tick', 'source', 'attr', 'delta', 'ratio'],
+                                    // leg24 片3：`ratio` 由必填改**可选**——它记的是"分量比折减系数"，
+                                    //   那个数已随"引擎不裁胜负"退场；旧账里的历史条目仍有该键（照旧合法=零扰动）。
+                                    required: ['tick', 'source', 'attr', 'delta'],
                                     props: {
                                         tick: { kind: 'number', int: true, min: 0 },
                                         source: { kind: 'string', minLength: 1 },
                                         attr: { kind: 'string', minLength: 1 },
                                         delta: { kind: 'number' },
-                                        ratio: { kind: 'number' },
+                                        ratio: { kind: 'number' },   // 旧账遗留（新条目不再写）
                                     },
                                 },
                             },

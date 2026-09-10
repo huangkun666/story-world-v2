@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     settleTick, ENTITY_BIRTH_PER_TICK, ENTITY_IDLE_RETIRE_TICKS,
-    RETIRE_WEIGHT_FLOOR, ENTITY_GC_SCAN_TICKS,
+    ENTITY_GC_SCAN_TICKS,
 } from '../src/settle.js';
 import { checkWorldStep } from '../src/check-step.js';
 import { gateWorldStep } from '../src/gate.js';
@@ -19,7 +19,7 @@ import { seedBookEntities, sanitizeCanon } from '../src/abstract.js';
 
 assert.equal(ENTITY_BIRTH_PER_TICK, 1, '单轮新生 ≤1（提案）');
 assert.equal(ENTITY_IDLE_RETIRE_TICKS, 20, '空闲 20 轮（提案）');
-assert.equal(RETIRE_WEIGHT_FLOOR, 0.05, '影响力 <0.05（提案；leg24 片2 实测证伪了"提前摘掉它"，本片撤回不动）');
+// leg24 片3：RETIRE_WEIGHT_FLOOR 已删——退休判据不再吃那个 0-1 的分数（改"久未露面 + 无在办 + 无未决引用"）
 assert.equal(ENTITY_GC_SCAN_TICKS, 20, '扫描 20 轮（提案）');
 
 function baseWorld(extra = {}) {
@@ -106,8 +106,10 @@ test('A-10 生·dialogueFact 源：依据册命中才放行；依据册随落子
     // 依据册里没有的名字 → 拒
     const r2 = checkWorldStep(step({ newEntities: [{ name: '无名氏', location: '大营', entity: 'e_du', source: { type: 'dialogueFact', ref: '无名氏' } }] }), r0.ssot);
     assert.ok(!r2.ok && r2.errors.some((e) => e.includes('对话依据册')));
-    // 入局（提议者 e_du——r0 重算后 e_merchant 已低于静默阈值，静默方提议双面无痕，改用活跃提议者）
-    const r3 = settleTick({ ssot: r0.ssot, step: step({ newEntities: [{ name: '船娘', location: '大营', entity: 'e_du', source: { type: 'dialogueFact', ref: '船娘' } }] }) });
+    // 入局（提议者 e_du）：leg24 片3 起静默判据=结构三条件，提议方须"刚出过手"才不算静默（旧法看分量）
+    const w3 = structuredClone(r0.ssot);
+    w3.entities.find((e) => e.id === 'e_du').lastActiveTick = 0;
+    const r3 = settleTick({ ssot: w3, step: step({ newEntities: [{ name: '船娘', location: '大营', entity: 'e_du', source: { type: 'dialogueFact', ref: '船娘' } }] }) });
     assert.ok(r3.ok, r3.stage.warnings.join('; '));
     assert.ok(r3.stage.chronicle.some((c) => c.text.includes('「船娘」入局（屡被提及，声名鹊起）')));
 });

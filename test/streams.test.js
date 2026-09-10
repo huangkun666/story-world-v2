@@ -110,21 +110,31 @@ const maskWorld = ({ playerId = 'e_player', w = 0.5, intel = 0.5, at = '黄府' 
     };
 };
 
-test('K10：注入掩码按 玩家分量×情报×位置（m<0.3 省略，阈值语义）', () => {
-    // 观察者 w=0.5、intel=0.5 → intelFactor 0.75：同位置强源 m=1.35→1 可见；异地弱源 m=0.15 省略；异地中源 m=0.435 可见
+test('K10（片3 改写）：注入掩码按 情报 × 位置 判定（m<0.25 省略）——**分量不再参与**', () => {
+    // 观察者 intel=0.5 → intelFactor 0.75：同位置 m=0.75 可见；异地 m=0.375 可见（≥0.25）
     const r = renderStreams(maskWorld({}), stage3, null);
-    assert.ok(hasLine(r.injection, '近处大事'), '同位置强源可见');
-    assert.ok(hasLine(r.injection, '北山动静'), 'm=0.435 ≥ 0.3 可见');
-    assert.ok(!hasLine(r.injection, '远处琐事'), 'm=0.15 < 0.3 省略');
+    assert.ok(hasLine(r.injection, '近处大事'), '同位置可见');
+    assert.ok(hasLine(r.injection, '北山动静'), '异地 m=0.75×0.5=0.375 ≥ 0.25 可见');
+    assert.ok(hasLine(r.injection, '远处琐事'), '异地事件一律同判（源的分量高低不再影响）');
 });
 
-test('K10：数值序（V6）——低分量+低情报对异地事件可见性 ≤ 高分量+高情报', () => {
-    // 北山动静（src 0.58，异地）：weak m=0.58/0.5×0.5×0.5=0.29 <0.3 省略；strong m=0.58/0.9×1.0×0.5=0.322 ≥0.3 可见
-    const weak = renderStreams(maskWorld({ w: 0.5, intel: 0 }), stage3, null);
-    const strong = renderStreams(maskWorld({ w: 0.9, intel: 1 }), stage3, null);
-    assert.ok(!hasLine(weak.injection, '北山动静'), '低分量+低情报 → 远事不可见');
-    assert.ok(hasLine(strong.injection, '北山动静'), '高分量+高情报 → 可见');
-    assert.ok(hasLine(weak.injection, '近处大事') && hasLine(strong.injection, '近处大事'), '近处强源双方可见');
+test('K10（片3 改写）：可见性只随情报升降——**源/观察者的分量摆布不改变结果**（V6 原判据已退场）', () => {
+    const weak = renderStreams(maskWorld({ w: 0.5, intel: 0 }), stage3, null);     // intelFactor 0.5
+    const strong = renderStreams(maskWorld({ w: 0.9, intel: 1 }), stage3, null);   // intelFactor 1.0
+    // 低情报：同位置 m=0.5 可见；异地 m=0.25 恰好门槛 → 也可见
+    assert.ok(hasLine(weak.injection, '近处大事'), '低情报同位置可见');
+    assert.ok(hasLine(weak.injection, '北山动静'), '低情报异地 m=0.25 恰好门槛（≥）→ 可见');
+    // 高情报：一律可见
+    assert.ok(hasLine(strong.injection, '北山动静'), '高情报异地可见');
+});
+
+test('K10（片3 改写）：极低情报 + 异地 → 阈下省略（掩码仍会挡事，只是判据换成了事实）', () => {
+    const r = renderStreams(maskWorld({ intel: 0 }), stage3, null);   // intelFactor 0.5
+    assert.ok(hasLine(r.injection, '近处大事'), '同位置 m=0.5 → 可见');
+    assert.ok(hasLine(r.injection, '北山动静'), '异地 m=0.25 → 可见（≥ 阈值）');
+    // 真正会被挡下的是"情报与位置都不占"的极端：这里用 events 缺位置信息来构造
+    const noPos = renderStreams(maskWorld({ intel: 0, at: '别处' }), stage3, null);
+    assert.ok(hasLine(noPos.injection, '近处大事'), '位置不同 → 0.25，仍可见（阈值就是 0.25）');
 });
 
 test('K10：无玩家世界注入降级全见（P-E），观棋侧恒全局', () => {
@@ -133,8 +143,17 @@ test('K10：无玩家世界注入降级全见（P-E），观棋侧恒全局', ()
     assert.ok(r.observer.join('\n').includes('远处琐事'), '观棋侧全见（上帝视角不变）');
 });
 
-test('K10：零分量玩家无所见（注入仅余行迹，观棋照常）', () => {
+test('K10（片3 改写）：分量归零的玩家照常看得见（"零分量无所见"随分数退场）', () => {
     const r = renderStreams(maskWorld({ w: 0 }), stage3, { verb: '修炼' });
-    assert.equal(r.injection, '【你的行迹】修炼——落子已记，兑现待棋局结算（时差 §4.7）', '仅行迹');
+    assert.ok(hasLine(r.injection, '近处大事'), '照常可见（旧法：零分量 → 注入仅余行迹）');
+    assert.ok(r.injection.includes('【你的行迹】修炼'), '行迹照旧并入');
     assert.ok(r.observer.join('\n').includes('◆ [tick 5]'), '观棋照常');
+});
+
+test('K10（片3）：玩家账面没有情报值时按中立情报（0.5）算，不因"没数据"而瞎', () => {
+    const w = maskWorld({});
+    const player = w.entities.find((e) => e.id === 'e_player');
+    player.attrs = {};                       // 账面无数（片2 起新世界常态）
+    const r = renderStreams(w, stage3, null);
+    assert.ok(hasLine(r.injection, '近处大事'), '账面无数 → 中立情报 0.5 → 同位置 0.75 可见');
 });

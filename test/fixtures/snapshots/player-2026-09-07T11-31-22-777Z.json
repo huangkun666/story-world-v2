@@ -1,154 +1,144 @@
 {
- "name": "player-2026-09-07T11-31-22-777Z",
- "sourceWorld": "player-world.json",
- "meta": {
-  "era": "post"
- },
- "steps": [
-  {
-   "tick": 1,
-   "step": {
-    "actions": [
-     {
-      "entity": "e_xie",
-      "verb": "封锁谷口列阵",
-      "position": "大盘谷",
-      "note": "回应外围窥探并施加军威压力"
-     },
-     {
-      "entity": "e_dayu",
-      "verb": "派出使者催促答复",
-      "target": "e_player",
-      "position": "江州",
-      "note": "推进地契交割协议"
-     },
-     {
-      "entity": "e_wanfa",
-      "verb": "张贴悬赏招募散修",
-      "position": "北山",
-      "note": "集结探谷人手"
-     }
-    ],
-    "newEvents": [
-     {
-      "title": "大盘谷外煞气结阵",
-      "source": {
-       "type": "ripple",
-       "ref": "ev_0"
+  "name": "player-2026-09-07T11-31-22-777Z",
+  "sourceWorld": "player-world.json",
+  "meta": {
+    "era": "post"
+  },
+  "steps": [
+    {
+      "tick": 1,
+      "step": {
+        "actions": [
+          {
+            "entity": "e_xie",
+            "verb": "封锁谷口列阵",
+            "position": "大盘谷",
+            "note": "回应外围窥探并施加军威压力"
+          },
+          {
+            "entity": "e_dayu",
+            "verb": "派出使者催促答复",
+            "target": "e_player",
+            "position": "江州",
+            "note": "推进地契交割协议"
+          },
+          {
+            "entity": "e_wanfa",
+            "verb": "张贴悬赏招募散修",
+            "position": "北山",
+            "note": "集结探谷人手"
+          }
+        ],
+        "newEvents": [
+          {
+            "title": "大盘谷外煞气结阵",
+            "source": {
+              "type": "ripple",
+              "ref": "ev_0"
+            },
+            "position": "大盘谷",
+            "ripples": [
+              "e_xie",
+              "e_player"
+            ]
+          },
+          {
+            "title": "北山重金悬赏令",
+            "source": {
+              "type": "plot",
+              "ref": "a_wanfa"
+            },
+            "position": "北山",
+            "ripples": [
+              "e_wanfa"
+            ]
+          }
+        ],
+        "agendaAdvances": [
+          {
+            "agendaId": "a_xie",
+            "step": "前锋列阵封锁谷口，释放煞气",
+            "stage": "兵临城下"
+          },
+          {
+            "agendaId": "a_wanfa",
+            "step": "发布悬赏招募探路炮灰",
+            "stage": "人手筹备"
+          }
+        ],
+        "stateChanges": [
+          {
+            "entity": "e_xie",
+            "attr": "hardPower",
+            "delta": 0.1,
+            "cause": "a_xie"
+          },
+          {
+            "entity": "e_wanfa",
+            "attr": "network",
+            "delta": 0.1,
+            "cause": "a_wanfa"
+          }
+        ],
+        "newAgendas": [],
+        "agendaCancels": [],
+        "newEntities": [],
+        "entityFates": []
       },
-      "position": "大盘谷",
-      "ripples": [
-       "e_xie",
-       "e_player"
-      ]
-     },
-     {
-      "title": "北山重金悬赏令",
-      "source": {
-       "type": "plot",
-       "ref": "a_wanfa"
+      "moveFact": {
+        "verb": "探查",
+        "object": "薛铁衣",
+        "location": "大盘谷",
+        "attempt": true,
+        "note": null,
+        "dropped": []
       },
-      "position": "北山",
-      "ripples": [
-       "e_wanfa"
-      ]
-     }
-    ],
-    "agendaAdvances": [
-     {
-      "agendaId": "a_xie",
-      "step": "前锋列阵封锁谷口，释放煞气",
-      "stage": "兵临城下"
-     },
-     {
-      "agendaId": "a_wanfa",
-      "step": "发布悬赏招募探路炮灰",
-      "stage": "人手筹备"
-     }
-    ],
-    "stateChanges": [
-     {
-      "entity": "e_xie",
-      "attr": "hardPower",
-      "delta": 0.1,
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "network",
-      "delta": 0.1,
-      "cause": "a_wanfa"
-     }
-    ],
-    "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
-   },
-   "moveFact": {
-    "verb": "探查",
-    "object": "薛铁衣",
-    "location": "大盘谷",
-    "attempt": true,
-    "note": null,
-    "dropped": []
-   },
-   "world": null,
-   "expect": {
-    "warnings": [],
-    "gate": {
-     "silent": [
-      "e_player"
-     ],
-     "lifted": [
-      "e_player"
-     ]
-    },
-    "player": {
-     "weight": 0.20145000000000002,
-     "attrs": {
-      "hardPower": 0.18000000000000002,
-      "office": 0.030000000000000002,
-      "network": 0.27999999999999997,
-      "intel": 0.38
-     },
-     "affected": [
-      {
-       "tick": 1,
-       "source": "e_dayu",
-       "attr": "hardPower",
-       "delta": -0.04999999999999999,
-       "ratio": 1
-      },
-      {
-       "tick": 1,
-       "source": "world",
-       "attr": "hardPower",
-       "delta": -0.01999999999999999,
-       "ratio": 1
-      },
-      {
-       "tick": 1,
-       "source": "world",
-       "attr": "office",
-       "delta": -0.02,
-       "ratio": 1
-      },
-      {
-       "tick": 1,
-       "source": "world",
-       "attr": "network",
-       "delta": -0.020000000000000018,
-       "ratio": 1
-      },
-      {
-       "tick": 1,
-       "source": "world",
-       "attr": "intel",
-       "delta": -0.020000000000000018,
-       "ratio": 1
+      "world": null,
+      "expect": {
+        "warnings": [],
+        "gate": {
+          "silent": [
+            "e_player"
+          ],
+          "lifted": [
+            "e_player"
+          ]
+        },
+        "player": {
+          "affected": [
+            {
+              "tick": 1,
+              "source": "e_dayu",
+              "attr": "hardPower",
+              "delta": -0.04999999999999999
+            },
+            {
+              "tick": 1,
+              "source": "world",
+              "attr": "hardPower",
+              "delta": -0.01999999999999999
+            },
+            {
+              "tick": 1,
+              "source": "world",
+              "attr": "office",
+              "delta": -0.02
+            },
+            {
+              "tick": 1,
+              "source": "world",
+              "attr": "network",
+              "delta": -0.020000000000000018
+            },
+            {
+              "tick": 1,
+              "source": "world",
+              "attr": "intel",
+              "delta": -0.020000000000000018
+            }
+          ]
+        }
       }
-     ]
     }
-   }
-  }
- ]
+  ]
 }

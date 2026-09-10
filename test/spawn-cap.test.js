@@ -75,8 +75,13 @@ test('K45: 无池顶——批次 300 实体全量 seed 后仍可自由入局（s
     assert.equal(rSeed.seeded, 300);                       // 300 全量（2 基础名已在册不计）
     assert.equal(w.entities.length, 302);
     assert.equal(new Set(w.entities.map((e) => e.id)).size, 302, 'id 全部唯一（K45 防冲突）');
-    assert.equal(Object.keys(w.weights).length, 302, '权重预填全覆盖');
+    assert.equal(Object.keys(w.weights).length, 302, '分量缓存全覆盖（值来自中立 floor——账面不预填数值）');
+    // 既有夹具里的 e_bk_* 是手摆的旧形态；新 seed 出来的名号 id 顺延（e_bk_3 起）——只查新增的那些
+    for (const e of w.entities.filter((x) => x.id.startsWith('e_bk_') && Number(x.id.slice(5)) > 2)) {
+        assert.deepEqual(e.attrs, {}, `leg24 片2：名册入账不预填数值（${e.name}）`);
+    }
     w.events = [{ id: 'ev_a', title: '甲事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }];
+    w.entities.find((e) => e.id === 'e_bk_2').lastActiveTick = 0;   // leg24 片3：提议方须"刚出过手"才不算结构静默
     const r = settleTick({
         ssot: w,
         step: zeroStep({ newEntities: [{ name: '第303个', kind: 'character', location: '大营', entity: 'e_bk_2', source: { type: 'event', ref: 'ev_a' } }] }),

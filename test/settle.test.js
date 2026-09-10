@@ -193,26 +193,25 @@ const targetStep = (target) => ({
     newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
-test('K9：玩家被 targeting（强源）→ 影响通道全量落账 + simLog 审计', () => {
+test('K9（片3 改写）：玩家被 targeting → 影响通道按**固定系数**落账 + simLog 审计（不再按分量比折减）', () => {
     const r = settleTick({ ssot: pwWorld({ e_xie: 0.9, e_player: 0.2397 }), step: targetStep('e_player') });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const hp = r.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower;
-    assert.ok(Math.abs(hp - 0.2) < 1e-12, `0.25 − 0.05×min(1, 0.9/0.2397) = 0.20，实际 ${hp}`);
+    assert.ok(Math.abs(hp - 0.2) < 1e-12, `0.25 − 0.05 = 0.20，实际 ${hp}`);
     const pa = r.ssot.meta.simLog[0].playerAffected;
     assert.equal(pa.length, 1);
     assert.equal(pa[0].tick, 1);
     assert.equal(pa[0].source, 'e_xie');
     assert.equal(pa[0].attr, 'hardPower');
     assert.ok(Math.abs(pa[0].delta - -0.05) < 1e-9, `delta 容差，实际 ${pa[0].delta}`);
-    assert.ok(Math.abs(pa[0].ratio - 1) < 1e-12);
+    assert.equal(pa[0].ratio, undefined, 'ratio 字段随分量退场（审计不再记那个数）');
 });
 
-test('K9：弱源 targeting 强玩家 → 分量比折减（ratio 精确）', () => {
-    const r = settleTick({ ssot: pwWorld({ e_xie: 0.1, e_player: 0.8 }), step: targetStep('e_player') });
-    assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    const hp = r.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower;
-    assert.ok(Math.abs(hp - (0.25 - 0.05 * 0.1 / 0.8)) < 1e-9, `0.25 − 0.05×(0.1/0.8) = 0.24375，实际 ${hp}`);
-    assert.ok(Math.abs(r.ssot.meta.simLog[0].playerAffected[0].ratio - 0.125) < 1e-12);
+test('K9（片3 改写）：源的分量高低不再改变影响幅度——弱源打强玩家也照章扣', () => {
+    const weak = settleTick({ ssot: pwWorld({ e_xie: 0.1, e_player: 0.8 }), step: targetStep('e_player') });
+    assert.equal(weak.ok, true, weak.stage.warnings.join('; '));
+    const hp = weak.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower;
+    assert.ok(Math.abs(hp - 0.2) < 1e-12, `旧法 0.25 − 0.05×(0.1/0.8) = 0.24375；现法固定系数 → 0.20，实际 ${hp}`);
 });
 
 test('K9：事件波及玩家（plot 源）→ 各 attrs 受影响 + 审计四笔', () => {
@@ -230,10 +229,10 @@ test('K9：事件波及玩家（plot 源）→ 各 attrs 受影响 + 审计四�
     assert.ok(Math.abs(p.attrs.intel - 0.38) < 1e-12, 'intel −0.02');
     const pa = r.ssot.meta.simLog[0].playerAffected;
     assert.equal(pa.length, 4);
-    assert.ok(pa.every((x) => Math.abs(x.delta - -0.02) < 1e-9 && Math.abs(x.ratio - 1) < 1e-12), JSON.stringify(pa));
+    assert.ok(pa.every((x) => Math.abs(x.delta - -0.02) < 1e-9), JSON.stringify(pa));
 });
 
-test('K9：state 源波及 → 世界大势常量（w_src=1.0 提案）', () => {
+test('K9：state 源波及 → 世界大势常量（source=world）', () => {
     const step = {
         actions: [],
         newEvents: [{ title: '天雷动', source: { type: 'state' }, position: '黄府', ripples: ['e_player'] }],
@@ -242,11 +241,11 @@ test('K9：state 源波及 → 世界大势常量（w_src=1.0 提案）', () => 
     const r = settleTick({ ssot: pwWorld({ e_player: 0.2397 }), step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const hp = r.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower;
-    assert.ok(Math.abs(hp - 0.23) < 1e-12, '世界大势 ratio=1 → −0.02');
+    assert.ok(Math.abs(hp - 0.23) < 1e-12, '世界大势 → −0.02');
     assert.equal(r.ssot.meta.simLog[0].playerAffected[0].source, 'world');
 });
 
-test('K9：ripple 波及沿链上溯到 plot 属主分量', () => {
+test('K9：ripple 波及沿链上溯到 plot 属主（来源归属不变）', () => {
     const w = pwWorld({ e_xie: 0.9, e_player: 0.2397 });
     w.events.push({ id: 'ev_up', title: '兵变', source: { type: 'plot', ref: 'a_xie' }, position: '大盘谷', ripples: [], links: { up: [], down: [] }, closed: false });
     const step = {
@@ -257,15 +256,15 @@ test('K9：ripple 波及沿链上溯到 plot 属主分量', () => {
     const r = settleTick({ ssot: w, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const hp = r.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower;
-    assert.ok(Math.abs(hp - 0.23) < 1e-12, '上溯到 e_xie（0.9）→ ratio 1');
+    assert.ok(Math.abs(hp - 0.23) < 1e-12, '上溯到 e_xie → 扣 0.02');
     assert.equal(r.ssot.meta.simLog[0].playerAffected[0].source, 'e_xie');
 });
 
-test('K9：零分量玩家不被点名影响（与掩码"零分量无所见"对偶）', () => {
+test('K9（片3 改写）：分量归零的玩家照常被点名影响（"零分量无所见/不受影响"的对偶已随分数退场）', () => {
     const r = settleTick({ ssot: pwWorld({ e_xie: 0.9, e_player: 0 }), step: targetStep('e_player') });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    assert.equal(r.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower, 0.25, '分毫未动');
-    assert.equal(r.ssot.meta.simLog[0].playerAffected, undefined);
+    assert.ok(Math.abs(r.ssot.entities.find((e) => e.id === 'e_player').attrs.hardPower - 0.2) < 1e-12, '照章扣 0.05');
+    assert.equal(r.ssot.meta.simLog[0].playerAffected.length, 1, '审计照记');
 });
 
 test('K9：影响通道后世界过 SSOT schema（playerAffected 审计合法）', () => {

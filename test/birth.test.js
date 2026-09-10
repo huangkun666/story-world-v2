@@ -2,7 +2,9 @@
 // K14 验收（盘算树细案 §3.2/§3.3/§4 K14 → A-2/A-3/A-4/A-5）：出生裁判——静默滤除（gate 联动）、
 // GC 上限（每 tick ≤2 / 在飞 ≤15 / 顶层 ≤5 超限拒建）、挂因落账+编年（处境/因事/委派）、父 promises 写
 // （A-5 前半）、环检测自动拆（防御性：blocked 写 + 编年留痕）、子达成兑现落痕（A-5 后半）。
-// 夹具：tree-world.json（分量差三实体 0.9/0.6/0.2 + 父盘算在飞 + 双子在飞 + 未决事件可挂因，细案 §5）。
+// 夹具：tree-world.json（三实体 + 父盘算在飞 + 双子在飞 + 未决事件可挂因，细案 §5）。
+// leg24 片3：静默判据已改为**结构三条件**（无在办盘算 ∧ 久未出手 ∧ 无人点名）——
+//   夹具里 e_min 有在飞盘算 → 它现在是**活跃**的；要测"静默方提议被滤"，先把它变成静默（清 lastActiveTick + 盘算终结）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,18 +18,27 @@ const TREE = JSON.parse(readFileSync(new URL('./fixtures/tree-world.json', impor
 
 const na = (entity, goal, source, extra = {}) => ({ entity, goal, visibility: 'known', source, ...extra });
 const emptyStep = (newAgendas) => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas, agendaCancels: [], newEntities: [], entityFates: [] });
+// 片3 辅助：把某实体调成"结构静默"（无在办盘算 + 从没出手）
+function makeQuiet(world, id) {
+    const w = structuredClone(world);
+    for (const a of w.agendas) if (a.owner === id) a.closed = true;
+    const e = w.entities.find((x) => x.id === id);
+    if (e) delete e.lastActiveTick;
+    return w;
+}
 
-test('K14/A-2：静默方提议被 gate 滤除（双面无痕：不落账、不编年、simLog 审计计数）', () => {
-    const r = settleTick({ ssot: TREE, step: emptyStep([na('e_min', '夺旗', { type: 'state' })]) });
+test('K14/A-2（片3）：静默方提议被 gate 滤除（双面无痕：不落账、不编年、simLog 审计计数）', () => {
+    const quiet = makeQuiet(TREE, 'e_min');
+    const r = settleTick({ ssot: quiet, step: emptyStep([na('e_min', '夺旗', { type: 'state' })]) });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    assert.deepEqual(r.ssot.meta.simLog[0].silent, ['e_min']);
-    assert.deepEqual(r.ssot.meta.simLog[0].silentDropped, { e_min: 1 }, 'newAgendas 滤除计入审计');
-    assert.equal(r.ssot.agendas.length, 3, '不落账');
+    assert.deepEqual(r.ssot.meta.simLog[0].silent.includes('e_min'), true, '结构静默（无在办 + 久未出手）');
+    assert.equal(r.ssot.meta.simLog[0].silentDropped.e_min, 1, 'newAgendas 滤除计入审计');
+    assert.ok(!r.ssot.agendas.some((a) => a.goal === '夺旗'), '不落账');
     assert.ok(!r.ssot.chronicle.some((c) => c.text.includes('由处境而生')), '不编年');
 });
 
-test('K14/A-2：被点名应答方（lifted）可以提议——gate 透传 + settle 落账', () => {
-    const world = structuredClone(TREE);
+test('K14/A-2（片3）：被点名应答方（lifted）可以提议——gate 透传 + settle 落账', () => {
+    const world = makeQuiet(TREE, 'e_min');
     world.events[0].ripples = ['e_min'];
     const step = emptyStep([na('e_min', '夺旗', { type: 'state' })]);
     const g = gateWorldStep(step, world);

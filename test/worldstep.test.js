@@ -256,15 +256,17 @@ test('K18：合法取消提议通过（在飞盘算 + 理由可选）；静默�
     const r = checkWorldStep(s, GOLDEN);
     assert.equal(r.ok, true, r.errors.join('; '));
 
-    // 静默方（低分量 + 无点名）的取消提议 → gate 滤除 + droppedCounts 审计（裁决留 K22，滤除即契约面）
+    // 静默方（**结构静默**：手上没有在办的盘算 + 从没出手 + 无人点名）的取消提议 → gate 滤除 + 审计
+    // leg24 片3：判据换了，构造也跟着换——旧夹具的 e_silent 手上有在飞盘算（旧法因低分量静默；
+    //   新法"有在办的事"=活跃）。且**它必须先有过一条盘算才谈得上取消**：用一条已终结的盘算承载取消提议。
     const w = structuredClone(GOLDEN);
     w.entities.push({ id: 'e_silent', kind: 'character', name: '无名客', location: '临渊城', attrs: { hardPower: 0.1, office: 0.1, network: 0.1, intel: 0.1 } });
-    w.agendas.push({ id: 'a_silent', owner: 'e_silent', goal: '暗务', stage: '谋划', visibility: 'concealed', maxSteps: 4, progress: 1, memory: { promises: [], done: [], blocked: [], turnsAlive: 1 } });
+    w.agendas.push({ id: 'a_dead', owner: 'e_silent', goal: '旧暗务', stage: '了结', visibility: 'concealed', maxSteps: 4, progress: 4, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 3 } });
     w.weights = { e_merchant: 0.9, e_silent: 0.1 };
     const silentStep = validStep();
-    silentStep.agendaCancels = [{ agendaId: 'a_silent' }];
+    silentStep.agendaCancels = [{ agendaId: 'a_dead' }];
     const g = gateWorldStep(silentStep, w);
-    assert.deepEqual(g.dropped.agendaCancels, ['e_silent'], '静默方取消提议被滤（与出生对称，双面无痕）');
+    assert.deepEqual(g.dropped.agendaCancels, ['e_silent'], '结构静默方的取消提议被滤（与出生对称，双面无痕）');
     assert.deepEqual(g.droppedCounts, { e_silent: 1 }, '审计计数');
     assert.equal(g.step.agendaCancels.length, 0, '透传步不含被滤提议');
 });

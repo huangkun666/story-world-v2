@@ -30,10 +30,10 @@ test('K44: 全量入镜——现规模（350 实体）全部进入且 ≤ 镜头
     assert.equal(p.pack.entities.length, 350);
 });
 
-test('K44: 保送优先——落子对象/未决波及/在飞属主/近 2 tick 活跃 置顶（即使低分量）', () => {
+test('K44（片3 改写）: 保送优先——落子对象/未决波及/在飞属主/近 2 tick 活跃 置顶（判据已不看分量）', () => {
     const entities = [
-        ent('e_hi', '高分量者', 'character', { attrs: { hardPower: 0.9, network: 0.5, intel: 0.5, office: 0.5 } }),
-        ent('e_lo', '低分量者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
+        ent('e_hi', '高分者', 'character', { attrs: { hardPower: 0.9, network: 0.5, intel: 0.5, office: 0.5 } }),
+        ent('e_lo', '低分者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
         ent('e_wave', '被波及者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
         ent('e_owner', '有盘算者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
         ent('e_act', '近活跃者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 }, lastActiveTick: 9 }),
@@ -45,25 +45,31 @@ test('K44: 保送优先——落子对象/未决波及/在飞属主/近 2 tick �
         events: [{ id: 'ev_1', title: '波及', ripples: ['e_wave'], closed: false }],
         agendas: [{ id: 'a_1', owner: 'e_owner', goal: '谋划', closed: false }],
         tick: 10,
-        moveFact: { verb: '拜会', object: '低分量者' },
+        moveFact: { verb: '拜会', object: '低分者' },
     });
     const lens = lensList(w, { moveFact: w.moveFact });
     const names = lens.map((x) => x.e.name);
-    const boosted = ['低分量者', '被波及者', '有盘算者', '近活跃者'];
-    assert.deepEqual([...names.slice(0, 4)].sort(), [...boosted].sort(), '前 4 位恰为保送四人（低分量也置顶）');
-    assert.ok(boosted.every((n) => names.indexOf(n) < names.indexOf('高分量者')), '非保送的高分量者不得抢顶');
-    assert.ok(names.indexOf('久未动者') > names.indexOf('高分量者'), '非保送段按分量降序');
+    const boosted = ['低分者', '被波及者', '有盘算者', '近活跃者'];
+    assert.deepEqual([...names.slice(0, 4)].sort(), [...boosted].sort(), '前 4 位恰为保送/在办/近期出手者（分量高低不影响）');
+    assert.ok(boosted.every((n) => names.indexOf(n) < names.indexOf('久未动者')), '久未出手者排在后面');
 });
 
-test('K44: 分量降序（非保送段）与确定性逐字节', () => {
+test('K44（片3 改写）: 非保送段=确定性结构序（在办盘算 → 近期出手 → 其余 id 序），零分量参与', () => {
     const entities = [ent('e_a', '甲', 'character'), ent('e_b', '乙', 'character'), ent('e_c', '丙', 'character')];
-    const weights = { e_a: 0.2, e_b: 0.8, e_c: 0.5 };
+    // 故意给"甲"最高分量：旧法它会排第一；新法按 id 序 → 甲/乙/丙
+    const weights = { e_a: 0.99, e_b: 0.2, e_c: 0.5 };
     const w = mkWorld({ entities, weights });
     const lens = lensList(w);
-    assert.deepEqual(lens.map((x) => x.e.name), ['乙', '丙', '甲']);
+    assert.deepEqual(lens.map((x) => x.e.name), ['甲', '乙', '丙'], '第④段按 id 序（分量不参与）');
+    // 有在办盘算者排到第②段最前（即使 id 靠后）
+    const w2 = mkWorld({ entities, weights, agendas: [{ id: 'a_1', owner: 'e_c', goal: '谋划', closed: false }] });
+    assert.equal(lensList(w2)[0].e.name, '丙', '第②段优先于 id 序');
+    // 近期出手者排第③段（先于"其余"）
+    const w3 = mkWorld({ entities: [ent('e_a', '甲', 'character'), ent('e_b', '乙', 'character', { lastActiveTick: 9 })], weights, tick: 10 });
+    assert.deepEqual(lensList(w3).map((x) => x.e.name), ['乙', '甲'], '第③段优先于第④段');
     const p1 = buildEvolutionPack(w, null);
     const p2 = buildEvolutionPack(w, null);
-    assert.equal(JSON.stringify(p1.pack), JSON.stringify(p2.pack));
+    assert.equal(JSON.stringify(p1.pack), JSON.stringify(p2.pack), '确定性逐字节');
 });
 
 test('K44: 镜头预算截断机制——小预算只留前缀（首名保底，空镜防御）', () => {

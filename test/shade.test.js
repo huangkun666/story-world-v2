@@ -8,12 +8,14 @@ import { settleTick } from '../src/settle.js';
 import { renderStreams } from '../src/streams.js';
 
 // 双实体世界：e_x 开 known 盘算 + concealed 盘算各一；e_y 收委派（concealed 子样本）
+// leg24 片3：静默判据=结构三条件——e_y 要能主动提议（收委派/自开暗线），得让它"刚出过手"
+//   （lastActiveTick）；否则它无在办盘算 + 久未出手 → 结构静默 → 提议被门控滤掉（那不是本文件的考点）。
 const W = () => ({
     version: 1,
     context: { world: '边地', tension: 0.5, positions: ['边城', '大营'] },
     entities: [
-        { id: 'e_x', kind: 'faction', name: '边军', location: '边城', attrs: { hardPower: 0.9, office: 0.9, network: 0.9, intel: 0.9 } },
-        { id: 'e_y', kind: 'character', name: '细作', location: '大营', attrs: { hardPower: 0.5, office: 0.3, network: 0.6, intel: 0.7 } },
+        { id: 'e_x', kind: 'faction', name: '边军', location: '边城', attrs: { hardPower: 0.9, office: 0.9, network: 0.9, intel: 0.9 }, lastActiveTick: 0 },
+        { id: 'e_y', kind: 'character', name: '细作', location: '大营', attrs: { hardPower: 0.5, office: 0.3, network: 0.6, intel: 0.7 }, lastActiveTick: 0 },
     ],
     weights: { e_x: 0.9, e_y: 0.5 },
     agendas: [

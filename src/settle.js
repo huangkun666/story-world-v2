@@ -31,14 +31,10 @@ export const ARCHIVE = { hotWindow: 20, milestoneEvery: 10 };
 // K37 实体治理数字组（细案 §3.7 → A-10..A-12；铁律 2：全部提案态，随 K37 曲线 + K38 报批）
 export const ENTITY_BIRTH_PER_TICK = 1;      // 提案：单轮新生 ≤1
 export const ENTITY_IDLE_RETIRE_TICKS = 20;  // 提案：连续未活跃轮数（背景化条件）
-// leg24 片2 复核记录（**实测证伪了一次改动，已撤回，留档勿重走**）：曾按交接 §4 片4 的方向提前把
-//   「分量 < RETIRE_WEIGHT_FLOOR」从退休判据里删掉（改为只看"多久没露面"），实测三处冒烟立刻红：
-//   ①K47 全量棋盘"全册 active 保持"破（345/346）②重量冒烟"被点名可应答"累计 66→34（应答机制塌了一半）
-//   ③50t 冒烟编年条数 6→7（多退了一个）——根因：`lastActiveTick` 只由**落账的原子动作**写，从未列面的
-//   在册实体根本没有这个字段/值永远停在初值 → 新判据把它们在 t20 一次性全体退休 → 离席者不再回应。
-//   结论：**退休判据与"谁值得动/镜头怎么排"是同一块石头**（都得先有片3 那套确定性粗规则替代门控的重心），
-//   所以本片不动它；实机回归证据在台账（leg24 片2 行）。谁要再动这一条，先让那三处冒烟能自己回答"退休的是谁"。
-export const RETIRE_WEIGHT_FLOOR = 0.05;     // 提案：影响力下限（背景化条件；**片3 前不得单独摘除——见上**）
+// leg24 片3 删除位：RETIRE_WEIGHT_FLOOR（"影响力低于地板才准退休"）已删——判据不再吃分量。
+//   片2 曾提前单摘它，三处冒烟当场红（应答机制 66→34、全册 active 破）；根因=当时门控还在吃分数，
+//   而分数退化的世界"谁静默"已经失真。片3 把门控/镜头/掩码全换成结构判据之后，退休才具备换判据的前提。
+//   现判据（下表 retireInactive）：无在飞盘算 ∧ 无未决事件引用 ∧ 连续 ENTITY_IDLE_RETIRE_TICKS 轮未露面。
 export const ENTITY_GC_SCAN_TICKS = 20;      // 提案：背景化扫描周期
 // （POOL_CAP 席位上限已于第十九棒 K45 废除——full-roster-lens-spec C3：资格=在册，镜头管进出；用户 2026-09-09 拍板「不设上限」）
 
@@ -58,7 +54,9 @@ const SOURCE_LABEL = null; // 已废弃（第十三棒：编年源头措辞改�
 
 const entityName = (world, id) => world.entities.find((e) => e.id === id)?.name || id;   // 编年渲染：id 一律成名（"棋好看"）
 
-// ①-② 校验 + 薄裁定（硬结果：属性边界；K5 分量折减：低分量动作方按分量比折减——幅度单调 P7；静默方自我增强被拒）
+// ①-② 校验 + 薄裁定（硬结果：**只有属性边界钳制与"静默方自我增强被拒"**）
+// leg24 片3（拆引擎裁定）：删除"低分量动作方按分量比折减"——用户拍板「引擎不裁胜负」，
+//   而"弱的一方打强的一方伤害打折"就是最直白的裁胜负（还要靠那个没法客观的分数）。现法：提议值与边界钳制说了算。
 // K15：hurtByEntity 收集 stateChanges 负向实际生效值（三态败露判据的窗口输入）
 function adjudicate(world, step, tick, warnings, gate, hurtByEntity) {
     const checked = checkWorldStep(step, world);
@@ -66,7 +64,6 @@ function adjudicate(world, step, tick, warnings, gate, hurtByEntity) {
         for (const e of checked.errors) warnings.push(`校验拒绝: ${e}`);
         return false;
     }
-    const weights = world.weights || {};
     const silentSet = new Set(gate.silent);
     const liftedSet = new Set(gate.lifted);
     for (const [i, c] of step.stateChanges.entries()) {
@@ -77,14 +74,6 @@ function adjudicate(world, step, tick, warnings, gate, hurtByEntity) {
         if (selfSilent) {
             eff = 0;
             warnings.push(`裁定: 静默方自我增强被拒（${c.entity}.${c.attr} 申请 ${c.delta}）`);
-        } else if (c.actor && c.actor !== c.entity && weights[c.actor] != null) {
-            const wAct = weights[c.actor] ?? 0;
-            const wTgt = weights[c.entity] ?? 0;
-            if (wTgt > 0 && wAct < wTgt) {
-                const ratio = wAct / wTgt;   // 低分量动作方折减（P7）
-                eff = c.delta * ratio;
-                warnings.push(`裁定: 分量比折减 ${ratio.toFixed(3)}（${c.actor}→${c.entity}.${c.attr}）`);
-            }
         }
         if (!c.cause) warnings.push(`stateChanges 无 cause: ${c.entity}.${c.attr}（坏账前置，K5）`);
         // leg24 片2（账本换血）：账面**没有**这一维时，把模型这次的提议当作**该维的初值**，
@@ -162,35 +151,32 @@ export function resolveEventSource({ world, ev, weights }) {
 }
 
 // K9 影响通道（引擎独占写玩家，红线 1 代码化，玩家档案细案 §3.3）：
-// ① 他人 actions[].target === playerId → hardPower −= 0.05×min(1, w_src/w_player)
-// ② 新事件波及玩家 → 各 attrs −= 0.02×min(1, w_src/w_player)
-// 确定性、钳制 [0,1]、simLog 审计（playerAffected）。零分量玩家不被点名影响（与"零分量无所见"对偶）。
+// ① 他人 actions[].target === playerId → hardPower −= PLAYER_IMPACT.targeted
+// ② 新事件波及玩家 → 已有各 attrs −= PLAYER_IMPACT.rippled
+// 确定性、钳制 [0,1]、simLog 审计（playerAffected）。
+// leg24 片3：**删掉 min(1, w_src/w_player) 折减系数**——那个数用户已定不要了；影响改用报批定案的固定系数
+//   （报批 #4-9：−0.05×min(1,ratio) / −0.02×ratio 里的"ratio"部分随分量退场，系数本身仍在）。
+//   理由同 adjudicate：拿两个没法客观的分数相除来决定"玩家被影响多少"，就是引擎在裁强弱。
 function applyPlayerImpact(world, gstep, tick, playerId, playerAffected, warnings) {
     const player = world.entities.find((e) => e.id === playerId);
     if (!player) return;
-    const weights = world.weights || {};
-    const wPlayer = weights[playerId] ?? 0;
-    if (!(wPlayer > 0)) return;
-    const hit = (attr, amount, ratio, source) => {
+    const hit = (attr, amount, source) => {
         const before = player.attrs[attr] ?? 0;
         const after = clamp(before + amount, ATTR_BOUNDS);
         if (after !== before + amount) {
             warnings.push(`裁定: 属性硬边界（${playerId}.${attr} ${before}→${after}，申请 ${before + amount}）`);
         }
         player.attrs[attr] = after;
-        playerAffected.push({ tick, source, attr, delta: after - before, ratio });
+        playerAffected.push({ tick, source, attr, delta: after - before });
     };
     for (const a of gstep.actions) {
         if (a.target !== playerId) continue;
-        const wSrc = weights[a.entity] ?? 0;
-        const ratio = Math.min(1, wSrc / wPlayer);
-        hit('hardPower', -PLAYER_IMPACT.targeted * ratio, ratio, a.entity);
+        hit('hardPower', -PLAYER_IMPACT.targeted, a.entity);
     }
     for (const ev of gstep.newEvents) {
         if (!(ev.ripples || []).includes(playerId)) continue;
-        const { source, weight: wSrc } = resolveEventSource({ world, ev, weights });
-        const ratio = Math.min(1, wSrc / wPlayer);
-        for (const attr of Object.keys(player.attrs)) hit(attr, -PLAYER_IMPACT.rippled * ratio, ratio, source);
+        const { source } = resolveEventSource({ world, ev, weights: world.weights || {} });
+        for (const attr of Object.keys(player.attrs)) hit(attr, -PLAYER_IMPACT.rippled, source);
     }
 }
 
@@ -266,14 +252,14 @@ function findCycle(start, agendas) {
     return null;
 }
 
-// 自动拆环（ANCHOR §4.1 / 细案 §3.3 → A-4）：环内按分量升序，最低分量方断其与父的边转独立
-// （分量相等按 progress 浅者先让；再相等按 id 序——确定性兜底）；blocked 记"拆环让路"；编年留痕。
+// 自动拆环（ANCHOR §4.1 / 细案 §3.3 → A-4）：环内挑一方断其与父的边转独立。
+// leg24 片3：**排序判据由"分量升序"改为结构序**——①盘算年纪：turnsAlive 小者（较新）先让
+//   ②再比 progress 浅者先让 ③再比 id 序（确定性兜底）。原判据吃那个已被拍板删除的分数。
+// blocked 记"拆环让路"；编年留痕。
 function breakCycle(cycle, world, tick, chronicle) {
-    const weights = world.weights || {};
+    const age = (a) => (typeof a.memory?.turnsAlive === 'number' ? a.memory.turnsAlive : 0);
     const sorted = [...cycle].sort((x, y) => {
-        const wx = weights[x.owner] ?? 0;
-        const wy = weights[y.owner] ?? 0;
-        if (wx !== wy) return wx - wy;
+        if (age(x) !== age(y)) return age(x) - age(y);
         if (x.progress !== y.progress) return x.progress - y.progress;
         return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
     });
@@ -283,7 +269,7 @@ function breakCycle(cycle, world, tick, chronicle) {
     chronicle.push({
         id: `ch_${tick}_cyc_${victim.id}`,
         tick,
-        text: `拆环：${entityName(world, victim.owner)} 让路转伺机（分量最低）`,
+        text: `拆环：${entityName(world, victim.owner)} 让路转伺机（较新者先让）`,
         kind: victim.visibility === 'concealed' ? 'shade' : 'scheme',
     });
 }
@@ -704,12 +690,16 @@ function reactivateNamed(world, events, tick, chronicle) {
 }
 
 // K37 背景化 GC（细案 §3.7 → A-12）：扫描轮（每 ENTITY_GC_SCAN_TICKS）——条件=无在飞盘算 + 无未决事件/链引用
-// + 影响力 < RETIRE_WEIGHT_FLOOR（提案）+ 连续 ENTITY_IDLE_RETIRE_TICKS 轮未活跃 → status=retired
+// + 连续 ENTITY_IDLE_RETIRE_TICKS 轮未露面（**片3 起不再看分量**）→ status=retired
 // （名录/指针全保留；编年「淡出」一笔，kind state——处境驱动）；依据册随退休清理（其名消账）。
 // K45（full-roster-lens-spec C3 拍板）：**超席强制退已废除**（资格=在册，镜头管进出——用户 2026-09-09 拍板）——
-// 闲置退休仍保留：长期没戏份的实体退二线（仍可在册、可被点名复归），这是"镜头进出"的引擎侧实现。
-// leg24 片2：**分量地板这一条本片不动**（实测证伪——摘掉它全体在册实体 t20 一次性退休，"被点名可应答"塌一半；
-//   详见上方 RETIRE_WEIGHT_FLOOR 旁的复核记录）。片4 换判据时必须与片3 的粗规则替换一并做。
+// 闲置退休仍保留：长期没戏份的实体退二线（**仍在册**、可被点名复归），这是"镜头进出"的引擎侧实现。
+// leg24 片3：判据里的分量地板已删（那个数用户已定不要）。
+//   ⚠️ 两条边界（实测踩过，留档）：① **"没露过面"≠"久未露面"**——`lastActiveTick` 缺失 = 从没出过手
+//   （书里读进来的名号就是这种）；若把它当 t0，新世界 t20 会把全册实体一次性退休（实测 K47 全量棋盘
+//   active 346→0：镜头空转、应答机制失效）。故保留"必须有过活跃记录"这一条——退的是"曾经在场、
+//   如今久未现身"的人，不是"还没上场"的人。② 上一版注释里"从没出过手也在 t20 退二线是设计要的行为"
+//   是**错的判断**，被 K47 与重量冒烟两处读数当场证伪。
 function retireInactive(world, tick, warnings, chronicle) {
     const canRetire = (e) => !(world.agendas || []).some((a) => a.owner === e.id && !a.closed)
         && !(world.events || []).some((ev) => !ev.closed && (ev.ripples || []).includes(e.id));
@@ -717,7 +707,6 @@ function retireInactive(world, tick, warnings, chronicle) {
     for (const e of world.entities) {
         if (e.status && e.status !== 'active') continue;
         if (!canRetire(e)) continue;
-        if ((world.weights[e.id] ?? 1) >= RETIRE_WEIGHT_FLOOR) continue;
         if (typeof e.lastActiveTick !== 'number' || tick - e.lastActiveTick < ENTITY_IDLE_RETIRE_TICKS) continue;
         e.status = 'retired';
         if (world.meta?.dialogueBook) delete world.meta.dialogueBook[e.name];

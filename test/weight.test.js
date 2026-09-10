@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     computeWeight, computeWeightAtTick, activityFactor, visibilityMask, isVisible, spreadRadius, maxRippleTargets,
-    DECAY, MASK, NEUTRAL_TENSION,
+    DECAY, MASK, NEUTRAL_TENSION, RIPPLE_TARGET_CAP,
 } from '../src/weight.js';
 
 const CHAR = 'character';
@@ -100,49 +100,41 @@ test('衰减：衰减后分量 = 公式分 × 因子（玩家同尺经由同一�
     assert.ok(Math.abs(computeWeightAtTick(attrs, CHAR, NEUTRAL_TENSION, grace + 1) - 0.35 * (1 - DECAY.character.rate)) < 1e-12);
 });
 
-test('掩码：对等分量全情报同位置 → 1', () => {
-    assert.equal(visibilityMask({ srcWeight: 0.5, obsWeight: 0.5, intel: 1, sameLocation: true }), 1);
-});
-
-test('掩码：情报缺失 → 减半；异地 → 再减半', () => {
-    const base = visibilityMask({ srcWeight: 0.5, obsWeight: 0.5, intel: 1, sameLocation: true });
-    const noIntel = visibilityMask({ srcWeight: 0.5, obsWeight: 0.5, intel: 0, sameLocation: true });
-    const far = visibilityMask({ srcWeight: 0.5, obsWeight: 0.5, intel: 1, sameLocation: false });
+test('掩码（片3 事实驱动）：全情报同位置 → 1；情报缺失 → 减半；异地 → 再减半', () => {
+    assert.equal(visibilityMask({ intel: 1, sameLocation: true }), 1);
+    const base = visibilityMask({ intel: 1, sameLocation: true });
+    const noIntel = visibilityMask({ intel: 0, sameLocation: true });
+    const far = visibilityMask({ intel: 1, sameLocation: false });
     assert.ok(Math.abs(noIntel - base * MASK.intelBase) < 1e-12);
     assert.ok(Math.abs(far - base * MASK.posDiff) < 1e-12);
 });
 
-test('掩码：权重比方向（观察者越强、源越弱 → 越低；零分量观察者无所见）', () => {
-    const lowSrc = visibilityMask({ srcWeight: 0.1, obsWeight: 0.9, intel: 1, sameLocation: true });
-    assert.ok(lowSrc < 0.2);
-    assert.equal(visibilityMask({ srcWeight: 0.5, obsWeight: 0, intel: 1, sameLocation: true }), 0);
-    assert.equal(visibilityMask({ srcWeight: 0, obsWeight: 0.5, intel: 1, sameLocation: true }), 0);
+test('掩码（片3）：**不再吃那个分数**——传不传分量、分量多少，结果逐字节一致', () => {
+    const a = visibilityMask({ intel: 0.5, sameLocation: true });
+    const b = visibilityMask({ srcWeight: 0.01, obsWeight: 0.99, intel: 0.5, sameLocation: true });
+    const c = visibilityMask({ srcWeight: 9, obsWeight: 0, intel: 0.5, sameLocation: true });
+    assert.equal(a, b, '分量参数已退场（旧法：源弱观察者强 → 更低）');
+    assert.equal(a, c, '观察者分量 0 不再导致全瞎（旧法：零分量无所见短路）');
+    assert.ok(a > 0, '账面无数的新世界，玩家仍看得见东西');
 });
 
-test('掩码：阈值判定（m ≥ 0.3 可见）', () => {
-    assert.ok(isVisible(0.3));
-    assert.ok(!isVisible(0.2999));
-    const m = visibilityMask({ srcWeight: 0.2, obsWeight: 0.5, intel: 1, sameLocation: true }); // 0.4
-    assert.ok(isVisible(m));
-    const m2 = visibilityMask({ srcWeight: 0.2, obsWeight: 0.5, intel: 0, sameLocation: false }); // 0.1
-    assert.ok(!isVisible(m2));
+test('掩码（片3）：阈值两端（0.25 是门槛线，两边各测一格）', () => {
+    assert.equal(visibilityMask({ intel: 0, sameLocation: false }), 0.25, '无情报 + 异地 = 0.25（恰好门槛）');
+    assert.ok(isVisible(visibilityMask({ intel: 0, sameLocation: false })), '恰好 0.25 → 可见（≥ 阈值）');
+    assert.ok(!isVisible(visibilityMask({ intel: 0, sameLocation: false }) - 0.01), '门槛下一格 → 不可见');
 });
 
-test('掩码：观察者存在感门（评审修边）——obs→0 连续趋 0，无"0.001 全见/0 全瞎"断崖', () => {
-    const big = { srcWeight: 0.9, intel: 1, sameLocation: true };
-    assert.equal(visibilityMask({ ...big, obsWeight: MASK.obsFloor }), 1, 'obs=ε → 原公式值（连续点）');
-    assert.ok(Math.abs(visibilityMask({ ...big, obsWeight: 0.001 }) - 0.02) < 1e-12, '0.9/0.001 饱和 × 0.001/0.05 → 0.02，不再全见');
-    assert.ok(Math.abs(visibilityMask({ ...big, obsWeight: 0.02 }) - 0.4) < 1e-12, '存在感线性段');
-    assert.ok(visibilityMask({ ...big, obsWeight: 0.01 }) < MASK.threshold, '极低存在感 → 阈下省略');
-    assert.equal(visibilityMask({ ...big, obsWeight: 0 }), 0, '零分量守卫保留（拍板语义"零分量无所见"）');
+test('掩码（片3）：删掉的 obsFloor 修边不再需要（比值项已不存在，断崖无从谈起）', () => {
+    assert.equal(MASK.obsFloor, undefined, 'obsFloor 常量随比值项一并删除');
+    // 旧毛病（0.001 全见 / 0 全瞎）在事实驱动公式下不存在：m 只由情报×位置决定
+    assert.equal(visibilityMask({ intel: 1, sameLocation: true }), visibilityMask({ intel: 1, sameLocation: true }));
 });
 
-test('半径与波及上限：单调 + 边界', () => {
+test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限改固定提案值', () => {
     assert.equal(spreadRadius(0), 1);
     assert.equal(spreadRadius(1), 4);
-    assert.ok(spreadRadius(0.6) > spreadRadius(0.4));
-    assert.equal(maxRippleTargets(0), 0);
-    assert.equal(maxRippleTargets(1), 2);
-    assert.equal(maxRippleTargets(0.25), 1); // ceil(0.5)
-    assert.ok(maxRippleTargets(0.6) >= maxRippleTargets(0.4));
+    assert.ok(spreadRadius(0.6) > spreadRadius(0.4), '半径那把尺还在（尽管已无调用者）');
+    assert.equal(maxRippleTargets(), RIPPLE_TARGET_CAP, '不再随分量变：固定值');
+    assert.equal(maxRippleTargets(0), RIPPLE_TARGET_CAP, '传参也不影响（旧法 ceil(2×0)=0）');
+    assert.equal(maxRippleTargets(1), RIPPLE_TARGET_CAP);
 });

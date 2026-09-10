@@ -10,10 +10,14 @@ export const LENS_MEMBERS_TOP = 8;            // 势力麾下成员简表条数�
 export const TOKEN_RATIO = 3;                // 粗略估计：1 token ≈ 3 字符（中文）
 export const DIALOGUE_BOOK_TOP = 5;          // 提案：K38 补差包——依据册摘要进包条数上限（敲定稿 C 条）
 
-// 镜头名单（引擎层纯函数只读，一处定义多处读取）：全量 active 实体 →
-//   [例外保送（moveFact.object / 未决事件 ripples / 在飞盘算属主 / lastActiveTick ≥ tick−2）]
-//   + [其余按分量降序]——lensMaxTokens 内取前缀（估算沿用 TOKEN_RATIO；确定性逐字节）。
+// 镜头名单（引擎层纯函数只读，一处定义多处读取）：全量 active 实体 → 四段确定性序（leg24 片3）：
+//   ① 保送（moveFact.object / 未决事件 ripples / 在飞盘算属主 / lastActiveTick ≥ tick−2）
+//   ② 手上有在办盘算者（盘算"年纪" new→old：memory.turnsAlive 小者先）
+//   ③ 近 LENS_RECENT_TICKS 轮出手者（近→远）
+//   ④ 其余按实体 id（字典序）
+// 段内同值时一律取 id 序兜底 —— **全程零分数**（旧法：第④段按分量降序，那个数已随 leg24 片3 退场）
 // 分量只用于排序，不随行输出（P3：模型看不到分量数字）。
+export const LENS_RECENT_TICKS = 5;   // 提案（片3）：镜头第③段"近期出手"的轮数窗（原按分量降序，无窗可言）
 export function lensList(ssot, { lensMaxTokens = LENS_DEFAULT_MAX_TOKENS, moveFact = null } = {}) {
     const est = (s) => Math.ceil(s.length / TOKEN_RATIO);
     const tick = ssot?.meta?.tick ?? 0;
@@ -22,22 +26,35 @@ export function lensList(ssot, { lensMaxTokens = LENS_DEFAULT_MAX_TOKENS, moveFa
     if (obj && typeof obj === 'string') named.add(obj);
     for (const ev of ssot?.events || []) if (!ev.closed) for (const r of ev.ripples || []) named.add(r);
     for (const ag of ssot?.agendas || []) if (!ag.closed) named.add(ag.owner);
+    // 段②的输入：每个属主手上最"老"的在飞盘算年纪（turnsAlive 缺省按 0=刚生）
+    const oldest = new Map();
+    for (const ag of ssot?.agendas || []) {
+        if (ag.closed) continue;
+        const age = typeof ag.memory?.turnsAlive === 'number' ? ag.memory.turnsAlive : 0;
+        if (!oldest.has(ag.owner) || age < oldest.get(ag.owner)) oldest.set(ag.owner, age);
+    }
+    const seg = (e) => {
+        if (named.has(e.name) || named.has(e.id)
+            || (typeof e.lastActiveTick === 'number' && tick - e.lastActiveTick <= 2)) return 0;   // ① 保送
+        if (oldest.has(e.id)) return 1;                                                            // ② 有在办的事
+        if (typeof e.lastActiveTick === 'number' && tick - e.lastActiveTick <= LENS_RECENT_TICKS) return 2;   // ③ 近期出手
+        return 3;                                                                                  // ④ 其余
+    };
     const rows = (ssot?.entities || [])
         .filter((e) => !e.status || e.status === 'active')      // K37 三点过滤①：retired/dead 出演化上下文
-        .map((e) => {
-            const boost = named.has(e.name) || named.has(e.id)
-                || (typeof e.lastActiveTick === 'number' && tick - e.lastActiveTick <= 2);
-            return { e, w: ssot?.weights?.[e.id] ?? 0, boost };
-        })
-        .sort((a, b) => (b.boost - a.boost) || (b.w - a.w) || (a.e.id < b.e.id ? -1 : 1));
+        .map((e) => ({ e, seg: seg(e), age: oldest.get(e.id) ?? 0, idle: tick - (e.lastActiveTick ?? -Infinity) }))
+        .sort((a, b) => (a.seg - b.seg)
+            || (a.seg === 1 ? a.age - b.age : 0)                            // ② 段内：盘算年纪 new→old
+            || (a.seg === 2 ? a.idle - b.idle : 0)                          // ③ 段内：出手 近→远
+            || (a.e.id < b.e.id ? -1 : a.e.id > b.e.id ? 1 : 0));           // 全部兜底：id 序（确定性）
     const out = [];
     let used = 0;
-    for (const { e, w } of rows) {
+    for (const { e } of rows) {
         const line = JSON.stringify([e.id, e.name, e.kind]);
         const cost = est(line);
         if (out.length && used + cost > lensMaxTokens) break;    // 前缀截断（至少保留首名，防御空镜）
         used += cost;
-        out.push({ e, w });
+        out.push({ e, w: ssot?.weights?.[e.id] ?? 0 });          // w 仅向后兼容保留：已无任何引擎消费者（片3）
     }
     return out;
 }
