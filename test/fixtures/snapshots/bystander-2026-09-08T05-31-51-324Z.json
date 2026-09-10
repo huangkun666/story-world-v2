@@ -89,16 +89,7 @@
         "newAgendas": [],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
@@ -188,23 +179,7 @@
         ],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "network",
-            "delta": -0.1,
-            "actor": "e_dayu",
-            "cause": "a_dayu"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
@@ -304,23 +279,7 @@
         "newAgendas": [],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu",
-            "cause": "a_dayu"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
@@ -427,30 +386,12 @@
         ],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.3,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.2,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
       "expect": {
-        "warnings": [
-          "裁定: 属性硬边界（e_wanfa.hardPower 0.20000000000000004→0，申请 -0.09999999999999995）"
-        ],
+        "warnings": [],
         "gate": {
           "silent": [],
           "lifted": []
@@ -527,16 +468,7 @@
         ],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
@@ -635,38 +567,12 @@
         ],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "network",
-            "delta": -0.2,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
-          },
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_xie",
-            "cause": "a_5_1"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_wanfa"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
       "expect": {
-        "warnings": [
-          "裁定: 越界提议被忽略（e_xie.hardPower 已是 1，申请 1.1）",
-          "stateChanges 无 cause: e_wanfa.hardPower（坏账前置，K5）",
-          "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.1）"
-        ],
+        "warnings": [],
         "gate": {
           "silent": [],
           "lifted": []
@@ -752,35 +658,12 @@
         "newAgendas": [],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "cause": "a_4_1"
-          },
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "cause": "a_5_1"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "cause": "a_6_1"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
       "expect": {
-        "warnings": [
-          "裁定: 越界提议被忽略（e_xie.hardPower 已是 1，申请 1.1）",
-          "裁定: 越界提议被忽略（e_wanfa.hardPower 已是 0，申请 -0.1）"
-        ],
+        "warnings": [],
         "gate": {
           "silent": [],
           "lifted": []
@@ -866,30 +749,12 @@
         ],
         "agendaCancels": [],
         "newEntities": [],
-        "entityFates": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.2,
-            "actor": "e_xie",
-            "cause": "a_5_1"
-          },
-          {
-            "entity": "e_dayu",
-            "attr": "intel",
-            "delta": 0.1,
-            "actor": "e_dayu"
-          }
-        ]
+        "entityFates": []
       },
       "moveFact": null,
       "world": null,
       "expect": {
-        "warnings": [
-          "裁定: 越界提议被忽略（e_xie.hardPower 已是 1，申请 1.2）",
-          "stateChanges 无 cause: e_dayu.intel（坏账前置，K5）"
-        ],
+        "warnings": [],
         "gate": {
           "silent": [],
           "lifted": []

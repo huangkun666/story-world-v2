@@ -83,24 +83,10 @@
       "stage": "死守阵眼"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "intel",
-      "delta": -0.1,
-      "actor": "e_xie",
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "network",
-      "delta": -0.2,
-      "actor": "e_dayu",
-      "cause": "a_dayu"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -170,24 +156,10 @@
       "stage": "兵临城下"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.15,
-      "actor": "e_xie",
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "intel",
-      "delta": -0.1,
-      "actor": "e_dayu",
-      "cause": "a_dayu"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -268,24 +240,10 @@
       "stage": "强弩之末"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.2,
-      "actor": "e_xie",
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.2,
-      "actor": "e_dayu",
-      "cause": "a_dayu"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -373,23 +331,10 @@
       "stage": "困兽犹斗"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.3,
-      "actor": "e_xie",
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_xie",
-      "attr": "hardPower",
-      "delta": 0.2,
-      "cause": "a_xie"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -477,24 +422,10 @@
       "stage": "玉石俱焚"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.3,
-      "actor": "e_dayu",
-      "cause": "a_wanfa"
-     },
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": -0.1,
-      "actor": "e_wanfa",
-      "cause": "a_wanfa"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -560,24 +491,10 @@
      }
     ],
     "agendaAdvances": [],
-    "stateChanges": [
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": -0.2,
-      "actor": "e_wanfa",
-      "cause": "ev_5_2"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.3,
-      "actor": "e_wanfa",
-      "cause": "ev_5_2"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -643,23 +560,10 @@
      }
     ],
     "agendaAdvances": [],
-    "stateChanges": [
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": -0.1,
-      "actor": "e_xie",
-      "cause": "ev_6_2"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.2,
-      "cause": "ev_6_1"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,
@@ -724,24 +628,10 @@
      }
     ],
     "agendaAdvances": [],
-    "stateChanges": [
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": -0.1,
-      "actor": "e_xie",
-      "cause": "ev_7_1"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.2,
-      "actor": "e_dayu",
-      "cause": "ev_6_1"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": null,
    "world": null,

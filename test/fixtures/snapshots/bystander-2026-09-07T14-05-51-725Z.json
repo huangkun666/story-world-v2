@@ -74,22 +74,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "network",
-            "delta": -0.1,
-            "actor": "e_dayu",
-            "cause": "a_dayu"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []

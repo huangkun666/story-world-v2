@@ -2,6 +2,8 @@
 // K43（full-roster-lens-spec C1/C7/C8 拍板）：全量棋盘入账 + 势力净化折叠 + 初始权重预填。
 // 判据 A-1/A-2 的测试面：无席位截断 / location 不入池 / parent 折叠进 branches（链顶解析）/
 // 弃关系防御（缺失/环/目标非势力）/ character parent 解析 / 幂等重跑 / 权重全覆盖与公式一致。
+// leg25 c 追加（用户令「删」四维浮点）：本文件同时是"入账**不预填任何数值**"的锁面——账上连 `attrs` 键
+//   都不许有（旧法按 kind 预填四维默认值 0.15/0.25），名册里的内容也不许流进实体；形状必须过 schema。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seedBookEntities } from '../src/abstract.js';
@@ -113,7 +115,13 @@ test('K43: 初始分量预填——weights 全覆盖且与 computeWeight 同口�
     seedBookEntities(w);
     assert.equal(Object.keys(w.weights).length, 2);
     for (const e of w.entities) {
-        assert.equal(w.weights[e.id], computeWeight(e.attrs, e.kind, 0.7));
+        // leg25 c：实体账上已无 `attrs`（四维浮点整条删除），公式也不再吃属性 ⇒ 直接传空对象同值；
+        //   本条的意图（预填分量与 computeWeight 同口径、吃 context.tension）一字不改。
+        assert.equal(w.weights[e.id], computeWeight({}, e.kind, 0.7));
+        // 张力 0.7 真的进了式子：envFactor = 1 + 0.2×(0.7−0.5) = 1.04 ⇒ 势力 0.85×1.04 = 0.884；
+        //   人物 1.0×1.04 = 1.04 → 被 clamp01 截平回 1（人物层基础分贴着上界，见 weight.test 登记）。
+        const expect = e.kind === 'faction' ? 0.85 * 1.04 : 1;
+        assert.ok(Math.abs(w.weights[e.id] - expect) < 1e-9, `${e.kind} 预填吃张力（期望 ${expect}，实际 ${w.weights[e.id]}）`);
     }
 });
 
@@ -137,7 +145,8 @@ test('K43: 幂等重跑与已有实体——重跑零新增；同名（含 retir
     assert.equal(Object.keys(w.weights).length, first.weights);
 
     // 已 retired 的同名不重建（青龙会 入账 + 盐帮 折叠；白小娥 已在册跳过）
-    const w2 = mkWorld(book, { entities: [{ id: 'e_old', kind: 'character', name: '白小娥', location: '中央', attrs: {}, status: 'retired', lastActiveTick: 0 }] });
+    // leg25 c：既有实体夹具也不带 `attrs`（账上不该有那个键——引擎既不读也不写）
+    const w2 = mkWorld(book, { entities: [{ id: 'e_old', kind: 'character', name: '白小娥', location: '中央', status: 'retired', lastActiveTick: 0 }] });
     const r3 = seedBookEntities(w2);
     assert.equal(r3.seeded, 1);
     assert.equal(w2.entities.length, 2);
@@ -149,17 +158,19 @@ test('K43: 空书名录与 shape 防御', () => {
     assert.deepEqual(r, { seeded: 0, folded: 0, skippedLocation: 0, warnings: [] });
     assert.equal(w.entities.length, 0);
 
-    const w2 = mkWorld([{ name: '老角色', kind: 'character' }], { entities: [{ id: 'e_1', kind: 'character', name: '老角色', location: '中央', attrs: {} }] });
+    const w2 = mkWorld([{ name: '老角色', kind: 'character' }], { entities: [{ id: 'e_1', kind: 'character', name: '老角色', location: '中央' }] });
     const r2 = seedBookEntities(w2);
     assert.equal(r2.seeded, 0);
     assert.equal(w2.entities.length, 1);
     assert.equal(w2.weights['e_1'], computeWeight({}, 'character', 0.5));   // 既有实体也完成预填
 });
 
-test('leg24 片1/片2：名册里的旧 attrs/race 字段不采信，且**不预填任何数值**（空着就是空着）；形状过 schema', () => {
+test('leg25 c：入账**不预填任何数值**（空着就是空着）——账面没有四维键，分数只有层基线；形状过 schema', () => {
     const book = [
-        // 旧世界可能还留着这些字段（leg20/leg21 抽的）——引擎已不读；入账也不预填
-        { name: '万法阁', kind: 'faction', race: '人族', attrs: { hardPower: 0.9, office: 0.8 }, evidence: '灵脉霸主' },
+        // 名册条目只留身份（name/kind/parent/location）——`attrs`/`evidence` 已从 canon.bookEntities 形状里
+        //   整条删除（schema additional:false ⇒ 带它们的名册条目当场校验不过），故夹具不再摆这两个键。
+        //   `race` 仍是形状内的合法可选键：本条的意图是"名册里的东西**不自动流进实体**"，故留着当探针用。
+        { name: '万法阁', kind: 'faction', race: '人族' },
         { name: '白小娥', kind: 'character' },
     ];
     const w = {
@@ -177,12 +188,16 @@ test('leg24 片1/片2：名册里的旧 attrs/race 字段不采信，且**不预
     assert.equal(r.seeded, 2);
     const f = w.entities.find((e) => e.name === '万法阁');
     assert.equal(f.race, undefined, 'race 不再从名册带进实体');
-    assert.deepEqual(f.attrs, {}, '势力账面不预填数值（旧法填 0.25 四键；书里抄来的 0.9/0.8 也不采信）');
+    // leg25 c：不是"填空对象"，是**根本没有这个键**（旧法：势力预填 0.25 四键 / 人物预填 0.15 四键）
+    assert.equal('attrs' in f, false, '势力账面上连 attrs 键都不该有（空格不是 0.25）');
+    assert.deepEqual(Object.keys(f).sort(), ['id', 'kind', 'location', 'name'], `入账形状只剩身份+位置（实际 ${JSON.stringify(f)}）`);
     const c = w.entities.find((e) => e.name === '白小娥');
-    assert.deepEqual(c.attrs, {}, '角色账面同样空着');
-    // 同属"账面无数" → 分数只剩两点差异：kind 的中立 floor（character 0.5 / faction 0.75 × 层基线）
-    assert.ok(Math.abs(w.weights[c.id] - 0.5) < 1e-9, `人物中立 floor=0.5（实际 ${w.weights[c.id]}）`);
-    assert.ok(Math.abs(w.weights[f.id] - 0.75) < 1e-9, `势力中立 floor=0.75（层基线 1.5；实际 ${w.weights[f.id]}）`);
+    assert.equal('attrs' in c, false, '角色账面同样没有该键');
+    assert.equal(Object.keys(c).some((k) => /hardPower|office|network|intel|兵力|权位|人脉|耳目/.test(k)), false, '四维一个都不许有（含改名的）');
+    // 分数只剩层基线一个输入：人物 1.0（0.85 是势力层，见 weight.test 重基线）——
+    //   旧法此处是"中立 floor 0.5 / 势力 0.75"，那是属性缺键取中立的产物，已随公式删除。
+    assert.ok(Math.abs(w.weights[c.id] - 1.0) < 1e-9, `人物基础分=层基线 1.0（实际 ${w.weights[c.id]}）`);
+    assert.ok(Math.abs(w.weights[f.id] - 0.85) < 1e-9, `势力基础分=层基线 0.85（实际 ${w.weights[f.id]}）`);
     const checked = validate(w, ssotSchema);
     assert.equal(checked.ok, true, checked.errors.join('; '));
 });

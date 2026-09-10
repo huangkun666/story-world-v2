@@ -65,9 +65,10 @@
       "stage": "人手就位"
      }
     ],
-    "stateChanges": [],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "探查",
@@ -145,24 +146,10 @@
       "stage": "收拢包围"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": 0.2,
-      "actor": "e_wanfa",
-      "cause": "a_wanfa"
-     },
-     {
-      "entity": "e_xie",
-      "attr": "intel",
-      "delta": 0.1,
-      "actor": "e_xie",
-      "cause": "a_xie"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "询问",
@@ -257,22 +244,10 @@
       "stage": "集结破阵"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_xie",
-      "attr": "hardPower",
-      "delta": 0.1,
-      "cause": "a_xie"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "network",
-      "delta": 0.1,
-      "cause": "a_wanfa"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "盘问",
@@ -369,29 +344,10 @@
       "stage": "当面施压"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.1,
-      "cause": "a_wanfa"
-     },
-     {
-      "entity": "e_xie",
-      "attr": "intel",
-      "delta": 0.1,
-      "actor": "e_wanfa",
-      "cause": "a_wanfa"
-     },
-     {
-      "entity": "e_dayu",
-      "attr": "network",
-      "delta": 0.1,
-      "cause": "a_dayu"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "跟随",
@@ -475,24 +431,10 @@
       "stage": "武力威压"
      }
     ],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "hardPower",
-      "delta": -0.1,
-      "actor": "e_xie",
-      "cause": "a_wanfa"
-     },
-     {
-      "entity": "e_dayu",
-      "attr": "intel",
-      "delta": 0.1,
-      "actor": "e_dayu",
-      "cause": "a_dayu"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "图谋",
@@ -562,24 +504,10 @@
      }
     ],
     "agendaAdvances": [],
-    "stateChanges": [
-     {
-      "entity": "e_wanfa",
-      "attr": "network",
-      "delta": -0.2,
-      "actor": "e_wanfa",
-      "cause": "ev_5_1"
-     },
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": 0.1,
-      "actor": "e_dayu",
-      "cause": "ev_5_2"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "询价",
@@ -645,24 +573,10 @@
      }
     ],
     "agendaAdvances": [],
-    "stateChanges": [
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": 0.2,
-      "actor": "e_dayu",
-      "cause": "ev_6_2"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "network",
-      "delta": -0.2,
-      "actor": "e_wanfa",
-      "cause": "ev_5_1"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "离开",
@@ -727,24 +641,10 @@
      }
     ],
     "agendaAdvances": [],
-    "stateChanges": [
-     {
-      "entity": "e_dayu",
-      "attr": "hardPower",
-      "delta": 0.2,
-      "actor": "e_dayu",
-      "cause": "ev_7_1"
-     },
-     {
-      "entity": "e_wanfa",
-      "attr": "intel",
-      "delta": -0.1,
-      "actor": "e_wanfa",
-      "cause": "ev_7_2"
-     }
-    ],
     "newAgendas": [],
-    "agendaCancels": [], "newEntities": [], "entityFates": []
+    "agendaCancels": [],
+    "newEntities": [],
+    "entityFates": []
    },
    "moveFact": {
     "verb": "修炼",

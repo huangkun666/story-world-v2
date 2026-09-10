@@ -36,7 +36,8 @@ function busyStepGen(t) {
         const newEvents = open.slice(0, 4).map((a) => ({ title: `局面演进（${a.goal}）`, source: { type: 'plot', ref: a.id }, position: '中央', ripples: [a.owner] }));
         const agendaAdvances = open.slice(0, 12).map((a) => ({ agendaId: a.id, step: `第 ${tick} 步`, stage: '推进' }));
         if (tick === 5 || tick % 30 === 0) actions.push({ entity: world.entities.find((e) => e.kind === 'character')?.id, verb: '走动', position: '中央' });
-        return { actions, newEvents, agendaAdvances, stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
+        // leg25 c：世界步里不再有 `stateChanges`（四维浮点已删）——生成器也不再产它。
+        return { actions, newEvents, agendaAdvances, newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
     };
 }
 

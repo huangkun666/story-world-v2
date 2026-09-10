@@ -44,7 +44,9 @@ function baseWorld() {
     return {
         version: 1,
         context: { world: '临渊城', tension: 0.6, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        // leg25 c：夹具不再带 `attrs`（四维浮点已删；schema entities additional:false ⇒ 带它就是"未知字段"）。
+        //   本文件测的是设定抽取/净化/落账的形状，实体只当最小合法载体。
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [],
         events: [],

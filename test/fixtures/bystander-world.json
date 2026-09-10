@@ -6,9 +6,9 @@
     "positions": ["云砂坊市", "江州", "大盘谷", "北山"]
   },
   "entities": [
-    { "id": "e_xie", "kind": "faction", "name": "薛铁衣", "location": "大盘谷", "attrs": { "hardPower": 0.8, "office": 0.3, "network": 0.5, "intel": 0.6 } },
-    { "id": "e_dayu", "kind": "faction", "name": "大虞偏将", "location": "江州", "attrs": { "hardPower": 0.6, "office": 0.7, "network": 0.4, "intel": 0.4 } },
-    { "id": "e_wanfa", "kind": "faction", "name": "万法阁", "location": "北山", "attrs": { "hardPower": 0.5, "office": 0.4, "network": 0.6, "intel": 0.7 } }
+    { "id": "e_xie", "kind": "faction", "name": "薛铁衣", "location": "大盘谷" },
+    { "id": "e_dayu", "kind": "faction", "name": "大虞偏将", "location": "江州" },
+    { "id": "e_wanfa", "kind": "faction", "name": "万法阁", "location": "北山" }
   ],
   "weights": { "e_xie": 0.871125, "e_dayu": 0.901425, "e_wanfa": 0.749925 },
   "agendas": [

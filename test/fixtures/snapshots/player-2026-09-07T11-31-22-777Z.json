@@ -66,20 +66,6 @@
             "stage": "人手筹备"
           }
         ],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "network",
-            "delta": 0.1,
-            "cause": "a_wanfa"
-          }
-        ],
         "newAgendas": [],
         "agendaCancels": [],
         "newEntities": [],
@@ -105,38 +91,7 @@
           ]
         },
         "player": {
-          "affected": [
-            {
-              "tick": 1,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": -0.04999999999999999
-            },
-            {
-              "tick": 1,
-              "source": "world",
-              "attr": "hardPower",
-              "delta": -0.01999999999999999
-            },
-            {
-              "tick": 1,
-              "source": "world",
-              "attr": "office",
-              "delta": -0.02
-            },
-            {
-              "tick": 1,
-              "source": "world",
-              "attr": "network",
-              "delta": -0.020000000000000018
-            },
-            {
-              "tick": 1,
-              "source": "world",
-              "attr": "intel",
-              "delta": -0.020000000000000018
-            }
-          ]
+          "affected": []
         }
       }
     }

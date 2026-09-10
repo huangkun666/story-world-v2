@@ -11,7 +11,9 @@ import { ssotSchema } from '../src/schemas/ssot.schema.js';
 const TREE = JSON.parse(readFileSync(new URL('./fixtures/tree-world.json', import.meta.url), 'utf8'));
 import { readFileSync } from 'node:fs';
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
+// leg25 c：`stateChanges`（模型提议的属性增量）随四维浮点从世界步契约整条删除——夹具步不再拼它
+//   （拼了即"未知字段"整步被拒，世界如实不动，本文件全部用例会当场变红）。
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id) => ({ agendaId: id, step: '推进', stage: '中' });
 

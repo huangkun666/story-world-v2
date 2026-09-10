@@ -7,8 +7,9 @@ import { settleTick } from '../src/settle.js';
 import { seedBookEntities } from '../src/abstract.js';
 
 function zeroStep(extra = {}) {
+    // leg25 c：`stateChanges` 已随四维浮点从世界步契约删除——夹具步不再拼它。
     return {
-        actions: [], newEvents: [], agendaAdvances: [], stateChanges: [],
+        actions: [], newEvents: [], agendaAdvances: [],
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
         ...extra,
     };
@@ -19,8 +20,8 @@ function baseWorld(extra = {}) {
         version: 1,
         context: { world: '测试界', tension: 0.5, positions: ['临渊城', '大营'] },
         entities: [
-            { id: 'e_bk_1', kind: 'faction', name: '万法阁', location: '临渊城', attrs: { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 } },
-            { id: 'e_bk_2', kind: 'character', name: '清玄真人', location: '临渊城', attrs: { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 } },
+            { id: 'e_bk_1', kind: 'faction', name: '万法阁', location: '临渊城' },
+            { id: 'e_bk_2', kind: 'character', name: '清玄真人', location: '临渊城' },
         ],
         weights: { e_bk_1: 0.9, e_bk_2: 0.6 },
         agendas: [], events: [], chronicle: [], milestones: [],
@@ -78,7 +79,8 @@ test('K45: 无池顶——批次 300 实体全量 seed 后仍可自由入局（s
     assert.equal(Object.keys(w.weights).length, 302, '分量缓存全覆盖（值来自中立 floor——账面不预填数值）');
     // 既有夹具里的 e_bk_* 是手摆的旧形态；新 seed 出来的名号 id 顺延（e_bk_3 起）——只查新增的那些
     for (const e of w.entities.filter((x) => x.id.startsWith('e_bk_') && Number(x.id.slice(5)) > 2)) {
-        assert.deepEqual(e.attrs, {}, `leg24 片2：名册入账不预填数值（${e.name}）`);
+        // leg25 c：名册入账**根本不落 attrs**（键都不存在，不是空对象）——四维浮点已整条删除。
+        assert.equal(e.attrs, undefined, `leg25 c：名册入账不落数值属性（${e.name}）`);
     }
     w.events = [{ id: 'ev_a', title: '甲事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }];
     w.entities.find((e) => e.id === 'e_bk_2').lastActiveTick = 0;   // leg24 片3：提议方须"刚出过手"才不算结构静默

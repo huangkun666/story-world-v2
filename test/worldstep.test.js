@@ -17,11 +17,13 @@ const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json
 const EXTRACT_FIX = JSON.parse(readFileSync(new URL('./fixtures/extract-samples.json', import.meta.url), 'utf8'));
 
 // 合法世界步（黄金世界语境）
+// leg25 c（单维删除）：原先这里还有一条 `stateChanges: [{entity, attr:'network', delta, cause}]`。
+//   四维浮点（兵力/权位/人脉/耳目）随用户令整条删除之后，契约层 `stateChanges` 也整条删了——
+//   它在夹具里的唯一作用就是喂那几个数。删掉它，本文件的断言意图（形状/因果/位置/波及/门控）一个不少。
 const validStep = () => ({
     actions: [{ entity: 'e_merchant', verb: '沿商路北上巡查', position: '商路' }],
     newEvents: [{ title: '守将允诺通关', source: { type: 'plot', ref: 'a_1' }, position: '边关', ripples: ['e_merchant'] }],
     agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
-    stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05, cause: 'a_1' }],
     newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
@@ -166,6 +168,8 @@ test('样例 tick：黄金世界 + l91 落子事实 → 演化上下文预算内
 // ---------- 玩家档案 K8：模型禁写玩家（红线 1 代码化） ----------
 
 // 黄金世界 + 玩家实体（P-F 提案值，K11 校准后正式报批）
+// leg25 c：玩家实体不再带 `attrs`（四维浮点已删，schema 不再接受该键）。
+//   玩家实体本身照旧要建——K8 那几条"模型禁写玩家"的红线与被删的属性无关。
 const playerWorld = () => {
     const w = JSON.parse(JSON.stringify(GOLDEN));
     w.context.playerId = 'e_player';
@@ -174,7 +178,6 @@ const playerWorld = () => {
         kind: 'character',
         name: '黄坤',
         location: w.context.positions[0],
-        attrs: { hardPower: 0.25, office: 0.05, network: 0.3, intel: 0.4 },
     });
     return w;
 };
@@ -199,13 +202,15 @@ test('K8：actions 写玩家被拒，世界如实不动（红线 1 代码化）'
     assert.ok(r.errors.some((e) => e.includes('禁写玩家')));
 });
 
-test('K8：stateChanges 写玩家被拒（模拟器永不写主角行动代码化）', () => {
-    const step = validStep();
-    step.stateChanges = [{ entity: 'e_player', attr: 'hardPower', delta: 0.5, cause: 'a_1' }];
-    const r = checkWorldStep(step, playerWorld());
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes('禁写玩家')));
-});
+// leg25 c（单维删除）──**原「K8：stateChanges 写玩家被拒」整条删除**。
+//   为什么删：那条测试构造的是 `stateChanges: [{entity:'e_player', attr:'hardPower', delta}]`，
+//   指望 engine 以「模型禁写玩家」拒它。现在 `stateChanges` 在**契约层**就没了 ⇒ 整步首先被
+//   `$.stateChanges: 未知字段` 拒掉，那条断言永远走不到（只是"死引用"，不是活的防线）。
+//   而"模型禁写玩家"这条红线在别处仍有活锁：actions 写玩家（上一条）、newAgendas.entity 写玩家、
+//   entityFates 灭玩家、newEntities 提议者写玩家——四条通道都有独立断言。
+//   "`stateChanges` 这个键必须被拒"这件事改由 schema.test.js 的专项用例锁定，见：
+//   「世界步 schema（leg25 c）：`stateChanges` 属未知字段被拒」。
+//   按硬规矩：该删就删，不用改名/换字段续命（换名保留假精度正是本次要治的病）。
 
 test('K8：玩家入池不影响他人动作/状态校验（无过检）', () => {
     const r = checkWorldStep(validStep(), playerWorld());
@@ -287,8 +292,10 @@ test('K18：合法取消提议通过（在飞盘算 + 理由可选）；静默�
     // 静默方（**结构静默**：手上没有在办的盘算 + 从没出手 + 无人点名）的取消提议 → gate 滤除 + 审计
     // leg24 片3：判据换了，构造也跟着换——旧夹具的 e_silent 手上有在飞盘算（旧法因低分量静默；
     //   新法"有在办的事"=活跃）。且**它必须先有过一条盘算才谈得上取消**：用一条已终结的盘算承载取消提议。
+    // leg25 c：这个实体原先带 `attrs: {hardPower:0.1,…}`（四维浮点，已删；schema 不再接受该键）——
+    //   删掉不改变本用例语义：静默判据看的是"有没有在办的事/出没出手/被没被点名"，从来看属性。
     const w = structuredClone(GOLDEN);
-    w.entities.push({ id: 'e_silent', kind: 'character', name: '无名客', location: '临渊城', attrs: { hardPower: 0.1, office: 0.1, network: 0.1, intel: 0.1 } });
+    w.entities.push({ id: 'e_silent', kind: 'character', name: '无名客', location: '临渊城' });
     w.agendas.push({ id: 'a_dead', owner: 'e_silent', goal: '旧暗务', stage: '了结', visibility: 'concealed', maxSteps: 4, progress: 4, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 3 } });
     w.weights = { e_merchant: 0.9, e_silent: 0.1 };
     const silentStep = validStep();

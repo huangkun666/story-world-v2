@@ -62,15 +62,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "network",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -95,20 +86,7 @@
           ]
         },
         "player": {
-          "affected": [
-            {
-              "tick": 1,
-              "source": "e_xie",
-              "attr": "hardPower",
-              "delta": -0.04999999999999999
-            },
-            {
-              "tick": 1,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": -0.04999999999999999
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -175,15 +153,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "intel",
-            "delta": 0.1,
-            "actor": "e_player",
-            "cause": "a_dayu"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -204,38 +173,7 @@
           "lifted": []
         },
         "player": {
-          "affected": [
-            {
-              "tick": 2,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": -0.05
-            },
-            {
-              "tick": 2,
-              "source": "world",
-              "attr": "hardPower",
-              "delta": -0.020000000000000004
-            },
-            {
-              "tick": 2,
-              "source": "world",
-              "attr": "office",
-              "delta": -0.02
-            },
-            {
-              "tick": 2,
-              "source": "world",
-              "attr": "network",
-              "delta": -0.020000000000000018
-            },
-            {
-              "tick": 2,
-              "source": "world",
-              "attr": "intel",
-              "delta": -0.020000000000000018
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -294,14 +232,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "intel",
-            "delta": 0.1,
-            "cause": "a_xie"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -322,14 +252,7 @@
           "lifted": []
         },
         "player": {
-          "affected": [
-            {
-              "tick": 3,
-              "source": "e_xie",
-              "attr": "hardPower",
-              "delta": -0.05
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -413,20 +336,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": 0.2,
-            "cause": "a_wanfa"
-          },
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "cause": "a_dayu"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -441,54 +350,13 @@
       },
       "world": null,
       "expect": {
-        "warnings": [
-          "裁定: 属性硬边界（e_player.hardPower 0.030000000000000013→0，申请 -0.01999999999999999）",
-          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
-          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）"
-        ],
+        "warnings": [],
         "gate": {
           "silent": [],
           "lifted": []
         },
         "player": {
-          "affected": [
-            {
-              "tick": 4,
-              "source": "e_xie",
-              "attr": "hardPower",
-              "delta": -0.030000000000000013
-            },
-            {
-              "tick": 4,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": 0
-            },
-            {
-              "tick": 4,
-              "source": "world",
-              "attr": "hardPower",
-              "delta": 0
-            },
-            {
-              "tick": 4,
-              "source": "world",
-              "attr": "office",
-              "delta": -0.02
-            },
-            {
-              "tick": 4,
-              "source": "world",
-              "attr": "network",
-              "delta": -0.020000000000000018
-            },
-            {
-              "tick": 4,
-              "source": "world",
-              "attr": "intel",
-              "delta": -0.020000000000000018
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -558,15 +426,6 @@
             "note": "精锐入谷后的首要目标"
           }
         ],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu",
-            "cause": "a_dayu"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -582,9 +441,6 @@
       "world": null,
       "expect": {
         "warnings": [
-          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.05）",
-          "裁定: 越界提议被忽略（e_player.hardPower 已是 0，申请 -0.02）",
-          "裁定: 属性硬边界（e_player.office 0.010000000000000002→0，申请 -0.009999999999999998）",
           "行动↔盘算不一致: e_xie 无在飞盘算仍然行动（烟雾报警）"
         ],
         "gate": {
@@ -592,38 +448,7 @@
           "lifted": []
         },
         "player": {
-          "affected": [
-            {
-              "tick": 5,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": 0
-            },
-            {
-              "tick": 5,
-              "source": "world",
-              "attr": "hardPower",
-              "delta": 0
-            },
-            {
-              "tick": 5,
-              "source": "world",
-              "attr": "office",
-              "delta": -0.010000000000000002
-            },
-            {
-              "tick": 5,
-              "source": "world",
-              "attr": "network",
-              "delta": -0.01999999999999999
-            },
-            {
-              "tick": 5,
-              "source": "world",
-              "attr": "intel",
-              "delta": -0.020000000000000018
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -710,15 +535,6 @@
               "ref": "ev_5_2"
             },
             "note": "清理大盘谷隐患"
-          }
-        ],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.2,
-            "actor": "e_dayu",
-            "cause": "ev_5_1"
           }
         ],
         "agendaCancels": [],
@@ -868,22 +684,6 @@
               "ref": "ev_0"
             },
             "note": "发兵催战的最终目的"
-          }
-        ],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu",
-            "cause": "ev_6_1"
-          },
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_wanfa",
-            "cause": "ev_6_2"
           }
         ],
         "agendaCancels": [],

@@ -14,8 +14,8 @@ const W = () => ({
     version: 1,
     context: { world: '边地', tension: 0.5, positions: ['边城', '大营'] },
     entities: [
-        { id: 'e_x', kind: 'faction', name: '边军', location: '边城', attrs: { hardPower: 0.9, office: 0.9, network: 0.9, intel: 0.9 }, lastActiveTick: 0 },
-        { id: 'e_y', kind: 'character', name: '细作', location: '大营', attrs: { hardPower: 0.5, office: 0.3, network: 0.6, intel: 0.7 }, lastActiveTick: 0 },
+        { id: 'e_x', kind: 'faction', name: '边军', location: '边城', lastActiveTick: 0 },
+        { id: 'e_y', kind: 'character', name: '细作', location: '大营', lastActiveTick: 0 },
     ],
     weights: { e_x: 0.9, e_y: 0.5 },
     agendas: [
@@ -27,7 +27,8 @@ const W = () => ({
     meta: { tick: 0 },
 });
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
+// leg25 c：`stateChanges` 已随四维浮点从世界步契约删除；实体 `attrs` 同（四维不存在了）。
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id, s) => ({ agendaId: id, step: s, stage: '中' });
 const na = (entity, goal, source) => ({ entity, goal, visibility: 'concealed', source });

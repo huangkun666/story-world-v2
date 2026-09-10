@@ -18,7 +18,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function world() {
     const w = JSON.parse(readFileSync(path.join(ROOT, 'test', 'fixtures', 'live-world.json'), 'utf8'));
     w.context.playerId = 'e_player';
-    w.entities.push({ id: 'e_player', kind: 'character', name: '黄坤', location: '黄府', attrs: {} });
+    // leg25 c：实体不再带 `attrs`（四维浮点已删，ssot.schema 的 additional:false 也不再接受该键）。
+    w.entities.push({ id: 'e_player', kind: 'character', name: '黄坤', location: '黄府' });
     w.context.setting = {
         frozen: {
             fingerprint: 'fnv1a_9f31x_12044',
@@ -131,10 +132,19 @@ test('K33/leg24 片5 观棋·位置速览：事实标记（在办/据）取代�
     assert.ok(!side.includes('sw2-weight-row'), '整行影响力组件下架');
     assert.match(side, /sw2-ev-mark/, '改为事实标记');
     assert.match(side, /在办|无在办/, '在办与否可见');
-    assert.match(side, /有据 \d\/4|数值无据/, '据/无据可见（空着就是空着）');
+    // leg25 c：原「有据 n/4 / 数值无据」徽章随四维删除——"有几维有据"这个说法已失去所指
+    //   （没有数值维度了）。取而代之的是查书标记（实力/位置的原文或未查态），见实体页那几条用例。
+    //   注：玩家行那句「账上没有的数就是没有据」是**另一处**文案（render.js:239），本次未改；
+    //   所以这里只锁"按维度计数"的那种形态，不误伤它。
+    assert.ok(!/有据\s*\d\s*\/\s*4/.test(side) && !side.includes('数值无据'),
+        'leg25 c：「有据 n/4 / 数值无据」不再出现（四维不存在，无从谈"几维有据"）');
+    // ★本次变更核心意图锁：旧的四维属性名不得以任何形式出现在玩家视线面
+    for (const term of ['兵力', '权位', '人脉', '耳目']) {
+        assert.ok(!side.includes(term), `位置速览页不得再出现旧属性名「${term}」`);
+    }
     assert.match(side, /sw2-entity sw2-player/);
     assert.match(side, /你的棋子/);
-    w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', attrs: {}, status: 'dead' });
+    w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', status: 'dead' });
     assert.ok(!renderBoardHtml(w).side.includes('覆灭阁'));
 });
 
@@ -161,43 +171,48 @@ test('K34 大事纪·旧卷页：里程碑卡（span/标题/ids 展开） + 卷�
     assert.match(empty, /尚未入卷/);
 });
 
-test('K34 角色与势力页：全量表（位置/影响力/兵力权位人脉耳目/谋划/最近活跃/状态徽）', () => {
+test('K34 角色与势力页：全量表（位置/实力文本/谋划/最近活跃/状态徽）', () => {
     const w = world();
     const html = renderEntitiesHtml(w);
     assert.match(html, /全部角色与势力（全册 4 · 本轮镜头 4）/);
-    assert.ok(html.includes('sw2-eattr" title="兵力：硬实力'));
-    assert.ok(html.includes('sw2-eattr" title="耳目：情报网有多灵'));
+    // leg25 c（本次变更核心意图）：四维属性 chip（兵力/权位/人脉/耳目）**整段删除**——
+    //   那些数没法精确表示、手拍值让"编的"像"算的"。属性区现在只有两样**据书/据账**的东西：
+    //   ① 实力 = 书里明述的原话（文本，角色才有）；② 位置的查书标记。
+    for (const term of ['兵力', '权位', '人脉', '耳目', 'hardPower', 'office', 'network', 'intel']) {
+        assert.ok(!html.includes(term), `实体页不得再出现旧属性名/键「${term}」（四维已删）`);
+    }
+    assert.ok(!html.includes('ATTR_HINTS') && !html.includes('sw2-eattr" title="兵力'),
+        '旧的属性释义悬停（ATTR_HINTS）不得回潮');
     assert.match(html, /sw2-ename">黄坤<small>你的棋子/);
     assert.match(html, /最近活跃<br>第45轮/);
-    w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', attrs: {}, status: 'dead' });
+    w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', status: 'dead' });
     const html2 = renderEntitiesHtml(w);
     assert.match(html2, /覆灭阁/);
     assert.match(html2, /sw2-visible v-hidden">已灭</);
     // K37 席位语义：在席计数只算 active + 退休/已灭标注
-    w.entities.push({ id: 'e_ret', kind: 'character', name: '归隐客', location: 'x', attrs: {}, status: 'retired' });
+    w.entities.push({ id: 'e_ret', kind: 'character', name: '归隐客', location: 'x', status: 'retired' });
     const html3 = renderEntitiesHtml(w);
     assert.match(html3, /全部角色与势力（全册 6 · 本轮镜头 4） <small class="sw2-quiet-note">另 2 位退休\/已灭<\/small>/);
 });
 
-test('第十三棒：属性维度释义与无障碍——title+视障文本双通道、注脚行、缺键零维不渲染', () => {
+test('leg25 c：属性区（实力/位置的查书标记）无障碍双通道——悬停 title + 视障 sr 文本；注脚行在位', () => {
     const w = world();
     const html = renderEntitiesHtml(w);
-    // 悬停释义（鼠标通道）
-    assert.ok(html.includes('title="兵力：硬实力——兵马、武备、财力这类能押上桌的东西">'));
-    // 视障通道（sr 文本对读屏可见，chip 内先释义后数值）
-    assert.ok(html.includes('class="sw2-visually-hidden">兵力：硬实力——兵马、武备、财力这类能押上桌的东西。<'));
-    assert.ok(html.includes('class="sw2-visually-hidden">耳目：情报网有多灵——决定你能看多远。<'));
-    // 势力/角色差异注脚（机制事实：COEFFS 层差）
-    assert.ok(html.includes('账上只记查到的与玩出来的东西'), '片5 注脚 + 细案查书标记改写：有值/未加载到/书未明述 三句分清');
-    // 缺键零维不渲染：账上只有兵力的世界，不出现权位/人脉/耳目任何 chip（「无兵世界」语义闭环）
-    const bareAttrs = world();
-    for (const e of bareAttrs.entities) e.attrs = {};
-    bareAttrs.entities.find((e) => e.id === 'e_xie').attrs = { hardPower: 0.8 };
-    const html2 = renderEntitiesHtml(bareAttrs);
-    assert.ok(html2.includes('title="兵力：硬实力'));
-    assert.ok(!html2.includes('title="权位'));
-    assert.ok(!html2.includes('title="人脉'));
-    assert.ok(!html2.includes('title="耳目'));
+    // ① 有值态（实力=书里原话）：两条通道都要有（鼠标悬停 + 读屏 sr 文本）
+    w.entities.push({ id: 'e_c1', kind: 'character', name: '玄一道祖', location: '未明', '实力': 'T9渡劫巅峰' });
+    const withPower = renderEntitiesHtml(w);
+    assert.ok(withPower.includes('title="实力：书里明述的原话（角色字段；势力不写实力）"'),
+        '悬停释义在位（鼠标通道）');
+    assert.ok(withPower.includes('<span class="sw2-visually-hidden">实力：书里明述的原话。</span>实力<b>T9渡劫巅峰</b>'),
+        '视障通道在位：sr 文本先释义、后原话（读屏用户拿得到同一信息）');
+    // ② 未查态（没轮到查它）：悬停释义同样要在——否则这一格对读屏用户是空白
+    assert.ok(html.includes('title="实力：还没轮到查它'), '实力未查态有悬停释义');
+    assert.ok(html.includes('title="位置：还没轮到查它'), '位置未查态有悬停释义（两条通道不因"无值"而消失）');
+    // 势力行不摆实力栏（用户拍板）：势力行的属性区不应出现"实力"chip
+    const factionRow = html.split('<div class="sw2-entity-row').find((seg) => seg.includes('>薛铁衣<'));
+    assert.ok(factionRow && !factionRow.includes('实力<b>'), '势力行内不得渲染实力 chip');
+    // 片5 注脚 + 细案查书标记改写：有值/未加载到/书未明述 三句分清
+    assert.ok(html.includes('账上只记查到的与玩出来的东西'), '注脚行在位（说清"有值/未加载到/书未明述"三态）');
 });
 
 test('细案 spec-entity-field-lookup：实力/位置查书标记在面板上是三句不同的话；势力不显示实力栏', () => {
@@ -237,18 +252,21 @@ test('细案 spec-entity-field-lookup：势力的实力由麾下成员派生显�
     assert.ok(row && !row.includes('实力<b>'), `势力行内不得渲染实力 chip：${String(row).slice(0, 80)}`);
 });
 
-test('leg24 片5：账面无数与位置未明都要看得见（不填默认值冒充客观）；环境键书没给就标「书未明述」', () => {
+test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客观）；环境键书没给就标「书未明述」', () => {
+    // leg25 c 改写（原「leg24 片5：账面无数与位置未明都要看得见」）：
+    //   原用例断言的是"四维无数 → 明说『数值无据』"与"整排属性空着 → 一句人话解释『四维无数（等模型提议或查书）』"。
+    //   那两个说法的**所指**（四维浮点）已经不存在 ⇒ 断言换成现在真实存在的对应物：
+    //   ①属性区不是数值而是**查书标记**，空态文案是「实力/位置未查（轮到时会按需去世界书取原话）」；
+    //   ②同样一条硬规矩仍在被锁：**不许拿 0.15/0.25/0.5 这类默认值冒充数据**（design-core-leg23 §2.2 硬规矩一）。
     const w = world();
-    // 全部实体清空数值 → 四维无数是真状态，界面要点明
-    for (const e of w.entities) e.attrs = {};
     w.entities.forEach((e) => { e.location = '未明'; });
     const html = renderEntitiesHtml(w);
-    assert.match(html, /数值无据/, '无数值 → 明说"数值无据"');
     // 第二十五棒修正（用户实拍："第一个未明是位置未明，后面还有一个位置未明是不是多了"）：
     //   位置列已经说明"没载到"，标记列不再重复打「位置未明」徽章；位置列本身写「未载」。
     assert.match(html, /sw2-eloc">未载</, '位置没载到 → 位置列写「未载」（不再显示重复的"未明"）');
     assert.ok(!html.includes('位置未明'), '★撤销重复的「位置未明」徽章（同一事实不再说两遍）');
-    assert.match(html, /四维无数（等模型提议或查书）/, '整排属性空着 → 一句人话解释');
+    assert.ok(!html.includes('数值无据'), 'leg25 c：四维不存在 → "数值无据"这个说法不再出现');
+    assert.match(html, /实力\/位置未查（轮到时会按需去世界书取原话）/, '属性区空态 → 一句人话解释（不是空白、不是假数）');
     assert.ok(!/0\.15|0\.25/.test(html), '不出现任何默认值冒充的数据');
     // 环境四键：书没给的显示「书未明述（无据）」，不给 0.5
     const bare = structuredClone(w);
@@ -352,7 +370,7 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
             world: 'x', tension: 0.5, positions: ['x'],
             setting: { dynamic: { tension: { polarity: '正邪相争', direction: '魔涨道消', intensity: 0.82 }, env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.15, 张力推手: 0.8 }, derivedFrom: ['浪尖:a_1@3'] } },
         },
-        entities: [{ id: 'e_a', kind: 'faction', name: '甲宗', location: 'x', attrs: {} }], weights: { e_a: 0.9 },
+        entities: [{ id: 'e_a', kind: 'faction', name: '甲宗', location: 'x' }], weights: { e_a: 0.9 },
         agendas: [{ id: 'a_1', owner: 'e_a', goal: '血洗洛城', stage: '用兵', visibility: 'known', maxSteps: 3, progress: 2, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
         events: [], chronicle: [], milestones: [], meta: { tick: 3, simLog: [] },
     });
@@ -376,9 +394,9 @@ test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）'
     const w = {
         version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] },
         entities: [
-            { id: 'e_f', kind: 'faction', name: '青龙会', location: 'x', attrs: { network: 0.6 }, branches: ['盐帮', '漕帮'] },
-            { id: 'e_c1', kind: 'character', name: '弟子甲', location: 'x', attrs: { network: 0.5 }, parent: '盐帮' },
-            { id: 'e_c2', kind: 'character', name: '弟子乙', location: 'x', attrs: { network: 0.4 }, parent: '青龙会' },
+            { id: 'e_f', kind: 'faction', name: '青龙会', location: 'x', branches: ['盐帮', '漕帮'] },
+            { id: 'e_c1', kind: 'character', name: '弟子甲', location: 'x', parent: '盐帮' },
+            { id: 'e_c2', kind: 'character', name: '弟子乙', location: 'x', parent: '青龙会' },
         ],
         weights: { e_f: 0.9, e_c1: 0.5, e_c2: 0.4 },
         agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 0, simLog: [] },
@@ -501,8 +519,8 @@ function chainWorld() {
         version: 1,
         context: { world: '江州', tension: 0.5, positions: ['江州'] },
         entities: [
-            { id: 'e_gov', kind: 'faction', name: '江州官府', location: '江州', attrs: {} },
-            { id: 'e_du', kind: 'character', name: '大虞偏将', location: '江州', attrs: {} },
+            { id: 'e_gov', kind: 'faction', name: '江州官府', location: '江州' },
+            { id: 'e_du', kind: 'character', name: '大虞偏将', location: '江州' },
         ],
         weights: {},
         agendas: [

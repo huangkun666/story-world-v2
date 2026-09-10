@@ -2,9 +2,9 @@
   "version": 1,
   "context": { "world": "北境临战", "tension": 0.5, "positions": ["主帐", "前线", "粮道"] },
   "entities": [
-    { "id": "e_lead", "kind": "character", "name": "主帅", "location": "主帐", "attrs": { "hardPower": 0.9, "office": 0.9, "network": 0.5, "intel": 0.5 } },
-    { "id": "e_court", "kind": "character", "name": "军师", "location": "主帐", "attrs": { "hardPower": 0.5, "office": 0.4, "network": 0.8, "intel": 0.9 } },
-    { "id": "e_min", "kind": "character", "name": "小校", "location": "前线", "attrs": { "hardPower": 0.2, "office": 0.1, "network": 0.1, "intel": 0.1 } }
+    { "id": "e_lead", "kind": "character", "name": "主帅", "location": "主帐" },
+    { "id": "e_court", "kind": "character", "name": "军师", "location": "主帐" },
+    { "id": "e_min", "kind": "character", "name": "小校", "location": "前线" }
   ],
   "weights": { "e_lead": 0.9, "e_court": 0.6, "e_min": 0.2 },
   "agendas": [

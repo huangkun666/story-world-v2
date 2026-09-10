@@ -3,6 +3,9 @@
 // top-1 保送、静默方为合法客体、双面无痕、P3（pack 不含分量）、确定性、schema 审计字段。
 // 夹具：gated-world.json（三实体：e_hi/e_mid 各有在办盘算，e_lo 的盘算已终结——**leg24 片3 起静默判据=结构三条件**，
 //   不再看分量：没有在办的事 ∧ 久未出手 ∧ 无人点名 才静默）。
+// leg25 c 改写（用户令「删」四维浮点）：世界步里不再有 `stateChanges`（契约层整条删除），
+//   "静默方是合法客体"这一条的载体由"属性被他人改动"换成"被新事件波及点名"——
+//   语义没变（静默方始终是合法客体：可以被写进事件/被动作点名，只是不出主动作）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -31,7 +34,7 @@ const busyStep = () => ({
         { agendaId: 'a_mid', step: '布防完成', stage: '就绪' },
         { agendaId: 'a_lo', step: '自荐成功', stage: '上前' },
     ],
-    stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+    newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
 });
 
 test('门控（片3 结构判据）：没有在办的事 + 久未出手 + 无人点名 → 静默滤除（不落账、双面无痕）', () => {
@@ -108,7 +111,7 @@ test('门控：top-1 保送（实体序首个 active 实体恒活跃，防全静
             { title: '毛遂自荐', source: { type: 'plot', ref: 'a_lo' }, position: '大营' },
         ],
         agendaAdvances: [],
-        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -118,20 +121,24 @@ test('门控：top-1 保送（实体序首个 active 实体恒活跃，防全静
     assert.ok(!w.events.some((e) => e.title === '毛遂自荐'), '静默方的动作被滤');
 });
 
-test('门控：静默方是合法客体（被打被波及照常落账，仍不出主动作）', () => {
+test('门控：静默方是合法客体（被波及点名照常落账，仍不出主动作）', () => {
+    // leg25 c：原样本是"他人改他属性（stateChanges）"，该通道已随四维一并删除；
+    //   换成"新事件波及点名"这个仍在的载体——测的语义不变：**静默 = 不主动，不是消失**。
     const step = {
         actions: [{ entity: 'e_hi', verb: '弹压', position: '大营' }],
         newEvents: [{ title: '兵卒哗动', source: { type: 'ripple', ref: 'ev_p' }, position: '大营', ripples: ['e_lo'] }],
         agendaAdvances: [{ agendaId: 'a_hi', step: '亲临弹压', stage: '镇压' }],
-        stateChanges: [{ entity: 'e_lo', attr: 'hardPower', delta: -0.05, actor: 'e_hi', cause: 'ev_p' }],
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: GATED, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const w = r.ssot;
-    assert.equal(w.entities.find((e) => e.id === 'e_lo').attrs.hardPower, 0.05, '客体属性照常被改');
-    assert.ok(w.events.some((e) => e.title === '兵卒哗动'), '波及事件照常落账（含 e_lo 波及）');
-    assert.deepEqual(w.meta.simLog[0].silent, ['e_lo'], '静默状态保持（客体变动不改主动作权）');
+    const ev = w.events.find((e) => e.title === '兵卒哗动');
+    assert.ok(ev, '波及事件照常落账');
+    assert.deepEqual(ev.ripples, ['e_lo'], '静默方作为客体被点名（写进事件）');
+    assert.deepEqual(w.meta.simLog[0].silent, ['e_lo'], '静默状态保持（当客体不改主动作权）');
+    assert.deepEqual(w.meta.simLog[0].lifted, [], '本轮无人豁免（新事件在门控之后落账，当轮不构成点名源）');
+    assert.ok(w.agendas.find((a) => a.id === 'a_hi').progress > 0, '非静默方的推进照常落账');
 });
 
 test('门控：触发例外——被其他实体动作点名时可应答', () => {
@@ -161,7 +168,7 @@ test('门控（片3）：结构三条件的真值表（各条件单独成立即�
         events: patch.events || [],
         meta: { tick: patch.tick ?? 10 },
     });
-    const step = { actions: [{ entity: 'e_x', verb: '动', position: '某处' }], newEvents: [], agendaAdvances: [], stateChanges: [] };
+    const step = { actions: [{ entity: 'e_x', verb: '动', position: '某处' }], newEvents: [], agendaAdvances: [] };
     // 三条件全不成立 → 静默
     assert.deepEqual(gateWorldStep(step, mk()).silent, ['e_x'], '无在办 + 久未出手 + 无人点名 → 静默');
     // ① 有在办盘算 → 不静默

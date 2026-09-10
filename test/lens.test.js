@@ -33,13 +33,16 @@ test('K44: 全量入镜——现规模（350 实体）全部进入且 ≤ 镜头
 });
 
 test('K44（片3 改写）: 保送优先——落子对象/未决波及/在飞属主/近 2 tick 活跃 置顶（判据已不看分量）', () => {
+    // leg25 c：这六位原先各带一份 `attrs`（高分/低分样本），用来证明"分量高低不影响保送序"。
+    //   四维浮点已删（schema 不再接受该键），而本用例真正依赖的是 **weights 缓存**（下一行仍在给），
+    //   所以把 attrs 摘掉、只留 weights——断言意图（分量不影响保送）一字不改地保住了。
     const entities = [
-        ent('e_hi', '高分者', 'character', { attrs: { hardPower: 0.9, network: 0.5, intel: 0.5, office: 0.5 } }),
-        ent('e_lo', '低分者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
-        ent('e_wave', '被波及者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
-        ent('e_owner', '有盘算者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 } }),
-        ent('e_act', '近活跃者', 'character', { attrs: { hardPower: 0.05, network: 0.05, intel: 0.05, office: 0.05 }, lastActiveTick: 9 }),
-        ent('e_old', '久未动者', 'character', { attrs: { hardPower: 0.9, network: 0.5, intel: 0.5, office: 0.5 }, lastActiveTick: 0 }),
+        ent('e_hi', '高分者', 'character'),
+        ent('e_lo', '低分者', 'character'),
+        ent('e_wave', '被波及者', 'character'),
+        ent('e_owner', '有盘算者', 'character'),
+        ent('e_act', '近活跃者', 'character', { lastActiveTick: 9 }),
+        ent('e_old', '久未动者', 'character', { lastActiveTick: 0 }),
     ];
     const w = mkWorld({
         entities,
@@ -222,7 +225,8 @@ test('leg25: runTick 端到端——超预算世界不炸且全程落在预算�
         actions: [{ entity: 'e_merchant', verb: '沿商路北上巡查', position: '商路' }],
         newEvents: [{ title: '守将允诺通关', source: { type: 'plot', ref: 'a_1' }, position: '边关', ripples: ['e_merchant'] }],
         agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
-        stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05, cause: 'a_1' }],
+        // leg25 c：原先这里还有一条 `stateChanges`（属性增量）——四维浮点整条删除后契约层也没有它了；
+        //   本用例测的是"超预算裁剪的端到端路径"，与属性无关，删掉它不损失任何断言意图。
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = await runTick({ transport: async () => ({ text: JSON.stringify(step) }), ssot: world, dialogue: '（继续）' });

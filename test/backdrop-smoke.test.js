@@ -24,8 +24,8 @@ const world = () => ({
         },
     },
     entities: [
-        { id: 'e1', kind: 'faction', name: '大虞', location: '临渊城', attrs: { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 } },
-        { id: 'e2', kind: 'character', name: '薛铁衣', location: '临渊城', attrs: { hardPower: 0.3, office: 0.2, network: 0.4, intel: 0.4 } },
+        { id: 'e1', kind: 'faction', name: '大虞', location: '临渊城' },
+        { id: 'e2', kind: 'character', name: '薛铁衣', location: '临渊城' },
     ],
     weights: {},
     agendas: [],
@@ -34,7 +34,8 @@ const world = () => ({
     meta: { tick: 0 },
 });
 
-const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
+// leg25 c：`stateChanges` 已随四维浮点从世界步契约删除——夹具步不再拼它。
+const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 // 挂因闭环步生成：熵泵事件未决时提议应对盘算（source.event=熵泵 id——A-6"可作盘算挂因"冒烟面）；
 // 有在飞盘算才行动/推进（零烟雾报警）；盘算满步达成后闭环。
@@ -101,8 +102,9 @@ test('K29/A-5/A-6/A-8：冒烟 100t 张力/环境量曲线——强度域 [0,1] 
     assert.ok(Object.keys(env).every((k) => ENV_KEYS.includes(k)), `env 键越表: ${Object.keys(env)}`);
     const r = validate(a.world, ssotSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
-    const attrsLen = Object.keys(env).length === ENV_KEYS.length;
-    assert.equal(attrsLen, true, '四键常驻');
+    // （原变量名 attrsLen 是历史误名——它数的是环境量键，与已删的实体四维属性无关；一并正名）
+    const envKeysAllPresent = Object.keys(env).length === ENV_KEYS.length;
+    assert.equal(envKeysAllPresent, true, '四键常驻');
 
     // A-5 两来源之二：盘算浪尖派生——顶层盘算终结（达成）后 derivedFrom 有浪尖项
     const derived = a.world.context.setting.dynamic.derivedFrom || [];

@@ -43,12 +43,15 @@ test('校验器：缺失必填单独列出', () => {
 });
 
 // ---------- SSOT schema ----------
+// leg25 c（用户令「删」）：四维浮点（兵力/权位/人脉/耳目）整条删除之后，实体 `attrs` 键**不再被接受**。
+//   所以下面所有 SSOT 夹具里的 `attrs: {}` 一律摘掉——留着它 schema 会判「未知字段」。
+//   这不是"改夹具迁就实现"：那些空 attrs 本来就没有任何信息量（空对象），删掉不损失任何断言意图。
 
 test('SSOT schema：无源事件被拒（§4.2）', () => {
     const doc = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [{ id: 'a1', owner: 'e1', goal: 'g', stage: 's', visibility: 'known', maxSteps: 2, progress: 0, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
         events: [{ id: 'ev1', title: '空降事件', position: '临渊城' }],   // 无 source
@@ -64,7 +67,7 @@ test('SSOT schema：事件源类型枚举外被拒', () => {
     const base = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'character', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'character', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [],
         events: [{ id: 'ev1', title: 't', source: { type: 'magic' }, position: '临渊城' }],
@@ -80,7 +83,7 @@ test('SSOT schema：盘算缺 maxSteps 被拒（§4.5 三必须）', () => {
     const base = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [{ id: 'a1', owner: 'e1', goal: 'g', stage: 's', visibility: 'known', progress: 0, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
         events: [],
@@ -96,7 +99,7 @@ test('SSOT schema：顶层未知字段被拒', () => {
     const base = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [],
         events: [],
@@ -109,11 +112,27 @@ test('SSOT schema：顶层未知字段被拒', () => {
     assert.ok(r.errors.some(e => e.includes('$.stray: 未知字段')));
 });
 
+test('SSOT schema（leg25 c）：实体 `attrs` 不再被接受——删字段只删一半最危险（引擎不写、契约仍收=看起来删了其实没有）', () => {
+    const doc = {
+        version: 1,
+        context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: { hardPower: 0.5 } }],
+        weights: {},
+        agendas: [],
+        events: [],
+        chronicle: [],
+        meta: { tick: 1 },
+    };
+    const r = validate(doc, ssotSchema);
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('$.entities[0].attrs: 未知字段')), r.errors.join('; '));
+});
+
 test('SSOT schema：盘算 closed 可选、meta.simLog 记账合法', () => {
     const doc = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [{ id: 'a1', owner: 'e1', goal: 'g', stage: 's', visibility: 'known', maxSteps: 2, progress: 2, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 2 } }],
         events: [],
@@ -130,7 +149,7 @@ test('SSOT schema：编年行 kind 合法值通过、枚举外被拒、缺省合
     const base = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [],
         events: [],
@@ -157,7 +176,7 @@ test('SSOT schema：编年行 chainRef 可选字段——合法通过、与 even
     const base = {
         version: 1,
         context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
         weights: {},
         agendas: [],
         events: [],
@@ -177,17 +196,28 @@ test('SSOT schema：编年行 chainRef 可选字段——合法通过、与 even
 });
 
 // ---------- 世界步 schema（提案形状） ----------
+// leg25 c：`stateChanges`（属性增量提议）整条删除；世界步从八组收敛为**七组**。
 
-test('世界步 schema：合法世界步通过', () => {
+test('世界步 schema：合法世界步通过（七组形状）', () => {
     const step = {
         actions: [{ entity: 'e_merchant', verb: '循商路北上', position: '商路' }],
         newEvents: [{ title: '边关扣货', source: { type: 'state' }, position: '边关', ripples: ['e_merchant'] }],
         agendaAdvances: [{ agendaId: 'a_1', step: '守将首肯，车队放行', stage: '过边关' }],
-        stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05 }],
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = validate(step, worldStepSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
+});
+
+test('世界步 schema（leg25 c）：`stateChanges` 属未知字段被拒——四维浮点已随用户令删除，涨回来的路必须是"另立细案"而不是"旧键复活"', () => {
+    // 这一条锁的是"删除"这件事本身：契约层该字段整条删了，模型若照旧模板吐出它，整步被拒（世界如实不动）。
+    const step = {
+        actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+        stateChanges: [{ entity: 'e_merchant', attr: 'network', delta: 0.05 }],
+    };
+    const r = validate(step, worldStepSchema);
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('$.stateChanges: 未知字段')), r.errors.join('; '));
 });
 
 test('世界步 schema：事件缺源被拒、未知字段被拒', () => {
@@ -195,7 +225,6 @@ test('世界步 schema：事件缺源被拒、未知字段被拒', () => {
         actions: [],
         newEvents: [{ title: 't', position: '边关' }],   // 缺 source
         agendaAdvances: [],
-        stateChanges: [],
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
         magic: 1,
     };

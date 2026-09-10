@@ -1,5 +1,8 @@
 // story-world-v2/test/setting-guard.test.js
 // K25/设定大势层：设定池读写面（细案 §3.3 → A-4）——保留键空间拒面（check-step 集成）+ 演化层写通道（src/setting.js）。
+// leg25 c 改写：`stateChanges` 已从世界步契约整条删除（四维浮点不存在了），故拒面样本里那两类
+//   （$.stateChanges[0].entity / .actor）随之删除——引用面只剩四类（actions.entity/target、newAgendas.entity、
+//   newEvents.ripples）。测的东西没变：**设定池保留键空间对一切实体引用字段一律关门**。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkWorldStep } from '../src/check-step.js';
@@ -18,8 +21,8 @@ const world = () => ({
         },
     },
     entities: [
-        { id: 'e_p', kind: 'character', name: '玩家', location: '临渊城', attrs: { hardPower: 0.25 } },
-        { id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} },
+        { id: 'e_p', kind: 'character', name: '玩家', location: '临渊城' },
+        { id: 'e1', kind: 'faction', name: 'A', location: '临渊城' },
     ],
     weights: {},
     agendas: [],
@@ -32,7 +35,6 @@ const okStep = () => ({
     actions: [{ entity: 'e1', verb: '巡视', position: '临渊城' }],
     newEvents: [],
     agendaAdvances: [],
-    stateChanges: [],
     newAgendas: [],
     agendaCancels: [], newEntities: [], entityFates: [],
 });
@@ -49,10 +51,8 @@ test('K25/A-4 判词：保留键空间——setting 全池命中，普通实体/
     assert.equal(isSettingRef('scenario'), false);
 });
 
-test('K25/A-4 拒面：六类实体引用字段命中设定池保留键一律拒绝（世界如实不动）', () => {
+test('K25/A-4 拒面：四类实体引用字段命中设定池保留键一律拒绝（世界如实不动）', () => {
     const cases = [
-        [{ stateChanges: [{ entity: 'setting.frozen.canon.powerScale', attr: 'hardPower', delta: 0.1 }] }, '$.stateChanges[0].entity'],
-        [{ stateChanges: [{ entity: 'e1', attr: 'hardPower', delta: 0.1, actor: 'setting.dynamic' }] }, '$.stateChanges[0].actor'],
         [{ actions: [{ entity: 'setting', verb: '修改' }] }, '$.actions[0].entity'],
         [{ actions: [{ entity: 'e1', verb: '攻打', target: 'setting.frozen.canon.rules' }] }, '$.actions[0].target'],
         [{ newAgendas: [{ entity: 'setting.frozen', goal: 'g', visibility: 'known', source: { type: 'state' } }] }, '$.newAgendas[0].entity'],
@@ -76,7 +76,7 @@ test('K25/A-4：命名空间恒定保留——无设定池的世界同样拒绝 
     const w = world();
     delete w.context.setting;
     const step = okStep();
-    step.stateChanges = [{ entity: 'setting.frozen.canon', attr: 'hardPower', delta: 0.1 }];
+    step.actions = [{ entity: 'e1', verb: '攻打', target: 'setting.frozen.canon' }];
     const r = checkWorldStep(step, w);
     assert.equal(r.ok, false);
     assert.ok(r.errors.some((e) => e.includes('设定池保留键')));

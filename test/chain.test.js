@@ -10,8 +10,9 @@ const mainWorld = () => ({
     version: 1,
     context: { world: '江州', tension: 0.5, positions: ['江州'] },
     entities: [
-        { id: 'e_gov', kind: 'faction', name: '江州官府', location: '江州', attrs: { office: 0.6 } },
-        { id: 'e_du', kind: 'character', name: '大虞偏将', location: '江州', attrs: { hardPower: 0.7 } },
+        // leg25 c：实体不再有 attrs（四维浮点整条删除）——链展开与属性无关，夹具直接去掉该字段。
+        { id: 'e_gov', kind: 'faction', name: '江州官府', location: '江州' },
+        { id: 'e_du', kind: 'character', name: '大虞偏将', location: '江州' },
     ],
     weights: {},
     agendas: [

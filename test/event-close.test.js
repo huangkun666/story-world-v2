@@ -2,6 +2,8 @@
 // K19 验收（因果链细案 §3.1/§3.2 → A-1/A-2）：事件闭环三型——源结清（K9 保真）/ 链尾结清（ripple 链头了结 +
 // 涟漪平息窗 CHAIN_SETTLE=5 提案 + 无未决下游）/ 常驻保留（state 永不自动闭环）+ 事件产率上限
 // （EVENT_CAPS.perTick=6 提案，超限拒建 + 洪峰警告，双面无痕于世界）。曲线支撑：细案 §1（max 4/稳态 1）。
+// leg25 c 改写（用户令「删」四维浮点）：夹具实体不再带 `attrs`，世界步不再带 `stateChanges`
+//   （契约层整条删除）——闭环逻辑本身不吃属性，故只删夹具里的死字段，断言一字未改。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { settleTick, EVENT_CAPS, CHAIN_SETTLE } from '../src/settle.js';
@@ -13,7 +15,7 @@ const W = () => ({
     version: 1,
     context: { world: '边地', tension: 0.5, positions: ['边城', '大营'] },
     entities: [
-        { id: 'e_x', kind: 'faction', name: '边军', location: '边城', attrs: { hardPower: 0.9, office: 0.9, network: 0.9, intel: 0.9 } },
+        { id: 'e_x', kind: 'faction', name: '边军', location: '边城' },
     ],
     weights: {},
     agendas: [
@@ -27,7 +29,7 @@ const W = () => ({
     meta: { tick: 0 },
 });
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id) => ({ agendaId: id, step: '推进', stage: '中' });
 

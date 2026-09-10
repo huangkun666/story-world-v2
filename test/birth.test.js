@@ -16,8 +16,9 @@ import { ssotSchema } from '../src/schemas/ssot.schema.js';
 
 const TREE = JSON.parse(readFileSync(new URL('./fixtures/tree-world.json', import.meta.url), 'utf8'));
 
+// leg25 c：`stateChanges`（模型提议的属性增量）随四维浮点从世界步契约整条删除——夹具步不再拼它。
 const na = (entity, goal, source, extra = {}) => ({ entity, goal, visibility: 'known', source, ...extra });
-const emptyStep = (newAgendas) => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas, agendaCancels: [], newEntities: [], entityFates: [] });
+const emptyStep = (newAgendas) => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas, agendaCancels: [], newEntities: [], entityFates: [] });
 // 片3 辅助：把某实体调成"结构静默"（无在办盘算 + 从没出手）
 function makeQuiet(world, id) {
     const w = structuredClone(world);
@@ -139,7 +140,11 @@ test('K14/A-5 前半：委派落痕——父 promises 记子 id + 编年"委派"
     assert.equal(pack.pack.agendas.find((a) => a.id === 'a_1_2').parentId, 'a_root', 'K13 补差：pack 在飞盘算含 parentId（树形可见）');
 });
 
-test('K14/A-4（防御）：新节点挂进既有环 → 最低分量方断边转独立（blocked 写 + 编年留痕 ≥1）', () => {
+test('K14/A-4（防御）：新节点挂进既有环 → 结构序最前者断边转独立（blocked 写 + 编年留痕 ≥1）', () => {
+    // leg24 片3：拆环排序判据由**"分量升序"改为结构序**（settle.js breakCycle）——
+    //   ①盘算年纪 turnsAlive 小者（较新）先让 ②再比 progress 浅者 ③再比 id 序（确定性兜底）。
+    //   原判据吃的是那个已被拍板删除的分数（分量），故断言改为"结构序最前者让路"。
+    //   本夹具两个环成员 turnsAlive 同为 1、progress 同为 1 → 落到 id 序兜底：a_cyc_x < a_cyc_y。
     const world = structuredClone(TREE);
     world.agendas.push(
         { id: 'a_cyc_x', owner: 'e_court', goal: '环甲', stage: '进行', visibility: 'known', maxSteps: 4, progress: 1, parentId: 'a_cyc_y', memory: { promises: [], done: [], blocked: [], turnsAlive: 1 } },
@@ -150,13 +155,15 @@ test('K14/A-4（防御）：新节点挂进既有环 → 最低分量方断边�
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const x = r.ssot.agendas.find((a) => a.id === 'a_cyc_x');
     const y = r.ssot.agendas.find((a) => a.id === 'a_cyc_y');
-    assert.equal(x.parentId, undefined, '最低分量方（e_court 0.6）断父链转独立');
+    assert.equal(x.parentId, undefined, '结构序最前者（同年资/同 progress → id 序 a_cyc_x）断父链转独立');
     assert.ok(x.memory.blocked.includes('拆环让路'), 'blocked 写入（清 blocked 写入执行债）');
-    assert.equal(y.parentId, 'a_cyc_x', '环内高分方保留父链');
-    assert.ok(r.ssot.chronicle.some((c) => c.text.includes('拆环') && c.text.includes('军师')), '编年留痕');
+    assert.equal(y.parentId, 'a_cyc_x', '环内后位者保留父链');
+    assert.ok(r.ssot.chronicle.some((c) => c.text.includes('拆环') && c.text.includes('军师')), '编年留痕（让路方属主 e_court=军师）');
 });
 
-test('K14/A-4（防御）：分量相等按 progress 浅者先让', () => {
+test('K14/A-4（防御）：同年资按 progress 浅者先让', () => {
+    // （原测试名"分量相等按 progress 浅者先让"——判据已换结构序，"分量相等"不再是对照变量；
+    //   本条实际锁的是结构序第②级：turnsAlive 相同时 progress 浅者让路。）
     const world = structuredClone(TREE);
     world.agendas.push(
         { id: 'a_cyc_x', owner: 'e_court', goal: '环甲', stage: '进行', visibility: 'known', maxSteps: 4, progress: 2, parentId: 'a_cyc_y', memory: { promises: [], done: [], blocked: [], turnsAlive: 1 } },
@@ -167,7 +174,7 @@ test('K14/A-4（防御）：分量相等按 progress 浅者先让', () => {
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     const x = r.ssot.agendas.find((a) => a.id === 'a_cyc_x');
     const y = r.ssot.agendas.find((a) => a.id === 'a_cyc_y');
-    assert.equal(y.parentId, undefined, '同分量 → progress 浅者（环乙）让路');
+    assert.equal(y.parentId, undefined, '同年资 → progress 浅者（环乙 1 < 环甲 2）让路');
     assert.equal(x.parentId, 'a_cyc_y', 'progress 深者保留');
 });
 
@@ -178,7 +185,7 @@ test('K14/A-5 后半：子满步达成 → 父 memory.done 记"兑现" + 编年'
             { agendaId: 'a_son1', step: '粮道探明', stage: '就绪' },
             { agendaId: 'a_son1', step: '押运启程', stage: '上路' },
         ],
-        stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = settleTick({ ssot: TREE, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -193,7 +200,7 @@ test('K14/A-5 后半：子满步达成 → 父 memory.done 记"兑现" + 编年'
 test('K14（K13 补差）：模型禁写玩家延伸——newAgendas.entity === playerId 校验拒绝，世界如实不动', () => {
     const world = structuredClone(TREE);
     world.context.playerId = 'e_player';
-    world.entities.push({ id: 'e_player', kind: 'character', name: '黄坤', location: '主帐', attrs: { hardPower: 0.25, office: 0.05, network: 0.3, intel: 0.4 } });
+    world.entities.push({ id: 'e_player', kind: 'character', name: '黄坤', location: '主帐' });
     const step = emptyStep([na('e_player', '玩家的盘算', { type: 'state' })]);
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, false);

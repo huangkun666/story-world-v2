@@ -1,76 +1,93 @@
 // story-world-v2/test/weight.test.js
-// K1 单测（分量引擎细案 §4 K1 验收）：公式单调/边界/层差/env 方向/缺键/确定性；衰减宽限/单调/封底/层差；掩码对等/情报/位置/权重比/阈值；半径与波及上限。
+// K1 单测（分量引擎细案 §4 K1 验收）→ **leg25 c 改写**（用户令「删」四维浮点）。
+// 改写缘由（design-core-leg23 §4 第 1 条 + §2.2 三条硬规矩）：兵力/权位/人脉/耳目这几个概念
+//   **没法精确表示**（书里没刻度、现实里也没有），压成 0–1 是拿精确外壳装模糊内容；
+//   手拍值比没有更坏——它让"编的"看起来像"算的"。故 src/weight.js 里 COEFFS/NEUTRAL_ATTR 整条删除，
+//   computeWeight 签名保留但**不吃属性**：= clamp01(layerBase × envFactor)；visibilityMask **只剩位置**。
+// 本文件锁的三件事（换载体不换意图）：
+//   ① 属性彻底退场——传什么都不改结果（防它借尸还魂 / 改名续用）；
+//   ② 剩下的两个真输入（层基线、张力）方向正确；
+//   ③ 掩码只剩"位置"这一条零歧义事实（同地/异地二元判定为能力上限）。
+// 已删断言（机制没了，不是遗漏；理由写在报告里）：系数单调、缺键=中立 0.5、显式全零/全满、MASK.intelBase、obsFloor 修边。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as W from '../src/weight.js';
 import {
     computeWeight, computeWeightAtTick, activityFactor, visibilityMask, isVisible, spreadRadius,
-    DECAY, MASK, NEUTRAL_TENSION, RIPPLE_TARGET_CAP,
+    DECAY, MASK, NEUTRAL_TENSION, FACTION_BASELINE, RIPPLE_TARGET_CAP,
 } from '../src/weight.js';
 
 const CHAR = 'character';
 const FACT = 'faction';
 
-test('公式：属性单调不减（各系数为正）', () => {
-    for (const kind of [CHAR, FACT]) {
-        for (const attr of ['hardPower', 'office', 'network', 'intel']) {
-            const lo = { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 };
-            const hi = { ...lo, [attr]: 0.9 };
-            assert.ok(computeWeight(hi, kind) >= computeWeight(lo, kind), `${kind}.${attr} 应单调`);
-        }
+test('公式（leg25 c）：不吃属性——传任何 attrs 结果逐字节一致（"编的数"不许借尸还魂）', () => {
+    const empty = computeWeight({}, CHAR);
+    // 旧四维（各种摆放）与"新概念试探"都必须一律无效：引擎不再有"属性→分量"这条换算
+    const shapes = [
+        { hardPower: 1, office: 1, network: 1, intel: 1 },
+        { hardPower: 0, office: 0, network: 0, intel: 0 },
+        { hardPower: 0.93, office: 0.4, network: 0.6, intel: 0.2 },
+        { 兵力: 0.99, 权位: 0.01, 气运: 1 },
+    ];
+    for (const attrs of shapes) {
+        assert.equal(computeWeight(attrs, CHAR), empty, `${JSON.stringify(attrs)} 不得改变分量`);
+        assert.equal(computeWeight(attrs, FACT), computeWeight({}, FACT), '势力层同理');
     }
+    // 不给 attrs（旧调用形状 computeWeight()）与给 null 同样安全
+    assert.equal(computeWeight(), empty, '缺省入参不抛且同值');
+    assert.equal(computeWeight(null, CHAR), empty);
 });
 
-test('公式：边界钳制 [0,1]；**账面无数 → 中立 floor**（leg24 片2）：空 attrs=0.5，显式全零=0，全满=1', () => {
-    // leg24 片2（账本换血）语义变更：**"没有数据"不再等于 0**——账本不预填数值后，若把缺键当 0，
-    // 开局全世界分量全 0 → 门控全体静默 + 掩码 obs=0 谁都不见 → 世界冻死。
-    // 现法：缺键按中立值 0.5 取中性 floor（不落账、同 kind 同值、不含个体信息；见 weight.js NEUTRAL_ATTR）。
-    assert.equal(computeWeight({}, CHAR), 0.5, '账面无数 → 中立 floor（人物 0.5）');
-    assert.equal(computeWeight({}, FACT), 0.75, '势力层基线 1.5 → 0.75');
-    assert.equal(computeWeight({ hardPower: 0, office: 0, network: 0, intel: 0 }, CHAR), 0, '**显式**全零=真值，不是缺键 → 0');
-    assert.equal(computeWeight({ hardPower: 1, office: 1, network: 1, intel: 1 }, CHAR), 1);
-    // 势力层基线 1.5 会把全满顶到 1.5 → 钳回 1；0.8 全满 → 1.2 → 同钳回 1
-    assert.equal(computeWeight({ hardPower: 1, office: 1, network: 1, intel: 1 }, FACT), 1);
-    assert.equal(computeWeight({ hardPower: 0.8, office: 0.8, network: 0.8, intel: 0.8 }, FACT), 1);
+test('公式（leg25 c）：删掉的常量不许留名——COEFFS / NEUTRAL_ATTR 均已不存在（防"改名续用"）', () => {
+    // 这一条是**反向锁**：本次要治的病就是"把没法精确表示的概念压成 0–1 假装客观"。
+    //   若有人日后把 hardPower 改名成别的键再把系数表加回来，这里当场红。
+    assert.equal(W.COEFFS, undefined, '系数表已删（四维退场后没有"系数"可谈）');
+    assert.equal(W.NEUTRAL_ATTR, undefined, '中立属性表已删——它唯一的存在理由是"缺键时公式取什么默认值"，而公式已不吃属性');
+    assert.equal(MASK.intelBase, undefined, '掩码的"情报"项已删（同样是手拍的 0–1）');
+    assert.equal(MASK.obsFloor, undefined, 'obsFloor 修边随比值项一并删除（比值没了，断崖无从谈起）');
 });
 
-test('公式：层差（同属性势力分量 ≥ 人物；均匀属性下恰为基线倍）', () => {
-    const attrs = { hardPower: 0.5, office: 0.3, network: 0.2, intel: 0.1 };
-    const c = computeWeight(attrs, CHAR);
-    const f = computeWeight(attrs, FACT);
-    assert.ok(f >= c, `势力 ${f} 应不小于人物 ${c}`);
-    // 0.5×0.35+0.3×0.25+0.2×0.25+0.1×0.15 = 0.175+0.075+0.05+0.015 = 0.315
-    assert.ok(Math.abs(c - 0.315) < 1e-9);
-    // 均匀属性下两套系数和都是 1.0 → 基础分相等，势力分量恰为人物 ×1.5
-    const uni = { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 };
-    assert.ok(Math.abs(computeWeight(uni, FACT) - 1.5 * computeWeight(uni, CHAR)) < 1e-9);
+test('公式：层基线 × 张力，钳回 [0,1]（势力层基线 0.85——leg25 c 无属性化后重基线）', () => {
+    assert.equal(FACTION_BASELINE, 0.85, '层基线常量=0.85（势力按人物的 85% 计；原 1.5 被 clamp01 吸平成了纸面常量）');
+    // 算式现状：envFactor = 1 + 0.2×(张力−0.5) ∈ [0.9,1.1] ⇒
+    //   人物层 1×[0.9,1.1]：≤1 那半可见，>1 那半仍被 clamp01 截平（张力 0.5 恰好 = 1）；
+    //   势力层 0.85×[0.9,1.1] = [0.765,0.935]：**全程落在界内**，张力项与层差现在都看得见。
+    //   ⇒ "人物 vs 势力"的可见差 = 1.0 vs 0.85（势力更低——层级折扣，不是"更大"）。
+    assert.ok(Math.abs(computeWeight({}, CHAR) - 1) < 1e-12, '人物：1 × envFactor(0.5)=1 → 1');
+    assert.ok(Math.abs(computeWeight({}, FACT) - 0.85) < 1e-12, `势力：0.85 × 1 = 0.85（实际 ${computeWeight({}, FACT)}）`);
+    assert.ok(Math.abs(computeWeight({}, FACT, 1) - 0.935) < 1e-12, '张力拉满：0.85 × 1.1 = 0.935');
+    assert.ok(Math.abs(computeWeight({}, FACT, 0) - 0.765) < 1e-12, '张力归零：0.85 × 0.9 = 0.765');
+    // 层差在账面上可见了（删属性前两者同为 1.0，层差全被钳制吃掉）
+    assert.ok(computeWeight({}, FACT) < computeWeight({}, CHAR), '势力基础分低于人物（层级折扣方向）');
 });
 
-test('公式：envFactor 方向（张力高 → 分量升）', () => {
-    assert.ok(computeWeight({ hardPower: 0.5 }, CHAR, 0.8) > computeWeight({ hardPower: 0.5 }, CHAR, NEUTRAL_TENSION));
-    assert.ok(computeWeight({ hardPower: 0.5 }, CHAR, 0.2) < computeWeight({ hardPower: 0.5 }, CHAR, NEUTRAL_TENSION));
-    assert.equal(computeWeight({ hardPower: 0.5 }, CHAR, NEUTRAL_TENSION), computeWeight({ hardPower: 0.5 }, CHAR));
-});
-
-test('公式：缺键按中立值（不是 0）——prop 是"有据的值"，缺键=账面无数（leg24 片2）', () => {
-    // 只提议 hardPower=1：其余三维无数 → 取中立 0.5
-    //   1×0.35 + 0.5×(0.25+0.25+0.15) = 0.35 + 0.325 = 0.675
-    assert.ok(Math.abs(computeWeight({ hardPower: 1 }, CHAR) - 0.675) < 1e-9, '缺键取中立 0.5（旧法按 0 得 0.35）');
-    // 显式给 0 = "确实没有" → 才按 0 算
-    assert.ok(Math.abs(computeWeight({ hardPower: 1, office: 0, network: 0, intel: 0 }, CHAR) - 0.35) < 1e-9, '显式 0 才按 0');
+test('公式：envFactor 方向（张力高 → 分量升；降的方向对人物层被钳制贴顶）', () => {
+    assert.equal(computeWeight({}, CHAR, NEUTRAL_TENSION), computeWeight({}, CHAR), '缺省张力 = 中立张力');
+    // 降的方向可见：1 + 0.2×(0.2−0.5) = 0.94
+    assert.ok(Math.abs(computeWeight({}, CHAR, 0.2) - 0.94) < 1e-12, '低张力 → 0.94');
+    assert.ok(computeWeight({}, CHAR, 0.2) < computeWeight({}, CHAR, NEUTRAL_TENSION), '张力低 → 分量降');
+    // 升的方向对人物层**不可见**：1 + 0.2×(0.8−0.5) = 1.06 → 钳回 1。
+    //   删掉属性之后人物基础分恒为 1（贴着上界），凡 >1 的张力修正都被 clamp01 截平。
+    //   势力层不贴顶（0.85 起算），故升的方向在势力层照样观察得到——见上一条的 0.935。
+    assert.equal(computeWeight({}, CHAR, 0.8), 1, '高张力 → 公式值 1.06 → 钳回 1');
+    assert.equal(computeWeight({}, CHAR, 0.8), computeWeight({}, CHAR, NEUTRAL_TENSION), '人物层升的方向当前观察不到');
+    assert.ok(computeWeight({}, FACT, 0.8) > computeWeight({}, FACT, NEUTRAL_TENSION), '势力层升的方向可见（不贴顶）');
+    // 缺省 kind 按人物（kind 是层参数，不是属性；保留旧签名的宽容度）
+    assert.equal(computeWeight({}), computeWeight({}, CHAR));
 });
 
 test('公式：确定性（重复调用序列逐字节一致）', () => {
     const cases = [
-        [{ hardPower: 0.1, office: 0.9, network: 0.4, intel: 0.7 }, CHAR, 0.6],
-        [{ hardPower: 1, office: 0, network: 0.3, intel: 0 }, FACT, 0.4],
-        [{}, CHAR, 0.5],
+        [{}, CHAR, 0.6],
+        [{ hardPower: 1, office: 0 }, FACT, 0.4],
+        [null, CHAR, 0.5],
     ];
     const pass1 = cases.map((a) => JSON.stringify(computeWeight(...a)));
     const pass2 = cases.map((a) => JSON.stringify(computeWeight(...a)));
     assert.deepEqual(pass1, pass2);
 });
 
-test('衰减：宽限期内恒 1', () => {
+test('衰减：宽限期内恒 1（人物 8 tick / 势力 20 tick）', () => {
     for (let idle = 0; idle <= DECAY.character.grace; idle++) {
         assert.equal(activityFactor(idle, CHAR), 1);
     }
@@ -93,53 +110,47 @@ test('衰减：宽限期后每 tick 固定比率、单调递减、封底 0', () 
     assert.equal(activityFactor(p.grace + 51, CHAR), 0); // 1 − 0.02×51 < 0 → 封底
 });
 
-test('衰减：衰减后分量 = 公式分 × 因子（玩家同尺经由同一入口）', () => {
-    const attrs = { hardPower: 1, office: 0, network: 0, intel: 0 };
+test('衰减：衰减后分量 = 公式分 × 因子（唯一还在动的那一项，是时间事实不是编的数）', () => {
     const grace = DECAY.character.grace;
-    assert.equal(computeWeightAtTick(attrs, CHAR, NEUTRAL_TENSION, grace), 0.35);
-    assert.ok(Math.abs(computeWeightAtTick(attrs, CHAR, NEUTRAL_TENSION, grace + 1) - 0.35 * (1 - DECAY.character.rate)) < 1e-12);
+    // 公式分现在恒为 1（人物层），衰减是唯一变量：宽限内 1，宽限后每 tick −2%
+    assert.equal(computeWeightAtTick(null, CHAR, NEUTRAL_TENSION, grace), 1);
+    assert.equal(computeWeightAtTick({}, CHAR, NEUTRAL_TENSION, grace), 1, '传 attrs 也不改（属性退场）');
+    assert.ok(Math.abs(computeWeightAtTick(null, CHAR, NEUTRAL_TENSION, grace + 1) - (1 - DECAY.character.rate)) < 1e-12);
 });
 
-test('掩码（片3 事实驱动）：全情报同位置 → 1；情报缺失 → 减半；异地 → 再减半', () => {
-    assert.equal(visibilityMask({ intel: 1, sameLocation: true }), 1);
-    const base = visibilityMask({ intel: 1, sameLocation: true });
-    const noIntel = visibilityMask({ intel: 0, sameLocation: true });
-    const far = visibilityMask({ intel: 1, sameLocation: false });
-    assert.ok(Math.abs(noIntel - base * MASK.intelBase) < 1e-12);
-    assert.ok(Math.abs(far - base * MASK.posDiff) < 1e-12);
+test('掩码（leg25 c）：只剩位置——同地 1.0 / 异地 0.5（零歧义事实，二元判定为能力上限）', () => {
+    assert.equal(MASK.posSame, 1.0);
+    assert.equal(MASK.posDiff, 0.5);
+    assert.equal(visibilityMask({ sameLocation: true }), 1.0);
+    assert.equal(visibilityMask({ sameLocation: false }), 0.5);
+    // 旧参数形状（intel / 分量对）一律不再参与：与"只传位置"逐字节一致
+    assert.equal(visibilityMask({ intel: 0, sameLocation: true }), 1.0, '耳目数量不再是输入');
+    assert.equal(visibilityMask({ intel: 1, sameLocation: false }), 0.5);
+    assert.equal(visibilityMask({ srcWeight: 0.01, obsWeight: 0.99, sameLocation: true }), 1.0, '分量比项早已退场');
+    assert.equal(visibilityMask({ srcWeight: 9, obsWeight: 0, sameLocation: false }), 0.5, '零分量观察者不再"全瞎"');
 });
 
-test('掩码（片3）：**不再吃那个分数**——传不传分量、分量多少，结果逐字节一致', () => {
-    const a = visibilityMask({ intel: 0.5, sameLocation: true });
-    const b = visibilityMask({ srcWeight: 0.01, obsWeight: 0.99, intel: 0.5, sameLocation: true });
-    const c = visibilityMask({ srcWeight: 9, obsWeight: 0, intel: 0.5, sameLocation: true });
-    assert.equal(a, b, '分量参数已退场（旧法：源弱观察者强 → 更低）');
-    assert.equal(a, c, '观察者分量 0 不再导致全瞎（旧法：零分量无所见短路）');
-    assert.ok(a > 0, '账面无数的新世界，玩家仍看得见东西');
+test('掩码：阈值两端（门槛线 = MASK.threshold，恰好等于阈值算可见）', () => {
+    assert.equal(MASK.threshold, 0.25);
+    assert.ok(isVisible(visibilityMask({ sameLocation: true })), '同地 1.0 → 可见');
+    assert.ok(isVisible(visibilityMask({ sameLocation: false })), '异地 0.5 → 可见（> 阈值）');
+    assert.ok(isVisible(MASK.threshold), '恰好等于阈值 → 可见（≥ 语义）');
+    assert.ok(!isVisible(MASK.threshold - 1e-9), '门槛下一格 → 不可见');
 });
 
-test('掩码（片3）：阈值两端（0.25 是门槛线，两边各测一格）', () => {
-    assert.equal(visibilityMask({ intel: 0, sameLocation: false }), 0.25, '无情报 + 异地 = 0.25（恰好门槛）');
-    assert.ok(isVisible(visibilityMask({ intel: 0, sameLocation: false })), '恰好 0.25 → 可见（≥ 阈值）');
-    assert.ok(!isVisible(visibilityMask({ intel: 0, sameLocation: false }) - 0.01), '门槛下一格 → 不可见');
+test('掩码（leg25）：入参缺省不抛（唯一真源被多方调用，鲁棒性）', () => {
+    // 缺省 sameLocation=false → 按异地位（现法口径：不因数据缺失而放宽可见性；
+    //   "事件位置缺失该按同地/异地/中立取哪一值"仍是源注释里登记未拍板的待办）。
+    assert.equal(visibilityMask(), MASK.posDiff, '缺省 → 异地 0.5');
+    assert.equal(visibilityMask({ 未知字段: 1 }), MASK.posDiff, '多余入参不影响');
+    assert.equal(visibilityMask({ sameLocation: true, 未知字段: 1 }), 1.0);
 });
 
-test('掩码（片3）：删掉的 obsFloor 修边不再需要（比值项已不存在，断崖无从谈起）', () => {
-    assert.equal(MASK.obsFloor, undefined, 'obsFloor 常量随比值项一并删除');
-    // 旧毛病（0.001 全见 / 0 全瞎）在事实驱动公式下不存在：m 只由情报×位置决定
-    assert.equal(visibilityMask({ intel: 1, sameLocation: true }), visibilityMask({ intel: 1, sameLocation: true }));
-});
-
-test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限=固定提案常量（leg25 起由校验侧强制）', () => {
+test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限=固定提案常量（校验侧强制）', () => {
     assert.equal(spreadRadius(0), 1);
     assert.equal(spreadRadius(1), 4);
     assert.ok(spreadRadius(0.6) > spreadRadius(0.4), '半径那把尺还在（尽管已无调用者）');
     // leg25：删掉 `maxRippleTargets()` 包装函数的三则断言——该函数生产 0 调用（唯一用处是返回本常量），
     //   上限的强制点已改在 check-step（校验 newEvents[].ripples 条数），常量本体仍在此锁值。
     assert.equal(RIPPLE_TARGET_CAP, 3, '波及目标数上限=固定提案值（不再随分量变：旧法 ceil(2×分量)）');
-});
-
-test('掩码（leg25）：入参缺省不抛（唯一真源被多方调用，鲁棒性）', () => {
-    assert.equal(visibilityMask(), 0.25, '缺省 intel=0 异地 → 0.25（门槛线）');
-    assert.equal(visibilityMask({ intel: 1, sameLocation: true, 未知字段: 1 }), 1, '多余入参不影响（分量参数退场后仍容忍旧调用形状）');
 });

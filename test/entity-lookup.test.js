@@ -22,7 +22,8 @@ const world = (over = {}) => ({
         ] } } },
     },
     entities: [
-        { id: 'e_p1', kind: 'character', name: '你', location: '未明', attrs: {}, lastActiveTick: 0 },
+        // leg25 c：玩家实体不再带 `attrs`（四维浮点整条删除，schema 的 additional:false 会拒该键）。
+        { id: 'e_p1', kind: 'character', name: '你', location: '未明', lastActiveTick: 0 },
         { id: 'e_bk_1', kind: 'faction', name: '昆仑道宫', location: '未明' },
         { id: 'e_bk_2', kind: 'character', name: '玄一道祖', location: '未明', parent: '昆仑道宫' },
         { id: 'e_bk_3', kind: 'character', name: '影', location: '未明' },
@@ -266,8 +267,10 @@ test('细案 ⑤：runTick 前置步——选人/查书结果进包，主调用�
     const { runTick } = await import('../src/tick.js');
     const w = world();
     // 让玄一道祖缺字段，前置步把它的实力查回来；势力昆仑道宫也查（应被 prompt 口径排除，不入字段）
+    // leg25 c：`stateChanges` 整条删除（四维浮点提议随四维一并没了；契约层 additional:false 会拒该键）。
+    //   本用例要验的是**前置步（选人/查书）**，世界步只需空步过校验即可，不需要任何属性增量。
     const emptyStep = {
-        actions: [], newEvents: [], agendaAdvances: [], stateChanges: [],
+        actions: [], newEvents: [], agendaAdvances: [],
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     let sawPack = null;
@@ -295,8 +298,9 @@ test('细案 ⑤：runTick 前置步——选人/查书结果进包，主调用�
 
 test('细案 ⑤：前置步抛错 → 世界照常推进（失败零阻塞，退回引擎镜头）', async () => {
     const { runTick } = await import('../src/tick.js');
+    // leg25 c：同上——空步不再带 `stateChanges`（该键已不在世界步契约里）。
     const emptyStep = {
-        actions: [], newEvents: [], agendaAdvances: [], stateChanges: [],
+        actions: [], newEvents: [], agendaAdvances: [],
         newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const r = await runTick({

@@ -8,6 +8,7 @@
 
 | 日期 | 谁 | 一句话 |
 |---|---|---|
+| 2026-09-11 | leg25 c | **四维浮点属性整条删除**（依据 design-core §4 第 1 条「手拍值比没有更坏」）+ 文档重塑（接手必读 379 KB → START-HERE 5 KB；ANCHOR 状态行 9425→310 字符）；途中修 4 个真 bug（gate 拼 stateChanges 致停摆、meta 缺迁移闸、attrs 只删一半、层基线漏乘）|
 | 2026-09-07 | S1 | 工程骨架：test/ 基建（node:test + node:assert/strict，沿用旧件惯例）、黄金夹具 golden-world.min.jso… |
 | 2026-09-07 | S2 | 提案形状 |
 | 2026-09-07 | S3 | 经活档实测定稿 |

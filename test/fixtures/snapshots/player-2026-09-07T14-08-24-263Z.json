@@ -83,20 +83,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "intel",
-            "delta": 0.1,
-            "cause": "a_wanfa"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -121,20 +107,7 @@
           ]
         },
         "player": {
-          "affected": [
-            {
-              "tick": 1,
-              "source": "e_xie",
-              "attr": "hardPower",
-              "delta": -0.04999999999999999
-            },
-            {
-              "tick": 1,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": -0.04999999999999999
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -196,22 +169,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "intel",
-            "delta": 0.1,
-            "actor": "e_wanfa",
-            "cause": "a_wanfa"
-          },
-          {
-            "entity": "e_xie",
-            "attr": "intel",
-            "delta": 0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -232,38 +189,7 @@
           "lifted": []
         },
         "player": {
-          "affected": [
-            {
-              "tick": 2,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": -0.05
-            },
-            {
-              "tick": 2,
-              "source": "e_dayu",
-              "attr": "hardPower",
-              "delta": -0.020000000000000004
-            },
-            {
-              "tick": 2,
-              "source": "e_dayu",
-              "attr": "office",
-              "delta": -0.02
-            },
-            {
-              "tick": 2,
-              "source": "e_dayu",
-              "attr": "network",
-              "delta": -0.020000000000000018
-            },
-            {
-              "tick": 2,
-              "source": "e_dayu",
-              "attr": "intel",
-              "delta": -0.020000000000000018
-            }
-          ]
+          "affected": []
         }
       }
     },
@@ -360,22 +286,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu",
-            "cause": "a_dayu"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "intel",
-            "delta": 0.1,
-            "actor": "e_wanfa",
-            "cause": "a_wanfa"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -535,21 +445,6 @@
             "note": "察觉黄坤图谋灵脉，准备强行接管"
           }
         ],
-        "stateChanges": [
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_wanfa",
-            "cause": "a_wanfa"
-          },
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -699,15 +594,6 @@
               "type": "state"
             },
             "note": "见利忘义"
-          }
-        ],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.2,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
           }
         ],
         "agendaCancels": [],
@@ -913,22 +799,6 @@
             "note": "牵制大虞偏将的精力"
           }
         ],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 1,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "intel",
-            "delta": 1,
-            "actor": "e_wanfa",
-            "cause": "a_5_1"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -1113,22 +983,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
-          },
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.2,
-            "actor": "e_xie",
-            "cause": "a_6_1"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []

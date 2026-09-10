@@ -24,8 +24,8 @@ const world = () => ({
         },
     },
     entities: [
-        { id: 'e1', kind: 'faction', name: '大虞', location: '临渊城', attrs: { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 } },
-        { id: 'e2', kind: 'character', name: '薛铁衣', location: '临渊城', attrs: { hardPower: 0.3, office: 0.2, network: 0.4, intel: 0.4 } },
+        { id: 'e1', kind: 'faction', name: '大虞', location: '临渊城' },
+        { id: 'e2', kind: 'character', name: '薛铁衣', location: '临渊城' },
     ],
     weights: {},
     agendas: [],
@@ -34,7 +34,8 @@ const world = () => ({
     meta: { tick: 0 },
 });
 
-const emptyStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
+// leg25 c：`stateChanges` 已随四维浮点从世界步契约删除——夹具步不再拼它。
+const emptyStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 const run = (w, ticks) => {
     let s = w;

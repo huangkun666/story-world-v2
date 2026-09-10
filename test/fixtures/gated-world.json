@@ -6,9 +6,9 @@
     "positions": ["边城", "大营"]
   },
   "entities": [
-    { "id": "e_hi", "kind": "character", "name": "裴将军", "location": "边城", "attrs": { "hardPower": 0.9, "office": 0.9, "network": 0.9, "intel": 0.9 } },
-    { "id": "e_mid", "kind": "character", "name": "周校尉", "location": "边城", "attrs": { "hardPower": 0.5, "office": 0.5, "network": 0.5, "intel": 0.5 } },
-    { "id": "e_lo", "kind": "character", "name": "王小卒", "location": "大营", "attrs": { "hardPower": 0.1, "office": 0.1, "network": 0.1, "intel": 0.1 } }
+    { "id": "e_hi", "kind": "character", "name": "裴将军", "location": "边城" },
+    { "id": "e_mid", "kind": "character", "name": "周校尉", "location": "边城" },
+    { "id": "e_lo", "kind": "character", "name": "王小卒", "location": "大营" }
   ],
   "weights": { "e_hi": 0.9, "e_mid": 0.5, "e_lo": 0.1 },
   "agendas": [

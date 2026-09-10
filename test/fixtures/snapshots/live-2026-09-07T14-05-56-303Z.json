@@ -70,20 +70,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "network",
-            "delta": 0.1,
-            "cause": "a_wanfa"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -185,7 +171,6 @@
             "note": "防止万法阁破坏洗煞之局"
           }
         ],
-        "stateChanges": [],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -269,22 +254,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_wanfa",
-            "cause": "a_wanfa"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_2_1"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -382,22 +351,6 @@
             "note": "大军出动，镇压谷内乱局"
           }
         ],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_wanfa",
-            "cause": "a_wanfa"
-          },
-          {
-            "entity": "e_wanfa",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_xie",
-            "cause": "a_2_1"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -486,15 +439,6 @@
               "type": "state"
             },
             "note": "觊觎灵脉已久"
-          }
-        ],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_wanfa",
-            "cause": "a_2_1"
           }
         ],
         "agendaCancels": [],
@@ -597,22 +541,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_xie",
-            "cause": "a_xie"
-          },
-          {
-            "entity": "e_dayu",
-            "attr": "hardPower",
-            "delta": 0.1,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []
@@ -703,15 +631,6 @@
           }
         ],
         "newAgendas": [],
-        "stateChanges": [
-          {
-            "entity": "e_xie",
-            "attr": "hardPower",
-            "delta": -0.1,
-            "actor": "e_dayu",
-            "cause": "a_4_1"
-          }
-        ],
         "agendaCancels": [],
         "newEntities": [],
         "entityFates": []

@@ -8,7 +8,9 @@ import { ssotSchema } from '../src/schemas/ssot.schema.js';
 const baseWorld = () => ({
     version: 1,
     context: { world: '临渊城', tension: 0.5, positions: ['临渊城'] },
-    entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城', attrs: {} }],
+    // leg25 c：实体夹具不再带 `attrs`（四维浮点已整条删除；schema additional:false ⇒ 带它就是"未知字段"拒）。
+    //   本文件测的全是 `setting` 层形状，实体只需最小合法形状充当载体，与属性无关。
+    entities: [{ id: 'e1', kind: 'faction', name: 'A', location: '临渊城' }],
     weights: {},
     agendas: [],
     events: [],

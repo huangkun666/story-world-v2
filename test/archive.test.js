@@ -2,6 +2,8 @@
 // K20 验收（因果链细案 §3.3 → A-3）：档案摘要化——闭环满热窗（ARCHIVE.hotWindow=20 提案）且无未决下游 →
 // 按出生段压入里程碑（引擎结构摘要 T3-D1：span/counts/titles/ids + 指针修复）；未决/年轻/链活着不归档；
 // 跨段指针重指里程碑（链条不断）；resolveEventSource 跨段防御；schema + 确定性。
+// leg25 c 改写（用户令「删」四维浮点）：夹具实体不再带 `attrs`，世界步不再带 `stateChanges`
+//   （契约层整条删除）——归档/指针修复逻辑本身不吃属性，故只删夹具里的死字段，断言一字未改。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { settleTick, ARCHIVE, resolveEventSource } from '../src/settle.js';
@@ -12,7 +14,7 @@ const W = () => ({
     version: 1,
     context: { world: '边地', tension: 0.5, positions: ['边城', '大营'] },
     entities: [
-        { id: 'e_x', kind: 'faction', name: '边军', location: '边城', attrs: { hardPower: 0.9, office: 0.9, network: 0.9, intel: 0.9 } },
+        { id: 'e_x', kind: 'faction', name: '边军', location: '边城' },
     ],
     weights: {},
     agendas: [
@@ -24,7 +26,7 @@ const W = () => ({
     meta: { tick: 0 },
 });
 
-const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], stateChanges: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
+const empty = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 const step = (extra) => ({ ...empty(), ...extra });
 const adv = (id) => ({ agendaId: id, step: '推进', stage: '中' });
 const ev = (title, source, tickN) => ({ title, source, position: '边城', ripples: ['e_x'] });

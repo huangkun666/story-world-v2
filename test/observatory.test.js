@@ -48,7 +48,8 @@ test('拒签率：旧账兜底（无 proposals 字段按 warnings 前缀计分�
 
 test('坏账率：干净世界零坏账；投毒世界逐项点名', () => {
     const base = {
-        entities: [{ id: 'e1', kind: 'character', name: 'A', location: '城', attrs: {} }],
+        // leg25 c：实体不再有 attrs（四维浮点整条删除）——观测台读数与属性无关，夹具去掉该字段。
+        entities: [{ id: 'e1', kind: 'character', name: 'A', location: '城' }],
         agendas: [
             { id: 'a1', owner: 'e1', goal: 'g1', stage: 's', visibility: 'known', maxSteps: 4, progress: 1, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } },
             { id: 'a2', owner: 'e1', goal: 'g2', stage: 's', visibility: 'concealed', maxSteps: 4, progress: 0, parentId: 'a1', memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } },
@@ -84,11 +85,11 @@ test('驻留：状态分布 + 摸鱼名单（活跃且闲置 ≥ LOUNGER_TICKS�
     const w = world({
         meta: { tick: 40 },
         entities: [
-            { id: 'e_hot', kind: 'character', name: '热的', location: '城', attrs: {}, lastActiveTick: 40 },
-            { id: 'e_med', kind: 'character', name: '中的', location: '城', attrs: {}, lastActiveTick: 35 },
-            { id: 'e_sleepy', kind: 'faction', name: '睡的', location: '城', attrs: {}, lastActiveTick: 8 },   // idle 32 ≥ 30
-            { id: 'e_old', kind: 'character', name: '旧的', location: '城', attrs: {}, lastActiveTick: 20, status: 'retired' },
-            { id: 'e_dead', kind: 'character', name: '死的', location: '城', attrs: {}, status: 'dead' },
+            { id: 'e_hot', kind: 'character', name: '热的', location: '城', lastActiveTick: 40 },
+            { id: 'e_med', kind: 'character', name: '中的', location: '城', lastActiveTick: 35 },
+            { id: 'e_sleepy', kind: 'faction', name: '睡的', location: '城', lastActiveTick: 8 },   // idle 32 ≥ 30
+            { id: 'e_old', kind: 'character', name: '旧的', location: '城', lastActiveTick: 20, status: 'retired' },
+            { id: 'e_dead', kind: 'character', name: '死的', location: '城', status: 'dead' },
         ],
     });
     const s = residencyStats(w);
@@ -140,7 +141,7 @@ test('冷档链验证：轮转后坏账率仍为零（红线 2 代码化的观�
     const rows = Array.from({ length: 60 }, (_, i) => ({ id: `ch_${i + 1}_x`, tick: i + 1, text: `第 ${i + 1} 轮` }));
     const w = world({
         meta: { tick: 60 },
-        entities: [{ id: 'e1', kind: 'character', name: 'A', location: '城', attrs: {} }],
+        entities: [{ id: 'e1', kind: 'character', name: 'A', location: '城' }],
         events: [{ id: 'ev_1_1', title: '事', source: { type: 'state' }, position: '城', ripples: ['e1'], links: { up: [], down: [] }, closed: true }],
         milestones: [{ id: 'm_10', span: { from: 1, to: 10 }, counts: { events: 0 }, titles: [], ids: [], links: { up: [], down: [] } }],
         chronicle: rows,

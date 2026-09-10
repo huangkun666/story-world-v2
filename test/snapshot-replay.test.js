@@ -9,6 +9,21 @@
 //    升级后快照（K23 缺口②，2026-09-08）每 tick 带 world——null 行由世界快照接续（链不断），
 //    且每 tick 重放结果与落盘世界逐字节对照（引擎确定性锁）；
 // ④ 真样本存在性：新 4 快照 newAgendas 合计 ≥11（台账 12 条含 12-57 t6 红线拦截整步拒的 1 条，如实注明）。
+//
+// ===================== leg25 c 单维删除后重放基线（2026-09-11） =====================
+// 用户令「删」四维浮点（兵力/权位/人脉/耳目）⇒ 契约层 `stateChanges` 整条删除（world-step.schema 注释）。
+// 这批快照是**历史真模型输出**，每个 step 都带 `stateChanges` ⇒ 直接重放会被 schema 判「未知字段」整步拒，
+// 于是"全锁"退化成"全拒"（回归面归零＝没在回归）。处理方式（本次改动，逐条列明）：
+//   ① **从 fixture 里删掉 `stateChanges` 键**（test/fixtures/snapshots/*.json，允许改）。只删这一个键，
+//      其余字节与结构不动（改动自检：把该键塞回 null 后与原文档逐字节等价）；
+//   ② `expect.warnings` / `expect.player.affected` **按实测重基线**——它们记的原值来自已删除的通道：
+//      「裁定: 属性硬边界 / 越界提议被忽略 / stateChanges 无 cause」全是属性裁定的产出；
+//      `player.affected` 是 K9 影响通道扣玩家四维的账。两条通道整段删除 ⇒ 那些行**不可能**再出现，
+//      留着它们就是"锁一行已经不存在的输出"。重基线=把实测值写回，锁言行的机制本身不动。
+//   ③ 统计阈值：可重放 tick 与 newAgendas 真样本数按**实测**核对（下方便是实测断言值，不是拍的）。
+// 这一条要老实说清：本次是"删字段 + 重基线"，**不是**"引擎行为回归"。删掉的那批警告背后，
+//   是"引擎按 0–1 刻度裁定四维涨跌"这件事整体不存在了——这正是用户要的结果，不是被掩盖的回归。
+// ================================================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -17,6 +32,16 @@ import { settleTick } from '../src/settle.js';
 const fixtureDir = new URL('./fixtures/snapshots/', import.meta.url);
 const fixtureFiles = readdirSync(fixtureDir).filter((f) => f.endsWith('.json'));
 assert.ok(fixtureFiles.length >= 7, `快照 fixture ≥7 份（实际 ${fixtureFiles.length}）`);
+
+// leg25 c 断言：fixture 里不得再有已删除的契约字段（防"删了一半"静默复活——旧快照重新落盘时最容易带回来）
+test('K23/leg25 c：快照 fixture 里不再有 `stateChanges`（四维浮点已删，契约层整条不存在）', () => {
+    let hits = 0;
+    for (const f of fixtureFiles) {
+        const fx = JSON.parse(readFileSync(new URL(`./fixtures/snapshots/${f}`, import.meta.url), 'utf8'));
+        for (const s of fx.steps) if (s.step && 'stateChanges' in s.step) hits += 1;
+    }
+    assert.equal(hits, 0, `快照 step 里不得带已删除的 stateChanges（实际 ${hits} 处）`);
+});
 
 let totalReplayable = 0;
 let totalSkipped = 0;
@@ -53,6 +78,8 @@ for (const f of fixtureFiles.sort()) {
                 assert.deepEqual(sim.lifted, s.expect.gate.lifted ?? [], `${fx.name} tick${s.tick} gate.lifted`);
             }
             if (s.expect.player) {
+                // leg25 c：`playerAffected` 的**记录结构**仍在审计面（K9 通道整段删除后恒为空数组），
+                //   fixture 里的期望值已按实测重基线为零——本行锁的是"世界伸手碰玩家"这件事**没有**发生。
                 assert.deepEqual(sim.playerAffected ?? [], s.expect.player.affected ?? [], `${fx.name} tick${s.tick} playerAffected`);
             }
             world = r.ssot;
@@ -61,6 +88,7 @@ for (const f of fixtureFiles.sort()) {
 }
 
 test('K23：回归面统计——可重放 tick 全过（真模型历史输出仍被引擎接受）且真样本存在', () => {
+    // leg25 c 实测基线：可重放 24 tick（原 ≥16 的下界仍成立，故阈值不动；实际值写在报错文案里便于对账）。
     assert.ok(totalReplayable >= 16, `可重放 tick ≥16（实际 ${totalReplayable}，跳过 ${totalSkipped}——旧格式中间世界未记录如实不计；新格式带 world 全链接续）`);
     let totalNa = 0;
     for (const f of fixtureFiles) {
