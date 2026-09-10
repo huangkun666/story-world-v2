@@ -727,7 +727,7 @@ export async function loadWorld() {
     const hot = rot.hot;
     // leg24 片4（旧账清理）：热账读到之后、渲染之前——一次把旧代码替模型编的四维默认值
     //   （character 全 0.15 / faction 全 0.25，且书里无据者）批掉，界面"有据 4/4"不再骗人。
-    //   纯函数 + 幂等（meta.legacyAttrsMigratedAt 为闸）；被批的值留档在 meta.legacyAttrsPurged。
+    //   纯函数 + 幂等（leg25 c 起闸名 meta.attrsRemovedAt；留档仍进 meta.legacyAttrsPurged）。
     const migrated = migrateLegacyAttrs(hot);
     const hotWorld = migrated;   // 迁移返回新对象（不可变风格）——后续一律用迁移后的世界
     // 审计修复 E4：名册入账只改内存（seedBookEntities 就地 push 实体 + 预填权重）→ 账本真变了就落盘。

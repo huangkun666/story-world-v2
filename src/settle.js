@@ -694,17 +694,20 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     // K14 出生裁判（盘算树细案 §3.2 落点：gate 之后、裁定之前）：GC 上限 → 落账 → 挂因/委派留痕 → 环检测自动拆
     const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle);
 
-    const hurtByEntity = {};
-    if (!adjudicate(world, gstep, tick, warnings, gate, hurtByEntity, chronicle)) {
+    // leg25 c：`hurtByEntity`（属性负向 δ 收集）随属性裁定一并删除——没有负向 δ 可收。
+    //   连带：下方 hurtWindow 的惰性写已无写入方（对旧账残留只做滑动清零，见该块注释）。
+    if (!adjudicate(world, gstep, tick, warnings)) {
         // 不可达（check 已过），防御
         return { ok: false, ssot, stage: { warnings, chronicle } };
     }
     const born = spawnEntities(world, gstep, tick, warnings, chronicle);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
-    // K15 三态判据窗口（细案 §3.4）：实体粒度近 2 tick 负向 δ（stateChanges 实际生效值）；
-    // 窗口 [本 tick, 上一 tick]；惰性写——全 0 删字段（旧夹具/黄金锚点零扰动）。
+    // K15 三态判据窗口（细案 §3.4）：实体粒度近 2 tick 负向 δ。
+    //   leg25 c（如实登记）：负向 δ 的来源是 `stateChanges` 的实际生效值，而该字段已随四维浮点删除
+    //   ⇒ **本窗口已无写入方**（`cur` 恒为 0）。此块保留只为把**旧账残留**的 hurtWindow 滑零自删
+    //   （不留在账上误导）；盘算"败露"判据因此失去输入，落在达成一侧——要恢复须另立不依赖假精度的判据。
     for (const e of world.entities) {
-        const cur = hurtByEntity[e.id] ?? 0;
-        if (cur !== 0 || e.hurtWindow) {
+        const cur = 0;
+        if (e.hurtWindow) {
             const next = [cur, e.hurtWindow?.[0] ?? 0];
             if (next[0] === 0 && next[1] === 0) delete e.hurtWindow;
             else e.hurtWindow = next;
@@ -755,10 +758,13 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
 
     const pack = buildEvolutionPack(world, moveFact || null);
     // K38 观测台：拒签率分子/分母记账（铁律 8：先有数，后说话）
-    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'stateChanges', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates']
+    // leg25 c：`stateChanges` 已从世界步契约删除 ⇒ 从分母里**移除**（留着恒为 0，会让分母少算一项——
+    //   "删字段只删一半"的典型残留）。同处 `rejected` 的死过滤 `!w.includes('入局属性钳制')` 一并删除
+    //   （那条警告已不可能产生）。
+    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates']
         .reduce((n, k) => n + (step[k]?.length ?? 0), 0);
     const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)
-        + warnings.filter((w) => (w.startsWith('裁定:') || w.startsWith('校验拒绝:')) && !w.includes('入局属性钳制')).length;
+        + warnings.filter((w) => w.startsWith('裁定:') || w.startsWith('校验拒绝:')).length;
     recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected);
 
     return { ok: true, ssot: world, stage: { chronicle, warnings, events } };
