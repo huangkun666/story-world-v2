@@ -20,9 +20,13 @@ test('公式：属性单调不减（各系数为正）', () => {
     }
 });
 
-test('公式：边界钳制 [0,1]，全零 → 0，全满 → 1', () => {
-    assert.equal(computeWeight({}, CHAR), 0);
-    assert.equal(computeWeight({ hardPower: 0, office: 0, network: 0, intel: 0 }, CHAR), 0);
+test('公式：边界钳制 [0,1]；**账面无数 → 中立 floor**（leg24 片2）：空 attrs=0.5，显式全零=0，全满=1', () => {
+    // leg24 片2（账本换血）语义变更：**"没有数据"不再等于 0**——账本不预填数值后，若把缺键当 0，
+    // 开局全世界分量全 0 → 门控全体静默 + 掩码 obs=0 谁都不见 → 世界冻死。
+    // 现法：缺键按中立值 0.5 取中性 floor（不落账、同 kind 同值、不含个体信息；见 weight.js NEUTRAL_ATTR）。
+    assert.equal(computeWeight({}, CHAR), 0.5, '账面无数 → 中立 floor（人物 0.5）');
+    assert.equal(computeWeight({}, FACT), 0.75, '势力层基线 1.5 → 0.75');
+    assert.equal(computeWeight({ hardPower: 0, office: 0, network: 0, intel: 0 }, CHAR), 0, '**显式**全零=真值，不是缺键 → 0');
     assert.equal(computeWeight({ hardPower: 1, office: 1, network: 1, intel: 1 }, CHAR), 1);
     // 势力层基线 1.5 会把全满顶到 1.5 → 钳回 1；0.8 全满 → 1.2 → 同钳回 1
     assert.equal(computeWeight({ hardPower: 1, office: 1, network: 1, intel: 1 }, FACT), 1);
@@ -47,8 +51,12 @@ test('公式：envFactor 方向（张力高 → 分量升）', () => {
     assert.equal(computeWeight({ hardPower: 0.5 }, CHAR, NEUTRAL_TENSION), computeWeight({ hardPower: 0.5 }, CHAR));
 });
 
-test('公式：缺键按 0 处理', () => {
-    assert.equal(computeWeight({ hardPower: 1 }, CHAR), 0.35);
+test('公式：缺键按中立值（不是 0）——prop 是"有据的值"，缺键=账面无数（leg24 片2）', () => {
+    // 只提议 hardPower=1：其余三维无数 → 取中立 0.5
+    //   1×0.35 + 0.5×(0.25+0.25+0.15) = 0.35 + 0.325 = 0.675
+    assert.ok(Math.abs(computeWeight({ hardPower: 1 }, CHAR) - 0.675) < 1e-9, '缺键取中立 0.5（旧法按 0 得 0.35）');
+    // 显式给 0 = "确实没有" → 才按 0 算
+    assert.ok(Math.abs(computeWeight({ hardPower: 1, office: 0, network: 0, intel: 0 }, CHAR) - 0.35) < 1e-9, '显式 0 才按 0');
 });
 
 test('公式：确定性（重复调用序列逐字节一致）', () => {

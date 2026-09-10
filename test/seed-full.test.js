@@ -154,9 +154,9 @@ test('K43: 空书名录与 shape 防御', () => {
     assert.equal(w2.weights['e_1'], computeWeight({}, 'character', 0.5));   // 既有实体也完成预填
 });
 
-test('leg24 片1 停抄书：名册里的旧 attrs/race 字段不再进实体（数值只来自类别默认 + 模型提议）；形状过 schema', () => {
+test('leg24 片1/片2：名册里的旧 attrs/race 字段不采信，且**不预填任何数值**（空着就是空着）；形状过 schema', () => {
     const book = [
-        // 旧世界可能还留着这些字段（leg20/leg21 抽的）——引擎已不读：实体数值只走 kind 类别默认
+        // 旧世界可能还留着这些字段（leg20/leg21 抽的）——引擎已不读；入账也不预填
         { name: '万法阁', kind: 'faction', race: '人族', attrs: { hardPower: 0.9, office: 0.8 }, evidence: '灵脉霸主' },
         { name: '白小娥', kind: 'character' },
     ];
@@ -175,10 +175,12 @@ test('leg24 片1 停抄书：名册里的旧 attrs/race 字段不再进实体（
     assert.equal(r.seeded, 2);
     const f = w.entities.find((e) => e.name === '万法阁');
     assert.equal(f.race, undefined, 'race 不再从名册带进实体');
-    assert.deepEqual(f.attrs, { hardPower: 0.25, office: 0.25, network: 0.25, intel: 0.25 }, '势力按类别默认（书里抄来的 0.9/0.8 不再采信）');
+    assert.deepEqual(f.attrs, {}, '势力账面不预填数值（旧法填 0.25 四键；书里抄来的 0.9/0.8 也不采信）');
     const c = w.entities.find((e) => e.name === '白小娥');
-    assert.deepEqual(c.attrs, { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 }, '角色按类别默认');
-    assert.ok(w.weights[f.id] > w.weights[c.id], '势力/角色类别不同 → 权重仍差异化（类别默认本身有别）');
+    assert.deepEqual(c.attrs, {}, '角色账面同样空着');
+    // 同属"账面无数" → 分数只剩两点差异：kind 的中立 floor（character 0.5 / faction 0.75 × 层基线）
+    assert.ok(Math.abs(w.weights[c.id] - 0.5) < 1e-9, `人物中立 floor=0.5（实际 ${w.weights[c.id]}）`);
+    assert.ok(Math.abs(w.weights[f.id] - 0.75) < 1e-9, `势力中立 floor=0.75（层基线 1.5；实际 ${w.weights[f.id]}）`);
     const checked = validate(w, ssotSchema);
     assert.equal(checked.ok, true, checked.errors.join('; '));
 });

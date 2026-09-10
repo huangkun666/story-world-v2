@@ -34,7 +34,7 @@
 // ============================================================================================
 import { bookFingerprint } from './fingerprint.js';
 import { ENV_KEYS } from './entropy.js';
-import { ENTITY_ATTR_DEFAULT, INBORN_ATTR_KEYS } from './settle.js';
+// leg24 片2：不再从 settle 借 ENTITY_ATTR_DEFAULT（该常量已删）——名册入账不预填数值
 import { computeWeight } from './weight.js';
 
 export const ENV_INIT_BASELINE = 0.5;      // 提案：抽取缺省环境量初值（patchDynamic 新键基线口径）
@@ -503,10 +503,10 @@ export function applySettingToSsot(ssot, setting) {
 //     （平铺直属名，深链解析到顶；parent 缺失/自指/成环/目标非势力 → 弃关系+警告，名号仍独立入账）；
 //   - 关联字段（C7）：character 带 parent（所属势力/分支名）单存；势力侧成员=派生反查；
 //   - 初始分量预填：以 context.tension 口径（与 settle 首轮同源）为全部实体预填 world.weights——t1 门控就有真分量。
-const buildSeedAttrs = (kind) => {
-    const v = ENTITY_ATTR_DEFAULT[kind] ?? ENTITY_ATTR_DEFAULT.character;
-    return Object.fromEntries(INBORN_ATTR_KEYS.map((k) => [k, v]));
-};
+// leg24 片2（账本换血）：名册实体入账**不再预填四维**——`buildSeedAttrs` 已删。
+// 旧法按 kind 预填（character 0.15 / faction 0.25），实测导致 75.2% 实体四维全默认（导出 (5)：453/602）：
+//   那些数是我们替他填的，看起来却像客观数据。现法：attrs 空着（schema 已由必填改可选），
+//   真值只从模型提议来；分量公式在"账面无数"时按中立值取中性 floor（weight.js NEUTRAL_ATTR）。
 
 // 沿 parent 链上溯到落账目标：势力链顶（无 parent 的势力）或**在册角色**（书里明述的统治者/管辖者）。
 // leg23：新增角色终点——大荒书用「<X帝麾下_Y>」把上级直接写成**帝（角色）**，旧口径（只认势力）导致
@@ -552,10 +552,9 @@ export function seedBookEntities(ssot) {
             kind: entKind,
             name: b.name,
             location: b.location || home,   // leg21：名册带出的所在优先；leg24 片1 起新抽取不再产 location（旧账仍读=零扰动）
-            // 身份 + 类别入账（design-core §2.3 第 1 项）；四维数值只有两个来源：
-            //   kind 类别默认（ENTITY_ATTR_DEFAULT）与 LLM 每轮提议（settle 通道）——
-            //   片1 起**不再从书里抄**（旧账里若还留着 attrs/race，本函数一概不读）
-            attrs: buildSeedAttrs(entKind),
+            // 身份 + 类别入账（design-core §2.3 第 1 项）；**四维数值不预填**（leg24 片2：空着就是空着）——
+            // 账面没有这些键是事实，模型每轮提议的 stateChanges 才是它们的来源（引擎钳制落账）
+            attrs: {},
         };
         (ssot.entities = ssot.entities || []).push(ent);
         byName.set(b.name, ent);

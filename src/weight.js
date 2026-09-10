@@ -31,12 +31,21 @@ export const RIPPLE_TARGET_GAIN = 2;          // 影响范围 = 事件可波及�
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-// 分量 = clamp(基础分 × 层级基线 × 环境修正, 0, 1)。缺键按 0；张力缺省取静态常量。
+// leg24 片2（账本换血）：账面**没有**四维数值时，公式按**中立值**算中性 floor（character 0.5 / faction 0.75）。
+// 为什么要有这个 floor：账本不再预填任何数值（空着就是空着），若把"没有数据"当成 0，
+//   全世界开局分量全 0 → 门控把所有人判静默、掩码 obs=0 让谁都不见 → 世界直接冻死。
+// 这不是"替实体编数值"：①它不落账（账面上这些键**根本不存在**，可验证）②同 kind 一律同值，不含任何个体信息
+//   ③语义诚实——**"不知道"不等于"很弱"**（旧法把未知当 0.15，才让"没数据的角色"看起来像客观的弱者）。
+// 真值只从模型提议来（settle 钳制落账）；片3 会把"谁值得动"的排序换成确定性粗规则，届时 floor 只留作兜底。
+export const NEUTRAL_ATTR = { hardPower: 0.5, office: 0.5, network: 0.5, intel: 0.5 };
+
+// 分量 = clamp(基础分 × 层级基线 × 环境修正, 0, 1)。缺键按**中立值**（见上）；
+// 张力缺省取静态常量。空 attrs / 缺某一维 = 该维"账面无数" → 取中立值，不取 0。
 // "客观 = 确定性计算 + 有界输入"（dev-process 红线④）：引擎只算，上游属性由模型提议、结算器钳制。
 export function computeWeight(attrs = {}, kind = 'character', tension = NEUTRAL_TENSION) {
     const coeffs = COEFFS[kind] || COEFFS.character;
     let base = 0;
-    for (const [name, w] of Object.entries(coeffs)) base += (attrs[name] ?? 0) * w;
+    for (const [name, w] of Object.entries(coeffs)) base += (attrs[name] ?? NEUTRAL_ATTR[name] ?? 0) * w;
     const layerBase = kind === 'faction' ? FACTION_BASELINE : 1;
     const envFactor = 1 + ENV_TENSION_COEFF * ((tension ?? NEUTRAL_TENSION) - NEUTRAL_TENSION);
     return clamp01(base * layerBase * envFactor);

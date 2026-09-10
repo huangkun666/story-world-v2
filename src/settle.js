@@ -31,17 +31,26 @@ export const ARCHIVE = { hotWindow: 20, milestoneEvery: 10 };
 // K37 实体治理数字组（细案 §3.7 → A-10..A-12；铁律 2：全部提案态，随 K37 曲线 + K38 报批）
 export const ENTITY_BIRTH_PER_TICK = 1;      // 提案：单轮新生 ≤1
 export const ENTITY_IDLE_RETIRE_TICKS = 20;  // 提案：连续未活跃轮数（背景化条件）
-export const RETIRE_WEIGHT_FLOOR = 0.05;     // 提案：影响力下限（背景化条件）
+// leg24 片2 复核记录（**实测证伪了一次改动，已撤回，留档勿重走**）：曾按交接 §4 片4 的方向提前把
+//   「分量 < RETIRE_WEIGHT_FLOOR」从退休判据里删掉（改为只看"多久没露面"），实测三处冒烟立刻红：
+//   ①K47 全量棋盘"全册 active 保持"破（345/346）②重量冒烟"被点名可应答"累计 66→34（应答机制塌了一半）
+//   ③50t 冒烟编年条数 6→7（多退了一个）——根因：`lastActiveTick` 只由**落账的原子动作**写，从未列面的
+//   在册实体根本没有这个字段/值永远停在初值 → 新判据把它们在 t20 一次性全体退休 → 离席者不再回应。
+//   结论：**退休判据与"谁值得动/镜头怎么排"是同一块石头**（都得先有片3 那套确定性粗规则替代门控的重心），
+//   所以本片不动它；实机回归证据在台账（leg24 片2 行）。谁要再动这一条，先让那三处冒烟能自己回答"退休的是谁"。
+export const RETIRE_WEIGHT_FLOOR = 0.05;     // 提案：影响力下限（背景化条件；**片3 前不得单独摘除——见上**）
 export const ENTITY_GC_SCAN_TICKS = 20;      // 提案：背景化扫描周期
 // （POOL_CAP 席位上限已于第十九棒 K45 废除——full-roster-lens-spec C3：资格=在册，镜头管进出；用户 2026-09-09 拍板「不设上限」）
 
-// ---- K38 补差包（敲定稿 D 条）：新实体入局数值——模型提议可选 attrs（[0,1] 钳制）；缺省按 kind 兜底（提案态，随 K38 报批）----
-export const ENTITY_ATTR_DEFAULT = { character: 0.15, faction: 0.25 };
+// ---- K38 补差包（敲定稿 D 条）原"入局数值"面；**leg24 片2 账本换血：预填整段删除** ----
+// 旧法：新实体入局按 kind 预填四维（character 0.15 / faction 0.25），名册实体也照填——
+//   病根（用户实证）：**75.2% 实体四维全默认**（导出 (5)：453/602），"全 0.5/全 0.15"看起来像客观数据，
+//   实际是我们替他填的。design-core §2.4 硬规矩一：**空着就是空着，不许填默认值冒充客观**。
+// 现法：入局**不预填任何数值**（attrs 缺省=账面空着，schema 里 attrs 由必填改可选）；
+//   数值只有一个来源=**模型每轮提议的 stateChanges/newEntities.attrs**（引擎钳制 [0,1]，留痕），
+//   加上分量公式在"账面无数"时按中立值取中性 floor（见 weight.js NEUTRAL_ATTR）。
+// 数字常量 ENTITY_ATTR_DEFAULT 已删（它唯一的用途就是那次预填）。
 export const INBORN_ATTR_KEYS = ['hardPower', 'office', 'network', 'intel'];
-const defaultAttrs = (kind) => {
-    const v = ENTITY_ATTR_DEFAULT[kind] ?? ENTITY_ATTR_DEFAULT.character;
-    return Object.fromEntries(INBORN_ATTR_KEYS.map((k) => [k, v]));
-};
 
 const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
 
@@ -78,7 +87,24 @@ function adjudicate(world, step, tick, warnings, gate, hurtByEntity) {
             }
         }
         if (!c.cause) warnings.push(`stateChanges 无 cause: ${c.entity}.${c.attr}（坏账前置，K5）`);
-        const before = e.attrs[c.attr] ?? 0;
+        // leg24 片2（账本换血）：账面**没有**这一维时，把模型这次的提议当作**该维的初值**，
+        // 不从 0 起算增量——旧法 `?? 0` 等于引擎替它把未知维定成 0（"不知道"被当成"很弱"，
+        // 而且负向提议会被硬边界钳到 0，凭空造出一个"被打到 0"的事实）。
+        // 现法：①非负提议 = 该维第一个真值，留痕；②**负向提议（无基线可减）不收，只留痕**——
+        //   账面上"没有这一维"时，扣减无从下手；要削弱一个账面无数的实体，得先有一次正向落账。
+        if (e.attrs?.[c.attr] === undefined) {
+            if (!(eff > 0)) {
+                warnings.push(`裁定: 账面无「${c.attr}」，负向提议 ${eff} 无基线可减——不收（先有正向落账才谈削弱；leg24 片2）`);
+                continue;
+            }
+            const init = clamp(eff, ATTR_BOUNDS);
+            if (init !== eff) warnings.push(`裁定: 属性硬边界（${c.entity}.${c.attr} 初值 ${eff}→${init}）`);
+            e.attrs = e.attrs || {};
+            e.attrs[c.attr] = init;
+            warnings.push(`裁定: 账面无「${c.attr}」——本次提议记为该维初值 ${init}（不从 0 起算，leg24 片2）`);
+            continue;
+        }
+        const before = e.attrs[c.attr];
         const after = clamp(before + eff, ATTR_BOUNDS);
         if (after !== before + eff) {
             warnings.push(`裁定: 属性硬边界（${c.entity}.${c.attr} ${before}→${after}，申请 ${before + eff}）`);
@@ -569,8 +595,9 @@ function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate
     world.meta.simLog.push(entry);
 }
 
-// K37 生通道②落账（细案 §3.7 → A-10）：入局提议——单轮 ≤1 / 席位 ≤32（提案）拒超限；
-// 落账（id=e_<tick>_<n>；kind 缺省 character；attrs 空=公式兜底）+ 编年「XX 入局」（kind major=大事）
+// K37 生通道②落账（细案 §3.7 → A-10）：入局提议——单轮 ≤1 拒超限；
+// 落账（id=e_<tick>_<n>；kind 缺省 character；**attrs 只在模型提议时落，没提议就空着**——leg24 片2）
+// + 编年「XX 入局」（kind major=大事）
 function spawnEntities(world, gstep, tick, warnings, chronicle) {
     const born = [];
     for (const ne of gstep.newEntities || []) {
@@ -580,9 +607,11 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
         }
         if (world.entities.some((e) => e.name === ne.name)) continue;   // 重名拒（check 已查，防御）
         const kind = ne.kind || 'character';
+        // leg24 片2：**不再按 kind 预填四维**——没提议就是没数据（空着就是空着），
+        // 引擎只在模型真提议了数值时钳制落账（有据才留痕）。
         const proposed = ne.attrs && typeof ne.attrs === 'object' ? ne.attrs : {};
         const attrs = {};
-        for (const [k, v] of Object.entries({ ...defaultAttrs(kind), ...proposed })) {
+        for (const [k, v] of Object.entries(proposed)) {
             const clamped = clamp(v, ATTR_BOUNDS);
             if (clamped !== v) warnings.push(`裁定: 入局属性钳制（${ne.name}.${k} ${v}→${clamped}）`);
             attrs[k] = clamped;
@@ -679,6 +708,8 @@ function reactivateNamed(world, events, tick, chronicle) {
 // （名录/指针全保留；编年「淡出」一笔，kind state——处境驱动）；依据册随退休清理（其名消账）。
 // K45（full-roster-lens-spec C3 拍板）：**超席强制退已废除**（资格=在册，镜头管进出——用户 2026-09-09 拍板）——
 // 闲置退休仍保留：长期没戏份的实体退二线（仍可在册、可被点名复归），这是"镜头进出"的引擎侧实现。
+// leg24 片2：**分量地板这一条本片不动**（实测证伪——摘掉它全体在册实体 t20 一次性退休，"被点名可应答"塌一半；
+//   详见上方 RETIRE_WEIGHT_FLOOR 旁的复核记录）。片4 换判据时必须与片3 的粗规则替换一并做。
 function retireInactive(world, tick, warnings, chronicle) {
     const canRetire = (e) => !(world.agendas || []).some((a) => a.owner === e.id && !a.closed)
         && !(world.events || []).some((ev) => !ev.closed && (ev.ripples || []).includes(e.id));

@@ -19,7 +19,7 @@ import { seedBookEntities, sanitizeCanon } from '../src/abstract.js';
 
 assert.equal(ENTITY_BIRTH_PER_TICK, 1, '单轮新生 ≤1（提案）');
 assert.equal(ENTITY_IDLE_RETIRE_TICKS, 20, '空闲 20 轮（提案）');
-assert.equal(RETIRE_WEIGHT_FLOOR, 0.05, '影响力 <0.05（提案）');
+assert.equal(RETIRE_WEIGHT_FLOOR, 0.05, '影响力 <0.05（提案；leg24 片2 实测证伪了"提前摘掉它"，本片撤回不动）');
 assert.equal(ENTITY_GC_SCAN_TICKS, 20, '扫描 20 轮（提案）');
 
 function baseWorld(extra = {}) {
@@ -112,23 +112,23 @@ test('A-10 生·dialogueFact 源：依据册命中才放行；依据册随落子
     assert.ok(r3.stage.chronicle.some((c) => c.text.includes('「船娘」入局（屡被提及，声名鹊起）')));
 });
 
-test('K38 生·新实体数值分配（敲定稿 D 条）：缺省按 kind 兜底；提议 attrs 钳制；非法值校验拒', () => {
+test('leg24 片2 生·新实体**不预填数值**：没提议就空着；提议过的键钳制落账；非法值校验拒', () => {
     const ev0 = { id: 'ev_1', title: '大营起事', source: { type: 'state' }, position: '大营', ripples: [], closed: false };
-    // ① character 缺省 0.15 四键（提案）
+    // ① character 未提议数值 → 账面空着（空着就是空着，不再按 kind 兜底 0.15）
     const w1 = baseWorld({ events: [ev0] });
     const r1 = settleTick({ ssot: w1, step: step({ newEntities: [{ name: '船娘', kind: 'character', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_1' } }] }) });
     assert.equal(r1.ok, true, r1.stage.warnings.join('; '));
     const c = r1.ssot.entities.find((e) => e.name === '船娘');
-    assert.deepEqual(c.attrs, { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 }, 'character 缺省兜底（提案 0.15）');
-    assert.ok(r1.ssot.weights['e_1_1'] > 0, '入局即有分量');
-    // ② faction 缺省 0.25 + 提议键覆盖 + 越界钳制 [0,1]
+    assert.deepEqual(c.attrs, {}, '没提议 → 账面无这些键（不许填默认值冒充客观）');
+    assert.ok(r1.ssot.weights['e_1_1'] > 0, '分量照常有值（公式按中立 floor 算，不落账）');
+    // ② faction 只落提议的键 + 越界钳制 [0,1]（未提议的键不再补默认）
     const w2 = baseWorld({ events: [ev0] });
     const r2 = settleTick({ ssot: w2, step: step({ newEntities: [{ name: '漕帮', kind: 'faction', location: '大营', entity: 'e_merchant', attrs: { hardPower: 5, intel: 0.3 }, source: { type: 'event', ref: 'ev_1' } }] }) });
     assert.equal(r2.ok, true, r2.stage.warnings.join('; '));
     const f = r2.ssot.entities.find((e) => e.name === '漕帮');
     assert.equal(f.attrs.hardPower, 1, '提议超出 [0,1] → 钳制');
     assert.equal(f.attrs.intel, 0.3, '提议合法值原样');
-    assert.equal(f.attrs.office, 0.25, '未提议键按 faction 缺省（提案 0.25）');
+    assert.equal(f.attrs.office, undefined, '未提议键不落账（旧法按 faction 兜底 0.25）');
     assert.ok(r2.stage.warnings.some((x) => x.includes('入局属性钳制')), '钳制留痕（审计）');
     // ③ 非法值：字符串/NaN → schema 层拒（numRecord「期望数字」）；Infinity → 语义层拒（「有限数值」防御）
     const w3 = baseWorld({ events: [ev0] });
@@ -151,7 +151,7 @@ test('A-10 生·book 源：书名录命中才放行；seed 幂等入账（书序
     assert.equal(s1.seeded, 2);
     assert.ok(w.entities.some((e) => e.name === '城门卒' && e.id === 'e_bk_1' && e.location === '临渊城'));
     assert.ok(w.entities.some((e) => e.name === '白小娥' && e.id === 'e_bk_2'));
-    assert.deepEqual(w.entities.find((e) => e.id === 'e_bk_1').attrs, { hardPower: 0.15, office: 0.15, network: 0.15, intel: 0.15 }, 'K38：seed 通道同样按 kind 缺省兜底（不再哑巴）');
+    assert.deepEqual(w.entities.find((e) => e.id === 'e_bk_1').attrs, {}, 'leg24 片2：seed 通道不预填数值（空着就是空着）');
     const s2 = seedBookEntities(w);
     assert.equal(s2.seeded, 0, '幂等：二次 seed 零新增');
     assert.equal(validate(w, ssotSchema).ok, true, 'seed 后世界过 SSOT schema');
@@ -322,8 +322,9 @@ test('A-11 灭·玩家不可灭（红线 1）；gate 透传 entityFates（无提
 
 test('A-12 背景化：条件四则齐 → 扫描轮自动 retired + 编年「淡出」；条件缺一不入', () => {
     const w = baseWorld({ events: [] });
-    w.entities.push({ id: 'e_gone', kind: 'character', name: '旧人', location: '临渊城', attrs: {}, lastActiveTick: 0 });
-    w.weights.e_gone = 0.02;   // < 0.05（重算后 attrs 空 → 0）
+    // leg24 片2 起"账面无数"= 中立 floor（0.5），所以"分量低于地板"必须由**有据的极低值**构成
+    // （模型提议过、真被削到接近零）——这正是"打崩≠灭"的可退面：伤到极轻且久未露面才退二线。
+    w.entities.push({ id: 'e_gone', kind: 'character', name: '旧人', location: '临渊城', attrs: { hardPower: 0.01, office: 0.01, network: 0.01, intel: 0.01 }, lastActiveTick: 0 });
     // 扫描轮 t20：20 % 20 === 0 ✓；tick 20 - lastActiveTick 0 = 20 ≥ 20 ✓
     const r = settleTick({ ssot: w, step: step() });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
@@ -335,24 +336,21 @@ test('A-12 背景化：条件四则齐 → 扫描轮自动 retired + 编年「�
     assert.ok(after.chronicle.some((c) => c.text.includes('「旧人」淡出视野（久未现身）')));
     assert.ok(after.chronicle.find((c) => c.text.includes('淡出')).kind === 'state');
     assert.equal(validate(after, ssotSchema).ok, true);
-    // 条件缺一：有在飞盘算 → 不入
+    // 条件缺一：有在飞盘算 → 不入（本例分量取中立 floor 0.5——不满足"分量低于地板"这一条，但验证的是盘算那一条）
     const w2 = baseWorld({ events: [] });
     w2.entities.push({ id: 'e_busy', kind: 'character', name: '忙人', location: '临渊城', attrs: {}, lastActiveTick: 0 });
-    w2.weights.e_busy = 0.02;
     w2.agendas = [{ id: 'a_1', owner: 'e_busy', goal: '守城', stage: '布防', visibility: 'known', maxSteps: 3, progress: 1, closed: false, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }];
     const after2 = run(structuredClone(w2), ENTITY_GC_SCAN_TICKS);
     assert.equal(after2.entities.find((e) => e.id === 'e_busy').status ?? 'active', 'active', '有在飞盘算不入 retirement');
     // 条件缺一：未活跃轮数不足 → 不入
     const w3 = baseWorld({ events: [] });
-    w3.entities.push({ id: 'e_young', kind: 'character', name: '新人', location: '临渊城', attrs: {}, lastActiveTick: 5 });
-    w3.weights.e_young = 0.02;
+    w3.entities.push({ id: 'e_young', kind: 'character', name: '新人', location: '临渊城', attrs: { hardPower: 0.01, office: 0.01, network: 0.01, intel: 0.01 }, lastActiveTick: 5 });
     const after3 = run(structuredClone(w3), ENTITY_GC_SCAN_TICKS);
     assert.equal(after3.entities.find((e) => e.id === 'e_young').status ?? 'active', 'active', '未满 20 轮不入');
     // 依据册随退休清理
     const w4 = baseWorld({ events: [] });
     w4.meta.dialogueBook = { 旧人: { count: 2, lastTick: 1 } };
-    w4.entities.push({ id: 'e_gone', kind: 'character', name: '旧人', location: '临渊城', attrs: {}, lastActiveTick: 0 });
-    w4.weights.e_gone = 0.02;
+    w4.entities.push({ id: 'e_gone', kind: 'character', name: '旧人', location: '临渊城', attrs: { hardPower: 0.01, office: 0.01, network: 0.01, intel: 0.01 }, lastActiveTick: 0 });
     const after4 = run(structuredClone(w4), ENTITY_GC_SCAN_TICKS);
     assert.equal(after4.meta.dialogueBook['旧人'], undefined, '退休随依据册清账');
 });

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { settleTick } from '../src/settle.js';
+import { computeWeight } from '../src/weight.js';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 
@@ -62,6 +63,45 @@ test('结算：基本 tick 全管线落账', () => {
     assert.equal(JSON.stringify(GOLDEN), before);
     const vr = validate(w, ssotSchema);
     assert.equal(vr.ok, true, `结算后世界仍过 schema: ${vr.errors.join('; ')}`);
+});
+
+test('leg24 片2 账本换血：账面没有的那一维——首次正向提议记为初值（不从 0 起算），负向提议不收', () => {
+    const mk = (attrs) => ({
+        version: 1,
+        context: { world: '孤岛', tension: 0.5, positions: ['孤岛'] },
+        entities: [{ id: 'e_lone', kind: 'character', name: '独行客', location: '孤岛', attrs }],
+        weights: {},
+        agendas: [],
+        events: [{ id: 'ev_1', title: '旧事', source: { type: 'state' }, position: '孤岛', closed: false }],
+        chronicle: [],
+        meta: { tick: 0 },
+    });
+    const stepOf = (attr, delta) => ({
+        actions: [], newEvents: [], agendaAdvances: [],
+        stateChanges: [{ entity: 'e_lone', attr, delta, cause: 'ev_1' }],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+    });
+    // ① 账面空着（leg24 片2：名册/入局都不再预填）→ 分量取中立 floor
+    const w = mk({});
+    assert.equal(computeWeight(w.entities[0].attrs, 'character', 0.5), 0.5, '账面无数 → 中立 floor 0.5');
+    // ② 首次正向提议 = 该维初值（旧法 ?? 0 起算会得到同样的数，但语义是"从 0 加"；且必留痕）
+    const r1 = settleTick({ ssot: w, step: stepOf('hardPower', 0.4) });
+    assert.equal(r1.ok, true, r1.stage.warnings.join('; '));
+    assert.equal(r1.ssot.entities[0].attrs.hardPower, 0.4, '首次正向提议记为初值');
+    assert.ok(r1.stage.warnings.some((x) => x.includes('记为该维初值')), '初值留痕（每条变更留痕）');
+    // ③ 同维第二次 → 正常增量语义
+    const r2 = settleTick({ ssot: r1.ssot, step: stepOf('hardPower', 0.1) });
+    assert.equal(r2.ssot.entities[0].attrs.hardPower, 0.5, '第二次走增量（0.4+0.1）');
+    // ④ 无基线时的负向提议 → 不收（不得凭空造出"0"这个事实），但留痕
+    const r3 = settleTick({ ssot: r1.ssot, step: stepOf('office', -0.3) });
+    assert.equal(r3.ok, true);
+    assert.equal(r3.ssot.entities[0].attrs.office, undefined, '负向提议无基线可减 → 不落账（旧法会钳成 0）');
+    assert.ok(r3.stage.warnings.some((x) => x.includes('负向提议') && x.includes('无基线可减')), '不收也留痕');
+    // ⑤ 有基线后照样能削弱（先正向、再负向）
+    const r4 = settleTick({ ssot: r3.ssot, step: stepOf('office', 0.3) });
+    const r5 = settleTick({ ssot: r4.ssot, step: stepOf('office', -0.1) });
+    assert.ok(Math.abs(r5.ssot.entities[0].attrs.office - 0.2) < 1e-9, '有基线 → 负向照常生效');
+    assert.equal(validate(r5.ssot, ssotSchema).ok, true);
 });
 
 test('结算：校验不过 → 世界如实不动', () => {

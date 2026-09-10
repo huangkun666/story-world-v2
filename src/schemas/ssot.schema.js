@@ -100,13 +100,15 @@ export const ssotSchema = {
             items: {
                 kind: 'object',
                 additional: false,
-                required: ['id', 'kind', 'name', 'location', 'attrs'],
+                required: ['id', 'kind', 'name', 'location'],
                 props: {
                     id: { kind: 'string', minLength: 1 },
                     kind: { kind: 'string', enum: ['faction', 'character'] },
                     name: { kind: 'string', minLength: 1 },
                     location: { kind: 'string', minLength: 1 },   // 驻点必须 ∈ context.positions（引擎校验 §3.2）
-                    attrs: { kind: 'numRecord' },                 // 硬实力/职权/人脉/情报（分量公式后续）
+                    // leg24 片2（账本换血）：attrs 由**必填改可选**——账面无数是合法状态（"空着就是空着"）。
+                    //   引擎不再预填默认值；键只在模型提议（settle 钳制落账）后才存在。
+                    attrs: { kind: 'numRecord' },                 // 硬实力/职权/人脉/情报（有据才在账；分量公式无数时取中立 floor）
                     race: { kind: 'string', minLength: 1 },   // leg20：种族标签（抽象带入；可选=旧世界零扰动）
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
                     hurtWindow: { kind: 'array', minItems: 2, maxItems: 2, items: { kind: 'number' } },   // K15：近 2 tick 负向 δ 窗口 [本 tick, 上一 tick]（三态判据用；惰性写——全 0 删字段）
