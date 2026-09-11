@@ -838,6 +838,43 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
             for (const x of set) bucket.add(x);
         }
     }
+    // ★leg25 g（P3，用户 2026-09-11 定论「虞昭华是大虞的」逼出的缺口）：
+    //   **书条目的 `key` 里明写着的势力名，也算那个势力的别名**——上面那圈只认"条目名"，
+    //   于是「canon 势力名」与「书条目名」**毫无字面关系**的条目就整条接不上。
+    //   实测（用户真账）：canon 势力 `大虞`，书条目却叫 `人族皇朝`（key 第一项就是 `大虞`，正文「代表人物:」下写着
+    //   `- 虞昭华（女，T8大乘中期）：大虞女帝。…`）⇒ `resolveCanonName('人族皇朝')` 双向子串都匹配不上（"人名+朝代" vs "朝代"）
+    //   ⇒ 正文取不到 ⇒ 成员行进不了名册 ⇒ `虞昭华 → 大虞` 挂不上。同款还有 `瑶池圣地` ↔ 书条目 `隐世圣地·瑶池`。
+    //   实测影响面（真账）：canon 势力 152 个里 80 个靠这条才拿到成员行，但**真正会新写入的只有 8 条**
+    //   （虞昭华/秦红袖/沈天君→大虞，瑶池圣母/灭情师太/蟠桃树灵·夭夭/青鸟/叶清璇→瑶池圣地）——
+    //   其余角色要么不在册、要么账上原有归属（明述优先，不覆盖）。
+    //   ★为什么必须**严格收窄**（多书实测教训，见 demo/measure-leg25g-p3-genericity.js）：
+    //     凡是"任意条目 key 命中任意势力名当关系"的写法都会炸——三国 735 条（`if→貂蝉`）、大荒 10087 条、
+    //     自指 225 条。那类书里 key 是**任意关键词表**，不是别名。所以这里三道闸缺一不可：
+    //       ① 出发点只能是 **canon 里 kind=faction 的条目**（不是"书上任意一个名字"）；
+    //       ② 只认**精确等于**该势力名的 key（不做子串/模糊）；
+    //       ③ 该 key 名在那个书条目下**必须本身像花名册**（≥2 条成员行，与 audit-design-candidates 同一形态判据），
+    //          否则"提到它的设定段落"会被当名册（实测：`人族` 会靠 `[寿元]` 拿到一堆散文碎片）。
+    {
+        const MIN_ROSTER_ROWS = 2;
+        for (const b of book) {
+            if (b.kind !== 'faction') continue;
+            const bn = String(b.name ?? '').trim();
+            if (bn.length < 2) continue;
+            for (const e of rawEntries) {
+                const en = String(e.comment ?? e.name ?? '').trim();
+                if (!en || en === bn) continue;                        // 同名那条上面那圈已经处理过
+                const keys = Array.isArray(e.key) ? e.key : [e.key];
+                if (!keys.some((k) => String(k ?? '').trim() === bn)) continue;   // ② 精确命中
+                const text = String(e.content ?? '');
+                MEMBER_LINE.lastIndex = 0;
+                const rows = [...text.matchAll(MEMBER_LINE)].map((m) => m[1].trim());   // ③ 像花名册
+                if (rows.length < MIN_ROSTER_ROWS) continue;
+                if (!orgRosterMap.has(bn)) orgRosterMap.set(bn, new Set());
+                const bucket = orgRosterMap.get(bn);
+                for (const x of rows) bucket.add(x);
+            }
+        }
+    }
     const orgOf = (name) => {
         const b = idx.get(String(name ?? '').trim());
         return b ? { name: b.name, kind: b.kind } : null;
@@ -904,6 +941,16 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
     //   "未明述为独立势力"，第二类情况下这句话对不上事实（如实测：界渊长城的上级「渡虚帝」压根不在册）。
     //   现按原因分措辞：账本要诚实，警告也不许替他物编个出处。
     const organs = [];                       // {owner 名号, name 名号}：书里明述归某势力/某统治者管，但不作为独立棋手
+    // 书标签声明的上级（照书办：`<X帝麾下_名号>` 形态）——**标签本身就是书的明述**，用它作正面证据。
+    //   候选集逐字取自书本段正文（形态判据，无词表）；模型抽出的声称必须与声明同名才算命中。
+    // ★leg25 g（P2）：这一段原本在第三遍（角色那一遍）才算，本棒起**提前到子势力折叠之前**——
+    //   因为子势力那条路（下面 `target.kind === 'character'`）现在也要判"是不是照书办"。
+    const declaredParent = new Map();
+    {
+        const srcText = ssot.context?.setting?.frozen?.canon?.sourceText;
+        const declared = typeof srcText === 'string' && srcText ? scanBookDeclarations(srcText).declares : [];
+        for (const d of declared) if (d.parent) declaredParent.set(d.name, d.parent);
+    }
     const missWords = (self, parent) => (idx.has(parent)
         ? `书名录: 「${self}」的上级「${parent}」是地名——弃隶属（名号照常入账）`
         : `书名录: 「${self}」的上级「${parent}」不在册（书里没有它的条目）——隶属空着，名号照常入账`);
@@ -917,7 +964,19 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
         if (target.kind === 'character') {
             // leg23：上级是在册角色（统治者/管辖者）——不折叠（不新建实体、不动分量），按独立势力入账 + 记名下机构
             const ent = pushEntity(b);
-            if (ent) { ent.parent = target.name; organs.push({ owner: target.name, name: b.name }); }
+            if (ent) {
+                ent.parent = target.name;
+                // ★leg25 g（P2）：**补上漏打的来源**。旧法只设了 `parent`，没设 `parentSource`/`parentSourceFrom`
+                //   ⇒ 账上 9 条 `parentSource === undefined`（实测全是 faction→character，即"子势力→皇帝角色"：
+                //   太昊仙洲/无念禅境→太素帝、大荒战界→噬天帝、须弥界域/界渊长城→渡虚帝…）。
+                //   为什么不能只留 parent：`parentSource` 是"这条归属是书里写的还是引擎推的"的**来源分账**，
+                //   面板与 pack 靠它标「（推）」（`render.js` parentDerived）。来源空着 = 让读者分不清明述与推断。
+                //   来源判定与第三遍 `setParent` 同口径：书标签声明优先（照书办），否则记为模型抽取。
+                const tagged = String(declaredParent.get(ent.name) ?? '') === String(target.name);
+                ent.parentSource = tagged ? '照书办' : '模型抽取';
+                ent.parentSourceFrom = tagged ? 'tag' : 'sub-faction-role';
+                organs.push({ owner: target.name, name: b.name });
+            }
             continue;
         }
         const topEntity = byName.get(target.name);
@@ -930,18 +989,28 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
         if (!topEntity.branches.includes(b.name)) topEntity.branches.push(b.name);
         folded += 1;
     }
+    // ★leg25 g（P2 补完）：**给老账回填漏打的来源**（幂等；与 leg25 e「名册落账做成可重入」同一治法）。
+    //   为什么必须单列这一步：上面第二遍只在 `pushEntity` **真的新建了实体**时才打来源；
+    //   而老世界的实体**早就入账了**（`pushEntity` 对已存在的名号直接返回 null）⇒ 光改新建那条路，
+    //   老账上那 9 条永远补不上（真账实测：改完仍是 `缺来源 9`）。这一刀挂在加载期收口里，打开面板即补齐。
+    //   来源判法与第二遍同口径（书标签声明优先），证据类型写清这条路的名字便于审计。
+    {
+        const srcText = ssot.context?.setting?.frozen?.canon?.sourceText;
+        for (const e of ssot.entities || []) {
+            if (!e?.parent || e.parentSource) continue;              // 只补空位（已有来源不动）
+            const target = resolveSeedTarget(e.parent, idx);
+            const parentItem = target?.kind === 'character' ? target : idx.get(String(e.parent).trim());
+            if (parentItem?.kind !== 'character') continue;          // 只认"上级是统治者"这一类
+            const tagged = String(declaredParent.get(e.name) ?? '') === String(e.parent);
+            e.parentSource = tagged ? '照书办' : '模型抽取';
+            e.parentSourceFrom = tagged ? 'tag' : 'sub-faction-role';
+            parentVerified += 1;
+        }
+    }
     // 第三遍：角色整量入账 + parent（所属势力）解析
     // leg23 修正：**册里明述为势力的上级一律认**——旧口径要求"上级实体此刻已在账"，而势力的入账在第一/二遍，
     // 角色却排在第三遍之前判断，导致「龙骧 → 镇海先锋营」这类真关系被误判成"未明述为势力"而丢弃（实测 20 条警告之根）。
     // 现在：上级在册 → 直接认（链顶解析得到则写链顶名，否则写上级本身，其自身实体会在账上指到链顶）；只有**不在册**才留痕。
-    // 书标签声明的上级（照书办：`<X帝麾下_名号>` 形态）——**标签本身就是书的明述**，用它作正面证据。
-    //   候选集逐字取自书本段正文（形态判据，无词表）；模型抽出的声称必须与声明同名才算命中。
-    const declaredParent = new Map();
-    {
-        const srcText = ssot.context?.setting?.frozen?.canon?.sourceText;
-        const declared = typeof srcText === 'string' && srcText ? scanBookDeclarations(srcText).declares : [];
-        for (const d of declared) if (d.parent) declaredParent.set(d.name, d.parent);
-    }
     // 所属落账的唯一出口（先验伪，再决定认不认）。
     //   弃关系的条件**只有一个**：正面证据全无 **且** 该组织确有花名册却列不出该名号（=被反驳）。
     //   ——无册不等于不存在（硬规矩：绝不用空值反推"没有"），只能落账并如实标成未验证。

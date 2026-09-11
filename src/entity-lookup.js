@@ -577,8 +577,17 @@ export function deriveLocationFromBook({ world, entities = null, entries = [] } 
             if (n.value && ACCEPT(s, n.value)) cand.push(n.value);
         }
         // 正文"核心底蕴/所在地"里的地名也收（如「居西极贺洲西极昆仑山玉虚秘境」）
-        const m = /(?:所在地|核心底蕴|驻地)[:：]?\s*([^\n。；]{2,30})/.exec(String(entry?.content || ''));
-        if (m) {
+        // ★leg25 g（P1）：两处修正（都由真书实测逼出，见 demo/measure-leg25g-p1-regex.js）。
+        //   ① **补上「所在地域」这个变体字段名 + 汉字边界**：旧法 `(?:所在地|…)` 会命中「所在地域」的**前缀**
+        //      「所在地」，把 `所在地域: 汜水关` 读成 `域: 汜水关` ⇒ 幻影地名（违反"引擎不发明地名"）。
+        //      实测范围：八本书里「所在地域」出现在 **2 本**（三国 2 处，其 `[用户信息]` 条目就是这写法）。
+        //      边界 `(?![\u4e00-\u9fff])`：字段名是**汉字词**，后面还跟汉字说明这条不是该字段（如「所在地不详」）——
+        //      这是**形态判据**，不是词表判语义（"不详"没有进任何词表）。
+        //   ② **扫全部命中，不只取第一条**：旧法 `exec` 只吃正文里第一处——若第一处是个幌子
+        //      （「所在地不详」）或不该收的段落，后面真正的「驻地: X」就永远读不到。现在全部收进候选，
+        //      仍由末尾的"取最长"与 ACCEPT 闸统一裁决（与 key 那条路同一口径）。
+        const re = /(?:所在地|核心底蕴|驻地)(?![\u4e00-\u9fff])[:：]?\s*([^\n。；]{2,30})/g;
+        for (const m of String(entry?.content || '').matchAll(re)) {
             const s = m[1].trim();
             const n = normalizeToPositionSet(s, positions);
             if (n.value && ACCEPT(s, n.value)) cand.push(n.value);

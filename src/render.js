@@ -22,7 +22,7 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   之前那句"接线断了而测试全绿"让真账 563 实体真位置恒 0、位置列整列「未载」；现首开面板即推 173。
 //   同棒另删两处死机制：盘算满步的「败露」支（判据输入早随四维消失）+ 可见性掩码（两取值都过阈值=恒真）。
 //   同棒收尾：观棋侧栏与 `📍` 行由"平铺一切"改为**按处聚合**（位置当分组键；"位置未载"单列一筐）。
-export const PANEL_BUILD = 'leg25f-whereabouts';
+export const PANEL_BUILD = 'leg25g-map';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -272,8 +272,31 @@ export function renderSideHtml(world) {
             + `<div class="sw2-locchips">${unknown.map((e) => chip(e, world)).join('')}</div>`
             + `</div>`
         : '';
-    return `<div class="sw2-col-head">各归何处 · 速览（${byLoc.size} 处 / ${active.length - unknown.length} 人有处可循）</div>`
-        + `<div class="sw2-side">${locGroups.join('')}${unknownHtml}</div>`;
+
+    // ★leg25 g（用户 2026-09-11 实机复验后拍板：「有是有但是太拥挤了，收缩到一个入口内，就叫地图吧，
+    //   这就是个暂时的展示功能」）：
+    //   上一棒把 563 张卡压成 21 组（-84%）方向是对的，但**整片铺在侧栏里**仍然占满视线——
+    //   21 组 + 390 人的未载筐一展开，动态流被挤到下面看不见。现在收成**一个入口**：默认收起，
+    //   开口只报一行摘要（几处 / 几人 / 未载几人），要看得自己点开。
+    //   形态选**原生 `<details>`**（不新增 JS、不新增状态）：本仓已有两处同款先例
+    //   （`.sw2-milestone` / `.sw2-source-alt`），样式按它们写，不为这一次改版发明新组件。
+    //   ★纪律（别改坏）：**内容照旧全在 DOM 里**——折叠≠删除。理由有两条：
+    //     ① `未载 ≠ 在别处` 这条口径靠那段说明文案承载（"书里没写"），删了就把口径删了；
+    //     ② 现有回归锁断言的是内容与 class（`sw2-locgroup-name">江州` / `位置未载…书里没写`），
+    //        真删了内容会当场红——那正是"别把呈现改版做成功能删减"的防线。
+    //   措辞纪律（用户原话）：入口就**叫「地图」**，别叫"各归何处速览"之类；这是**暂时的展示功能**。
+    const known = active.length - unknown.length;
+    const mapDetails = `<details class="sw2-map-details">`
+        + `<summary class="sw2-map-summary"><span class="sw2-map-title">地图</span>`
+        + `<span class="sw2-map-brief">${byLoc.size} 处 · ${known} 人有处可循`
+        + (unknown.length ? ` · 未载 ${unknown.length} 人` : '')
+        + `</span></summary>`
+        + `<div class="sw2-map-note" title="位置只是把账上已有的空间结构摆出来。引擎不据此筛选谁、也不判断两人能否相遇（那是笔的事）">`
+        + `各归何处（${byLoc.size} 处 / ${known} 人有处可循）——按处聚合，仅供查看；`
+        + `位置不参与筛选，「未载」也不代表在别处。</div>`
+        + `<div class="sw2-side">${locGroups.join('')}${unknownHtml}</div>`
+        + `</details>`;
+    return mapDetails;
 }
 
 export function renderBoardHtml(world, opts = {}) {

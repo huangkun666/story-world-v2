@@ -166,6 +166,17 @@
 .sw2-locchip-me::before{content:"你 · ";font-weight:700;}
 .sw2-locgroup-unknown .sw2-locchip{background:transparent;border:1px dashed var(--sw2-line-soft);color:var(--sw2-text-faint);}
 
+/* leg25 g：位置展示**收成一个入口「地图」**（用户 2026-09-11：「太拥挤了，收缩到一个入口内，就叫地图吧，
+   这就是个暂时的展示功能」）。默认收起——开口只报一行摘要，要看再点开。
+   形态跟本仓已有的两处折叠（`.sw2-milestone` / `.sw2-source-alt`）一致，不另立体系。 */
+.sw2-map-details{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:9px 12px;}
+.sw2-map-summary{display:flex;align-items:baseline;gap:8px;cursor:pointer;user-select:none;font-size:12.5px;color:var(--sw2-text-dim);}
+.sw2-map-summary:hover{color:var(--sw2-text);}
+.sw2-map-title{font-weight:700;font-size:13px;color:var(--sw2-text);}
+.sw2-map-brief{font-size:11px;color:var(--sw2-text-faint);font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-map-note{font-size:11px;line-height:1.6;color:var(--sw2-text-faint);margin:8px 0 8px;}
+.sw2-map-details > .sw2-side{margin-top:2px;}
+
 /* ---------- 编年页 ---------- */
 .sw2-chronicle{display:flex;flex-direction:column;gap:5px;max-height:560px;overflow:auto;padding-right:4px;}
 .sw2-ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px;}

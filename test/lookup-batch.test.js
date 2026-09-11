@@ -293,6 +293,42 @@ test('leg25 d：位置继承——组织条目的驻地推给成员（零 token�
     assert.equal(w.entities.find((x) => x.id === 'e_c1').location, '未明', '纯函数：不改输入');
 });
 
+test('leg25 g（P1）：驻地字段名的**变体「所在地域」**不许被前缀命中成幻影地名', () => {
+    // 实测（demo/measure-leg25g-p1-regex.js）：旧正则 `(?:所在地|…)` 会命中「所在地域」的前缀「所在地」，
+    //   于是 `所在地域: 汜水关` 被读成 `域: 汜水关` ⇒ 归一后可能写进一个**书里没有的地名**（幻影）。
+    //   三国书 2 处（其 `[用户信息]` 条目），真实形态；这里锁"不许出碎片值"。
+    const w = world();
+    w.context.positions = ['未明', '汜水关', '许昌'];
+    w.entities = [{ id: 'e_p', kind: 'character', name: '用户信息', location: '未明' }];
+    const entries = [{
+        comment: '用户信息',
+        key: [],
+        content: '[用户角色信息]\n姓名: 黄坤\n所在地域: 汜水关\n当前职位: 义勇先锋',
+    }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    const loc = d.ssot.entities.find((x) => x.id === 'e_p').location;
+    assert.ok(!String(loc).includes('域:'), `★不许把「域: 汜水关」这种碎片当地名（实得 ${JSON.stringify(loc)}）`);
+    assert.ok(!String(loc).startsWith('域'), `★碎片不得进 location（实得 ${JSON.stringify(loc)}）`);
+
+    // 反向锁：**正常写法不受影响**（别为了防碎片把真驻地也挡掉）
+    const w2 = world();
+    w2.context.positions = ['未明', '西极昆仑山'];
+    w2.entities = [{ id: 'e_f', kind: 'faction', name: '昆仑道宫', location: '未明' }];
+    const entries2 = [{ comment: '昆仑道宫', key: [], content: '核心底蕴: 居西极贺洲西极昆仑山, 天阶护山大阵。' }];
+    const d2 = deriveLocationFromBook({ world: w2, entries: entries2 });
+    assert.equal(d2.ssot.entities.find((x) => x.id === 'e_f').location, '西极昆仑山', '正常驻地行照旧生效（边界不许误伤）');
+    // 字段名后紧跟汉字 = 不是该字段（如"所在地不详"），不许吞进来；
+    // ★夹具注意：来源串必须**严格长于**地名（ACCEPT 闸的现行契约，实体上一条测试锁的就是它）——
+    //   所以这里写成「中州·许昌」而不是光「许昌」，否则测的是闸不是边界。
+    const w3 = world();
+    w3.context.positions = ['未明', '许昌'];
+    w3.entities = [{ id: 'e_q', kind: 'character', name: '某人', location: '未明' }];
+    const entries3 = [{ comment: '某人', key: [], content: '所在地不详，行踪成谜。\n另一行：驻地: 中州·许昌' }];
+    const d3 = deriveLocationFromBook({ world: w3, entries: entries3 });
+    assert.equal(d3.ssot.entities.find((x) => x.id === 'e_q').location, '许昌',
+        '「所在地不详」不被当成字段（汉字边界生效），后面那段「驻地: 中州·许昌」照常收到');
+});
+
 test('leg25 d：位置继承的安全闸——来源串不比地名长就不接受（防脏位置集自指错配）', () => {
     // 实测教训：若位置集被造脏（人名混进去），宽松匹配会把「曹操」匹配上「曹操」这种自指，
     //   一次推出满账假位置（实测脏集上一次推出 204 条，绝大多数是错的）。

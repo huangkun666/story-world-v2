@@ -167,6 +167,30 @@ test('leg25 f：各归何处速览——**按处聚合**且「位置未载」单
     assert.ok(!side.includes('<div class="sw2-entity'), '★旧的"一实体一卡"形态已撤（563 张卡 → 按处聚合）');
 });
 
+test('leg25 g：位置展示收成**一个入口「地图」**——默认收起、内容仍在、一屏只占一行', () => {
+    // 用户 2026-09-11 实机复验后拍板：「有是有但是太拥挤了，收缩到一个入口内，就叫地图吧，
+    //   这就是个暂时的展示功能」。上一棒已把 563 张卡压成 21 组，但整片铺开仍占满视线。
+    // 这条锁三件事：①入口存在且叫「地图」；②**默认是收起的**；③折叠≠删除（内容与口径文案都还在）。
+    const w = world();
+    w.entities.forEach((e, i) => { e.location = i % 2 === 0 ? '江州' : '未明'; });
+    const side = renderBoardHtml(w).side;
+    assert.match(side, /<details class="sw2-map-details">/, '★位置展示收进 details（原生折叠，不新增 JS 状态）');
+    assert.equal((side.match(/sw2-map-details/g) || []).length, 1, '★只有一个入口（不许一实体/一地点一个入口）');
+    assert.match(side, /sw2-map-title">地图</, '★入口就叫「地图」（用户原话）');
+    // ② 默认收起：开口标签上不许有 open 属性
+    const openTag = (side.match(/<details class="sw2-map-details"[^>]*>/) || [''])[0];
+    assert.ok(openTag && !/\bopen\b/.test(openTag), '★默认收起（没点开时不铺满侧栏）');
+    // 开口摘要一行报数：不点开也知道有多少处 / 多少人 / 多少未载
+    assert.match(side, /sw2-map-brief">[\s\S]{0,60}?人有处可循/, '开口摘要给"有处可循"人数');
+    assert.match(side, /sw2-map-brief">[\s\S]{0,80}?未载 \d+ 人/, '开口摘要给"未载"人数');
+    // ③ 折叠≠删除：地点组、未载筐、以及「未载 ≠ 在别处」的口径文案都得还在 details 里
+    const inner = side.split('<details class="sw2-map-details">')[1] || '';
+    assert.match(inner, /sw2-locgroup-name">江州</, '地点组仍在 details 内（没被删掉）');
+    assert.match(inner, /sw2-locgroup-unknown/, '未载筐仍在 details 内');
+    assert.match(inner, /位置未载[\s\S]{0,200}?书里没写/, '★「未载 ≠ 在别处」的口径文案随内容一起保留');
+    assert.match(inner, /<\/details>/, 'details 正确闭合');
+});
+
 test('K34 编年页：全量条目 + 大事纪插行 + 旧卷卷行（数据入面）', () => {
     const html = renderChronicleHtml(world(), { oldVolumes: VOLUMES });
     assert.match(html, /劳役征发——大虞偏将征调坊市丁壮。/);
