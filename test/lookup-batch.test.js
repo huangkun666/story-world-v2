@@ -333,10 +333,13 @@ test('leg25 d：★位置来源必须落账且外显——"书里明述"与"结�
     assert.equal(d.ssot.entities[0].location, '西极昆仑山', '推定成功');
     assert.equal(d.ssot.meta.entityFields.e_c1.位置来源, '结构推导', '★账上标"结构推导"');
     assert.equal(d.ssot.meta.entityFields.e_c1.位置来源自, '昆仑道宫', '★记"从哪一条推出来的"（可审计）');
-    // ② 外显：注入文本带（推）
+    // ② 外显：注入文本带（推）——leg25 f 起位置行改为**按处聚合**，标记落在组头上
+    //   （同一地点的人共享同一个推定来源，逐人重复标"（推）"是冗余）
     const { renderStreams } = await import('../src/streams.js');
     const s = renderStreams(d.ssot, { chronicle: [], warnings: [] }, null);
-    assert.ok(s.observer.join('\n').includes('玄一道祖 @ 西极昆仑山（推）'), '★注入文本必须标（推）');
+    const line = s.observer.join('\n');
+    assert.ok(line.includes('玄一道祖'), '★位置行里必须有这个名号（在它所属的地点组内）');
+    assert.ok(line.includes('西极昆仑山（推）'), '★推定来的地点必须标（推）——人不许把"引擎推的"当"书里写的"');
     // ③ 面板也标
     const html = renderEntitiesHtml(d.ssot, {});
     assert.ok(html.includes('（推）'), '★面板位置列标（推）');

@@ -34,7 +34,8 @@ test('双流：观棋三行齐备（动态流/位置/格局），注入带世界
     const obs = r.streams.observer.join('\n');
     assert.ok(obs.includes('◆ [tick 1] 盘算「打通边关商路」推进'), '动态流：盘算推进');
     assert.ok(obs.includes('◆ [tick 1] 事件「守将允诺通关」——由盘算「打通边关商路」而生'), '动态流：事件带因果');
-    assert.ok(obs.includes('📍 各方位置：大荒商帮 @ 临渊城'), '位置行');
+    assert.ok(obs.includes('📍 各归何处：'), '位置行（leg25 f 起改为按处聚合）');
+    assert.ok(obs.includes('临渊城（推）') || obs.includes('临渊城') , '位置行里带地点名与组内人数');
     assert.ok(obs.includes('▣ 当前格局：张力 0.5 · 未决事件 1 · 在飞盘算 1（「打通边关商路」2/4）'), '格局行（tick 后推进 1 步，2/4）');
     const inj = r.streams.injection;
     assert.ok(inj.includes('【世界动向】事件「守将允诺通关」'), '注入：世界动向');

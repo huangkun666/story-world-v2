@@ -148,6 +148,24 @@
 .sw2-entity.sw2-player .sw2-entity-name::before{content:"你 · ";color:var(--sw2-amber);font-weight:700;}
 .sw2-note{font-size:11px;color:var(--sw2-text-faint);margin-top:4px;}
 
+/* ---------- leg25 f：观棋侧栏「各归何处 · 速览」（按处聚合，取代"一实体一卡"） ----------
+   旧版 563 张实体卡（HTML 231 KB），位置只是卡右上角一个词 ⇒ 世界里唯一的空间结构看不出来。
+   新版以**地点为组头**、组内用 chip 列名号：一眼看得出"哪里聚了多少人、都有谁"。
+   两筐都摆：有处可循（按地点）+ 位置未载（单列，如实说"书里没写"——未载 ≠ 在别处）。 */
+.sw2-locgroup{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 12px;}
+.sw2-locgroup-unknown{border-style:dashed;background:transparent;}
+.sw2-locgroup-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;}
+.sw2-locgroup-name{font-weight:700;font-size:13.5px;color:var(--sw2-text);}
+.sw2-locgroup-n{font-size:11px;color:var(--sw2-amber);font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-locgroup-note{font-size:11px;line-height:1.6;color:var(--sw2-text-faint);margin-bottom:6px;}
+.sw2-locchips{display:flex;flex-wrap:wrap;gap:5px;}
+.sw2-locchip{font-size:11.5px;padding:1px 7px;border-radius:6px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
+.sw2-locchip small{font-size:9.5px;color:var(--sw2-text-faint);margin-left:4px;letter-spacing:1px;}
+.sw2-locchip-busy{color:var(--sw2-text);border-left:2px solid var(--sw2-amber-dim);}
+.sw2-locchip-me{background:var(--sw2-amber);color:#141006;font-weight:700;}
+.sw2-locchip-me::before{content:"你 · ";font-weight:700;}
+.sw2-locgroup-unknown .sw2-locchip{background:transparent;border:1px dashed var(--sw2-line-soft);color:var(--sw2-text-faint);}
+
 /* ---------- 编年页 ---------- */
 .sw2-chronicle{display:flex;flex-direction:column;gap:5px;max-height:560px;overflow:auto;padding-right:4px;}
 .sw2-ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px;}

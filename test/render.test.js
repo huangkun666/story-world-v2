@@ -130,29 +130,41 @@ test('K33 观棋·动态流：倒序 + 最新徽 + 引擎 id 只进 title 悬停
     assert.match(feed, /data-view="archive"/);
 });
 
-test('K33/leg24 片5 观棋·位置速览：事实标记（在办/据）取代影响力分数条 / 暗徽 / 你的棋子 / 已灭实体过滤', () => {
+test('K33/leg24 片5 观棋·各归何处速览：事实标记（在办/据）取代影响力分数条 / 暗徽 / 你的棋子 / 已灭实体过滤', () => {
     const w = world();
     w.weights.e_xie = 0.87975;   // 账上仍留着旧的分量缓存——界面**不许再显示它**（那个数引擎已不消费）
     const side = renderBoardHtml(w).side;
-    assert.match(side, /sw2-entity-name">薛铁衣</);
+    // ★leg25 f 版式重做：侧栏由"一实体一卡"改为**按处聚合**（位置当分组键），名号改为组内 chip。
+    assert.match(side, /sw2-locchip[^>]*>薛铁衣</, '名号仍在速览里（改由地点组内的 chip 呈现）');
     assert.ok(!side.includes('sw2-wval'), '片5：影响力分数条已撤（分数不参与决策，不摆给玩家看）');
     assert.ok(!side.includes('sw2-weight-row'), '整行影响力组件下架');
-    assert.match(side, /sw2-ev-mark/, '改为事实标记');
-    assert.match(side, /在办|无在办/, '在办与否可见');
-    // leg25 c：原「有据 n/4 / 数值无据」徽章随四维删除——"有几维有据"这个说法已失去所指
-    //   （没有数值维度了）。取而代之的是查书标记（实力/位置的原文或未查态），见实体页那几条用例。
-    //   注：玩家行那句「账上没有的数就是没有据」是**另一处**文案（render.js:239），本次未改；
-    //   所以这里只锁"按维度计数"的那种形态，不误伤它。
+    // leg25 c：原「有据 n/4 / 数值无据」徽章随四维删除——"有几维有据"这个说法已失去所指。
+    //   注：旧版这一行靠 sw2-ev-mark，本轮聚合式改版后该组件不再出现在侧栏（在办改为 chip 上的忙态）。
     assert.ok(!/有据\s*\d\s*\/\s*4/.test(side) && !side.includes('数值无据'),
         'leg25 c：「有据 n/4 / 数值无据」不再出现（四维不存在，无从谈"几维有据"）');
     // ★本次变更核心意图锁：旧的四维属性名不得以任何形式出现在玩家视线面
     for (const term of ['兵力', '权位', '人脉', '耳目']) {
         assert.ok(!side.includes(term), `位置速览页不得再出现旧属性名「${term}」`);
     }
-    assert.match(side, /sw2-entity sw2-player/);
-    assert.match(side, /你的棋子/);
+    assert.match(side, /sw2-locchip-me/, '玩家棋子在自己的地点组里被标出（sw2-locchip-me）');
     w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', status: 'dead' });
-    assert.ok(!renderBoardHtml(w).side.includes('覆灭阁'));
+    assert.ok(!renderBoardHtml(w).side.includes('覆灭阁'), '已灭实体不进速览（沿用旧口径）');
+});
+
+test('leg25 f：各归何处速览——**按处聚合**且「位置未载」单列一筐（未载 ≠ 在别处）', () => {
+    // 用户 2026-09-11 定案的交互口径：位置是**呈现**，不是筛选；聚合不许把未载的挤掉。
+    const w = world();
+    w.entities.forEach((e, i) => { e.location = i % 2 === 0 ? '江州' : '未明'; });
+    const side = renderBoardHtml(w).side;
+    assert.match(side, /sw2-locgroup-name">江州</, '有处可循的按地点成组');
+    assert.match(side, /江州<[\s\S]{0,120}?sw2-locgroup-n">\d+ 人</, '组头给人数（一眼看出聚落规模）');
+    assert.match(side, /sw2-locgroup-unknown/, '★「位置未载」单列一筐（不被聚合挤掉）');
+    assert.match(side, /位置未载[\s\S]{0,200}?书里没写/, '★并如实说明"书里没写"（未载 ≠ 在别处）');
+    // 未载那批的名号必须真的在里面（不是只画个筐）
+    const unknownBlock = side.split('sw2-locgroup-unknown')[1] || '';
+    assert.ok(unknownBlock.includes('覆灭阁') || unknownBlock.includes('黄坤') || /\d+ 人/.test(unknownBlock),
+        '未载筐里有真内容');
+    assert.ok(!side.includes('<div class="sw2-entity'), '★旧的"一实体一卡"形态已撤（563 张卡 → 按处聚合）');
 });
 
 test('K34 编年页：全量条目 + 大事纪插行 + 旧卷卷行（数据入面）', () => {

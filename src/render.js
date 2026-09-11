@@ -21,7 +21,8 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   第二十五棒 f 追加：**位置继承的接线修通**（`bookEntriesForInherit` + 三处调用点）——
 //   之前那句"接线断了而测试全绿"让真账 563 实体真位置恒 0、位置列整列「未载」；现首开面板即推 173。
 //   同棒另删两处死机制：盘算满步的「败露」支（判据输入早随四维消失）+ 可见性掩码（两取值都过阈值=恒真）。
-export const PANEL_BUILD = 'leg25f-no-dead-mechanisms';
+//   同棒收尾：观棋侧栏与 `📍` 行由"平铺一切"改为**按处聚合**（位置当分组键；"位置未载"单列一筐）。
+export const PANEL_BUILD = 'leg25f-whereabouts';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -224,32 +225,55 @@ export function renderFeedHtml(world, { limit = 8 } = {}) {
 
 export function renderSideHtml(world) {
     const playerId = world.context?.playerId;
-    const cards = world.entities
-        .filter((e) => !e.status || e.status === 'active')
-        .map((e) => {
-            const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
-            // leg24 片5：撤掉「影响力」分数条（那个数引擎已不消费）；改显示可查的事实——在办/位置/隶属。
-            // leg25 c：「有据 n/4」整条删除（四维不存在）；这一行只留结构性事实。
-            return `<div class="sw2-entity${e.id === playerId ? ' sw2-player' : ''}">`
-                + `<div class="sw2-entity-head"><span class="sw2-entity-name">${escapeHtml(e.name)}</span>`
-                + `<span class="sw2-entity-kind">${kindLabel(e, world)}</span>`
-                + `<span class="sw2-entity-loc">${escapeHtml(e.location || '未明')}</span></div>`
-                + `<div class="sw2-fact-row">`
-                + `<span class="sw2-ev-mark${agenda ? '' : ' nodata'}">${agenda ? '在办' : '无在办'}</span>`
-                + (e.parent ? `<span class="sw2-ev-mark">隶属 ${escapeHtml(e.parent)}${e.parentSource === '结构推导' ? '（推）' : ''}</span>` : '')
-                + (e.kind === 'character' && typeof e['实力'] === 'string' && e['实力'].trim()
-                    ? `<span class="sw2-ev-mark">实力 ${escapeHtml(e['实力'])}</span>` : '')
-                + (e.kind === 'faction' && typeof e['规模'] === 'string' && e['规模'].trim()
-                    ? `<span class="sw2-ev-mark">规模 ${escapeHtml(e['规模'])}</span>` : '')
-                + `</div>`
-                + (agenda
-                    ? `<div class="sw2-agenda"><b>${escapeHtml(agenda.goal)}</b>${agenda.visibility === 'concealed' ? ' <span class="sw2-visible v-hidden">暗</span>' : ''}</div>`
-                    : `<div class="sw2-agenda">${e.id === playerId ? '眼下没有在办的盘算——你的每一步从对话里来。' : '眼下没有在办的盘算。'}</div>`)
-                + `<div class="sw2-stage"><span class="sw2-stagetext">${agenda ? `${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (typeof e.lastActiveTick === 'number' ? `最近活跃：${fmtTick(e.lastActiveTick)}` : '')}</span></div>`
-                + (e.id === playerId ? '<div class="sw2-note">被大局牵动会伤筋动骨；账上没有的数就是没有据。</div>' : '')
-                + `</div>`;
-        });
-    return `<div class="sw2-col-head">位置与动作 · 速览</div><div class="sw2-side">${cards.join('')}</div>`;
+    const ef = world.meta?.entityFields || {};
+    const active = (world.entities || []).filter((e) => !e.status || e.status === 'active');
+    const real = (v) => typeof v === 'string' && v.trim() && v !== '未明';
+    const sorted = [...active].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    // ★leg25 f 版式重做（用户拍板「位置就先这样定了」）：
+    //   旧版把**每个实体渲染成一张卡**（真账实测 563 张 / HTML 231 KB），位置只是卡片右上角一个词—— 
+    //   于是"谁跟谁在一处"这个世界里唯一的空间结构**根本看不出来**，位置形同装饰。
+    //   新版改为**按处聚合**（位置当分组键用起来），并且**两筐都摆**：
+    //     ①有处可循：按地点分组（组头写"几处 / 几人"，组内按名号序列出）
+    //     ②位置未载：单列一筐（如实说"书里没写"，并区分"知道归属但不知驻地"与"孤儿"）
+    //   纪律（用户 2026-09-11 定的交互口径，别改回聚合式筛选）：**未载 ≠ 在别处**，
+    //   分筐只是呈现，"能否相遇"归模型（引擎对两个实体能否交互零表态）。所以未载永远单列存在，不被挤掉。
+    const byLoc = new Map();
+    const unknown = [];
+    for (const e of sorted) {
+        if (!real(e.location)) { unknown.push(e); continue; }
+        if (!byLoc.has(e.location)) byLoc.set(e.location, []);
+        byLoc.get(e.location).push(e);
+    }
+    const derivedAt = (loc) => byLoc.get(loc).every((e) => ef[e.id]?.位置来源 === '结构推导');
+    const chip = (e, worldRef) => {
+        const nm = escapeHtml(e.name);
+        const kind = e.kind === 'faction' ? '<small>势力</small>' : '';
+        const agenda = (worldRef.agendas || []).some((a) => !a.closed && a.owner === e.id);
+        return `<span class="sw2-locchip${e.id === playerId ? ' sw2-locchip-me' : ''}${agenda ? ' sw2-locchip-busy' : ''}"`
+            + ` title="${escapeHtml(e.name)}${agenda ? '：手上正有在办的盘算' : ''}">${nm}${kind}</span>`;
+    };
+    const locGroups = [...byLoc.entries()]
+        .sort((a, b) => b[1].length - a[1].length || String(a[0]).localeCompare(String(b[0])))
+        .map(([loc, list]) => `<div class="sw2-locgroup">`
+            + `<div class="sw2-locgroup-head"><span class="sw2-locgroup-name">${escapeHtml(loc)}</span>`
+            + `<span class="sw2-locgroup-n">${list.length} 人</span>`
+            + (derivedAt(loc) ? '<small class="sw2-quiet-note" title="这个地点是引擎从组织条目的驻地结构推出来的（成员推定在所属组织驻地），**不是书里对这个名号自己的明述**">（推）</small>' : '')
+            + `</div>`
+            + `<div class="sw2-locchips">${list.map((e) => chip(e, world)).join('')}</div>`
+            + `</div>`);
+    const unknownHtml = unknown.length
+        ? `<div class="sw2-locgroup sw2-locgroup-unknown">`
+            + `<div class="sw2-locgroup-head"><span class="sw2-locgroup-name">位置未载</span>`
+            + `<span class="sw2-locgroup-n">${unknown.length} 人</span></div>`
+            + `<div class="sw2-locgroup-note">书里没写他们在何处——**不是"在别处"，是不知道**。`
+            + `其中 ${unknown.filter((e) => e.parent).length} 人知道归属（只是其组织条目没写驻地）、`
+            + `${unknown.filter((e) => !e.parent).length} 人无归属。他们照常在世界里活动，不被位置筛掉。</div>`
+            + `<div class="sw2-locchips">${unknown.map((e) => chip(e, world)).join('')}</div>`
+            + `</div>`
+        : '';
+    return `<div class="sw2-col-head">各归何处 · 速览（${byLoc.size} 处 / ${active.length - unknown.length} 人有处可循）</div>`
+        + `<div class="sw2-side">${locGroups.join('')}${unknownHtml}</div>`;
 }
 
 export function renderBoardHtml(world, opts = {}) {
