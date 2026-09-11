@@ -661,6 +661,29 @@ async function worldBookCached() {
     return sw2BookCache;
 }
 
+// leg25 f 修（**接线类缺陷，本棒最重的一条**）：位置继承（零 token 结构推断，`deriveLocationFromBook`）
+//   要的是**原始 ST 条目**（`comment`=条目名 / `content`=正文 / `key`=键数组）——它自己按条目名与
+//   正文成员行匹配实体，**不经过查书那套"按名号取三档文本"**，所以不能复用 `bookTextForEntity`。
+// 旧法为什么一次都没生效（三处断头，全在接线层）：
+//   ① `lookupOneEntity` 调 `bookEntriesCached()`——**该函数全仓从未定义**（只有 `worldBookCached`），
+//      点面板行的「查/重查」当场抛 `ReferenceError`；
+//   ② `runBatchChunk`（批量补全）与 `advanceTick` 的 preStep（每轮前置步）**压根没传 `bookEntries`**
+//      ⇒ `runBatchLookup` 里 `bookEntries == null` ⇒ `withInherit` 原样返回世界 ⇒ 推断跑 0 次；
+//   ③ 全量测试没有任何一条把 `bookEntries` 喂给这两个收口 ⇒ "接线断了而测试全绿"（本仓常客）。
+// 实测代价（用户真账 563 实体）：`location` 真值 0 / 占位值「未明」563——面板整列「未载」。
+// 该函数提成**导出**是为了能被真测（与 `autoComposeSource` 同一治法）：注入 fake ST ctx 真跑。
+// 失败语义（与查书路同纪律）：**取不到书就返回空数组 = 本轮不推断**，绝不猜位置、绝不阻塞调用方。
+export async function bookEntriesForInherit() {
+    try {
+        const book = await worldBookCached();
+        if (!book?.readable) return [];          // 书没挂载/读不到 ⇒ 结构推断没得依据（≠ 书里没有）
+        return Array.isArray(book.entries) ? book.entries : [];
+    } catch (err) {
+        console.warn('[story-world-v2] 位置继承：取书失败（本轮不推断，世界照常推进）', String(err?.message || err));
+        return [];
+    }
+}
+
 // B6（leg25 d，细案 spec-lookup-batch-refresh §B6）：在条目正文里**定位到该名号自己那一行**。
 //   为什么值得做：v2 只会"命中条目→整条给"，而用户的书格式高度规整——
 //   `- 吞天妖王 (男, T8大乘中期): 现任盟主(饕餮蛟龙混血)。极度残暴且野心勃勃…`
@@ -806,7 +829,7 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
     const res = await runBatchLookup({
         ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
         ids: [id], forceFields, tick: world?.meta?.tick ?? 0,
-        bookEntries: await bookEntriesCached(),   // 位置继承：组织条目驻地 → 成员（零 token）
+        bookEntries: await bookEntriesForInherit(),   // 位置继承：组织条目驻地 → 成员（零 token）
     });
     if (!res.stats) return { ok: false, error: res.warning || '查书未执行' };
     writeHotMeta(hotAccountShape(res.ssot));
@@ -843,6 +866,7 @@ async function runBatchChunk(resolved) {
     const res = await runBatchLookup({
         ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
         ids: batch.ids, forceFields: t.forceFields, tick: world?.meta?.tick ?? 0,
+        bookEntries: await bookEntriesForInherit(),   // leg25 f：批量补全那条路也要吃到位置继承
     });
     t.cursor += batch.ids.length;
     if (res.stats) {
@@ -888,6 +912,8 @@ async function advanceTick({ world, dialogue }) {
                 tick: cur?.meta?.tick ?? 0,
                 moveFact: move,
                 prevPicks: sw2LastPicks,
+                // leg25 f：每轮前置步那条路也要吃位置继承（零 token，不占模型预算）
+                bookEntries: await bookEntriesForInherit(),
             });
             if (!sw2BatchTask) return pre;
             let world2 = pre?.ssot || cur;
@@ -1038,13 +1064,8 @@ export async function loadWorld() {
     // 第二十五棒 e：**名册落账这一步做成可重入**（挂在世界加载上）——老账停在老代码上（当年只搬 name/kind），
     //   这一步幂等、零 token、只填空栏、不新建实体（`seeded` 恒 0）、不碰世界进度 ⇒ 每次加载重跑安全。
     //   真书正文从取书缓存拿（同一次会话只读一遍）；取不到就退回"只有名册字段"的老行为，绝不阻塞加载。
-    let bookEntriesForSeed = [];
-    try {
-        const cachedBook = await worldBookCached();
-        bookEntriesForSeed = cachedBook?.entries || [];
-    } catch (err) {
-        console.warn('[story-world-v2] 名册落账：取书失败（本轮只有名册字段，零 token 兜底跳过）', String(err?.message || err));
-    }
+    // leg25 f：改走 `bookEntriesForInherit` 同一取数口（失败给空数组 + 上控制台），三处口径一致。
+    const bookEntriesForSeed = await bookEntriesForInherit();
     const { seed, seededDelta, backfilled, changed } = seedAndBackfill(hotWorld, { entries: bookEntriesForSeed });
     if (changed || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(hotWorld));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）

@@ -307,7 +307,7 @@ test('web/index.js 接线回归锁：模块可加载（顶层零 DOM 守卫不�
     assert.doesNotMatch(src, /catch \(_\) \{\s*return world;\s*\}/, 'E2：旧「吞异常返回原世界」实现已消失');
     assert.match(src, /seedBookEntities\(/, 'E4：名册入账仍在 loadWorld 入口');
     assert.match(src, /seedAndBackfill\(/, 'leg25 e：loadWorld 走可重入收口 seedAndBackfill（不是内联老逻辑）');
-    assert.match(src, /worldBookCached\(\)/, 'leg25 e：可重入补齐要拿真书正文（零 token 兜底靠它）');
+    assert.match(src, /bookEntriesForInherit\(\)/, 'leg25 f：三条取书路走同一个取数口（loadWorld 补齐也在内）');
     assert.match(src, /seedBookEntities\(seed, \{ entries:/, 'leg25 e：初始化创建世界时也把真书正文交给名册落账');
     assert.match(src, /flushHotMeta\(\)/, 'E4：名册入账后有显式落盘路径');
 });
