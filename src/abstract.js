@@ -766,6 +766,21 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
             keyOfBookName.set(nm, e.key);
         }
     }
+    // ★名号归一（实测逼出，第二十五棒 e）：模型抽的名号常是**短名**，而书条目名是**复合名**——
+    //   实测：canon `万妖盟` ↔ 书条目 `混乱之地·万妖盟`；`幽都` ↔ `鬼族幽都`；`大虞` ↔ `人族皇朝`。
+    //   旧法精确查 ⇒ 正文取不到（contentLen=0）⇒ 花名册建不起来 ⇒ 这 12 个组织**一个成员都挂不上**（真账实测丢 60 条归属）。
+    //   口径：精确优先；查不到时按"一个是另一个的子串"取**最长**候选（宁少不错）。
+    const bookNameAlias = (key) => {
+        const k = String(key ?? '').trim();
+        if (!k || contentOfBookName.has(k)) return k;
+        let best = null;
+        for (const nm of contentOfBookName.keys()) {
+            if (nm.length < 2) continue;
+            if (!(nm.includes(k) || k.includes(nm))) continue;
+            if (!best || nm.length > best.length) best = nm;
+        }
+        return best || k;
+    };
     const book = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
     if (!book.length) return { seeded: 0, folded: 0, skippedLocation: 0, warnings: [] };
     const positions = ssot.context?.positions || [];
@@ -796,7 +811,9 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
         for (const c of canonNames) {
             if (c.length < 2) continue;
             if (!(n.includes(c) || c.includes(n))) continue;
-            if (!best || c.length > best.length) best = c;
+            // 一律取最长（宁少不错）；**并列时优先 kind=faction**——实测 `人族皇朝`（真势力条目）的候选里有
+            //   `人族`（模型也抽了它、标成 faction），不多这一档就会把归属指向泛称、成员全挂不上。
+            if (!best || c.length > best.length || (c.length === best.length && idx.get(best)?.kind !== 'faction' && idx.get(c)?.kind === 'faction')) best = c;
         }
         return best;
     };
@@ -804,7 +821,7 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
     //   建索引的来源只有一处：书条目里被判为 **kind=faction** 的名号 + 其正文成员行。
     //   ★为什么必须限定 kind=faction：实测把"小节标题/泛称"当节点会推出「散修→散修」「虞昭华→人族皇朝」（假关系）。
     const orgRosterMap = new Map();
-    const contentFor = (b) => (typeof b?.content === 'string' && b.content ? b.content : (contentOfBookName.get(String(b?.name).trim()) ?? ''));
+    const contentFor = (b) => (typeof b?.content === 'string' && b.content ? b.content : (contentOfBookName.get(bookNameAlias(b?.name)) ?? ''));
     for (const b of book) {
         const canonName = resolveCanonName(b.name);
         const canonItem = canonName ? idx.get(canonName) : null;
@@ -1001,8 +1018,7 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
         });
         for (const [nm, org] of derived.byName) {
             const ent = byName.get(nm);
-            if (!ent || ent.parent) continue;
-            // 与模型那条路同口径：势力自己还有上级时，成员指向**链顶**（`resolveSeedTarget` 上溯；
+            if (!ent || ent.parent) continue;            // 与模型那条路同口径：势力自己还有上级时，成员指向**链顶**（`resolveSeedTarget` 上溯；
             //   上级是角色＝统治者时也认——leg23 口径）。这样"瑶池（隶阐教）的成员"不会与"阐教成员"分裂成两个节点。
             const viaCanon = resolveCanonName(org);
             const target = resolveSeedTarget(viaCanon || org, idx);
