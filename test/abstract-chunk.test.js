@@ -93,13 +93,21 @@ test('leg24 片1 停抄书：名册轮只问 {name,kind}，抽象轮也不过问
     assert.ok(rosterPrompts.length >= 1, '名册轮确实发起块调用');
     const p = rosterPrompts[0];
     assert.match(p, /不要给它们标 faction/, '种族禁令名单式强化在位（人族/妖族/鬼族…不算势力）');
-    // 名册轮瘦身锁：模板逐键 = name+kind
-    const tpl = JSON.parse(p.match(/\{[\s\S]*?\n\}/)[0]);
-    assert.deepEqual(Object.keys(tpl.bookEntities[0]), ['name', 'kind'], '名册轮模板只剩 name+kind（瘦身锁）');
-    assert.ok(!/"parent"|"race"|"location"|"attrs"|"依据"|hardPower/.test(p), '名册轮不问上级/所在/种族/属性（片1 停抄书）');
-    assert.ok(!p.includes('powerScale'), '名册轮不再问力量谱系');
-    assert.ok(!p.includes('situation'), '名册轮不再问世情句');
-    assert.ok(!p.includes('intensity'), '名册轮不再问张力强度');
+    // 名册轮形状锁（第二十五棒 e 改判据）：v1 的「所属/实力」回归——模板 = 名号+类别 **+ fields 属性组**。
+    //   旧锁的漏洞（如实记录）：它只 JSON.parse 模板里**第一个对象**，且只禁 `"parent"` 字面键
+    //   ⇒ 新加的 `fields:{所属,实力}` 从缝里漏过，闸门形同没锁。现在按中文锚点切段整段解析、逐键锁死。
+    const tplText = p.slice(p.indexOf('形状如下；可省字段不写 null）：') + '形状如下；可省字段不写 null）：'.length, p.indexOf('\n纪律：'));
+    const tpl = JSON.parse(tplText);
+    assert.deepEqual(Object.keys(tpl.bookEntities[0]), ['name', 'kind'], '第一形态：名号 + 类别');
+    const charTpl = tpl.bookEntities.find((x) => x.kind === 'character');
+    assert.deepEqual(Object.keys(charTpl.fields), ['所属', '身份', '定位', '实力'], '★角色属性组 = 所属/身份/定位/实力（v1 的 affiliation + power）');
+    const facTpl = tpl.bookEntities.find((x) => x.kind === 'faction');
+    assert.deepEqual(Object.keys(facTpl.fields), ['性质', '倾向', '规模'], '★势力属性组 = 性质/倾向/规模（规模≠角色档位）');
+    assert.match(p, /所属（角色的所属势力）= 必抄项/, '★所属是必抄项，写明"不许推测、不许按常识分配"');
+    assert.match(p, /实力（角色的档位）= 必抄项/, '★实力是必抄项（照抄原话、不套别书档位）');
+    assert.match(p, /不许套用别的书的档位体系/, '挡"套档位"的那句纪律在位');
+    // 仍然不问的东西：四维属性/种族/所在（停抄书口径不倒退——只有「所属/身份/定位/实力」这一组回归）
+    assert.ok(!/hardPower|softPower|intel|"attrs"|"race"|"依据"|powerScale|situation|intensity/.test(p), '名册轮仍不问四维属性/种族/力量谱系/世情/张力');
     // leg24 片1 新增锁：抽象轮（五件套轮）同样不许问书里的上级/所在/属性
     assert.equal(canonPrompts.length, 1, '五件套 = 头 3 万单发一次');
     const cp = canonPrompts[0];

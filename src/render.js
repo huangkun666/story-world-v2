@@ -18,7 +18,7 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   第二十五棒 d 追加：查书前置步的异步 bookText 修通 + **取书路径改 ST 官方指针**
 //   （`data.extensions.world`，旧法读 `character.world` 恒空 ⇒ 取书 0 条 ⇒ 假「书未明述」）
 //   + 未查态 title 属性截断修复 + **查书补全三件套**（批量补全/单实体重查/选人可见）。
-export const PANEL_BUILD = 'leg25d-lookup-batch';
+export const PANEL_BUILD = 'leg25e-v1-affiliation';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -233,7 +233,11 @@ export function renderSideHtml(world) {
                 + `<span class="sw2-entity-loc">${escapeHtml(e.location || '未明')}</span></div>`
                 + `<div class="sw2-fact-row">`
                 + `<span class="sw2-ev-mark${agenda ? '' : ' nodata'}">${agenda ? '在办' : '无在办'}</span>`
-                + (e.parent ? `<span class="sw2-ev-mark">隶属 ${escapeHtml(e.parent)}</span>` : '')
+                + (e.parent ? `<span class="sw2-ev-mark">隶属 ${escapeHtml(e.parent)}${e.parentSource === '结构推导' ? '（推）' : ''}</span>` : '')
+                + (e.kind === 'character' && typeof e['实力'] === 'string' && e['实力'].trim()
+                    ? `<span class="sw2-ev-mark">实力 ${escapeHtml(e['实力'])}</span>` : '')
+                + (e.kind === 'faction' && typeof e['规模'] === 'string' && e['规模'].trim()
+                    ? `<span class="sw2-ev-mark">规模 ${escapeHtml(e['规模'])}</span>` : '')
                 + `</div>`
                 + (agenda
                     ? `<div class="sw2-agenda"><b>${escapeHtml(agenda.goal)}</b>${agenda.visibility === 'concealed' ? ' <span class="sw2-visible v-hidden">暗</span>' : ''}</div>`
@@ -342,7 +346,17 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
         const status = e.status && e.status !== 'active' ? `<span class="sw2-visible ${e.status === 'dead' ? 'v-hidden' : 'v-known'}">${LABELS.status[e.status]}</span>` : '';
         const lensBadge = lens.has(e.id) && (!e.status || e.status === 'active') ? '<span class="sw2-visible v-known">在场</span>' : '';
         // leg23：势力挂到统治者/上级时用「上级」措辞（角色仍是「隶属」）；名下机构/部门单列一行
-        const affil = e.parent ? `<div class="sw2-eaffil">${e.kind === 'faction' ? '上级' : '隶属'}：${escapeHtml(e.parent)}</div>` : '';
+        // leg25 e：**来源外显**——结构推导来的归属（不是书里对这个名号自己的明述）标「（推）」，
+        //   与位置继承同款纪律（用户质疑过"推错会不会帮倒忙"）：标了来源，模型与人都不会当明述用。
+        const parentDerived = e.parentSource === '结构推导';
+        const affil = e.parent
+            ? `<div class="sw2-eaffil">${e.kind === 'faction' ? '上级' : '隶属'}：${escapeHtml(e.parent)}`
+                + (parentDerived ? '<small class="sw2-quiet-note" title="这条归属是引擎从势力条目的成员行结构推出来的（书里没在这个名号自己身上明述），不是模型创作">（推）</small>' : '')
+                + '</div>'
+            : '';
+        // leg25 e：势力自己的「规模」原话（书的势力标签/底蕴行，照抄；≠ 角色档位，引擎不换算）
+        const scaleHtml = e.kind === 'faction' && typeof e['规模'] === 'string' && e['规模'].trim()
+            ? `<div class="sw2-eaffil">规模：${escapeHtml(e['规模'])}</div>` : '';
         const branch = e.kind === 'faction' && e.branches?.length
             ? `<div class="sw2-eaffil">分支：${escapeHtml(e.branches.join('、'))}</div>` : '';
         // leg23：名下机构/部门（书里明述归它管）——势力与统治者（角色）都可能有；旧世界无此字段则零扰动
@@ -402,7 +416,7 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
             }</div>`
             + `<div class="sw2-ecert">${marks}</div>`
             + `<div class="sw2-eattrs">${[powerChip, posChip].filter(Boolean).join('') || '<span class="sw2-nodata-text">实力/位置未查（轮到时会按需去世界书取原话）</span>'}</div>`
-            + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${organ}${crewHtml}${crewPowerHtml}</div>`
+            + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${scaleHtml}${branch}${organ}${crewHtml}${crewPowerHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
             // leg25 d：行内两个入口（细案 §6）。**未查过**只需「查」（补缺）；**已定案**（含被旧 bug
             //   误标的「书未明述」）给「重查」——它走 force 覆盖，否则 absent 是永久闸、永远查不动。

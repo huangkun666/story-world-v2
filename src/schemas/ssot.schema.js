@@ -129,6 +129,18 @@ export const ssotSchema = {
                     //   可选键（旧世界零扰动）；键名用中文与 v1 字段/界面标签一致（账本已有中文键先例 ENV_KEYS）。
                     实力: { kind: 'string', minLength: 1 },
                     //   位置沿用既有英文键 location（账本里已有，不改旧名）：查书补的是"书里明述的所在"。
+                    // 第二十五棒 e（用户令「按 v1 那样把所有的东西都初步建立好」）：照书抄的属性与关联的**来源留痕**。
+                    //   与查书那条路的 `meta.entityFields[id].位置来源` 同性质（来源分账 + 外显「（推）」），
+                    //   但这里挂在实体上——因为它是**初始化就定下来**的账，不随查书步骤改写。
+                    //   引擎**不读**它们（不进分量/掩码/裁定/镜头）；只有渲染层/pack 用来标来源。
+                    fieldSource: { kind: 'object', additional: true, props: {} },   // 字段名 → '书里原话'（逐字段）
+                    parentSource: { kind: 'string', minLength: 1 },                 // 归属来源：照书办 / 模型抽取 / 模型抽取(未验证) / 结构推导
+                    parentSourceFrom: { kind: 'string', minLength: 1 },             // 证据类型：member-line / key-list / explicit / tag / unverifiable / 成员行@XX
+                    规模: { kind: 'string', minLength: 1 },   // 势力自己的规模/性质**原话**（书的势力标签/底蕴行；≠ 角色档位）
+                    性质: { kind: 'string', minLength: 1 },   // 势力性质原话（如「正道仙门魁首」）——文本，引擎不读
+                    倾向: { kind: 'string', minLength: 1 },   // 势力倾向原话——文本，引擎不读
+                    身份: { kind: 'string', minLength: 1 },   // 书里明述的身份（如「现任盟主」）——文本原话，引擎不读
+                    定位: { kind: 'string', minLength: 1 },   // 书里明述的角色定位——文本原话，引擎不读
                 },
             },
         },

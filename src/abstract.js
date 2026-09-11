@@ -81,19 +81,35 @@ export function buildAbstractPrompt(sourceText) {
 //   **名号 + 类别**（账本主键 design-core §2.3 第 1 项），纪律 3 的措辞随之改为"本轮只负责名号与类别"。
 export function buildRosterPrompt(sourceText, declared = []) {
     const lines = [
-        '你是世界设定的名册抽取器。只提取不创作：只从给定原文里提取名号，不创作、不润色、不补全、不重排。',
+        '你是世界设定的名册抽取器。只提取不创作：只从给定原文里提取名号与它自己的属性，不创作、不润色、不补全、不重排。',
         '输出严格 JSON（只输出 bookEntities 一组，形状如下；可省字段不写 null）：',
-        JSON.stringify({ bookEntities: [{ name: '势力/角色/地名的名号（原文名）', kind: 'faction|character|location（可省）' }] }, null, 2),
+        JSON.stringify(
+            {
+                bookEntities: [
+                    { name: '势力/角色/地名的名号（原文名）', kind: 'faction|character|location（可省）' },
+                    { name: '角色名', kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份（原文）', 定位: '定位（原文）', 实力: '紧贴名号的档位标签原话（原文）' } },
+                    { name: '势力名', kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '实力/规模原话（原文）' } },
+                ],
+            },
+            null,
+            2,
+        ),
         '纪律：',
         '1. 只收原文名，不收泛指称呼；地名（洲/山/谷/城等）标 location。',
         '2. 纯种族的群体名号（如 人族、妖族、鬼族、魔族、灵族、仙族、神族等）不算势力——不要给它们标 faction；只有书中明述的组织（如某族的宗族、门派、联盟、国度）才是势力。',
-        '3. 本轮只负责名号与类别，别的一律不要输出（上级、所在、种族、属性都不问）。',
+        '3. **所属（角色的所属势力）= 必抄项**：本书的常见写法是「组织条目的正文里列出成员行」（如 `- 吞天妖王 (男, T8大乘中期): 现任盟主`）——',
+        '   读到这种行时，该角色名的 `所属` 必须填**该组织条目的名字**（原文名，逐字），哪怕这一行只有标签也要抄。',
+        '   另有「所属势力/隶属/上级/势力=」这类**显式写法**时，同样照抄。原文没写所属就留空——**不许推测、不许按常识分配**。',
+        '4. **实力（角色的档位）= 必抄项**：名字后紧贴的括号或冒号里的**实力/境界/军阶标签照抄原话**（如 `T8大乘中期`/`化神巅峰`/`偏将军`/`中忍`），以本书实际写法为准，**不许套用别的书的档位体系、不许自己下判断词**；原文确实没写才留空。',
+        '   势力的「规模」= 原文写明的规模/兵力/底蕴原话（如「五万大军，据许都」）；**势力的实力不写角色的档位**（那是两回事）。',
+        '5. 身份/定位/性质/倾向/规模 各 **≤20 字**，没有就留空字符串，绝不写长句（输出太长会被截断导致整块作废）。',
+        '6. 名号来自原文的**都要列**（宁可多不可漏——要的是完整登记册）；属性不确定的也列，字段留空即可。',
     ];
     // leg23 照书办①：书本段已用标签声明过的名号（如「<上界势力_蟠桃园>」）——清单给全，模型漏了也不丢。
     // 名号逐字取自原文；此处只作召回提示，类别仍按书标签在引擎侧定（不靠模型改判）。
     if (declared.length) {
         lines.push(
-            '4. 本段原文里被标签直接标出来的名号（如上界势力_／幽冥势力_／某帝麾下_ 后的名字）一个都不能漏，必须全部出现在输出里：',
+            '7. 本段原文里被标签直接标出来的名号（如上界势力_／幽冥势力_／某帝麾下_ 后的名字）一个都不能漏，必须全部出现在输出里：',
             declared.map((d) => d.name).join('、'),
         );
     }
@@ -170,6 +186,36 @@ export function scanBookDeclarations(src) {
 //   纪律：只剥**前导层级符号/空白**，不改名字本体（书里写的是什么名，账上就必须是什么名）。
 export function normalizeParentName(raw) {
     return String(raw ?? '').trim().replace(/^[/／\\>·>\-—–\s]+/, '').trim();
+}
+
+// 照书抄的属性字段白名单（第二十五棒 e）：键名按 kind 分开，别的键一律不收。
+//   character：所属（= 所属势力，兼作 parent 的兜底来源）/ 身份 / 定位 / 实力（档位原话）
+//   faction  ：性质 / 倾向 / 规模（势力自己的规模原话——**不是**角色档位）
+// 纪律：全部 trim；空串丢弃；每项 ≤30 字符（超长截断而非丢弃：截断后的仍是原文片段，丢弃会白丢信息）。
+export const BOOK_FIELD_KEYS = {
+    character: ['所属', '身份', '定位', '实力'],
+    faction: ['性质', '倾向', '规模'],
+    location: [],
+};
+export const BOOK_FIELD_MAX = 30;
+
+export function sanitizeBookFields(rawFields, kind) {
+    const allow = BOOK_FIELD_KEYS[kind] || [];
+    if (!allow.length || !rawFields || typeof rawFields !== 'object') return null;
+    const out = {};
+    for (const k of allow) {
+        const v = rawFields[k];
+        if (typeof v !== 'string') continue;               // 非字符串（数字/数组/对象）一律不收——不许把档位换算成数
+        const s = v.trim();
+        if (!s) continue;
+        out[k] = s.length > BOOK_FIELD_MAX ? s.slice(0, BOOK_FIELD_MAX) : s;
+    }
+    // 所属要过同一把尺（书里的层级路径 `/太素帝` 在此收口）
+    if (out['所属']) {
+        const p = normalizeParentName(out['所属']);
+        if (p) out['所属'] = p; else delete out['所属'];
+    }
+    return Object.keys(out).length ? out : null;
 }
 
 // leg23 照书办②：书声明的名号**强制并册** + 照标签定类别 + 照标签落上级（一处定义，大书/小书共用）。
@@ -261,7 +307,16 @@ export function sanitizeCanon(raw) {
             seen.add(name);
             const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : 'character';
             const parent = normalizeParentName(it.parent);
-            canon.bookEntities.push(parent ? { name, kind, parent } : { name, kind });
+            const item = { name, kind };
+            if (parent) item.parent = parent;
+            // 第二十五棒 e（用户令「按 v1 那样把所有的东西都初步建立好」）：**照书抄属性**回到初始化。
+            //   v1 的名册层就抽 affiliation（所属）/ power（紧贴名号的档位原话），v2 的 leg24「停抄书」把它们
+            //   一起砍了、替代通道（用到时查书）只接回实力/位置 ⇒ 归属永远 0/623（真账实测）。
+            //   纪律：**照抄成文本**（实力=「T9渡劫巅峰」这类原话，引擎不换算、不进公式——START-HERE §2 第 1 条）；
+            //   字段按 kind 白名单收，逐项 trim + 上限 30 字符（防模型写长句撑裂账本）。
+            const fields = sanitizeBookFields(it.fields, kind);
+            if (fields) item.fields = fields;
+            canon.bookEntities.push(item);
         }
     } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
 
@@ -546,6 +601,149 @@ function resolveSeedTarget(name, idx) {
     return null;                                                   // 地名等不可作上级
 }
 
+// ============ 第二十五棒 e：势力↔角色关联（照 v1 把关系在初始化就建好）============
+// 缘起（用户实机）：真账 `parent` 0/623、`pack.membersOf` 反查 0/128 势力 ⇒ 面板「隶属 X」「麾下：」永不显示。
+//   根因不是坏，是 leg24「停抄书」把上级连同属性一起砍了，而替代通道只接回实力/位置。
+// 泛用性（八本真实世界书审计，见 docs/spec-parent-affiliation.md §2）：
+//   「成员行」形态在 7/8 本里存在（**是形态不是词表**）⇒ 可作结构依据；但**语义随书而变**
+//   （三国书里「名号(」多是正文对话、实教的 key 名单是剧集标题）⇒ 单靠形态判不出"谁属于谁"。
+//   ⇒ 设计取舍：**模型负责语义判别**（读得懂哪行是花名册），**结构负责验伪**（书里有没有这条关系的书面依据），
+//     两者缺一都会出事：纯结构会收进「散修→散修」「虞昭华→人族皇朝」（实测假关系），纯模型会编。
+export const MEMBER_LINE = /^[-*·•\s]*([^\s(（:：、,]{2,20})\s*[（(]/gm;
+
+export function orgNamesOf(entry) {
+    const out = [];
+    const push = (v) => { const s = String(v ?? '').trim(); if (s && !out.includes(s)) out.push(s); };
+    push(entry?.comment);
+    const keys = Array.isArray(entry?.key) ? entry.key : [entry?.key];
+    for (const k of keys) push(k);
+    return out;
+}
+
+export function rosterOfOrg(entry) {
+    const text = String(entry?.content ?? '');
+    MEMBER_LINE.lastIndex = 0;
+    const out = new Set();
+    for (const m of text.matchAll(MEMBER_LINE)) out.add(m[1].trim());
+    return out;
+}
+
+// 反查索引：组织名/其别名 → 该组织正文成员行里列出的名号集合。
+//   别名也算组织名：大荒书的条目 `混乱之地·万妖盟`，其 key 里就带「万妖盟」——模型写哪个都该认。
+export function buildOrgRosterMap(entries = []) {
+    const m = new Map();
+    for (const e of entries) {
+        if (!e || typeof e !== 'object') continue;
+        const roster = rosterOfOrg(e);
+        if (!roster.size) continue;
+        for (const n of orgNamesOf(e)) {
+            if (!m.has(n)) m.set(n, new Set());
+            const set = m.get(n);
+            for (const x of roster) set.add(x);
+        }
+    }
+    return m;
+}
+
+/**
+ * verifyClaimedParent({...}) → 'member-line' | 'key-list' | 'explicit' | 'tag' | 'unverifiable' | 'refuted'
+ * **确定性验伪**（细案 docs/spec-parent-affiliation.md §4）——三态语义，别退化成两态：
+ *   · 正面证据 → 认：'member-line'（本组织正文成员行列出该名号）/ 'key-list'（在该条目 key 名单里）/ 'explicit'（自己条目显式所属）
+ *   · **有册且该名号不在册 → 'refuted'**：这是唯一允许**弃关系**的情形（模型编的 / 张冠李戴）；
+ *   · **该组织条目根本没有花名册 → 'unverifiable'**：无册**不能反推"不存在"**（硬规矩第 2 条：绝不用空值反推），
+ *     只能算"未验证"——照样落账，但如实标成模型推断，面板/pack 上可区分。
+ *   ★为什么必须留 'unverifiable'：实测有些势力条目就是光杆（无成员行、无 key），若一律弃关系，
+ *     等于用"条目里没花名册"反推"该角色不属于它"，会把真关系误杀（本仓纪律：宁可漏填不可错填，但也不许凭空否定）。
+ */
+export function verifyClaimedParent({ name = '', claimed = '', orgRosterMap = new Map(), memberEntry = null, ownEntry = null, subOfTarget = false, bookDeclared = false } = {}) {
+    const nm = String(name).trim();
+    const c = String(claimed).trim();
+    if (!nm || !c) return null;
+    if (subOfTarget) return 'member-line';                         // 目标条目名本身含该名号（子串归属，条目名即证据）
+    // 名号归一（实测必需的第二个出口）：书条目名是复合名（`混乱之地·万妖盟`），而模型/名册可能只写短名（`万妖盟`）
+    //   ⇒ 精确查不到时按"一个是另一个的子串"再找一次（取最长者，宁少不错）。
+    let roster = orgRosterMap.get(c);
+    if (!roster) {
+        const cands = [...orgRosterMap.keys()].filter((k) => k.includes(c) || c.includes(k)).sort((a, b) => b.length - a.length);
+        if (cands.length) roster = orgRosterMap.get(cands[0]);
+    }
+    if (roster?.has(nm)) return 'member-line';
+    const keys = Array.isArray(memberEntry?.key) ? memberEntry.key : [memberEntry?.key];
+    if (keys.map((k) => String(k ?? '').trim()).includes(nm)) return 'key-list';
+    const text = String(ownEntry?.content ?? '');
+    const re = new RegExp(`(?:所属势力|所属|隶属|从属|势力)\\s*[:：=]\\s*-?\\s*([^\\n，。；;]{1,24})`, 'g');
+    for (const m of text.matchAll(re)) if (m[1].includes(c)) return 'explicit';
+    if (bookDeclared) return 'tag';                                // 书标签直接声明（照书办）——标签本身就是书的明述
+    const hasRoster = Boolean(roster?.size) || keys.some((k) => String(k ?? '').trim());
+    return hasRoster ? 'refuted' : 'unverifiable';                 // 有册不在册 = 反驳；无册 = 只能算未验证
+}
+
+// 零 token 兜底：模型没给所属时，从"组织条目的成员行/别名"反推（只对在册实体生效）。
+export function deriveParentFromOrgEntries({ entities = [], candidateEntries = [], orgRosterMap = null, orgOf = () => null } = {}) {
+    const rosterNames = new Map((entities || []).filter((e) => e?.name).map((e) => [String(e.name).trim(), e]));
+    const direct = orgRosterMap || buildOrgRosterMap(candidateEntries);
+    const out = { filled: 0, byName: new Map(), warnings: [] };
+    for (const [org, members] of direct) {
+        for (const nm of members) {
+            const ent = rosterNames.get(nm);
+            if (!ent || ent.kind !== 'character') continue;          // 只给在册角色挂
+            if (ent.parent) continue;                                // 明述优先：已有不覆盖
+            const target = orgOf(org);
+            if (!target || target.kind !== 'faction') {              // 归属目标不是势力 ⇒ 弃（泛称/标题不得当势力）
+                if (out.warnings.length < 5) out.warnings.push(`结构推导: 「${nm}」的疑似所属「${org}」不是势力条目——不写`);
+                continue;
+            }
+            if (!out.byName.has(nm)) { out.byName.set(nm, org); out.filled += 1; }
+        }
+    }
+    return out;
+}
+
+// v1 的零 token 档位兜底（`plugins/story-world/src/director.js:127` 同款口径）：只认「紧贴名号的括号/冒号」里的标签。
+//   校验词来自**本书自己的** powerScale 档位名（不是外挂词表）；T 系标签（T8大乘中期）自带格式识别。
+//   纪律：定位不到就返回空串（**绝不猜**）——调用方回退模型抽取结果。
+export function powerFromNameContext(fullText, name, tierWords = []) {
+    const target = String(name ?? '').replace(/^(?:undefined|null|NaN)\s+/i, '').trim();
+    if (!target || !fullText) return '';
+    const words = (Array.isArray(tierWords) ? tierWords : []).filter((w) => w && String(w).length >= 2).map(String).sort((a, b) => b.length - a.length);
+    const isTag = (s) => {
+        const t = String(s || '').trim();
+        if (/^T\d+/.test(t)) return t;                            // A) T 系标签（大荒格式）
+        for (const w of words) if (t.includes(w)) return t;        // B) 本书自己的力量标尺词（词表只做校验）
+        return '';
+    };
+    let idx = fullText.indexOf(target);
+    while (idx >= 0) {
+        const after = fullText.slice(idx + target.length, idx + target.length + 80);
+        // 必须紧跟名字（允许紧贴空白）：括号形/冒号形；**不得跳过中间文字**去抓后面的括号（v1 原注释口径）
+        const m = after.match(/^[ \t\u3000]*[（(]\s*(?:男|女|雄|雌|公|母)?\s*[,，、]?\s*([^）)；;。]{1,24})\s*[）)]/);
+        if (m) { const tag = isTag(m[1]); if (tag) return tag.slice(0, 30); }
+        const m2 = after.match(/^[ \t\u3000]*[：:]\s*([^，。；;、\s]{1,24})/);
+        if (m2) { const tag = isTag(m2[1]); if (tag) return tag.slice(0, 30); }
+        idx = fullText.indexOf(target, idx + target.length);
+    }
+    return '';
+}
+
+// 势力「底蕴/规模」的零 token 提取（第二十五棒 e）：书里势力的性质与规模**有固定书面形态**——
+//   实测用户书 96 个势力条目里 48 个是 `[势力: 万妖盟 (混乱绞肉机/妖修大本营)]` 这种势力标签，
+//   74 个带 `核心底蕴/底蕴/规模/兵力/势力:` 标签行 ⇒ 可直接照抄原话，**不需要模型、也不许引擎自造**。
+//   形态判据（不是词表）：`[势力: 名号 (原话)]` 与 `标签: 原话`。取不到就留空（绝不编）。
+export function factionScaleFromEntry(content, name) {
+    const text = String(content ?? '');
+    const nm = String(name ?? '').trim();
+    // ①势力标签形态：`[势力: 名号 (原话)]`——名号后可带别名（`幽都/枉死城`），故用"名号在括号前"松匹配
+    if (nm) {
+        // 注意捕获组序号：`[^\]（(\n]` 那层是第 2 组，原话是第 3 组
+        const m = /\[\s*势力\s*[:：][^\]（(\n]{0,40}?[（(]([^）)]{2,40})[）)]/.exec(text);
+        if (m) return m[1].trim().slice(0, BOOK_FIELD_MAX);
+    }
+    // ②标签行形态：`核心底蕴/底蕴/规模/兵力:` 后的原话（截到句读）
+    const m2 = /(?:核心底蕴|底蕴|规模|兵力)\s*[:：]\s*([^\n。；;]{2,40})/.exec(text);
+    if (m2) return m2[1].trim().slice(0, BOOK_FIELD_MAX);
+    return '';
+}
+
 export function seedBookEntities(ssot) {
     const book = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
     if (!book.length) return { seeded: 0, folded: 0, skippedLocation: 0, warnings: [] };
@@ -561,6 +759,50 @@ export function seedBookEntities(ssot) {
     let seeded = 0;
     let folded = 0;
     let skippedLocation = 0;
+    let fieldsAttached = 0;
+    let parentVerified = 0;
+    let parentDemoted = 0;      // 验伪不过被弃的"所属"（模型编的 / 不是势力条目 / 书里找不到证据）
+    // 名号归一尺（第二十五棒 e 实测逼出）：canon 名册会**合并同名**，只留第一个名字——
+    //   实测用户书：条目名 `混乱之地·万妖盟`，而 canon 里是 `万妖盟`（词表前缀 `混乱之地·` 在 canon 侧不存在）。
+    //   ⇒ 按书条目名精确查 canon 会查不到 ⇒ 该条目的势力身份丢失、整个花名册被跳过（吞天妖王/混元妖圣 5 人因此漏掉）。
+    //   口径：**双向子串匹配**，取最长者（宁少不错）；歧义/无匹配返回 null。
+    const canonNames = [...idx.keys()];
+    const resolveCanonName = (entryName) => {
+        const n = String(entryName ?? '').trim();
+        if (!n) return null;
+        if (idx.has(n)) return n;
+        let best = null;
+        for (const c of canonNames) {
+            if (c.length < 2) continue;
+            if (!(n.includes(c) || c.includes(n))) continue;
+            if (!best || c.length > best.length) best = c;
+        }
+        return best;
+    };
+    // 组织成员行反查索引（零 token）：用于**验伪**模型给的所属，也用于**兜底推导**。
+    //   建索引的来源只有一处：书条目里被判为 **kind=faction** 的名号 + 其正文成员行。
+    //   ★为什么必须限定 kind=faction：实测把"小节标题/泛称"当节点会推出「散修→散修」「虞昭华→人族皇朝」（假关系）。
+    const orgRosterMap = new Map();
+    for (const b of book) {
+        const canonName = resolveCanonName(b.name);
+        const canonItem = canonName ? idx.get(canonName) : null;
+        const isFaction = canonItem ? canonItem.kind === 'faction' : b.kind === 'faction';
+        if (!isFaction) continue;
+        const m = /^[-*·•\s]*([^\s(（:：、,]{2,20})\s*[（(]/gm;
+        const set = new Set();
+        for (const mm of String(b.content ?? '').matchAll(m)) set.add(mm[1].trim());
+        if (!set.size) continue;
+        // 登记在**书条目名**（复合名）与 **canon 名**（短名）两个键下——模型写哪个都该认。
+        for (const key of [b.name, canonName].filter(Boolean)) {
+            if (!orgRosterMap.has(key)) orgRosterMap.set(key, new Set());
+            const bucket = orgRosterMap.get(key);
+            for (const x of set) bucket.add(x);
+        }
+    }
+    const orgOf = (name) => {
+        const b = idx.get(String(name ?? '').trim());
+        return b ? { name: b.name, kind: b.kind } : null;
+    };
     const pushEntity = (b) => {
         if (byName.has(b.name)) return null;    // 已有（含 retired）不重建；dead 不回魂
         let n = seeded + 1;
@@ -579,6 +821,30 @@ export function seedBookEntities(ssot) {
             // leg25 c：**`attrs: {}` 整条删除**——四维浮点不存在了，账上连空键都不该有
             //   （书里的说法走实体 `实力` 文本态，见 spec-entity-field-lookup）。
         };
+        // 第二十五棒 e：**照书抄的属性落到实体账**（v1 初始化就有的效果）。
+        //   纪律：只落**文本原话**（实力=「T9渡劫巅峰」这类档位原话，**引擎不换算、不进任何公式**——START-HERE §2）；
+        //   只填空位（已有值不覆盖，明述优先）；来源分账 `fieldSource`（面板/pack 用来标「（书）」）。
+        const f = b.fields || {};
+        const setIfEmpty = (key, val) => {
+            if (typeof val !== 'string' || !val.trim()) return false;
+            if (typeof ent[key] === 'string' && ent[key].trim()) return false;
+            ent[key] = val.trim();
+            fieldsAttached += 1;
+            return true;
+        };
+        if (ent.kind === 'character') {
+            setIfEmpty('实力', f['实力']);
+            setIfEmpty('身份', f['身份']);
+            setIfEmpty('定位', f['定位']);
+        } else if (ent.kind === 'faction') {
+            setIfEmpty('规模', f['规模']);
+            setIfEmpty('性质', f['性质']);
+            setIfEmpty('倾向', f['倾向']);
+        }
+        if (Object.keys(f).length) {
+            ent.fieldSource = ent.fieldSource || {};
+            for (const k of Object.keys(f)) ent.fieldSource[k] = '书里原话';
+        }
         (ssot.entities = ssot.entities || []).push(ent);
         byName.set(b.name, ent);
         seeded += 1;
@@ -629,17 +895,127 @@ export function seedBookEntities(ssot) {
     // leg23 修正：**册里明述为势力的上级一律认**——旧口径要求"上级实体此刻已在账"，而势力的入账在第一/二遍，
     // 角色却排在第三遍之前判断，导致「龙骧 → 镇海先锋营」这类真关系被误判成"未明述为势力"而丢弃（实测 20 条警告之根）。
     // 现在：上级在册 → 直接认（链顶解析得到则写链顶名，否则写上级本身，其自身实体会在账上指到链顶）；只有**不在册**才留痕。
+    // 书标签声明的上级（照书办：`<X帝麾下_名号>` 形态）——**标签本身就是书的明述**，用它作正面证据。
+    //   候选集逐字取自书本段正文（形态判据，无词表）；模型抽出的声称必须与声明同名才算命中。
+    const declaredParent = new Map();
+    {
+        const srcText = ssot.context?.setting?.frozen?.canon?.sourceText;
+        const declared = typeof srcText === 'string' && srcText ? scanBookDeclarations(srcText).declares : [];
+        for (const d of declared) if (d.parent) declaredParent.set(d.name, d.parent);
+    }
+    // 所属落账的唯一出口（先验伪，再决定认不认）。
+    //   弃关系的条件**只有一个**：正面证据全无 **且** 该组织确有花名册却列不出该名号（=被反驳）。
+    //   ——无册不等于不存在（硬规矩：绝不用空值反推"没有"），只能落账并如实标成未验证。
+    const setParent = (ent, claimed, srcTag, ownEntry) => {
+        const c = normalizeParentName(claimed);
+        if (!c) return false;
+        // 名号归一后再查册：模型写短名（`万妖盟`）而册上是复合名时，绑到 canon 那**同一项**（否则 kind 查不到 ⇒ 关系白丢）
+        const canonName = resolveCanonName(c);
+        const inRoster = canonName ? idx.get(canonName) : null;
+        if (!inRoster || inRoster.kind !== 'faction') {
+            parentDemoted += 1;
+            warnings.push(`书名录: 「${ent.name}」的所属「${c}」不在册或不是势力——隶属空着（角色照常入账）`);
+            return false;
+        }
+        const tagged = String(declaredParent.get(ent.name) ?? '') === c;
+        const evidence = verifyClaimedParent({
+            name: ent.name,
+            claimed: c,
+            orgRosterMap,
+            ownEntry,
+            memberEntry: inRoster,
+            subOfTarget: String(inRoster.name).includes(String(ent.name)),
+            bookDeclared: tagged,
+        });
+        if (evidence === 'refuted') {
+            parentDemoted += 1;
+            warnings.push(`书名录: 「${ent.name}」的所属「${c}」被书里证据反驳（该组织有花名册但列不出此名号）——弃关系（角色照常入账）`);
+            return false;
+        }
+        const target = resolveSeedTarget(c, idx);
+        ent.parent = target?.kind === 'faction' ? target.name : c;
+        ent.parentSource = tagged ? '照书办' : (evidence === 'unverifiable' ? '模型抽取(未验证)' : srcTag);
+        ent.parentSourceFrom = evidence;
+        parentVerified += 1;
+        return true;
+    };
     for (const b of book) {
         if (b.kind !== 'character') continue;
         const ent = pushEntity(b);
         if (!ent) continue;
-        if (!b.parent) continue;
-        const inRoster = idx.get(b.parent);
-        if (inRoster && inRoster.kind === 'faction') {
-            const target = resolveSeedTarget(b.parent, idx);
-            ent.parent = target?.kind === 'faction' ? target.name : b.parent;
-        } else {
-            warnings.push(`书名录: 「${b.name}」的所属「${b.parent}」不在册或不是势力——隶属空着（角色照常入账）`);
+        if (ent.parent) continue;                       // 明述优先：已有不覆盖
+        // ①模型抽的 `parent`（同一条关系，两种写法都收）
+        if (b.parent && setParent(ent, b.parent, '模型抽取', b)) continue;
+        // ②模型抽的 fields.所属（v1 的 affiliation 口径——显式"所属势力：X"写法也走这里）
+        const own = b.fields?.['所属'];
+        if (own && own !== b.parent) setParent(ent, own, '模型抽取', b);
+    }
+    // 实体名 → **真书原文**（自己的条目 + 提到它的组织条目）——零 token 档位兜底与"显式所属"验伪共用这一份。
+    //   为什么要拼「提到它的组织条目」：大荒/三国这类书里，角色的档位与所属**只写在势力条目的成员行上**，
+    //   它自己没有条目——v1 的 `fillPowerFromBook` 正是扫全书的紧贴标签，这里等价但不重复扫。
+    const textOfName = new Map();
+    const addText = (nm, text) => {
+        const k = String(nm ?? '').trim();
+        if (!k || !text) return;
+        textOfName.set(k, textOfName.has(k) ? `${textOfName.get(k)}\n${text}` : text);
+    };
+    for (const b of book) {
+        const content = String(b.content ?? '');
+        if (!content) continue;
+        addText(b.name, content);
+        for (const nm of rosterOfOrg(b)) addText(nm, content);
+    }
+    const tierWords = (ssot.context?.setting?.frozen?.canon?.powerScale || []).map((p) => String(p?.level ?? '')).filter(Boolean);
+
+    // 第四遍（第二十五棒 e）：**结构兜底**——模型没给、但组织条目的成员行里确实列了该名号 ⇒ 补上（零 token）。
+    //   只对**在册角色**、**只填空位**、且**归属目标必须是 kind=faction 的条目**（泛称/标题不得当势力）。
+    //   ①关联优先：模型/验伪没定下来的，从成员行反推（来源标「结构推导」，面板与 pack 标「（推）」）。
+    {
+        const derived = deriveParentFromOrgEntries({
+            entities: ssot.entities || [],
+            candidateEntries: book.filter((b) => b.kind === 'faction'),
+            orgRosterMap,
+            orgOf,
+        });
+        for (const [nm, org] of derived.byName) {
+            const ent = byName.get(nm);
+            if (!ent || ent.parent) continue;
+            // 与模型那条路同口径：势力自己还有上级时，成员指向**链顶**（`resolveSeedTarget` 上溯；
+            //   上级是角色＝统治者时也认——leg23 口径）。这样"瑶池（隶阐教）的成员"不会与"阐教成员"分裂成两个节点。
+            const viaCanon = resolveCanonName(org);
+            const target = resolveSeedTarget(viaCanon || org, idx);
+            const top = target?.kind === 'faction' ? target.name : (viaCanon || org);
+            ent.parent = top;
+            ent.parentSource = '结构推导';
+            ent.parentSourceFrom = `成员行@${org}`;
+            parentVerified += 1;
+        }
+        for (const w of derived.warnings) warnings.push(w);
+    }
+    // ⑤零 token 档位兜底（v1 `fillPowerFromBook` 同口径）：模型漏了、但书里紧贴名号的标签写得明明白白 ⇒ 补上。
+    //   只填空位；只认紧贴名号的括号/冒号标签；校验词来自**本书自己的** powerScale（不是外挂词表）。
+    {
+        for (const e of ssot.entities || []) {
+            if (e.kind !== 'character' || (typeof e['实力'] === 'string' && e['实力'].trim())) continue;
+            const src = textOfName.get(e.name);
+            if (!src) continue;
+            const tag = powerFromNameContext(src, e.name, tierWords);
+            if (!tag) continue;
+            e['实力'] = tag;
+            e.fieldSource = { ...(e.fieldSource || {}), 实力: '书里原话' };
+            fieldsAttached += 1;
+        }
+        // 势力「规模/性质」同款兜底（`[势力: X (原话)]` / `核心底蕴: 原话`）——势力不写角色档位，只抄它自己的原话。
+        const entryTextOf = new Map(book.map((b) => [String(b.name).trim(), String(b.content ?? '')]));
+        for (const e of ssot.entities || []) {
+            if (e.kind !== 'faction' || (typeof e['规模'] === 'string' && e['规模'].trim())) continue;
+            const src = entryTextOf.get(e.name) || textOfName.get(e.name);
+            if (!src) continue;
+            const scale = factionScaleFromEntry(src, e.name);
+            if (!scale) continue;
+            e['规模'] = scale;
+            e.fieldSource = { ...(e.fieldSource || {}), 规模: '书里原话' };
+            fieldsAttached += 1;
         }
     }
     // 名下机构落账（leg23）：写回名义势力的 organs（如 渡虚帝.organs = [界渊长城, 须弥界域]）
@@ -659,6 +1035,10 @@ export function seedBookEntities(ssot) {
     // leg23：organsAttached 仅在真正附着机构时出现（返回形状对既有调用方保持稳定）
     const out = { seeded, folded, skippedLocation, warnings };
     if (organsAttached) out.organsAttached = organsAttached;
+    // 第二十五棒 e：照书抄的字段与关联落账计数（面板/台账用它说明"建世界时建好了多少"）
+    if (fieldsAttached) out.fieldsAttached = fieldsAttached;
+    if (parentVerified) out.parentVerified = parentVerified;
+    if (parentDemoted) out.parentDemoted = parentDemoted;
     return out;
 }
 
