@@ -215,6 +215,25 @@ test('leg25 c：属性区（实力/位置的查书标记）无障碍双通道—
     assert.ok(html.includes('账上只记查到的与玩出来的东西'), '注脚行在位（说清"有值/未加载到/书未明述"三态）');
 });
 
+test('leg25 d 回归：属性区 title 属性不得被内层裸双引号截断（悬停文案要完整）', () => {
+    // 子代理报回、实测确认的 A9：`lookupChip` 的未查态 title 里写了裸双引号（`"未加载到"`），
+    //   `escapeHtml` **不转义半角引号** ⇒ 属性值就地截断：悬停只显示前半句，残余文字还漏成游离文本。
+    //   旧用例只断言 `title="实力：还没轮到查它` 这个**前缀**，所以正好绕过它——这里按机械口径锁死：
+    //   凡是进 title 的文案一律不许带裸 `"`（要引号用「」）。
+    const w = world();
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('title="实力：还没轮到查它'), '前缀仍在（原用例不回归）');
+    // ① 逐个 title 属性取值，凡值里再出现 `"` 即为被截断
+    const titles = [...html.matchAll(/title="([^"]*)"/g)].map((m) => m[1]);
+    assert.ok(titles.length > 0, '这份产物里本来就该有 title（悬停释义通道）');
+    const broken = titles.filter((t) => t.includes('"'));
+    assert.deepEqual(broken, [], `title 属性值内出现裸双引号（属性被截断）：${JSON.stringify(broken)}`);
+    // ② 未查态那句完整释义必须整句在位（截断时后半句会掉出属性）
+    assert.ok(html.includes('查过之后这里会写「未加载到」或「书未明述」）"'),
+        '★未查态悬停文案整句在位（截断 bug 会让后半句掉出 title）');
+    assert.ok(!/title="[^"]*"[^<>]*"\s*>/.test(html), '不得出现"属性提前闭合 + 游离文字"的残迹');
+});
+
 test('细案 spec-entity-field-lookup：实力/位置查书标记在面板上是三句不同的话；势力不显示实力栏', () => {
     const w = world();
     const faction = w.entities[0];                              // fixture 里三条都是势力

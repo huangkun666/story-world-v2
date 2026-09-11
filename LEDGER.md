@@ -8,6 +8,8 @@
 
 | 日期 | 谁 | 一句话 |
 |---|---|---|
+| 2026-09-11 | leg25 d（续） | **修「书未明述」假话**：取世界书读错了字段——插件读 `character.world`（实测用户卡是 null），ST 官方指针是 **`data.extensions.world`**（='大荒-姬元真'）⇒ 候选世界名空 ⇒ `loadWorldInfo` 一次没调 ⇒ 取书恒 0 条 ⇒ 把"读不到书"记成 `absent`「书未明述」并**永久锁死**。**取证**：世界书 235 条里五个名号**各命中 1 条**（吞天妖王正文原话「T8大乘中期…」）⇒ 那句话是假的。**修**：官方指针 + 补卡内置 `character_book`（复数键 `keys`→`key`）+ **读不到书一律 `pending`（可重试），只有"读到书且确无该条目"才 `absent`** + 取书按会话缓存。测试 **436/436**（变异测试证红）。`PANEL_BUILD`→`leg25d-world-pointer` |
+| 2026-09-11 | leg25 d | **修「按需查书一次都没跑成」的真 bug**：注入面 `bookText` 是 async（浏览器 `bookTextForEntity`），消费方却同步调用 ⇒ 拿到 Promise、`.map` 抛 TypeError ⇒ 被 `tick.js` 的失败零阻塞 catch 静默吞掉 ⇒ `applyLookup` 永不执行、盘上 `entityFields` 恒 0 条（用户"看不到属性"的真因；`tick.js` 的 catch + 夹具清一色同步 ⇒ 430 条测试全绿也漏掉）。修法只补该有的行为（`await` + 数组兜底）。**A9** 一并修：`render.js` 未查态 `title` 里裸双引号致属性截断。新增 3 条回归（**先证红再证绿**）⇒ **433/433**；`PANEL_BUILD`→`leg25d-booktext-async` |
 | 2026-09-11 | leg25 c | **四维浮点属性整条删除**（依据 design-core §4 第 1 条「手拍值比没有更坏」）+ 文档重塑（接手必读 379 KB → START-HERE 5 KB；ANCHOR 状态行 9425→310 字符）；途中修 4 个真 bug（gate 拼 stateChanges 致停摆、meta 缺迁移闸、attrs 只删一半、层基线漏乘）|
 | 2026-09-07 | S1 | 工程骨架：test/ 基建（node:test + node:assert/strict，沿用旧件惯例）、黄金夹具 golden-world.min.jso… |
 | 2026-09-07 | S2 | 提案形状 |

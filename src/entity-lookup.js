@@ -168,14 +168,40 @@ export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS)
  *   本模块不读世界书文件，保持纯编排层。
  * 失败语义：调用失败/坏 JSON → { byName: null, error }（调用方**不写任何痕迹**，下轮重试）。
  */
+/**
+ * resolveBookSource(bookText, entity) → { ok, entries }
+ * bookText 注入面取值：**取一次、用两次**（原来 runLookup 与 sources 各取一遍 = 两次真实取书，
+ *   在异步取书下既浪费又会"两次结果不一致"）。
+ * 返回 `{ ok, entries }`：`ok:false` = **书没读到**（取书抛错/一本书都没取到）——与"书里没有该条目"
+ *   是两件事，调用方必须分开处置（见 applyLookup 的 sources 语义）。兼容三种注入面：
+ *   异步函数 / 同步函数 / `{ [名号]: entries[] }` 映射。
+ */
+export async function resolveBookSource(bookText, entity) {
+    let raw;
+    try {
+        raw = typeof bookText === 'function' ? await bookText(entity) : (bookText?.[entity?.name] || []);
+    } catch (err) {
+        return { ok: false, entries: [], error: String(err?.message || err) };
+    }
+    if (raw && !Array.isArray(raw) && typeof raw === 'object' && 'ok' in raw) {
+        return { ok: raw.ok !== false, entries: Array.isArray(raw.entries) ? raw.entries : [] };
+    }
+    return { ok: true, entries: Array.isArray(raw) ? raw : [] };
+}
+
 export async function runLookup({ world, transport, ids, bookText } = {}) {
     const ents = (world?.entities || []);
     const idIndex = new Map(ents.map((e) => [e.id, e]));
-    const targets = (ids || []).map((id) => idIndex.get(id)).filter(Boolean).map((e) => ({
-        id: e.id,
-        name: e.name,
-        entries: typeof bookText === 'function' ? bookText(e) : (bookText?.[e.name] || []),
-    })).filter((t) => t.entries.length);
+    const targets = (await Promise.all((ids || []).map(async (id) => {
+        const e = idIndex.get(id);
+        if (!e) return null;
+        // bookText 注入面**可能是异步的**（浏览器 `web/index.js` 的 `bookTextForEntity` 就是 async）——
+        //   必须 await：当同步用会拿到 Promise，`.length` 为 undefined。第二十五棒 d 实测后果：
+        //   下游 `.map` 对 Promise 抛 TypeError → 前置步被 tick.js 的 catch 静默吞掉 →
+        //   `applyLookup` 永不执行 → 盘上 `entityFields` 恒为 0 条（用户实拍"看不到属性"的真因）。
+        const src = await resolveBookSource(bookText, e);
+        return { id: e.id, name: e.name, entries: src.entries, readFailed: !src.ok };
+    }))).filter(Boolean).filter((t) => t.entries.length);
     if (!targets.length) return { byName: {}, skipped: 'no-source', ok: true };
     let text = '';
     try {
@@ -194,10 +220,15 @@ export async function runLookup({ world, transport, ids, bookText } = {}) {
 /**
  * applyLookup({ ssot, ids, byName, sources, tick, fields }) → { ssot, stats }
  * byName === null（调用失败）→ 原样返回（**不写任何痕迹**：这回没查成 ≠ 书里没有）。
- * sources: { [entityId]: string[] }（这次查了哪几条世界书条目；空数组 = 引擎判定"书里没有相关条目"→ absent）
+ * sources: { [entityId]: string[] | undefined }
+ *   `[...]` = 查了这几条世界书条目（模型没给值 → pending「未加载到」）
+ *   `[]`    = 书读到了、但书里确实没有该名号 → **才**允许 absent「书未明述」
+ *   `undefined` = **这一轮没读成书**（取书抛错/书没取到）→ 一律 pending，**绝不记 absent**
+ *     （第二十五棒 d：旧法把"读不到书"与"书里没有"同形处置 ⇒ 误写「书未明述」并永久锁死该栏，
+ *      违反硬规矩「绝不用空值反推『书里没有』」）
  */
 export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields = ENTITY_LOOKUP_FIELDS } = {}) {
-    const stats = { ok: 0, pending: 0, absent: 0, written: [] };
+    const stats = { ok: 0, pending: 0, absent: 0, unread: 0, written: [] };
     if (byName === null || byName === undefined) return { ssot, stats };
     const entities = [...(ssot?.entities || [])];
     const roster = rosterIndex(ssot);
@@ -212,7 +243,8 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
         const rec = entityFields[id] ? { ...entityFields[id] } : {};
         const fieldsRec = { ...(rec.fields || {}) };
         const attempts = { ...(rec.attempts || {}) };
-        const src = sources[id] || [];
+        const src = sources[id];
+        const readOk = Array.isArray(src);          // 只有"真读到书"才允许写 absent
         // 回文按名号对齐：**唯一命中**才算（重名/未命中一律丢弃——宁可漏填，不可错填；
         //   实测世界里 623 实体重名 0 组，但防御不能省：模型少一项就会让位置对齐全错位）
         const owner = resolveByName(roster, e.name);
@@ -226,23 +258,27 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
                 // 有值：落账 + 留痕（from = 查过的条目；实测模型回的就是原文原话）
                 next[f] = v;
                 changed = true;
-                fieldsRec[f] = { value: v, from: src[0] || null, fetchedAt: tick };
+                fieldsRec[f] = { value: v, from: (src && src[0]) || null, fetchedAt: tick };
                 attempts[f] = { count: (attempts[f]?.count ?? 0) + 1, lastTriedAt: tick, state: 'ok' };
                 stats.ok += 1;
                 stats.written.push(`${e.name}.${f}=${v}`);
                 continue;
             }
-            // 没值：查书标记分开——只有"引擎确认书里没有相关条目"才允许 absent，其余一律 pending
+            // 没值：查书标记分开——**只有"真读到书 + 书里确实没有该条目"才允许 absent**（书未明述）；
+            //   读不到书（src === undefined）一律 pending，下轮再试（不许拿"读不到"反推"书里没有"）
             const count = (attempts[f]?.count ?? 0) + 1;
-            attempts[f] = { count, lastTriedAt: tick, state: src.length ? 'pending' : 'absent' };
-            if (src.length) stats.pending += 1; else stats.absent += 1;
+            const state = !readOk ? 'pending' : (src.length ? 'pending' : 'absent');
+            attempts[f] = { count, lastTriedAt: tick, state };
+            if (!readOk) stats.unread += 1;
+            else if (src.length) stats.pending += 1;
+            else stats.absent += 1;
         }
         if (changed) entities[at] = next;
         entityFields[id] = {
             ...rec,
             fields: fieldsRec,
             attempts,
-            sources: [...new Set([...(rec.sources || []), ...src])],
+            sources: [...new Set([...(rec.sources || []), ...(readOk ? src : [])])],
         };
     }
     return {
@@ -296,8 +332,19 @@ export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0,
         out.warning = `查书调用失败：${res.error}`;
         return { ...out, ssot: noteFailure(ssot, tick) };          // 失败：不写任何痕迹
     }
+    // sources 语义（applyLookup 用它决定 ok/pending/absent）：
+    //   `undefined` = **这一轮没读成书**（取书抛错/书没取到）→ 必须记 pending，**绝不记 absent**
+    //   `[]`        = 书读到了、但书里确实没有该名号的条目 → 才允许记 absent（书未明述）
+    //   `[...]`     = 查了这几条世界书条目
+    // 第二十五棒 d：原实现取书失败时给 `[]`，与"书里没有"同形 ⇒ 把读不到书误记成「书未明述」并**永久锁死**。
+    let readFailed = false;
     const sources = {};
-    for (const e of need) sources[e.id] = (typeof bookText === 'function' ? bookText(e) : (bookText?.[e.name] || [])).map((x) => x?.name ?? x);
+    for (const e of need) {
+        const src = await resolveBookSource(bookText, e);   // 与 runLookup **同一次取数口径**（取一次用两次）
+        if (!src.ok) readFailed = true;
+        sources[e.id] = src.ok ? src.entries.map((x) => x?.name ?? x) : undefined;
+    }
+    if (readFailed) out.warning = '查书取不到世界书原文（本轮不写「书未明述」，下轮再试）';
     const applied = applyLookup({ ssot, ids: need.map((e) => e.id), byName: res.byName, sources, tick });
     out.stats = applied.stats;
     return { ...out, ssot: noteSuccess(applied.ssot) };

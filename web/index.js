@@ -405,36 +405,79 @@ export function namePlayerPiece(world, parsedName) {
 // 取数形状宽容：世界信息兼容 三形态（旧版 ctx.worldInfo 数组/{entries} + 模块化 ST 的官方挂载世界）；
 // 失败上控制台诊断现场（形状未知时不再盲猜）。
 
+// 卡挂世界名：**ST 官方取的是 `data.extensions.world`**（world-info.js checkEmbeddedWorld 逐字：
+//   `characters[chid]?.data?.extensions?.world`）。旧法读 `character.world`——实测用户卡该字段不存在。
+//   保留 `character.world` 作旧版兼容（v1 时代同指针）。
+export function characterWorldNames(character) {
+    const out = [];
+    const seen = new Set();
+    const push = (v) => {
+        const s = String(v ?? '').trim();
+        if (s && !seen.has(s)) { seen.add(s); out.push(s); }
+    };
+    push(character?.world);                            // 旧版 ST 兼容
+    push(character?.data?.extensions?.world);          // 模块化 ST 官方指针（主口径）
+    push(character?.extensions?.world);                // 少数卡把 extensions 摆在顶层
+    return out;
+}
+
+// 卡**内置**世界书（`character_book`）→ ST 标准 worldInfo 条目形状。
+//   为什么必须有这条：内置书用的是**复数键 `keys`**，直接当 worldInfo 条目读会取不到 `key` ⇒ 匹配必然落空。
+//   不猜字段名：按 ST 自己的转换表逐项对照（`convertCharacterBook`，world-info.js:5370）。
+export function characterBookEntries(character) {
+    const book = character?.character_book || character?.data?.character_book;
+    const raw = book?.entries;
+    const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+    return list.filter((e) => e && typeof e === 'object').map((e, i) => ({
+        uid: e.id ?? i,
+        key: Array.isArray(e.keys) ? e.keys : (e.key ?? []),
+        keysecondary: e.secondary_keys ?? [],
+        comment: e.comment ?? '',
+        content: String(e.content ?? ''),
+        disable: e.enabled === undefined ? Boolean(e.disable) : !e.enabled,
+    })).filter((e) => e.content);
+}
+
 // 世界书条目收集（第十九棒实证修正）：模块化 ST 的 getContext() 无 worldInfo/character 字段——
 // 挂载世界在 extension_settings.world_info（已载表）+ globalSelect（附加名），条目经官方
 // ctx.loadWorldInfo(name) 取（getContext 暴露，服务端按名取、模块内缓存）。旧版 ctx.worldInfo 形态保留兼容。
 // 候选序 = 卡挂 world 字段 → globalSelect → 已载表键（去重）。
 async function collectWorldInfoEntries(ctx, character) {
     const legacy = ctx?.worldInfo;
-    if (Array.isArray(legacy)) return { entries: legacy, worldSources: null };
-    if (legacy && typeof legacy === 'object' && Array.isArray(legacy.entries)) return { entries: legacy.entries, worldSources: null };
+    if (Array.isArray(legacy)) return { entries: legacy, worldSources: null, readable: true };
+    if (legacy && typeof legacy === 'object' && Array.isArray(legacy.entries)) return { entries: legacy.entries, worldSources: null, readable: true };
     const names = [];
     const seenName = new Set();
     const push = (n) => { if (n && typeof n === 'string' && n.trim() && !seenName.has(n)) { seenName.add(n); names.push(n.trim()); } };
     push(character?.world); // 卡挂世界（v1 时代同指针：大荒z → 大荒-姬元真）
+    // leg25 d 修：**旧法只读 `character?.world`，实测用户卡上这个字段根本不存在**（大荒z.png 的
+    //   `card.world` 与 `data.world` 都是 null），ST 官方指针是 `data.extensions.world`
+    //   （world-info.js checkEmbeddedWorld：`characters[chid]?.data?.extensions?.world`）。
+    //   后果链：推不进名字 → 候选世界名空 → loadWorldInfo 一次没调 → 取书恒 0 条 →
+    //   按需查书把"读不到书"当成"书里没有该条目" → 写 absent「书未明述」并**永久锁死**那栏。
+    for (const n of characterWorldNames(character)) push(n);
     const chatWi = ctx?.chatMetadata?.['world_info']; // 聊天级挂载（ST assignLorebookToChat 落 chat_metadata.world_info）
     if (typeof chatWi === 'string') push(chatWi); else if (Array.isArray(chatWi)) for (const n of chatWi) push(n);
     for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
     for (const n of Object.keys(ctx?.extensionSettings?.world_info ?? {})) push(n);
-    const entries = [];
+    const entries = [...characterBookEntries(character)];   // 卡内置书：不依赖 loadWorldInfo，有内容就是读到了
+    let loadedAny = false;
     const worldSources = [];
     for (const name of names) {
         try {
             const w = typeof ctx?.loadWorldInfo === 'function' ? await ctx.loadWorldInfo(name) : null;
             const raw = w?.entries;
             const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : null);
-            worldSources.push({ name, ok: Boolean(list?.length), entries: list?.length ?? 0 });
+            const ok = Boolean(list?.length);
+            if (ok) loadedAny = true;
+            worldSources.push({ name, ok, entries: list?.length ?? 0 });
             if (list) for (const e of list) if (e && typeof e === 'object') entries.push(e);
         } catch (err) {
             worldSources.push({ name, ok: false, entries: 0 });
         }
     }
-    return { entries, worldSources };
+    // readable = 真读到至少一本书（含卡内置书）——**不许**把"一本书都没读到"与"书里没有该条目"混为一谈
+    return { entries, worldSources, readable: loadedAny || entries.length > 0 };
 }
 
 // 当前聊天角色卡（第十九棒实证修正）：模块化 ST 的 getContext() 没有 character 字段——单聊取
@@ -572,27 +615,50 @@ function bindSettingsForm() {
 // 取数口径：账上实体名 → 世界书条目（comment 全等 或 key 含该名 或 comment 含该名）。
 //   实测（用户世界 235 条 × 账上 623 实体）：comment 全等命中 67、key 含名命中 533、comment 含名 104；
 //   同一名号可能命中多条 → 全给模型（宁多勿漏；"取最长的一条"这类取舍留给模型，引擎不替它选）。
-// 失败（世界书不可读）→ 返回空数组 = 引擎确认"书里没有该名号的条目" → entity-lookup 记 absent（不再重查）。
-async function bookTextForEntity(entity) {
+// leg25 d 修（**这是"书未明述"假话的真因之一**）：返回值从"裸数组"改为**带状态**：
+//   `{ ok: true, entries }`   = 书读到了，这就是匹配结果（entries 空 = 书里确实没有该条目 → 记 absent）
+//   `{ ok: false }`           = **书没读到**（取书炸了/一本都没取到）→ 调用方**不写任何痕迹**，下轮再试
+//   旧法失败时 `return []`，与"书里没有"同形 ⇒ 引擎把读不到书记成「书未明述」并**永久锁死**该栏
+//   （违反硬规矩「绝不用空值反推『书里没有』」）。另：取书结果按会话缓存（原实现每个实体重取一遍全量书）。
+let sw2BookCache = null;   // { names, entries, readable }——只活在内存，loadWorld 时清
+export function resetBookCache() { sw2BookCache = null; }
+
+async function worldBookCached() {
+    if (sw2BookCache) return sw2BookCache;
     const ctx = getCtx();
     const character = pickCharacter(ctx);
+    const { entries, readable } = await collectWorldInfoEntries(ctx, character);
+    sw2BookCache = { entries: entries || [], readable };
+    return sw2BookCache;
+}
+
+async function bookTextForEntity(entity) {
+    const name = String(entity?.name || '').trim();
+    if (!name) return { ok: true, entries: [] };
+    let book;
     try {
-        const { entries } = await collectWorldInfoEntries(ctx, character);
-        const name = String(entity?.name || '').trim();
-        if (!name) return [];
-        const hit = (entries || []).filter((e) => {
-            const comment = String(e?.comment || '').trim();
-            const keys = Array.isArray(e?.key) ? e.key : [e?.key];
-            return comment === name || comment.includes(name) || keys.map((k) => String(k ?? '').trim()).includes(name);
-        });
-        return hit.slice(0, 4).map((e) => ({
+        book = await worldBookCached();
+    } catch (err) {
+        console.warn('[story-world-v2] 查书取原文失败（**不视为"书里没有"**，本轮跳过、下轮再试）', String(err?.message || err));
+        return { ok: false };
+    }
+    // 一本书都没读到（世界书未挂载/取数失败）⇒ 读不到 ≠ 书里没有
+    if (!book.readable) {
+        console.warn('[story-world-v2] 查书取不到世界书（世界书未挂载或不可读）——本轮不写查书标记，下轮再试');
+        return { ok: false };
+    }
+    const hit = (book.entries || []).filter((e) => {
+        const comment = String(e?.comment || '').trim();
+        const keys = Array.isArray(e?.key) ? e.key : [e?.key];
+        return comment === name || comment.includes(name) || keys.map((k) => String(k ?? '').trim()).includes(name);
+    });
+    return {
+        ok: true,
+        entries: hit.slice(0, 4).map((e) => ({
             name: String(e?.comment || name).trim(),
             text: String(e?.content || '').slice(0, 1200),   // 单条截断防御（防巨条目灌爆查询 prompt）
-        })).filter((x) => x.text);
-    } catch (err) {
-        console.warn('[story-world-v2] 查书取原文失败（视为书里无该条目）', String(err?.message || err));
-        return [];
-    }
+        })).filter((x) => x.text),
+    };
 }
 
 async function advanceTick({ world, dialogue }) {
@@ -707,6 +773,7 @@ function shortErr(err) {
 
 // 世界注入入口（K36 推进后 / 导入后 / 加载热账后调用）
 export async function loadWorld() {
+    resetBookCache();   // leg25 d：换聊天/换卡/换世界 ⇒ 取书缓存必须失效（它按会话缓存全量世界书）
     const meta = readHotMeta();
     const world = meta ? loadHotAccount(meta) : null;
     if (!world) {

@@ -15,7 +15,10 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   上一版是"查书标记（缺未查）+ 位置未明徽章重复"。
 //   第二十五棒 b 追加（A1b）：张力行不再写「烈度带词 + 百分比」，改「近 N 轮事件 N 件」；
 //   麾下成员序由分量序改**名号序**（A1）。← 看到 `+a1b` 后缀即已载入这两条。
-export const PANEL_BUILD = 'leg25c-no-attrs';
+//   第二十五棒 d 追加：查书前置步的异步 bookText 修通 + **取书路径改 ST 官方指针**
+//   （`data.extensions.world`，旧法读 `character.world` 恒空 ⇒ 取书 0 条 ⇒ 假「书未明述」）
+//   + 未查态 title 属性截断修复。
+export const PANEL_BUILD = 'leg25d-world-pointer';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -359,7 +362,10 @@ export function renderEntitiesHtml(world) {
             const st = lookupState(f);
             if (st === 'pending') return `<span class="sw2-eattr nodata">${label}<b>未加载到</b></span>`;
             if (st === 'absent') return `<span class="sw2-eattr nodata">${label}<b>书未明述</b></span>`;
-            if (st === 'none') return `<span class="sw2-eattr nodata" title="${escapeHtml(label)}：还没轮到查它（轮到时会按需去世界书取原话；查过之后这里会写"未加载到"或"书未明述"）">${label}<b>未查</b></span>`;
+            // leg25 d 修（子代理报回、实测确认）：title 属性里原先写了裸双引号（`"未加载到"`），
+            //   属性值被就地截断 → 悬停只显示前半句（且残余文字漏成游离文本）。改用「」，
+            //   escapeHtml 不转义半角引号，凡是进属性的文案都不许带裸 `"`。
+            if (st === 'none') return `<span class="sw2-eattr nodata" title="${escapeHtml(label)}：还没轮到查它（轮到时会按需去世界书取原话；查过之后这里会写「未加载到」或「书未明述」）">${label}<b>未查</b></span>`;
             return '';
         };
         const powerChip = (e.kind === 'character' && typeof e['实力'] === 'string' && e['实力'].trim())

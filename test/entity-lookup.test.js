@@ -124,7 +124,7 @@ test('细案 ②：有值 → 落账 + 留痕（value/from/fetchedAt/sources 齐
     assert.equal(rec.fields['实力'].from, '昆仑道宫', '记来源条目');
     assert.equal(rec.fields['实力'].fetchedAt, 3);
     assert.deepEqual(rec.sources, ['昆仑道宫'], '审计：查过哪几条');
-    assert.deepEqual(out.stats, { ok: 2, pending: 0, absent: 0, written: ['玄一道祖.实力=T9渡劫巅峰', '玄一道祖.位置=昆仑山玉虚秘境'] });
+    assert.deepEqual(out.stats, { ok: 2, pending: 0, absent: 0, unread: 0, written: ['玄一道祖.实力=T9渡劫巅峰', '玄一道祖.位置=昆仑山玉虚秘境'] });
     assert.equal(w.entities[2]['实力'], undefined, '纯函数：不改输入');
 });
 
@@ -176,7 +176,7 @@ test('细案 ②：调用失败（byName=null）→ 一个字节都不写（这�
     const out = applyLookup({ ssot: w, ids: ['e_bk_2'], byName: null, sources: {}, tick: 5 });
     assert.equal(out.ssot, w, '原对象原样返回');
     assert.equal(out.ssot.meta.entityFields, undefined, '不留任何痕迹（下轮重试靠 tick 推进，不靠假痕迹）');
-    assert.deepEqual(out.stats, { ok: 0, pending: 0, absent: 0, written: [] });
+    assert.deepEqual(out.stats, { ok: 0, pending: 0, absent: 0, unread: 0, written: [] });
 });
 
 test('细案 ②：幂等——已定案的实体不再进查询面；重复回写逐字节一致', () => {
@@ -294,6 +294,99 @@ test('细案 ⑤：runTick 前置步——选人/查书结果进包，主调用�
     assert.equal(r.ssot.entities.find((e) => e.id === 'e_bk_2')['实力'], 'T9渡劫巅峰', '查回来的字段落在这一轮的世界里');
     assert.ok(sawPack && sawPack.includes('T9渡劫巅峰'), '★主调用的输入里带上了刚查回来的实力（这才叫"用上了"）');
     assert.ok(sawPack.includes('e_bk_1') && sawPack.includes('e_bk_2'), '实体段名单 = LLM 选的那两个（不是引擎镜头截出来的）');
+});
+
+test('细案 ⑤（leg25 d 回归）：**异步** bookText 也必须走通——浏览器接线 `bookTextForEntity` 就是 async', async () => {
+    // 本用例锁的是一条真 bug（用户实拍"看不到属性"的真因）：`runLookup`/`sources` 原先**同步**调用
+    //   注入的 bookText，而浏览器 `web/index.js:576 bookTextForEntity` 是 async ⇒ 拿到 Promise、
+    //   `.length` 为 undefined、`.map` 抛 TypeError → 前置步被 tick.js 的 catch 静默吞掉 →
+    //   `applyLookup` 永不执行 → 盘上 `meta.entityFields` 恒为 0 条（查书功能整个没生效）。
+    //   旧夹具清一色同步函数，所以 430 条全绿也照样漏掉它——这条用异步注入面把它钉死。
+    const { runTick } = await import('../src/tick.js');
+    const w = world();
+    const emptyStep = {
+        actions: [], newEvents: [], agendaAdvances: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+    };
+    const transport = async (prompt) => {
+        if (String(prompt).includes('本轮上场选择器')) return '{"pick":["e_bk_2"]}';
+        if (String(prompt).includes('字段抽取器')) return '{"玄一道祖":{"实力":"T9渡劫巅峰","位置":"昆仑山"}}';
+        return JSON.stringify(emptyStep);
+    };
+    // 与浏览器同一形状：async 函数、await 之后才拿到条目
+    const asyncBookText = async (e) => (e.name === '玄一道祖'
+        ? [{ name: '玄一道祖条目', text: '- 玄一道祖 (男, T9渡劫巅峰): 人族守护神，居昆仑山。' }]
+        : []);
+    const r = await runTick({
+        transport, ssot: w, dialogue: '（继续）', extractCtx: {},
+        preStep: async ({ ssot: cur }) => runEntityLookupStep({ ssot: cur, transport, bookText: asyncBookText, tick: 1 }),
+    });
+    assert.equal(r.ok, true, `前置步不得炸掉 tick：${r.error || ''}`);
+    const e2 = r.ssot.entities.find((e) => e.id === 'e_bk_2');
+    assert.equal(e2['实力'], 'T9渡劫巅峰', '★异步 bookText：查回来的实力落账');
+    assert.equal(e2['位置'], '昆仑山', '★异步 bookText：位置同样落账');
+    const rec = r.ssot.meta?.entityFields?.e_bk_2;
+    assert.ok(rec, '★`meta.entityFields` 必须真的建起来（旧实现恒为 0 条——这正是用户看到的症状）');
+    assert.equal(rec.attempts['实力'].state, 'ok', '查书标记：有值 → ok');
+    assert.equal(rec.fields['实力'].from, '玄一道祖条目', '留痕 from = 查过的世界书条目名');
+    assert.ok(rec.sources.includes('玄一道祖条目'), 'sources 记下这次查了哪条');
+});
+
+test('细案 ⑤（leg25 d 回归）：异步 bookText 抛错 → 不写痕、不阻塞（失败面同口径）', async () => {
+    const { runTick } = await import('../src/tick.js');
+    const w = world();
+    const emptyStep = {
+        actions: [], newEvents: [], agendaAdvances: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+    };
+    const transport = async (prompt) => (String(prompt).includes('本轮上场选择器')
+        ? '{"pick":["e_bk_2"]}' : JSON.stringify(emptyStep));
+    const r = await runTick({
+        transport, ssot: w, dialogue: '（继续）', extractCtx: {},
+        preStep: async ({ ssot: cur }) => runEntityLookupStep({
+            ssot: cur, transport, tick: 1,
+            bookText: async () => { await Promise.resolve(); throw new Error('世界书读不到'); },
+        }),
+    });
+    assert.equal(r.ok, true, '取原文抛错不得拦 tick（世界推进优先）');
+    // ★leg25 d 语义修正（这条是本棒的核心判据，别改回旧的"什么都不写"）：
+    //   取书失败**必须**记 pending（可重试），而**绝不能**记 absent。旧法两者同形（都写成"书未明述"）
+    //   ⇒ absent 被 missingFields 永久跳过 ⇒ 用户盘上出现假的「书未明述」且再也不会被纠正。
+    const rec = r.ssot.meta?.entityFields?.e_bk_2;
+    assert.ok(rec, '取书失败也要留可重试的痕（否则无法区分"没查过"与"查过但没读成"）');
+    assert.equal(rec.attempts['实力'].state, 'pending', '★读不到书 → pending（可重试），绝不是 absent');
+    assert.equal(rec.attempts['位置'].state, 'pending', '★位置同理');
+    assert.deepEqual(rec.sources, [], '没读到书 → sources 不得记条目名');
+    assert.ok(!JSON.stringify(rec).includes('absent'), '★一个 absent 都不许出现（读不到 ≠ 书里没有）');
+});
+
+test('细案 ⑤（leg25 d 回归）：**书读到了但书里确实没有该名号** → 才记 absent（书未明述）', async () => {
+    // 与上一条成对：区分「读不到书」与「书里真没有」——这是旧实现混为一谈的那两件事。
+    const { runTick } = await import('../src/tick.js');
+    const w = world();
+    const emptyStep = {
+        actions: [], newEvents: [], agendaAdvances: [],
+        newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
+    };
+    const transport = async (prompt) => {
+        if (String(prompt).includes('本轮上场选择器')) return '{"pick":["e_bk_2"]}';
+        return JSON.stringify(emptyStep);
+    };
+    const r = await runTick({
+        transport, ssot: w, dialogue: '（继续）', extractCtx: {},
+        preStep: async ({ ssot: cur }) => runEntityLookupStep({
+            ssot: cur, transport, tick: 1,
+            // 书**读到了**（ok:true），但这份书里没有玄一道祖的条目 → entries 空
+            bookText: async () => ({ ok: true, entries: [] }),
+        }),
+    });
+    assert.equal(r.ok, true);
+    // 引擎选中的实体缺字段、但"查到书可读且无此条目"⇒ 无来源可喂 ⇒ 不发起查书调用 ⇒ 不写痕。
+    //   absent 只可能由 applyLookup 在「readOk 且 src 为空」时写入（见 applyLookup 注释）；
+    //   此处 runLookup 因 targets 为空而跳过，故实体保持"未查"——两种状态都有据，不是空白。
+    const rec = r.ssot.meta?.entityFields?.e_bk_2;
+    assert.ok(!rec || rec.attempts?.['实力']?.state !== 'absent' || rec.sources.length === 0,
+        'absent 只在"读到书 + 书里无条目"时成立，且 sources 必为空');
 });
 
 test('细案 ⑤：前置步抛错 → 世界照常推进（失败零阻塞，退回引擎镜头）', async () => {

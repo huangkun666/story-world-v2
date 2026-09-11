@@ -10,7 +10,7 @@ import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import { checkWorldStep } from '../src/check-step.js';
 import { renderStreams } from '../src/streams.js';
-import { attachPlayerPiece, namePlayerPiece } from '../web/index.js';
+import { attachPlayerPiece, namePlayerPiece, characterWorldNames, characterBookEntries } from '../web/index.js';
 
 const world = (over = {}) => ({
     version: 1,
@@ -118,4 +118,48 @@ test('B-6 接线后的真实效果：四条"禁写玩家"守卫不再恒假 + �
     const streams = renderStreams(w3, stage, null);
     assert.equal(typeof streams.injection, 'string');
     assert.ok(streams.injection.includes('某地生变'), '有玩家世界：事件按掩码判定后仍可见（此前是"无玩家→全见"的降级分支）');
+});
+
+// ---------------------------------------------------------------------------
+// leg25 d：**取世界书的路径**回归锁（"书未明述"假话的真因）
+//   实测现场（用户卡 大荒z.png，ST 版本：模块化）：`card.world` / `data.world` 都是 null，
+//   真指针在 `data.extensions.world` = '大荒-姬元真'（ST 官方 world-info.js checkEmbeddedWorld：
+//   `characters[chid]?.data?.extensions?.world`）。旧法只读 `character.world` ⇒ 候选世界名空 ⇒
+//   loadWorldInfo 一次都不调 ⇒ 取书恒 0 条 ⇒ 按需查书记成「书未明述」并永久锁死。
+//   本组锁：①官方指针必须被取到；②卡内置书的 `keys`（复数键）必须转成 ST 的 `key`。
+// ---------------------------------------------------------------------------
+test('leg25 d：卡挂世界名读 ST 官方指针 data.extensions.world（旧法读 character.world 恒空）', () => {
+    const card = { name: '大荒z', world: null, data: { extensions: { world: '大荒-姬元真' }, world: null } };
+    assert.deepEqual(characterWorldNames(card), ['大荒-姬元真'], '★官方指针必须命中（实测用户卡就是这一形态）');
+    // 旧版 ST 兼容：`character.world` 仍在候选里
+    assert.deepEqual(characterWorldNames({ world: '旧指针书' }), ['旧指针书'], '旧版 ST 的 character.world 保留兼容');
+    // 两者都有 → 都收（去重、不重不漏）
+    assert.deepEqual(characterWorldNames({ world: 'A', data: { extensions: { world: 'A' } } }), ['A'], '同名去重');
+    assert.deepEqual(characterWorldNames({ world: 'A', data: { extensions: { world: 'B' } } }), ['A', 'B'], '两处不同名 → 都作候选');
+    assert.deepEqual(characterWorldNames(null), [], '无卡 → 空（不得抛错）');
+});
+
+test('leg25 d：卡内置书 character_book 的复数键 keys 必须转成 ST 的 key（否则匹配必然落空）', () => {
+    const card = {
+        data: {
+            character_book: {
+                name: '大荒-姬元真',
+                entries: [
+                    { id: 7, keys: ['吞天妖王', '万妖盟'], comment: '混乱之地·万妖盟', content: '- 吞天妖王 (男, T8大乘中期): 现任盟主。', enabled: true },
+                    { id: 8, keys: ['某'], comment: '停用条目', content: '不该出现', enabled: false },
+                    { id: 9, keys: ['空内容'], comment: '无正文', content: '' },
+                ],
+            },
+        },
+    };
+    const es = characterBookEntries(card);
+    assert.equal(es.length, 2, '停用条目与无正文条目不入面（与 ST convertCharacterBook 同口径）');
+    assert.deepEqual(es[0].key, ['吞天妖王', '万妖盟'], '★keys（复数）→ key（ST 标准形状）');
+    assert.equal(es[0].comment, '混乱之地·万妖盟');
+    assert.ok(es[0].content.includes('T8大乘中期'));
+    assert.equal(es[0].disable, false, 'enabled:true → disable:false');
+    assert.equal(es[1].disable, true, 'enabled:false → disable:true');
+    // 已经转过形的（有 key）也照吃
+    assert.deepEqual(characterBookEntries({ character_book: { entries: [{ key: ['甲'], comment: '甲', content: 'x' }] } })[0].key, ['甲']);
+    assert.deepEqual(characterBookEntries(null), [], '无卡内置书 → 空数组（不是 undefined）');
 });
