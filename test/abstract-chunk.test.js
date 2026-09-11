@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows, buildAbstractPrompt, buildRosterPrompt } from '../src/abstract.js';
+import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows, buildAbstractPrompt, buildRosterPrompt, dedupeRoster } from '../src/abstract.js';
 
 // 测试书：k0..k(n-1) 条目行（约 210 字符/条）；名号藏在条目深处（第 3 个词）
 function makeBook(n) {
@@ -77,6 +77,40 @@ test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次，全量覆
     assert.ok(r.setting.frozen.canon.powerScale.length === 1, '五件套仍出自 canon 单发');
 });
 
+test('leg25 g：跨块别名的正名裁决——按"别指认的那个名字"定正名（真模型实测逼出）', () => {
+    // 场景来自**真模型实测**（gemini-3.1-pro-preview 跑真书两块）：
+    //   块1 看得到条目定义 ⇒ 出 `人族皇朝`，aliases=[大虞, 大虞皇朝]；
+    //   块2 看不到定义   ⇒ 出 `大虞皇朝`，aliases=[人族皇朝, 大虞]   ← **指向正好相反**。
+    // 旧裁决（谁有别名谁赢/先到先得）会让 `大虞皇朝` 当正名 ⇒ 合并成 `大虞皇朝 ← [人族皇朝、大虞]`（正名错）。
+    // 现裁决：**被最多条目当别名指认的那个名字才是正名** —— `人族皇朝` 被指 1 次、`大虞皇朝` 被指 0 次。
+    const chunk1 = [{ name: '人族皇朝', kind: 'faction', aliases: ['大虞', '大虞皇朝'], fields: { 规模: '方圆7500万里' } }];
+    const chunk2 = [{ name: '大虞皇朝', kind: 'faction', aliases: ['人族皇朝', '大虞'] }, { name: '虞昭华', kind: 'character' }];
+    const merged = dedupeRoster([...chunk1, ...chunk2]);
+    // ★真正要保证的是"**合成一条**、三个叫法都不丢"——这是治碎块的目的。
+    //   ★而"留下哪个当 name"在**块间指向相反**时是**并列的**（两个名字都被对方指认过），
+    //     纯本地规则分不出来 ⇒ 由块顺序决胜（这里不锁死具体是哪个，只锁"合一条 + 叫法齐"）。
+    //     残留缺口已登记（G4）：要根治得知道"哪个叫法是书里的**条目名**"——那需要按块留痕，
+    //     本棒不做（老账不动、新世界先靠这条兜住）。
+    const dy = merged.filter((m) => ['人族皇朝', '大虞皇朝', '大虞'].includes(m.name));
+    assert.equal(dy.length, 1, '★三个叫法必须合成**一条**（治碎块的目的）');
+    const allNames = [dy[0].name, ...(dy[0].aliases || [])];
+    for (const n of ['人族皇朝', '大虞皇朝', '大虞']) assert.ok(allNames.includes(n), `叫法「${n}」不许丢`);
+    assert.equal(dy[0].fields?.规模, '方圆7500万里', '拼字段：已有的不丢');
+    assert.ok(merged.some((m) => m.name === '虞昭华'), '无关条目不受影响');
+    assert.ok(!merged.some((m) => m.name === '大虞'), '别名不许作为独立条目留下');
+
+    // 顺序无关性只保证**条数**（并列时留下的 name 允许随顺序变，见上）
+    assert.equal(dedupeRoster([...chunk2, ...chunk1]).filter((m) => ['人族皇朝', '大虞皇朝', '大虞'].includes(m.name)).length, 1,
+        '★块顺序颠倒后仍是**一条**（条数不受顺序影响）');
+
+    // 无别名可指认时退回书序（第一见到的留下），不许把两条都留下
+    const plain = dedupeRoster([{ name: '甲', kind: 'faction' }, { name: '甲', kind: 'faction', parent: '乙' }]);
+    assert.equal(plain.length, 1, '同名只留一条');
+    assert.equal(plain[0].parent, '乙', '缺的字段由后一条补上');
+    // 空/缺名条目直接丢（不许污染名册）
+    assert.equal(dedupeRoster([{ aliases: ['x'] }, null, { name: '  ' }]).length, 0, '缺 name 的条目丢弃');
+});
+
 test('leg24 片1 停抄书：名册轮只问 {name,kind}，抽象轮也不过问书里的上级/所在/属性', async () => {
     const src = makeBook(200);
     const rosterPrompts = [];
@@ -98,7 +132,11 @@ test('leg24 片1 停抄书：名册轮只问 {name,kind}，抽象轮也不过问
     //   ⇒ 新加的 `fields:{所属,实力}` 从缝里漏过，闸门形同没锁。现在按中文锚点切段整段解析、逐键锁死。
     const tplText = p.slice(p.indexOf('形状如下；可省字段不写 null）：') + '形状如下；可省字段不写 null）：'.length, p.indexOf('\n纪律：'));
     const tpl = JSON.parse(tplText);
-    assert.deepEqual(Object.keys(tpl.bookEntities[0]), ['name', 'kind'], '第一形态：名号 + 类别');
+    // leg25 g 改判据（用户点单「治碎块只能尽量做提示词约束吧？」）：第一形态由 `{name,kind}` 改为
+    //   **`{name,aliases,kind}`** —— `aliases` 是新增的**契约键**（`ssot.schema.js` 的 bookEntities 同步登记），
+    //   用途是让"同名多叫法"能跨块归一（模型分块抽取时看不到全书，旧法只按 name 判重 ⇒ 同一势力被收成多条空壳）。
+    //   仍**不过问**书里的上级/所在/属性（停抄书口径不倒退）。
+    assert.deepEqual(Object.keys(tpl.bookEntities[0]), ['name', 'aliases', 'kind'], '第一形态：名号 + 别名 + 类别');
     const charTpl = tpl.bookEntities.find((x) => x.kind === 'character');
     assert.deepEqual(Object.keys(charTpl.fields), ['所属', '身份', '定位', '实力'], '★角色属性组 = 所属/身份/定位/实力（v1 的 affiliation + power）');
     const facTpl = tpl.bookEntities.find((x) => x.kind === 'faction');

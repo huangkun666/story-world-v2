@@ -86,7 +86,7 @@ export function buildRosterPrompt(sourceText, declared = []) {
         JSON.stringify(
             {
                 bookEntities: [
-                    { name: '势力/角色/地名的名号（原文名）', kind: 'faction|character|location（可省）' },
+                    { name: '势力/角色/地名的名号（原文名）', aliases: ['同一实体的其他叫法（原文名，可省）'], kind: 'faction|character|location（可省）' },
                     { name: '角色名', kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份（原文）', 定位: '定位（原文）', 实力: '紧贴名号的档位标签原话（原文）' } },
                     { name: '势力名', kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '实力/规模原话（原文）' } },
                 ],
@@ -104,12 +104,32 @@ export function buildRosterPrompt(sourceText, declared = []) {
         '   势力的「规模」= 原文写明的规模/兵力/底蕴原话（如「五万大军，据许都」）；**势力的实力不写角色的档位**（那是两回事）。',
         '5. 身份/定位/性质/倾向/规模 各 **≤20 字**，没有就留空字符串，绝不写长句（输出太长会被截断导致整块作废）。',
         '6. 名号来自原文的**都要列**（宁可多不可漏——要的是完整登记册）；属性不确定的也列，字段留空即可。',
+        // ★leg25 g（用户点单「治碎块只能尽量做提示词约束吧？」）：
+        //   实测病根（真账 699 名号）：书里**一个条目**被抽成了**多个独立势力**——
+        //   书条目 `人族皇朝`（key 明写 `大虞`/`大虞皇朝`）被抽成 `大虞` + `大虞皇朝` + `大虞边境三十六凡俗小国`
+        //   三个各自独立的 faction，**每个都没有成员** ⇒ 账上 152 个势力里 108 个是空壳。
+        //   ⇒ 这三条是"一个实体只出一条 + 别名不单列 + 种族名不算势力（规则 2 的强制版）"。
+        //   ★能治什么、不能治什么（**实测**，别信直觉）：
+        //     原以为"同一块内的别名提示词能治"——**不成立**。实测大荒书 266819 字符 / 上限 60000 ⇒ **切 5 块**，
+        //     而「大虞」字样横跨第 1/2/3/5 块、定义它的那个条目 `【人族皇朝】` **只落在第 1 块** ⇒
+        //     第 2/3/5 块的模型看不到"大虞是谁的别名"，照样会把 `大虞` 单出一条。
+        //     ⇒ 提示词只能做**块内**的收敛（一个实体别在同一块里出多条）+ **把别名交出来**（`aliases`）；
+        //       **跨块的归一必须由引擎在块间合并时按"名字 ∪ 别名"做**（见下面的 `bookNames` 与 `mergeCleaned`）。
+        '7. **一个实体只出一条**。书里对同一个势力的不同叫法（条目名与它的别名、带前缀的写法，如 `人族皇朝`/`大虞`/`大虞皇朝`）',
+        '   **是同一个实体，只许出一条**，用**书里最完整、最正式的那个名字**；不许把同一个东西拆成多条、每条都标 faction。',
+        '   同一个条目里写明了"谁是谁的别名/旧称/别称"时，**把这些别的叫法放进该条的 `aliases` 数组**（照抄原文，不要自己发明叫法）。',
+        '   ⚠ 这一段原文里若**只**出现了某个叫法、而没有它所属条目的定义（比如正文里顺带提到一个势力名），',
+        '   那就**按这个名字出一条**并把你知道的别名写进 `aliases` —— 引擎会按"名字 + 别名"把跨段的重复合到一起。',
+        '8. **规则 2 是硬性要求**：纯种族/族群的群体名（人族、妖族、鬼族、魔族、灵族、仙族、神族、半妖、龙族、兽族、巫族等）',
+        '   **一个都不许标 faction**，也不要为它们单独出一条——它们不是组织。',
+        '   只有原文里**确有**一个具体组织（某族里的宗族、门派、联盟、国度、军团）才出 faction 条目，且用那个组织的名号。',
+        '   违反第 2、7、8 条 = 这一轮作废，请自己检查后重新输出（宁缺勿造：多列一条假的比漏一条更糟）。',
     ];
     // leg23 照书办①：书本段已用标签声明过的名号（如「<上界势力_蟠桃园>」）——清单给全，模型漏了也不丢。
     // 名号逐字取自原文；此处只作召回提示，类别仍按书标签在引擎侧定（不靠模型改判）。
     if (declared.length) {
         lines.push(
-            '7. 本段原文里被标签直接标出来的名号（如上界势力_／幽冥势力_／某帝麾下_ 后的名字）一个都不能漏，必须全部出现在输出里：',
+            '9. 本段原文里被标签直接标出来的名号（如上界势力_／幽冥势力_／某帝麾下_ 后的名字）一个都不能漏，必须全部出现在输出里：',
             declared.map((d) => d.name).join('、'),
         );
     }
@@ -405,18 +425,83 @@ export function chunkRows(rows, maxChar) {
     return chunks;
 }
 
+// ★leg25 g：书名录的**去重键 = 名字 ∪ 别名**（唯一一份实现，两个调用点共用——别复制，本仓吃过"两份复制品漂移"的亏）。
+//   为什么必须带别名：实体/归属都按 `name` 精确查册，书里同一个势力常有多个叫法（条目名 `人族皇朝`、
+//   key 里的 `大虞`/`大虞皇朝`）；模型分块抽取时只看得到自己那块，**跨块的别名无从归一**，
+//   旧法又只按 `name` 判重 ⇒ 同一个势力被收成多条、各自都没成员（真账 152 个势力里 108 个空壳）。
+//   纪律：名字与别名都**照抄书里的叫法**（不换算、不发明）；只做去重与拼字段，不生产新名号。
+const rosterNorm = (v) => String(v ?? '').trim();
+function rosterNamesOf(e) {
+    const out = [];
+    const push = (v) => { const s = rosterNorm(v); if (s && !out.includes(s)) out.push(s); };
+    push(e?.name);
+    for (const a of Array.isArray(e?.aliases) ? e.aliases : []) push(a);
+    return out;
+}
+// 已收下的条目吸收一个新条目的信息：**一切按"缺什么补什么"，绝不覆盖已有**（明述优先、书序/正名优先）。
+function absorbInto(kept, e, seenNames) {
+    if (!kept.kind && e.kind) kept.kind = e.kind;
+    if (!kept.parent && e.parent) kept.parent = e.parent;
+    if (!kept.location && e.location) kept.location = e.location;
+    if (!kept.race && e.race) kept.race = e.race;
+    if (e.fields && typeof e.fields === 'object') {
+        kept.fields = { ...(e.fields || {}), ...(kept.fields || {}) };   // 已有键优先
+    }
+    for (const a of (Array.isArray(e.aliases) ? e.aliases : [])) {
+        const s = rosterNorm(a);
+        // 别名里若写着另一个**完整条目名**，那该由那个条目自己承载，不要塞进别人的别名表（防自造重复）
+        if (!s || s === rosterNorm(kept.name) || seenNames.has(s)) continue;
+        if (!Array.isArray(kept.aliases)) kept.aliases = [];
+        if (!kept.aliases.includes(s)) kept.aliases.push(s);
+    }
+}
+// ★导出是为了**能被真测**（与 autoComposeSource / bookEntriesForInherit 同一治法）：
+//   跨块合并是"接线类"逻辑，只有真跑才能证明它把同义异名合掉了——否则又是"测试全绿而实机没合"。
+export function dedupeRoster(entities = []) {
+    const seenNames = new Set();          // 去重键（名字 ∪ 别名）
+    const kept = [];
+    // ★谁是正名：**被最多条目当别名指认的那个名字**（正名不该被别人当别名指）。
+    //   为什么必须这么定（实测逼出）：块2 看不到 `【人族皇朝】` 的定义，模型会把 `大虞皇朝` 当正名、
+    //   把 `人族皇朝` 写进它的 aliases —— 与块1 的指向**正好相反**。旧法"谁有别名谁赢"于是让 `大虞皇朝` 赢了，
+    //   合并结果成了 `大虞皇朝 ← [人族皇朝、大虞]`（正名错）。按"被指认次数"裁决就翻回来了：
+    //   `人族皇朝` 被指 1 次、`大虞皇朝` 被指 0 次 ⇒ 留 `人族皇朝`。
+    //   一律按"缺什么补什么"拼字段，绝不覆盖已有（明述优先）。
+    const inbound = new Map();            // 名字 → 被多少条目写成别名
+    for (const e of entities) {
+        for (const a of (Array.isArray(e?.aliases) ? e.aliases : [])) {
+            const s = rosterNorm(a);
+            if (s) inbound.set(s, (inbound.get(s) || 0) + 1);
+        }
+    }
+    const wonBy = (e) => {                // 分数越高越像正名；并列时保持原顺序（书序）
+        const ns = rosterNamesOf(e);
+        return Math.max(...ns.map((n) => inbound.get(n) || 0));
+    };
+    const ordered = entities
+        .map((e, i) => ({ e, i }))
+        .sort((a, b) => wonBy(b.e) - wonBy(a.e) || a.i - b.i)
+        .map((x) => x.e);
+    for (const e of ordered) {
+        if (!e || !rosterNorm(e.name)) continue;
+        const keys = rosterNamesOf(e);
+        const hit = keys.find((k) => seenNames.has(k));
+        if (hit) {
+            const target = kept.find((x) => rosterNamesOf(x).includes(hit));
+            if (target) absorbInto(target, e, seenNames);
+            continue;
+        }
+        for (const k of keys) seenNames.add(k);
+        kept.push(e);
+    }
+    return kept;
+}
+
 // 拆半递归（v1 tryChunk 同款精神）：块首试无效 → 对半拆（保内容，不空等重试）→ 拆不动保底重试一次 → 仍无效跳过降级。
 // 返回 cleaned | null；两半合并只取 bookEntities 并集（块级只收书名录，v1 同款）。
 function mergeCleaned(a, b) {
     if (!a) return b;
     if (!b) return a;
-    const seen = new Set(a.canon.bookEntities.map((x) => x.name));
-    const bookEntities = [...a.canon.bookEntities];
-    for (const x of b.canon.bookEntities) {
-        if (seen.has(x.name)) continue;
-        seen.add(x.name);
-        bookEntities.push(x);
-    }
+    const bookEntities = dedupeRoster([...a.canon.bookEntities, ...b.canon.bookEntities]);
     return { canon: { ...a.canon, bookEntities }, tension: a.tension, env: a.env };
 }
 
@@ -513,13 +598,10 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     // leg23 照书办①：先把书本段「结构声明」扫出来（纯函数零调用）——按块给召回清单，块后再强制并册
     const { declares: declared, usesLabelTerms } = scanBookDeclarations(src);
     if (usesLabelTerms.length) errors.push('照书办: 检测到词表判据参与声明扫描（应为形态判据，请核查）');
-    const bookSeen = new Set();
-    const bookNames = [];
-    for (const b of canonBase.canon.bookEntities) {   // 头 30k 内名号先入（书序优先）
-        if (bookSeen.has(b.name)) continue;
-        bookSeen.add(b.name);
-        bookNames.push(b);
-    }
+    // ★leg25 g：头 30k 内先抽到的名号与各块结果**先原样堆在一起**（`rawBookNames`），
+    //   等块全部跑完再**一次性**去重——不能在循环里就去重：那时后面块的别名还没出现，
+    //   先到先得会把"正名条目"当重复丢掉（块顺序只是书序，不代表哪个是正名）。
+    const rawBookNames = [...canonBase.canon.bookEntities];
     const probeState = { failures: 0 };
     let okChunks = 0;
     for (const chunk of chunks) {
@@ -529,12 +611,13 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
             continue;
         }
         okChunks += 1;
-        for (const b of cleaned.canon.bookEntities) {
-            if (bookSeen.has(b.name)) continue;
-            bookSeen.add(b.name);
-            bookNames.push(b);
-        }
+        for (const b of cleaned.canon.bookEntities) rawBookNames.push(b);
     }
+    // ★leg25 g：块收齐后**一次性**按「名字 ∪ 别名」去重。
+    //   三件事同时做：①同一实体的别名不再长成第二条（治碎块）；
+    //   ②块之间的碰撞由"自带别名者胜"裁决（不是先到先得——块顺序只是书序）；
+    //   ③拼字段（kind/parent/location/fields/aliases）一律"缺什么补什么"。
+    const bookNames = dedupeRoster(rawBookNames);
 
     // leg23 照书办②：书声明的名号**强制并册**（模型漏了也不丢）+ 照标签定类别、照标签落上级。
     // 类别覆盖只认「书声明的势力」——修正实证的 7 例误判（蟠桃园/瑶池/太昊仙洲…被判 location）；

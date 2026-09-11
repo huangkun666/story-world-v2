@@ -58,6 +58,15 @@ export const ssotSchema = {
                                                 required: ['name'],
                                                 props: {
                                                     name: { kind: 'string', minLength: 1 },
+                                                    // ★leg25 g：**别名**（书里对同一实体的其他叫法）。
+                                                    //   为什么必须有这个键：实体页/归属按 `name` 精确查册，而书里同一个势力
+                                                    //   常有多个叫法（条目名 `人族皇朝`、key 里的 `大虞`/`大虞皇朝`）——
+                                                    //   模型分块抽取时**每块只能看到自己那块**，跨块的别名无从归一，
+                                                    //   块间合并又只按 `name` 判重（`abstract.js` 的 bookNames/mergeCleaned）
+                                                    //   ⇒ 同一个势力被收成多条、各自都没成员（真账 152 个势力里 108 个空壳）。
+                                                    //   有了 aliases，块间合并就能按"名字 ∪ 别名"判重 ⇒ 别名不再长成新实体。
+                                                    //   纪律：**照抄书里的叫法**（不换算、不发明）；可省（旧世界零扰动）。
+                                                    aliases: { kind: 'array', items: { kind: 'string', minLength: 1 } },
                                                     kind: { kind: 'string', enum: ['faction', 'character', 'location'] },
                                                     parent: { kind: 'string', minLength: 1 },
                                                     location: { kind: 'string', minLength: 1 },   // leg21 补形状（此前 sanitizeCanon/关系轮已写、实体页已用，形状层漏登记 → 名册一律校验不过）；书中明述的所在/驻地
