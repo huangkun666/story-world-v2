@@ -499,7 +499,7 @@ function pickCharacter(ctx) {
     return null;
 }
 
-async function autoComposeSource() {
+export async function autoComposeSource() {
     const ctx = getCtx();
     const character = pickCharacter(ctx);
     const { entries: worldInfoEntries, worldSources } = await collectWorldInfoEntries(ctx, character);
@@ -522,7 +522,7 @@ async function autoComposeSource() {
     // 第二十五棒 e：把**真书条目**随源一起交出去——名册落账那一步（seedBookEntities）的零 token 兜底
     //   （成员行反推归属 / 紧贴名号的档位标签 / 势力规模原话）**必须读正文**，而 canon 名册条目只是名号表。
     //   这里已经收过一次条目，顺手带出，免得为了拿正文再收一遍（同一份数据取两次＝两次真实取书）。
-    res.worldInfoEntries = entries;
+    res.worldInfoEntries = worldInfoEntries;   // ← 真名是解构出来的 worldInfoEntries（`entries` 在此作用域不存在）
     return res;
 }
 
