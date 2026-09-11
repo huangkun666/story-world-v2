@@ -21,9 +21,21 @@ function clip(str, n) {
     return a.length <= n ? a.join('') : a.slice(0, n).join('');
 }
 
+export function normalizeEntryKey(e) {
+    // ★第二十五棒 e（五）：主键取值必须**处理数组**——ST 形状里 `e.key` 常是数组（`["九宸玄陆","世界总纲",…]`），
+    //   旧法 `String(e.key ?? …)` 会把它变成一长串逗号连接 ⇒ 同一本书的"世界书侧"与"卡内置侧"行**不可能相同**
+    //   ⇒ 去重**完全失效**（实测交集 0）⇒ 同一本书被送进抽取两遍（424 条 / 499,526 字符，顶到 50 万防御上限）。
+    const k = e?.key;
+    if (typeof k === 'string' && k.trim()) return k.trim();
+    if (Array.isArray(k) && k.length) return String(k[0] ?? '').trim();
+    if (Array.isArray(e?.keys) && e.keys.length) return String(e.keys[0] ?? '').trim();
+    if (typeof e?.keys === 'string' && e.keys.trim()) return e.keys.trim();
+    return String(e?.uid ?? e?.name ?? e?.comment ?? '');
+}
+
 function normalizeEntry(e) {
     if (!e || typeof e !== 'object') return null;
-    const key = String(e.key ?? (Array.isArray(e.keys) ? e.keys[0] : undefined) ?? e.uid ?? e.name ?? e.comment ?? '');
+    const key = normalizeEntryKey(e);
     const content = String(e.content ?? '').trim();
     if (!content) return null;
     return `【${key}】${content}`;

@@ -22,7 +22,7 @@ import { createIdbVolumeStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
-import { composeInitSource } from '../src/init-source.js';
+import { composeInitSource, normalizeEntryKey } from '../src/init-source.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
 import { runEntityLookupStep, runBatchLookup, pickOneForLookup, planBatches } from '../src/entity-lookup.js';
@@ -461,7 +461,30 @@ async function collectWorldInfoEntries(ctx, character) {
     if (typeof chatWi === 'string') push(chatWi); else if (Array.isArray(chatWi)) for (const n of chatWi) push(n);
     for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
     for (const n of Object.keys(ctx?.extensionSettings?.world_info ?? {})) push(n);
-    const entries = [...characterBookEntries(character)];   // 卡内置书：不依赖 loadWorldInfo，有内容就是读到了
+    // 第二十五棒 e（五）：**条目去重**（按内容指纹）——治的是"同一本书被读两遍"。
+    //   实机实测（真卡 + 真书）：卡内置 `character_book`（235 条）与 ST 挂载世界书经 `loadWorldInfo` 取回的
+    //   是**同一本书**（466/468 条内容完全相同）⇒ 旧法直接 push 到一起 ⇒ 送进抽取的文本**翻倍**
+    //   （499,526 字符 / 424 条，顶到 50 万防御上限、`truncated: true`，白烧一半 token 且有截断风险）。
+    //   旧注释只说"候选世界名去重"——**名去了重，条目没去重**，这就是那个洞。
+    //   指纹 = 正文 + 主键（正文就是"是不是同一条"的判据；主键防同文异键被误并）。
+    const fpOf = (e) => {
+        const content = String(e?.content ?? '').trim();
+        if (!content) return null;
+        return `${normalizeEntryKey(e)}\u0000${content}`;   // 与 init-source 同口径取主键（数组取首元素）
+    };
+    const entries = [];
+    const seenFp = new Set();
+    let dupEntries = 0;
+    const addEntry = (e) => {
+        if (!e || typeof e !== 'object') return;
+        const fp = fpOf(e);
+        if (fp) {
+            if (seenFp.has(fp)) { dupEntries += 1; return; }
+            seenFp.add(fp);
+        }
+        entries.push(e);
+    };
+    for (const e of characterBookEntries(character)) addEntry(e);   // 卡内置书：不依赖 loadWorldInfo，有内容就是读到了
     let loadedAny = false;
     const worldSources = [];
     for (const name of names) {
@@ -472,13 +495,14 @@ async function collectWorldInfoEntries(ctx, character) {
             const ok = Boolean(list?.length);
             if (ok) loadedAny = true;
             worldSources.push({ name, ok, entries: list?.length ?? 0 });
-            if (list) for (const e of list) if (e && typeof e === 'object') entries.push(e);
+            if (list) for (const e of list) addEntry(e);
         } catch (err) {
             worldSources.push({ name, ok: false, entries: 0 });
         }
     }
     // readable = 真读到至少一本书（含卡内置书）——**不许**把"一本书都没读到"与"书里没有该条目"混为一谈
-    return { entries, worldSources, readable: loadedAny || entries.length > 0 };
+    // dupEntries 只作诊断（同书两路来源的重复量），不进任何判据
+    return { entries, worldSources, readable: loadedAny || entries.length > 0, dupEntries };
 }
 
 // 当前聊天角色卡（第十九棒实证修正）：模块化 ST 的 getContext() 没有 character 字段——单聊取
