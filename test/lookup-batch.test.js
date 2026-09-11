@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     pickOneForLookup, forcedFields, missingFields, planBatches, runBatchLookup, resolveBookSource,
-    buildSelectPrompt, ENTITY_LOOKUP_MAX_ATTEMPTS, normalizeToPositionSet,
+    buildSelectPrompt, ENTITY_LOOKUP_MAX_ATTEMPTS, normalizeToPositionSet, deriveLocationFromBook,
 } from '../src/entity-lookup.js';
 import { renderAll, renderEntitiesHtml } from '../src/render.js';
 import { characterBookEntries, characterWorldNames, locateNameLine, locateNameSnippet, bookEntryText } from '../web/index.js';
@@ -254,6 +254,59 @@ test('leg25 d（C1）：location 只写位置集原有项（唯一断言：不�
         assert.ok(w.context.positions.includes(e.location), '★写进去的必须是位置集原有项');
         assert.equal(r.ssot.meta.entityFields.e_a.fields['位置'].位置归一, 'longest');
     });
+});
+
+// ---------- ⑦ 位置继承（零 token 结构推断）与它的安全闸 ----------
+
+test('leg25 d：位置继承——组织条目的驻地推给成员（零 token，不调模型）', () => {
+    const w = world();
+    w.context.positions = ['未明', '西极贺洲', '西极昆仑山', '玉虚秘境', '东胜沧洲', '东海浮空岛'];
+    w.entities = [
+        { id: 'e_f', kind: 'faction', name: '昆仑道宫', location: '未明' },
+        { id: 'e_c1', kind: 'character', name: '玄一道祖', location: '未明', parent: '昆仑道宫' },
+        { id: 'e_c2', kind: 'character', name: '冷霜月', location: '未明', parent: '昆仑道宫' },
+        { id: 'e_other', kind: 'character', name: '路人甲', location: '未明' },   // 不属于任何条目
+        { id: 'e_has', kind: 'character', name: '清玄真人', location: '东胜沧洲' },   // 已有位置
+    ];
+    const entries = [{
+        comment: '昆仑道宫',
+        key: ['昆仑道宫', '玉虚秘境', '西极贺洲'],
+        content: '[势力: 昆仑道宫]\n核心底蕴: 居西极贺洲西极昆仑山玉虚秘境, 天阶护山大阵。\n代表人物:\n- 玄一道祖 (男, T9渡劫巅峰): 人族守护神。\n- 冷霜月 (女, T5元婴巅峰): 黄金一代领袖。',
+    }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    const get = (id) => d.ssot.entities.find((x) => x.id === id);
+    assert.ok(d.stats.inherited >= 3, `门派自己 + 两名成员都应推定（实得 ${d.stats.inherited}）`);
+    for (const id of ['e_f', 'e_c1', 'e_c2']) {
+        assert.ok(w.context.positions.includes(get(id).location), `★${id} 的位置必须是位置集内原有项：${get(id).location}`);
+    }
+    assert.equal(get('e_c1').location, get('e_f').location, '成员的驻地 = 所属组织的驻地');
+    assert.equal(get('e_other').location, '未明', '不属于任何条目的实体不动（绝不张冠李戴）');
+    assert.equal(get('e_has').location, '东胜沧洲', '★已有位置的不覆盖（只填空位）');
+    assert.equal(w.entities.find((x) => x.id === 'e_c1').location, '未明', '纯函数：不改输入');
+});
+
+test('leg25 d：位置继承的安全闸——来源串不比地名长就不接受（防脏位置集自指错配）', () => {
+    // 实测教训：若位置集被造脏（人名混进去），宽松匹配会把「曹操」匹配上「曹操」这种自指，
+    //   一次推出满账假位置（实测脏集上一次推出 204 条，绝大多数是错的）。
+    const w = world();
+    w.context.positions = ['未明', '曹操', '韩遂', '长安'];
+    w.entities = [
+        { id: 'e_a', kind: 'character', name: '曹操', location: '未明' },
+        { id: 'e_b', kind: 'character', name: '刘备', location: '未明' },
+    ];
+    const entries = [{ comment: '曹操', key: ['曹操', '曹孟德'], content: '人物档案：曹操\n· 姓名：曹操\n· 籍贯：沛国谯县' }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    assert.equal(d.stats.inherited, 0, '★来源串「曹操」与地名「曹操」等长 ⇒ 视为自指，不推出位置');
+    assert.equal(d.ssot.entities[0].location, '未明', '不写错位置（错位置比「未明」更坏）');
+    // 来源串明显更长（真·地点包含关系）→ 接受
+    const w2 = world();
+    w2.context.positions = ['未明', '十万大山'];
+    w2.entities = [{ id: 'e_x', kind: 'faction', name: '万妖盟', location: '未明' }];
+    const d2 = deriveLocationFromBook({
+        world: w2,
+        entries: [{ comment: '万妖盟', key: ['南荒部洲·十万大山'], content: '[势力: 万妖盟]\n势力所在地: 南荒部洲·十万大山。' }],
+    });
+    assert.equal(d2.ssot.entities[0].location, '十万大山', '★来源串更长 ⇒ 接受（真包含关系）');
 });
 
 // ---------- ⑤ ★接线审计：画了按钮就必须有人接 ----------

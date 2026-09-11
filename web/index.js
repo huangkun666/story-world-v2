@@ -778,6 +778,7 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
     const res = await runBatchLookup({
         ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
         ids: [id], forceFields, tick: world?.meta?.tick ?? 0,
+        bookEntries: await bookEntriesCached(),   // 位置继承：组织条目驻地 → 成员（零 token）
     });
     if (!res.stats) return { ok: false, error: res.warning || '查书未执行' };
     writeHotMeta(hotAccountShape(res.ssot));

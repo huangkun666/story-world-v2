@@ -249,13 +249,21 @@ export async function planBatches({ world, ids = [], fields = ENTITY_LOOKUP_FIEL
  * 查**指定的一批**实体（面板单实体 / 批量补全的分批，都走这里；与每轮前置步同一收口）。
  * 与 runEntityLookupStep 的区别：不选人（名单由调用方给定），其余口径完全一致。
  */
-export async function runBatchLookup({ ssot, transport, bookText, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, tick = 0 } = {}) {
-    const out = { ssot, stats: null, warning: null, calls: 0 };
-    if (!transport || !ids.length) return out;
+export async function runBatchLookup({ ssot, transport, bookText, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, tick = 0, bookEntries = null } = {}) {
+    const out = { ssot, stats: null, warning: null, calls: 0, locationInherited: 0 };
+    if (!ids.length) return out;
+    // 位置继承是**零 token 结构推断**（组织条目驻地 → 成员），不依赖模型通道 ⇒ 没通道也照跑
+    const withInherit = (world) => {
+        if (!Array.isArray(bookEntries) || !bookEntries.length) return world;
+        const d = deriveLocationFromBook({ world, entities: null, entries: bookEntries });
+        out.locationInherited = d.stats.inherited;
+        return d.ssot;
+    };
+    if (!transport) return { ...out, ssot: withInherit(ssot) };
     const { batches, skipped } = await planBatches({ world: ssot, ids, fields, forceFields, bookText });
     if (skipped.length) out.warning = `${skipped.length} 个实体无需查（${skipped.slice(0, 3).map((s) => s.reason).join('/')}）`;
     const flat = batches.flatMap((b) => b.items);
-    if (!flat.length) return out;
+    if (!flat.length) return { ...out, ssot: withInherit(ssot) };
     const idList = flat.map((x) => x.id);
     const res = await runLookup({ world: ssot, transport, ids: idList, bookText });
     out.calls += 1;
@@ -273,7 +281,9 @@ export async function runBatchLookup({ ssot, transport, bookText, ids = [], fiel
     if (readFailed) out.warning = '查书取不到世界书原文（本轮不写「书未明述」，下轮再试）';
     const applied = applyLookup({ ssot, ids: idList, byName: res.byName, sources, tick, fields });
     out.stats = applied.stats;
-    return { ...out, ssot: noteSuccess(applied.ssot) };
+    // 查书之后再跑一遍位置继承：本批查回来的"位置"若没能归一化进集，结构推断可以补上（只填空位）
+    const finalSsot = withInherit(applied.ssot);
+    return { ...out, ssot: noteSuccess(finalSsot) };
 }
 
 export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS) {
@@ -500,34 +510,147 @@ export function lookupDisabled(ssot, tick = 0) {
     return Boolean(u && Number.isFinite(u.disabledUntil) && tick < u.disabledUntil);
 }
 
+// ---------- 位置继承（leg25 d，用户问「不能给个粗略位置吗，比如东边西边」）----------
+// 为什么这是对的解法（实测依据，别改成"让模型猜方位"）：
+//   ①**书里有现成的粗粒度**——位置集里天然存在"洲"级大区：东胜沧洲(东)/西极贺洲(西)/北俱荒洲(北)/
+//     南荒部洲(南)/中天神洲(中)，它们本身就是方位大区名。**不必发明"东边/西边"这种引擎自造词**。
+//   ②**结构可推、零 token**：算力实测（用户真书）——组织条目的"核心底蕴"明写驻地
+//     （`《昆仑道宫》核心底蕴: 居西极贺洲西极昆仑山玉虚秘境`），且条目的 `key` 里就带**位置集内的地名**
+//     （昆仑道宫 key 含 `[玉虚秘境, 西极贺洲]`）；成员（代表人物）的驻地**就是所属组织驻地**。
+//     ⇒ 只要"实体名 ∈ 某组织条目（条目名或正文成员行）"，就能从**条目结构**推出位置，不调模型、不猜。
+//   ③实测覆盖：能定位 470/1472（32%），其中 **260（18%）落到"洲"级**；剩下 68% 是
+//     `万劫不磨/万劫炼狱锁/一念化分身` 这类功法物品名——本来就不是人、没有驻地。
+// 纪律：推出的值**必须 ∈ 位置集**（引擎不发明地名）；只填空位（已有 location 的不覆盖）；
+//   只对条目里**确实属于它**的名号生效（条目名本身 / 正文 `- 名号 (…)` 成员行），绝不张冠李戴。
+const MEMBER_LINE = /^[-*·•\s]*([^\s(（:：]{2,16})\s*[（(]/gm;   // 正文成员行「- 名号 (男, T8…): …」
+
+/**
+ * deriveLocationFromBook({ world, entities, entries }) → { ssot, stats }
+ * 零 token 结构推断：组织条目的驻地 → 其成员实体的 location（归一化到位置集后写入）。
+ * 只在实体**尚无位置**（缺 location 或 location === '未明'）时生效。
+ *
+ * ★适用范围（实测，别外推）——本机制**只在两个前提同时成立**时有效：
+ *   ①位置集是一张**干净的地名表**（书里 `kind='location'` 条目被抽出来了）；
+ *   ②书里有**明述驻地**（`所在地/核心底蕴/驻地: …`）。
+ *   实测 8 本世界书：大荒两前提都满足 → 能推 ~28%；**其余 4 本 `kind=location` 条目为 0**（位置集退化成
+ *   ['未明']）⇒ 推出 0–1%。**所以它是"大荒这类结构化势力书"的能力，不是通用能力。**
+ *   ⇒ 因此本函数**宁缺勿造**：推不出就什么都不写（绝不写错位置——错位置比「未明」更坏）。
+ */
+export function deriveLocationFromBook({ world, entities = null, entries = [] } = {}) {
+    const stats = { inherited: 0, skipped: 0, assigned: [] };
+    const positions = world?.context?.positions || [];
+    if (!positions.length || !Array.isArray(entries) || !entries.length) return { ssot: world, stats };
+    const targets = (entities || world?.entities || []).filter((e) => e && e.name);
+    const byName = new Map(targets.map((e) => [String(e.name).trim(), e]));
+    // 安全闸（实测教训）：只有在**来源串明显比地名更长**时才接受——
+    //   否则脏位置集（人名/设定词混进去）会让"曹操"匹配上"曹操"这种自指，推出满账假位置。
+    //   例：来源「南荒部洲·十万大山」(9字) → 「十万大山」(4字) 可接受；
+    //       来源「曹操」(2字) → 「曹操」(2字) **拒绝**（等长 = 自指，不是"地点包含关系"）。
+    const ACCEPT = (sourceStr, loc) => {
+        const s = String(sourceStr || '').trim();
+        return loc.length >= 2 && s.length > loc.length;
+    };
+    // 条目 → 位置集内的地名（取最长，与 normalizeToPositionSet 同口径）
+    const entryLoc = (entry) => {
+        const keys = Array.isArray(entry?.key) ? entry.key : [entry?.key];
+        const cand = [];
+        for (const k of keys) {
+            const s = String(k ?? '').trim();
+            const n = normalizeToPositionSet(s, positions);
+            if (n.value && ACCEPT(s, n.value)) cand.push(n.value);
+        }
+        // 正文"核心底蕴/所在地"里的地名也收（如「居西极贺洲西极昆仑山玉虚秘境」）
+        const m = /(?:所在地|核心底蕴|驻地)[:：]?\s*([^\n。；]{2,30})/.exec(String(entry?.content || ''));
+        if (m) {
+            const s = m[1].trim();
+            const n = normalizeToPositionSet(s, positions);
+            if (n.value && ACCEPT(s, n.value)) cand.push(n.value);
+        }
+        if (!cand.length) return null;
+        cand.sort((a, b) => b.length - a.length);
+        return cand[0];
+    };
+    const patch = new Map();   // 实体 id → 位置
+    for (const entry of entries) {
+        const loc = entryLoc(entry);
+        if (!loc) continue;
+        const names = new Set();
+        const c = String(entry?.comment || '').trim();
+        if (c) names.add(c);
+        const text = String(entry?.content || '');
+        for (const m of text.matchAll(MEMBER_LINE)) names.add(m[1].trim());
+        for (const nm of names) {
+            const e = byName.get(nm);
+            if (!e) continue;
+            const has = typeof e.location === 'string' && e.location.trim() && e.location !== '未明';
+            if (has) { stats.skipped += 1; continue; }          // 已有位置不动（只填空位）
+            if (patch.has(e.id)) continue;
+            patch.set(e.id, loc);
+        }
+    }
+    if (!patch.size) return { ssot: world, stats };
+    const list = (world?.entities || []).map((e) => {
+        const loc = patch.get(e.id);
+        if (!loc) return e;
+        stats.inherited += 1;
+        stats.assigned.push(`${e.name}→${loc}`);
+        // 留痕：来源与口径都记上（可审计；不写进 attempts，因为这不是"查书"而是"结构推断"）
+        return { ...e, location: loc };
+    });
+    return { ssot: { ...world, entities: list }, stats };
+}
+
 // ---------- 一处收口：前置步（编排层调用它，web 只负责落盘） ----------
 /**
  * runEntityLookupStep({ ssot, transport, bookText, tick, moveFact, prevPicks })
  *   → { ssot, picks, warning, calls, stats }
  * 语义：选人失败 → 退回 prevPicks（再退兜底名单）；查书失败 → 不写痕；全部绝不阻塞调用方。
  */
-export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0, moveFact = null, prevPicks = null } = {}) {
-    const out = { ssot, picks: prevPicks || fallbackCandidates(ssot), warning: null, calls: 0, stats: null };
-    if (!transport || lookupDisabled(ssot, tick)) return out;
+export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0, moveFact = null, prevPicks = null, bookEntries = null } = {}) {
+    const out = { ssot, picks: prevPicks || fallbackCandidates(ssot), warning: null, calls: 0, stats: null, locationInherited: 0 };
+    if (!transport || lookupDisabled(ssot, tick)) {
+        // 查书熔断/无通道时，位置继承照样有得赚（零 token）——别把结构事实也一起停掉
+        if (Array.isArray(bookEntries) && bookEntries.length) {
+            const d = deriveLocationFromBook({ world: ssot, entries: bookEntries });
+            out.locationInherited = d.stats.inherited;
+            return { ...out, ssot: d.ssot };
+        }
+        return out;
+    }
 
     const selected = await runSelect({ world: ssot, transport, moveFact });
     out.calls += 1;
     if (!selected.picks) {
         out.warning = selected.warning;
-        return { ...out, ssot: noteFailure(ssot, tick) };   // 选人失败：退回上轮名单 + 记失败
+        const failed = noteFailure(ssot, tick);   // 选人失败：退回上轮名单 + 记失败
+        if (Array.isArray(bookEntries) && bookEntries.length) {
+            const d = deriveLocationFromBook({ world: failed, entries: bookEntries });
+            out.locationInherited = d.stats.inherited;
+            return { ...out, ssot: d.ssot };
+        }
+        return { ...out, ssot: failed };
     }
     out.picks = selected.picks;
 
     const idIndex = new Map((ssot.entities || []).map((e) => [e.id, e]));
     const need = out.picks.map((id) => idIndex.get(id)).filter(Boolean).filter((e) => missingFields(e, ssot.meta).length);
-    if (!need.length) return { ...out, ssot: noteSuccess(ssot) };   // 全部已有字段 → 零调用
+    if (!need.length) {
+        const ok = noteSuccess(ssot);   // 全部已有字段 → 零调用
+        if (Array.isArray(bookEntries) && bookEntries.length) {
+            const d = deriveLocationFromBook({ world: ok, entries: bookEntries });
+            out.locationInherited = d.stats.inherited;
+            return { ...out, ssot: d.ssot };
+        }
+        return { ...out, ssot: ok };
+    }
 
     // 与 runBatchLookup 同一收口（选定名单后的一切完全一致：取数一次用两次 / sources 语义 / 回写）
     const batch = await runBatchLookup({
-        ssot, transport, bookText, ids: need.map((e) => e.id), tick,
+        ssot, transport, bookText, ids: need.map((e) => e.id), tick, bookEntries,
     });
     out.calls += batch.calls || 1;
     out.stats = batch.stats;
+    out.locationInherited = batch.locationInherited || 0;
     if (batch.warning) out.warning = batch.warning;
     return { ...out, ssot: batch.ssot };
 }
