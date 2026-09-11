@@ -8,14 +8,14 @@ import {
     buildSelectPrompt, runSelect, fallbackCandidates,
     missingFields, buildLookupPrompt, runLookup, applyLookup,
     noteFailure, noteSuccess, lookupDisabled, runEntityLookupStep,
-    computeAgendaInvolvement, checkAgendaInvolvement,
+    computeAgendaInvolvement, checkAgendaInvolvement, normalizeToPositionSet,
 } from '../src/entity-lookup.js';
 
 // 夹具：2 势力 + 2 角色 + 1 玩家 + 1 已灭实体 + 1 不在册 id（校验面用）
 const world = (over = {}) => ({
     version: 1,
     context: {
-        world: '测试世界', tension: 0.5, positions: ['未明', '昆仑山'], playerId: 'e_p1',
+        world: '测试世界', tension: 0.5, positions: ['未明', '昆仑山', '玉虚秘境'], playerId: 'e_p1',
         setting: { frozen: { fingerprint: 'f', extractedAt: 't', canon: { bookEntities: [
             { name: '昆仑道宫', kind: 'faction' },
             { name: '玄一道祖', kind: 'character' },
@@ -124,7 +124,20 @@ test('细案 ②：有值 → 落账 + 留痕（value/from/fetchedAt/sources 齐
     assert.equal(rec.fields['实力'].from, '昆仑道宫', '记来源条目');
     assert.equal(rec.fields['实力'].fetchedAt, 3);
     assert.deepEqual(rec.sources, ['昆仑道宫'], '审计：查过哪几条');
-    assert.deepEqual(out.stats, { ok: 2, pending: 0, absent: 0, unread: 0, written: ['玄一道祖.实力=T9渡劫巅峰', '玄一道祖.位置=昆仑山玉虚秘境'] });
+    // C1（用户拍板「合并吧」）：原话留档 + location 归一化到位置集
+    const norm = normalizeToPositionSet('昆仑山玉虚秘境', w.context.positions);
+    assert.equal(e['位置'], '昆仑山玉虚秘境', '原话照抄留档（不被改写）');
+    assert.equal(rec.fields['位置'].位置归一, norm.how, '留痕：怎么归一的');
+    if (norm.value) {
+        assert.equal(e.location, norm.value, '★`location` = 位置集里那一项（集外复合写法不许直接灌进去）');
+        assert.equal(rec.fields['位置'].位置in集, norm.value);
+        assert.equal(out.stats.located, 1);
+    } else {
+        assert.equal(e.location, '未明', '★归一化不出唯一项 → **不写 location**（歧义不猜，宁缺勿造）');
+        assert.equal(out.stats.located, undefined);
+        assert.equal(out.stats.locatedMiss, 1, '记一笔"集外/歧义"供审计');
+    }
+    assert.ok(!e.location || w.context.positions.includes(e.location), '★写进去的必须是位置集原有项（引擎不发明地名）');
     assert.equal(w.entities[2]['实力'], undefined, '纯函数：不改输入');
 });
 

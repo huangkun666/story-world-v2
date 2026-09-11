@@ -315,6 +315,50 @@ export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS)
  *   是两件事，调用方必须分开处置（见 applyLookup 的 sources 语义）。兼容三种注入面：
  *   异步函数 / 同步函数 / `{ [名号]: entries[] }` 映射。
  */
+// ---------- C1（leg25 d，用户拍板「合并吧」）：查书的「位置」并入实体 `location` ----------
+// 为什么必须**归一化**后才并（实测依据，别直接写进去）：
+//   位置集是 `location` 的校验白名单（`check-step.js:99/134-140`，`location ∈ context.positions`）。
+//   实测用户账本：位置集 60 项 = 「未明 / 九宸玄陆 / 十万大山 / 中天神洲 / 中州 / 西极昆仑山 …」，
+//   而查书抽出的「位置」原话常是**复合写法**「南荒部洲·十万大山」——**不在集里**（集里是分开的两项）。
+//   ⇒ 直接把原话写进 `location` 会灌进集外值，破坏"位置集是唯一地名表"的纪律。
+// 口径（三级，宁缺勿造）：
+//   · 精确命中集中一项 → `location` = **集内那一项**（原书原话另外留档在 entityFields.fields.位置.value）
+//   · 命中多项 → 不写 location（歧义不猜），只留档
+//   · 一项都不命中 → 不写 location，只留档（查书标记照旧）
+// 引擎在这里**不发明地名**：写进去的每个值都是位置集里原有的一项。
+const LOCATION_FIELD = '位置';
+const LOCATION_FALLBACK = '未明';   // 位置集首项（derivePositions 的兜底词），永远是合法值
+
+/**
+ * normalizeToPositionSet(value, positions) → { value, how, candidates }
+ *   how = 'exact'（原话就是集内一项）| 'longest'（取集内被包含的**最长**那项）| 'none'
+ * **为什么命中多项时取"最长"而不是判歧义**（实测口径）：
+ *   用户位置集 60 项里**父子地名同时存在**（中天神洲/中州、南荒部洲/十万大山、东胜沧洲/…）。
+ *   原话「中天神洲·中州」按父区/子区都说得通，但 `location` 是"驻点"——**更具体的那一项才有用**；
+ *   判歧义会让绝大多数复合原话都写不进去（实测复合写法是主流），等于合并白做。
+ *   取最长 = "该串包含的、位置集里最具体的那个地名"，仍是**集内原有项**，引擎不发明地名。
+ *   '未明' 是兜底词，**不参与包含匹配**（否则任何含"未明"的串都会命中它）。
+ */
+export function normalizeToPositionSet(value, positions = []) {
+    const v = String(value ?? '').trim();
+    const set = (Array.isArray(positions) ? positions : []).map((p) => String(p ?? '').trim()).filter(Boolean);
+    if (!v || !set.length) return { value: null, how: 'none', candidates: [] };
+    if (set.includes(v)) return { value: v, how: 'exact', candidates: [v] };
+    const hits = set
+        .filter((p) => p !== LOCATION_FALLBACK && (v.includes(p) || p.includes(v)))
+        .map((p) => {
+            const at = v.lastIndexOf(p);
+            // 复合写法是「父区·子区」：分隔符（·/•/空格/、）**之后**的那一项才是具体驻地。
+            //   同长度时用它决胜——实测「南荒部洲·十万大山」两项都是 4 字，只按长度会错挑到大区。
+            const sepAfter = [v.lastIndexOf('·'), v.lastIndexOf('•'), v.lastIndexOf(' '), v.lastIndexOf('、'), v.lastIndexOf('　')]
+                .some((s) => s >= 0 && at > s);
+            return { p, at, sepAfter };
+        })
+        .sort((a, b) => b.p.length - a.p.length || Number(b.sepAfter) - Number(a.sepAfter) || b.at - a.at);
+    if (!hits.length) return { value: null, how: 'none', candidates: [] };
+    return { value: hits[0].p, how: 'longest', candidates: hits.map((h) => h.p) };
+}
+
 export async function resolveBookSource(bookText, entity) {
     let raw;
     try {
@@ -401,6 +445,19 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
                 attempts[f] = { count: (attempts[f]?.count ?? 0) + 1, lastTriedAt: tick, state: 'ok' };
                 stats.ok += 1;
                 stats.written.push(`${e.name}.${f}=${v}`);
+                // C1（用户拍板「合并吧」）：查书的「位置」**并入实体 `location`**——
+                //   但必须**归一化到位置集**才写（集是 location 的校验白名单，实测原话常是
+                //   「南荒部洲·十万大山」这种集外复合写法）。归一化结果记在 `位置in集`，供面板/审计看。
+                if (f === LOCATION_FIELD) {
+                    const norm = normalizeToPositionSet(v, ssot?.context?.positions);
+                    fieldsRec[f] = { ...fieldsRec[f], 位置in集: norm.value, 位置归一: norm.how };
+                    if (norm.value) {
+                        next.location = norm.value;   // 写进去的**一定是位置集里原有的一项**（引擎不发明地名）
+                        stats.located = (stats.located || 0) + 1;
+                    } else {
+                        stats.locatedMiss = (stats.locatedMiss || 0) + 1;   // 集外/歧义 → 只留档，不写 location
+                    }
+                }
                 continue;
             }
             // 没值：查书标记分开——**只有"真读到书 + 书里确实没有该条目"才允许 absent**（书未明述）；

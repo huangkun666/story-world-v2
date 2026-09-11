@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     pickOneForLookup, forcedFields, missingFields, planBatches, runBatchLookup, resolveBookSource,
-    buildSelectPrompt, ENTITY_LOOKUP_MAX_ATTEMPTS,
+    buildSelectPrompt, ENTITY_LOOKUP_MAX_ATTEMPTS, normalizeToPositionSet,
 } from '../src/entity-lookup.js';
 import { renderAll, renderEntitiesHtml } from '../src/render.js';
 import { characterBookEntries, characterWorldNames, locateNameLine, locateNameSnippet, bookEntryText } from '../web/index.js';
@@ -212,6 +212,48 @@ test('leg25 d：★测试不许自带被测逻辑（本棒踩过：镜像 helper
     // 真函数必须真的走三档（行首 / 段落 / 兜底），任何一档被摘掉都会在上一条用例里变红
     const src = String(mod.bookEntryText);
     assert.ok(src.includes('locateNameLine') && src.includes('locateNameSnippet'), '两档定位都在真函数体内');
+});
+
+// ---------- ⑥ C1：查书的「位置」并入 location（用户拍板「合并吧」） ----------
+
+test('leg25 d（C1）：位置原话归一化到位置集——**取更长者**，集外/歧义不写', () => {
+    // 夹具 = 用户真实位置集的前若干项（实测 60 项，父子地名同时存在）
+    const POS = ['未明', '九宸玄陆', '十万大山', '四海八荒', '中天神洲', '中州', '西极贺洲',
+        '西极昆仑山', '玉虚秘境', '东胜沧洲', '北俱荒洲', '不周山', '南荒部洲', '天机小世界'];
+    // ① 原话就是集内一项
+    assert.deepEqual(normalizeToPositionSet('中州', POS), { value: '中州', how: 'exact', candidates: ['中州'] });
+    // ② 复合写法 → 命中多项时**取最长**（"位置集里最具体的那个地名"）
+    const a = normalizeToPositionSet('中天神洲·中州', POS);
+    assert.equal(a.value, '中天神洲', `★取最长：${JSON.stringify(a)}`);
+    assert.equal(a.how, 'longest');
+    const b = normalizeToPositionSet('南荒部洲·十万大山', POS);
+    assert.equal(b.value, '十万大山', '★取最长（"十万大山"4字 与 "南荒部洲"4字 并列时按集序，前者先）');
+    const c = normalizeToPositionSet('东胜沧洲·青丘狐山秘境', POS);
+    assert.equal(c.value, '东胜沧洲', '只命中一项时用它');
+    // ③ 集外 → 不写
+    const d = normalizeToPositionSet('虚空夹缝·无间棋局', POS);
+    assert.equal(d.value, null, '★集外地名不写进 location（引擎不发明地名）');
+    assert.equal(d.how, 'none');
+    // ⑤ '未明' 是兜底词，**不参与包含匹配**（否则任何含"未明"的串都会命中它）
+    assert.equal(normalizeToPositionSet('未明之地', POS).value, null, '兜底词不参与 contains');
+    // ⑥ 空值安全
+    assert.equal(normalizeToPositionSet('', POS).value, null);
+    assert.equal(normalizeToPositionSet('中州', []).value, null);
+});
+
+test('leg25 d（C1）：location 只写位置集原有项（唯一断言：不发明地名）', () => {
+    const w = world();
+    w.context.positions = ['未明', '南荒部洲', '十万大山'];
+    const transport = async () => '{"玄一道祖":{"实力":"T8大乘中期","位置":"南荒部洲·十万大山"}}';
+    const bookText = async () => ({ ok: true, entries: [{ name: '混乱之地·万妖盟', text: '- 玄一道祖 (男, T8大乘中期): 盟主。所在地: 南荒部洲·十万大山' }] });
+    return import('../src/entity-lookup.js').then(async ({ runBatchLookup }) => {
+        const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 7 });
+        const e = r.ssot.entities.find((x) => x.id === 'e_a');
+        assert.equal(e['位置'], '南荒部洲·十万大山', '原话照抄留档');
+        assert.equal(e.location, '十万大山', 'location = 集内更长的那一项');
+        assert.ok(w.context.positions.includes(e.location), '★写进去的必须是位置集原有项');
+        assert.equal(r.ssot.meta.entityFields.e_a.fields['位置'].位置归一, 'longest');
+    });
 });
 
 // ---------- ⑤ ★接线审计：画了按钮就必须有人接 ----------
