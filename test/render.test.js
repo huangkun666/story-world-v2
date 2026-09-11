@@ -15,6 +15,13 @@ import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+// leg25 f：实体页的 markup 是**模板字符串折行拼出来的**，标签之间可能有换行/缩进 ⇒
+//   断言如果直接写死相邻标签，会因为源码折行的位置变化而假红（实测踩过两次）。
+//   这个助手把"空白"折成"可有可无"：`has(html, '>实力<b>未查</b>')` 能命中 `>\n  <b>未查</b>`。
+const has = (html, snippet) => new RegExp(
+    snippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'),
+).test(html);
+
 function world() {
     const w = JSON.parse(readFileSync(path.join(ROOT, 'test', 'fixtures', 'live-world.json'), 'utf8'));
     w.context.playerId = 'e_player';
@@ -184,7 +191,8 @@ test('K34 角色与势力页：全量表（位置/实力文本/谋划/最近活�
     assert.ok(!html.includes('ATTR_HINTS') && !html.includes('sw2-eattr" title="兵力'),
         '旧的属性释义悬停（ATTR_HINTS）不得回潮');
     assert.match(html, /sw2-ename">黄坤<small>你的棋子/);
-    assert.match(html, /最近活跃<br>第45轮/);
+    // leg25 f 版式重做：活跃度改用「安静标签 + 轮次」两行（标签不再与值同权重）
+    assert.match(html, /sw2-quiet-note">最近活跃<\/span><br>第45轮/);
     w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', status: 'dead' });
     const html2 = renderEntitiesHtml(w);
     assert.match(html2, /覆灭阁/);
@@ -203,14 +211,18 @@ test('leg25 c：属性区（实力/位置的查书标记）无障碍双通道—
     const withPower = renderEntitiesHtml(w);
     assert.ok(withPower.includes('title="实力：书里明述的原话（角色字段；势力不写实力）"'),
         '悬停释义在位（鼠标通道）');
-    assert.ok(withPower.includes('<span class="sw2-visually-hidden">实力：书里明述的原话。</span>实力<b>T9渡劫巅峰</b>'),
+    // leg25 f 版式重做：属性改「标签 + 值」竖排；**无障碍双通道保持**——
+    //   sr 文本仍与实值同处一个容器（先释义、后原话），只是中间夹了一层 aria-hidden 的视觉标签。
+    assert.ok(withPower.includes('<span class="sw2-visually-hidden">实力：书里明述的原话。</span><i aria-hidden="true">实力</i><span class="sw2-relval">T9渡劫巅峰</span>'),
         '视障通道在位：sr 文本先释义、后原话（读屏用户拿得到同一信息）');
     // ② 未查态（没轮到查它）：悬停释义同样要在——否则这一格对读屏用户是空白
     assert.ok(html.includes('title="实力：还没轮到查它'), '实力未查态有悬停释义');
-    assert.ok(html.includes('title="位置：还没轮到查它'), '位置未查态有悬停释义（两条通道不因"无值"而消失）');
-    // 势力行不摆实力栏（用户拍板）：势力行的属性区不应出现"实力"chip
-    const factionRow = html.split('<div class="sw2-entity-row').find((seg) => seg.includes('>薛铁衣<'));
-    assert.ok(factionRow && !factionRow.includes('实力<b>'), '势力行内不得渲染实力 chip');
+    // leg25 f 版式重做：位置的查书标记收进关系区的位置行（有真位置时位置行显示值）。
+    //   本夹具的三条势力没有位置行（势力不摆实力/位置两栏）；位置列那一格自己带解释。
+    assert.ok(html.includes('sw2-c-loc'), '位置列在位');
+    // 势力行不摆实力栏（用户拍板）：势力行内不得出现实力值
+    const factionRow = html.split('<div class="sw2-entity-row').find((seg) => seg.includes('薛铁衣'));
+    assert.ok(factionRow && !factionRow.includes('<i aria-hidden="true">实力</i>'), '势力行内不得渲染实力行');
     // 片5 注脚 + 细案查书标记改写：有值/未加载到/书未明述 三句分清
     assert.ok(html.includes('账上只记查到的与玩出来的东西'), '注脚行在位（说清"有值/未加载到/书未明述"三态）');
 });
@@ -231,6 +243,7 @@ test('leg25 d 回归：属性区 title 属性不得被内层裸双引号截断�
     // ② 未查态那句完整释义必须整句在位（截断时后半句会掉出属性）
     assert.ok(html.includes('查过之后这里会写「未加载到」或「书未明述」）"'),
         '★未查态悬停文案整句在位（截断 bug 会让后半句掉出 title）');
+    // leg25 f 追加：新增的**位置列注释 title** 也在上面 ① 的机械扫描里（new 文案同样不许带裸引号）
     assert.ok(!/title="[^"]*"[^<>]*"\s*>/.test(html), '不得出现"属性提前闭合 + 游离文字"的残迹');
 });
 
@@ -246,16 +259,22 @@ test('细案 spec-entity-field-lookup：实力/位置查书标记在面板上是
         e_wanfa: { attempts: { 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] },
     };
     const html = renderEntitiesHtml(w);
-    assert.ok(html.includes('实力<b>T9渡劫巅峰</b>'), '①有值 → 显示原文原话（文本类型，不做任何加工）');
+    assert.ok(html.includes('<i aria-hidden="true">实力</i><span class="sw2-relval">T9渡劫巅峰</span>'), '①有值 → 显示原文原话（文本类型，不做任何加工）');
     assert.ok(!html.includes('三万铁骑'), '②势力不显示实力栏（哪怕账上有值也不渲染——用户拍板）');
-    assert.ok(html.includes('实力<b>未加载到</b>'), '③查过但模型没给 → 明说"未加载到"（绝不写成"书里没有"）');
+    assert.ok(has(html, '>实力<b>未加载到</b>'), '③查过但模型没给 → 明说"未加载到"（绝不写成"书里没有"）');
     assert.ok(html.includes('书未明述'), '④书里确实没写 → 才说"书未明述"');
+    // 势力行不摆实力栏：本夹具里**唯一**有 e_wanfa 的位置态，它不得渲染出"实力"那一栏
+    const wanfaRow = html.split('<div class="sw2-entity-row').find((seg) => seg.includes('万法阁'));
+    assert.ok(wanfaRow && !wanfaRow.includes('title="实力：'), '势力行内不出现实力栏（连接都不能有）');
     // ★第二十五棒修正（用户实拍"根本看不到属性"）：从没查过的那一栏也必须显形，否则整栏空白=用户以为没这功能
     const w2 = world();
     w2.entities.push({ id: 'e_c3', kind: 'character', name: '从没查过的人', location: '未明' });
     const html2 = renderEntitiesHtml(w2);
-    assert.ok(html2.includes('实力<b>未查</b>'), '★没查过 → 显示"实力：未查"（不是空白）');
-    assert.ok(html2.includes('位置<b>未查</b>'), '★位置同理：没查过显示"位置：未查"');
+    // leg25 f：未查态的标签在 chip 的 title 里（chip 文本只写「未查」，免得与关系区标签重复）
+    //   ⇒ 判据：用 title 认"这是哪一栏"，用 <b>未查</b> 认"它是未查态"。
+    assert.ok(html2.includes('title="实力：还没轮到查它'), '★没查过 → 实力行有标记（title 认栏）');
+    assert.ok(html2.includes('title="位置：还没轮到查它'), '★位置同理：没查过 → 位置行有标记');
+    assert.ok(html2.includes('<b>未查</b>'), '★未查态真的渲染出来了（不是空白）');
     assert.ok(html2.includes('账上只记查到的与玩出来的东西'), '注脚把查书标记讲清');
 });
 
@@ -265,10 +284,11 @@ test('细案 spec-entity-field-lookup：势力的实力由麾下成员派生显�
     const member = { id: 'e_m1', kind: 'character', name: '玄一道祖', location: '未明', parent: faction.name, '实力': 'T9渡劫巅峰' };
     w.entities.push(member);
     const html = renderEntitiesHtml(w);
-    assert.ok(html.includes('麾下实力：玄一道祖（T9渡劫巅峰）'), '势力行显示麾下各成员的档位原话（派生，不落势力字段）');
-    // 势力自己那格不得出现实力 chip：把该势力的行切出来单独看
-    const row = html.split(`<div class="sw2-entity-row`).find((seg) => seg.includes(`>${faction.name}<`));
-    assert.ok(row && !row.includes('实力<b>'), `势力行内不得渲染实力 chip：${String(row).slice(0, 80)}`);
+    // leg25 f 版式重做：麾下名单与「麾下实力」改成分行（标签在 `<i>` 里，值与标签同容器）
+    assert.ok(html.includes('<i>麾下实力</i>玄一道祖（T9渡劫巅峰）'), '势力行显示麾下各成员的档位原话（派生，不落势力字段）');
+    // 势力自己那格不得出现实力行：把该势力的行切出来单独看
+    const row = html.split(`<div class="sw2-entity-row`).find((seg) => seg.includes(faction.name));
+    assert.ok(row && !row.includes('<i aria-hidden="true">实力</i>'), `势力行内不得渲染实力行：${String(row).slice(0, 80)}`);
 });
 
 test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客观）；环境键书没给就标「书未明述」', () => {
@@ -281,11 +301,16 @@ test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客�
     w.entities.forEach((e) => { e.location = '未明'; });
     const html = renderEntitiesHtml(w);
     // 第二十五棒修正（用户实拍："第一个未明是位置未明，后面还有一个位置未明是不是多了"）：
-    //   位置列已经说明"没载到"，标记列不再重复打「位置未明」徽章；位置列本身写「未载」。
-    assert.match(html, /sw2-eloc">未载</, '位置没载到 → 位置列写「未载」（不再显示重复的"未明"）');
+    //   位置列已经说明"没载到"，标记区不再重复打「位置未明」徽章；位置列本身写「未载」。
+    // leg25 f：位置列那格改虚线 chip（同一句话，但不再与名号抢注意力）。
+    assert.match(html, /sw2-eattr nodata"[^>]*>未载</, '位置没载到 → 位置列写「未载」（不再显示重复的"未明"）');
     assert.ok(!html.includes('位置未明'), '★撤销重复的「位置未明」徽章（同一事实不再说两遍）');
     assert.ok(!html.includes('数值无据'), 'leg25 c：四维不存在 → "数值无据"这个说法不再出现');
-    assert.match(html, /实力\/位置未查（轮到时会按需去世界书取原话）/, '属性区空态 → 一句人话解释（不是空白、不是假数）');
+    // leg25 f：属性空态改成**逐栏三态标记**（实力行/位置行各说各的），不再是一整句占位文案。
+    //   （未查态的标签在 title 里——chip 文本只写「未查」，避免与关系区的 <i>标签</i> 重复。）
+    assert.ok(html.includes('title="实力：还没轮到查它') && html.includes('<b>未查</b>'), '实力空态 → 行内标「未查」（不是空白、不是假数）');
+    assert.ok(html.includes('title="位置：还没轮到查它'), '位置空态 → 行内标「未查」（与位置列同一事实）');
+    assert.ok(!html.includes('实力/位置未查（轮到时会按需去世界书取原话）'), '旧的一整句占位文案已撤（改逐栏标记）');
     assert.ok(!/0\.15|0\.25/.test(html), '不出现任何默认值冒充的数据');
     // 环境四键：书没给的显示「书未明述（无据）」，不给 0.5
     const bare = structuredClone(w);
@@ -409,6 +434,37 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
     assert.match(digest, /天时不作美/, '环境危险带经时局句副句（世情面，不属张力）');
 });
 
+test('leg25 f：实体页版式——「一栏一义」+ 空态退成虚线 chip（用户实拍"能不能美化一下"逼出的重做）', () => {
+    // 旧版两个可读性问题（用户截图的直接观感）：
+    //   ① 没有位置时渲染成**裸字「未载」**，却独占 74px 一整列、与名号同一基线 ⇒ 最没信息的词最显眼；
+    //   ② 规模/上级/分支/机构/麾下/麾下实力**全挤进一个 div 连成长段** ⇒ 糊成一团。
+    // 本用例把"新版式"的三条结构性判据锁住（不是锁措辞，是锁结构）：
+    const w = {
+        version: 1, context: { world: 'x', tension: 0.5, positions: ['x'], playerId: 'e_p' },
+        entities: [
+            { id: 'e_p', kind: 'character', name: '你', location: 'x' },
+            { id: 'e_f', kind: 'faction', name: '昆仑道宫', location: '未明', '规模': '正道仙门魁首', branches: ['盐帮'] },
+            { id: 'e_c', kind: 'character', name: '玄一道祖', location: '未明', parent: '昆仑道宫', '实力': 'T9渡劫巅峰' },
+        ],
+        weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 0 },
+    };
+    const html = renderEntitiesHtml(w);
+    // ① 每格一义：六个格子类名各就各位
+    for (const cls of ['sw2-c-name', 'sw2-c-loc', 'sw2-c-rel', 'sw2-c-agenda', 'sw2-c-active', 'sw2-c-act']) {
+        assert.ok(html.includes(`class="sw2-cell ${cls}"`), `格子 ${cls} 在位（一栏一义）`);
+    }
+    // ② 空态一律走虚线 chip：位置列的「未载」不再是与名号同权重的裸字
+    assert.ok(html.includes('<span class="sw2-eattr nodata" title="还没轮到查它'),
+        '★位置列的「未载」是虚线 chip + 自带解释 title（旧版是裸字）');
+    // ③ 关系区是**竖排行**（标签 + 值），不再是连成长段的一大坨
+    assert.ok(html.includes('class="sw2-relations"'), '关系区有独立容器');
+    assert.ok(html.includes('<i>规模</i><span class="sw2-relval">正道仙门魁首</span>'), '规模单独成行（标签 + 值）');
+    assert.ok(html.includes('<i>隶属</i><span class="sw2-relval">昆仑道宫</span>'), '隶属单独成行');
+    assert.ok(html.includes('<i>分支</i><span class="sw2-relval">盐帮</span>'), '分支单独成行');
+    // ④ 真实值用 sw2-relval（正色）；空态才用 nodata —— 两类信息不许长一个样
+    assert.ok(!html.includes('<span class="sw2-relval">未明</span>'), '★占位词「未明」绝不作为"值"渲染出来');
+});
+
 test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）', () => {
     const w = {
         version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] },
@@ -423,11 +479,12 @@ test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）'
     const html = renderEntitiesHtml(w);
     assert.ok(html.includes('全部角色与势力（全册 3 · 本轮镜头 3）'), '全册/镜头计数');
     assert.ok(html.includes('在场'), '镜头徽');
-    assert.ok(html.includes('分支：盐帮、漕帮'), '分支表展示');
-    assert.ok(html.includes('隶属：盐帮') && html.includes('隶属：青龙会'), '角色隶属展示');
+    assert.ok(html.includes('<i>分支</i><span class="sw2-relval">盐帮、漕帮</span>'), '分支表展示');
+    assert.ok(html.includes('<i>隶属</i><span class="sw2-relval">盐帮</span>') && html.includes('<i>隶属</i><span class="sw2-relval">青龙会</span>'), '角色隶属展示');
     // leg25 b（A1）：麾下成员序由「分量序」改**名号序**（确定性；片3「引擎不拿数值排序」的最后一处）。
     //   注意名号序是 **Unicode 码点序**（不是拼音序）：乙 U+4E59 < 甲 U+7532，故乙在前。
-    assert.ok(html.includes('麾下：弟子乙、弟子甲'), '麾下成员派生（含分支成员，按名号序）');
+    // leg25 f 版式重做：麾下名单与「麾下实力」改成分行（标签在 `<i>` 里、名单换行 ⇒ 顺序可直接断言）
+    assert.ok(html.includes('<i>麾下</i>弟子乙、弟子甲'), '麾下成员派生（含分支成员，按名号序）');
     const text = html.replace(/<[^>]*>/g, '');
     for (const term of BLACKLIST) assert.ok(!text.includes(term), `实体页含禁词「${term}」`);
 });

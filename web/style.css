@@ -181,15 +181,46 @@
 .sw2-list-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
 .sw2-list-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
 .sw2-entity-list{display:flex;flex-direction:column;gap:7px;}
-.sw2-entity-row{display:grid;grid-template-columns:150px 74px 130px 1fr 1.6fr 96px;gap:10px;align-items:center;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 13px;}
+/* leg25 f 版式重做（用户实拍「能不能美化一下这个 ui」）：
+   旧版 6 列 `150/74/130/1fr/1.6fr/96px` 把「未载」这种空态单独塞进一整列，还和名号同基线 ⇒
+   最没信息的词占最显眼的位置；而规模/上级/麾下/麾下实力全挤在同一个 div 里连成长段 ⇒ 糊成一团。
+   新版：**每格一义**（身份 / 位置 / 关系属性 / 在办盘算 / 活跃 / 操作），实值加重、空态一律退成
+   虚线小 chip；关系属性改成「标签 + 值」的竖排行（带左侧细脊线），长名单（麾下）才换行。 */
+.sw2-entity-row{display:grid;grid-template-columns:160px 104px minmax(0,1.05fr) minmax(0,1fr) 74px 96px);
+    gap:12px;align-items:start;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);
+    border-radius:9px;padding:11px 14px;}
 .sw2-entity-row.sw2-player{border-style:dashed;border-color:var(--sw2-amber-dim);}
-.sw2-ename{font-weight:700;font-size:14px;}
-.sw2-ename small{display:block;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
-.sw2-eloc{font-size:12px;color:var(--sw2-text-dim);}
+.sw2-cell{min-width:0;}
+.sw2-ename{font-weight:700;font-size:14.5px;line-height:1.35;}
+.sw2-ename small{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;margin-top:2px;}
+/* 位置：实值用正文色（它是真事实），空态退成虚线 chip —— 与「未查/未加载到」同一套语言 */
+.sw2-c-loc{font-size:12px;color:var(--sw2-text-dim);padding-top:2px;}
+.sw2-locval{color:var(--sw2-text);}
+/* 关系与属性：竖排「标签 + 值」，标签定宽对齐 ⇒ 一眼扫下来能比 */
+.sw2-relations{display:flex;flex-direction:column;gap:3px;}
+.sw2-relrow{display:flex;align-items:baseline;gap:6px;font-size:12.5px;line-height:1.5;}
+.sw2-relrow i{font-style:normal;flex:none;width:42px;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+.sw2-relval{color:var(--sw2-text);min-width:0;overflow-wrap:anywhere;}
+.sw2-crew{margin-top:4px;font-size:12px;line-height:1.6;color:var(--sw2-text-dim);overflow-wrap:anywhere;}
+.sw2-crew i{font-style:normal;color:var(--sw2-text-faint);font-size:10.5px;letter-spacing:1px;margin-right:6px;}
+.sw2-crew-pow{color:var(--sw2-text-faint);}
+.sw2-orphan{font-size:11px;color:var(--sw2-text-faint);font-style:italic;margin-top:2px;}
+/* 在办盘算：这一行的主句 */
+.sw2-agline{font-size:13px;line-height:1.5;}
+.sw2-aggoal{color:var(--sw2-text);font-weight:600;}
+.sw2-agstage{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;}
+.sw2-aidle{font-size:12px;color:var(--sw2-text-faint);font-style:italic;}
+.sw2-c-active{font-size:11.5px;color:var(--sw2-text-faint);text-align:right;padding-top:2px;}
+.sw2-c-act{text-align:right;}
 .sw2-ecert{display:flex;flex-wrap:wrap;gap:5px;}
 .sw2-eattrs{display:flex;gap:5px;flex-wrap:wrap;}
 .sw2-eattr{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
 .sw2-eattr b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;margin-left:3px;}
+/* 空态 chip（未载/未查/未加载到/书未明述）：虚线 + 淡色 —— 让"没有数据"看起来就是没有数据。
+   位置列那一格再收一点内边距：它是行里最次要的信息，不该有实值那样的分量。 */
+.sw2-eattr.nodata{background:transparent;border:1px dashed var(--sw2-line-soft);color:var(--sw2-text-faint);}
+.sw2-eattr.nodata b{color:var(--sw2-text-faint);}
+.sw2-c-loc .sw2-eattr.nodata{padding:1px 6px;font-size:10.5px;}
 .sw2-eagenda{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.5;}
 .sw2-eagenda b{color:var(--sw2-text);font-weight:600;}
 .sw2-eactive{font-size:11.5px;color:var(--sw2-text-faint);text-align:right;}
