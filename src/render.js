@@ -395,7 +395,9 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
             + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}</small>${lensBadge}</div>`
             + `<div class="sw2-eloc">${
                 (e.location && e.location !== '未明')
-                    ? escapeHtml(e.location)
+                    ? escapeHtml(e.location) + (world.meta?.entityFields?.[e.id]?.位置来源 === '结构推导'
+                        ? `<small class="sw2-quiet-note" title="这条位置是引擎从组织条目结构推出来的（成员驻地=所属组织驻地），**不是书里对这个名号的明述**">（推）</small>`
+                        : '')
                     : (lookupState('位置') === 'absent' ? '书未明述' : '未载')   // 未查过与查过没给，都是"没载到"
             }</div>`
             + `<div class="sw2-ecert">${marks}</div>`

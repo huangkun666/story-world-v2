@@ -13,7 +13,7 @@ export function renderStreams(world, stage, moveFact) {
     for (const c of stage.chronicle) observer.push(`◆ [tick ${c.tick}] ${c.text}`);
 
     // 各方位置与动作（位置来自世界状态，§3.2）
-    observer.push(`📍 各方位置：${world.entities.map((e) => `${e.name} @ ${e.location}`).join('、')}`);
+    observer.push(`📍 各方位置：${world.entities.map((e) => `${e.name} @ ${e.location}${world.meta?.entityFields?.[e.id]?.位置来源 === '结构推导' ? '（推）' : ''}`).join('、')}`);
 
     // 当前格局
     const open = (world.agendas || []).filter((a) => !a.closed);

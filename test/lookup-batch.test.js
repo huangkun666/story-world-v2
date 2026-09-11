@@ -309,6 +309,49 @@ test('leg25 d：位置继承的安全闸——来源串不比地名长就不接�
     assert.equal(d2.ssot.entities[0].location, '十万大山', '★来源串更长 ⇒ 接受（真包含关系）');
 });
 
+test('leg25 d：★位置来源必须落账且外显——"书里明述"与"结构推导"不许混为一谈', async () => {
+    // 用户质疑（2026-09-11）：「既然不是通用的，这种功能有啥用，还不能保证会不会帮倒忙」。
+    //   要害在这里：推出来的位置**会进模型 prompt**（pack.js 实体行 / streams 的「各方位置」）。
+    //   不标明来源 ⇒ 模型把推导当书里的明述事实用 ⇒ 推错就是喂给模型的假事实。
+    //   故：①账上记 `位置来源`；②喂模型/注入文本/面板都带「（推）」标记。
+    const w = world();
+    w.context.positions = ['未明', '西极昆仑山'];
+    w.entities = [{ id: 'e_c1', kind: 'character', name: '玄一道祖', location: '未明' }];
+    const entries = [{
+        comment: '昆仑道宫', key: ['西极贺洲·西极昆仑山'],
+        content: '[势力: 昆仑道宫]\n核心底蕴: 居西极贺洲西极昆仑山, 天阶护山大阵。\n代表人物:\n- 玄一道祖 (男, T9渡劫巅峰): 人族守护神。',
+    }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    assert.equal(d.ssot.entities[0].location, '西极昆仑山', '推定成功');
+    assert.equal(d.ssot.meta.entityFields.e_c1.位置来源, '结构推导', '★账上标"结构推导"');
+    assert.equal(d.ssot.meta.entityFields.e_c1.位置来源自, '昆仑道宫', '★记"从哪一条推出来的"（可审计）');
+    // ② 外显：注入文本带（推）
+    const { renderStreams } = await import('../src/streams.js');
+    const s = renderStreams(d.ssot, { chronicle: [], warnings: [] }, null);
+    assert.ok(s.observer.join('\n').includes('玄一道祖 @ 西极昆仑山（推）'), '★注入文本必须标（推）');
+    // ③ 面板也标
+    const html = renderEntitiesHtml(d.ssot, {});
+    assert.ok(html.includes('（推）'), '★面板位置列标（推）');
+    // ④ 书里明述的来源不被推导降级
+    const w2 = world();
+    w2.context.positions = ['未明', '西极昆仑山'];
+    w2.entities = [{ id: 'e_c2', kind: 'character', name: '清玄真人', location: '未明' }];
+    w2.meta.entityFields = { e_c2: { 位置来源: '书里原话', fields: {}, attempts: {} } };
+    const d2 = deriveLocationFromBook({ world: w2, entries });
+    assert.equal(d2.ssot.meta.entityFields.e_c2?.位置来源, '书里原话', '★"书里原话"不被结构推导覆盖（明述 > 推导）');
+});
+
+test('leg25 d：查书抽到的位置标"书里原话"（与结构推导分开）', async () => {
+    const w = world();
+    w.context.positions = ['未明', '十万大山'];
+    w.entities = [{ id: 'e_a', kind: 'character', name: '玄一道祖', location: '未明' }];
+    const transport = async () => '{"玄一道祖":{"位置":"南荒部洲·十万大山"}}';
+    const bookText = async () => ({ ok: true, entries: [{ name: '万妖盟', text: '所在地: 南荒部洲·十万大山' }] });
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 4 });
+    assert.equal(r.ssot.entities[0].location, '十万大山');
+    assert.equal(r.ssot.meta.entityFields.e_a.位置来源, '书里原话', '★模型从原话抽的 ⇒ "书里原话"');
+});
+
 // ---------- ⑤ ★接线审计：画了按钮就必须有人接 ----------
 test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（防"按钮画了没人接"）', async () => {
     // 这一条治的是本棒反复踩的那类病：接线断了而测试全绿（异步 bookText / 卡挂世界指针都是这么漏的）。

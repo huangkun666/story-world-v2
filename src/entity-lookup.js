@@ -444,6 +444,7 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
         const reply = owner && owner.id === id ? (byName[e.name] ?? null) : null;
         const next = { ...e };
         let changed = false;
+        const provenance = {};   // 本次回写要落到 entityFields 的来源标记（如「位置来源」）
 
         for (const f of fields) {
             const v = reply && typeof reply[f] === 'string' ? reply[f].trim() : '';
@@ -461,6 +462,8 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
                 if (f === LOCATION_FIELD) {
                     const norm = normalizeToPositionSet(v, ssot?.context?.positions);
                     fieldsRec[f] = { ...fieldsRec[f], 位置in集: norm.value, 位置归一: norm.how };
+                    // 来源落账：模型从原文原话抽的 ⇒ "书里原话"（与结构推导的"位置来源"分开存）
+                    provenance.位置来源 = '书里原话';
                     if (norm.value) {
                         next.location = norm.value;   // 写进去的**一定是位置集里原有的一项**（引擎不发明地名）
                         stats.located = (stats.located || 0) + 1;
@@ -485,6 +488,7 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
             fields: fieldsRec,
             attempts,
             sources: [...new Set([...(rec.sources || []), ...(readOk ? src : [])])],
+            ...provenance,
         };
     }
     return {
@@ -585,19 +589,29 @@ export function deriveLocationFromBook({ world, entities = null, entries = [] } 
             const has = typeof e.location === 'string' && e.location.trim() && e.location !== '未明';
             if (has) { stats.skipped += 1; continue; }          // 已有位置不动（只填空位）
             if (patch.has(e.id)) continue;
-            patch.set(e.id, loc);
+            patch.set(e.id, { loc, from: String(entry?.comment || '').trim() });   // 连"哪一条推出来的"一起记
         }
     }
     if (!patch.size) return { ssot: world, stats };
+    const prevMeta = world?.meta || {};
+    const entityFields = { ...(prevMeta.entityFields || {}) };
     const list = (world?.entities || []).map((e) => {
-        const loc = patch.get(e.id);
-        if (!loc) return e;
+        const hit = patch.get(e.id);
+        if (!hit) return e;
         stats.inherited += 1;
-        stats.assigned.push(`${e.name}→${loc}`);
-        // 留痕：来源与口径都记上（可审计；不写进 attempts，因为这不是"查书"而是"结构推断"）
-        return { ...e, location: loc };
+        stats.assigned.push(`${e.name}→${hit.loc}`);
+        // ★留痕：这条位置是**结构推出**的，不是书里明述的（用户质疑"会不会帮倒忙"——
+        //   区别必须落账，否则模型分不清"书里写的"与"引擎推的"，推错就成了喂给模型的假事实）。
+        //   与查书留痕（`fields.位置`）分开存：`位置来源` ∈ {'书里原话','结构推导'}。
+        const rec = entityFields[e.id] ? { ...entityFields[e.id] } : {};
+        entityFields[e.id] = {
+            ...rec,
+            // 已标过"书里原话"的不降级（书里明述 > 结构推导）
+            ...(rec.位置来源 === '书里原话' ? {} : { 位置来源: '结构推导', 位置来源自: hit.from }),
+        };
+        return { ...e, location: hit.loc };
     });
-    return { ssot: { ...world, entities: list }, stats };
+    return { ssot: { ...world, entities: list, meta: { ...prevMeta, entityFields } }, stats };
 }
 
 // ---------- 一处收口：前置步（编排层调用它，web 只负责落盘） ----------

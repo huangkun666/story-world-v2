@@ -105,6 +105,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
     const entityRow = (e, mode) => {
         if (mode === 'idOnly') return { id: e.id, name: e.name };   // 最坏情况的兜底形态（视野仍在：还有名字）
         const row = { id: e.id, kind: e.kind, name: e.name, location: e.location };
+        // leg25 d：**位置是"结构推出"还是"书里明述"必须让模型看出来**——不标的话它就当书里的
+        //   事实用（用户质疑"推错会不会帮倒忙"）。来源落账在 meta.entityFields[id].位置来源。
+        const locSrc = ssot.meta?.entityFields?.[e.id]?.位置来源;
+        if (row.location && locSrc === '结构推导') row.locationNote = '（推）';
         if (e.parent) row.parent = e.parent;                      // C7：从属（角色→势力/分支）
         // 细案 spec-entity-field-lookup：按需查书补的 `实力`（文本）随行入包——**角色才有**
         //   （势力不写实力，用户拍板；势力实力在面板用麾下成员派生显示）。引擎不读它、不进任何公式。
