@@ -15,6 +15,7 @@ import {
     hotAccountShape, loadHotAccount, planChronicleRotation, countLedgerEntries,
 } from '../src/storage.js';
 import { seedBookEntities } from '../src/abstract.js';
+import { seedAndBackfill } from '../web/index.js';
 
 const LIMITS = { ticks: 5, bytes: 5 * 1024 * 1024 };
 
@@ -218,6 +219,77 @@ test('E4 落盘失败如实可见：saveChat 抛错 → flushed=false（不谎�
     assert.equal(r.flushed, false, '落盘失败 → 确认位 false（web 侧据此上状态条/控制台）');
 });
 
+// ============ 第二十五棒 e：名册落账**可重入**（挂世界加载，补已建好的世界）============
+// 病根：老世界的账是**当年那份代码**建的（leg24 后只搬 name/kind）⇒ 归属/档位/规模那块永远缺，
+//   而账是持久化的、没有重入点 ⇒ 缺一辈子。治法：把这一步做成幂等可重入，挂在 worldLoad 上。
+// 安全性质（本组三条锁）：只填空栏 + 不新建实体 + 不碰世界进度 + 幂等（第二次零变化）。
+function oldWorld() {
+    // 「老代码建的世界」：实体在册，但**没有任何 parent/实力/规模**（leg24 后的账就是这个形状）
+    return {
+        version: 1,
+        meta: { tick: 42, simLog: [{ tick: 42, warnings: [] }] },
+        context: {
+            world: '测试州', tension: 0.5, positions: ['未明'],
+            setting: { frozen: { canon: { bookEntities: [
+                { name: '昆仑道宫', kind: 'faction' },
+                { name: '清玄真人', kind: 'character' },
+                { name: '散修甲', kind: 'character' },
+                { name: '玄一道祖', kind: 'character' },
+            ] } } },
+        },
+        entities: [
+            { id: 'e_bk_1', kind: 'faction', name: '昆仑道宫', location: '未明' },
+            { id: 'e_bk_2', kind: 'character', name: '清玄真人', location: '未明' },
+            { id: 'e_bk_3', kind: 'character', name: '散修甲', location: '未明' },
+            { id: 'e_bk_4', kind: 'character', name: '玄一道祖', location: '未明' },
+        ],
+        weights: { e_bk_1: 0.85, e_bk_2: 1, e_bk_3: 1, e_bk_4: 1 },
+        agendas: [{ id: 'a_1' }], events: [{ id: 'ev_1' }], chronicle: [{ id: 'ch_1', tick: 42, text: '旧事' }], milestones: [],
+    };
+}
+const BOOK_ENTRIES = [
+    { comment: '昆仑道宫', content: '[势力: 昆仑道宫 (正道仙门魁首)]\n- 清玄真人 (男, T7合体中期): 掌教。\n- 玄一道祖 (男, T9渡劫巅峰): 人族守护神。', key: ['昆仑道宫'] },
+];
+
+test('leg25 e：可重入补齐——已建好的世界加载时补上归属/档位/规模（零 token，不新建实体）', () => {
+    const w = oldWorld();
+    const r = seedAndBackfill(w, { entries: BOOK_ENTRIES });
+    assert.equal(r.seed.seeded, 0, '★不新建实体（老账户一个都不加）');
+    assert.equal(r.changed, true, '有补齐 ⇒ 需要落盘');
+    assert.ok(r.backfilled >= 3, `补齐计数可见（实际 ${r.backfilled}）`);
+    const qing = w.entities.find((e) => e.name === '清玄真人');
+    assert.equal(qing.parent, '昆仑道宫', '★成员行反推出归属');
+    assert.equal(qing['实力'], 'T7合体中期', '★紧贴名号的档位原话照抄');
+    assert.equal(w.entities.find((e) => e.name === '昆仑道宫')['规模'], '正道仙门魁首', '★势力规模原话照抄');
+    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, undefined, '书里没有依据的：不许凭空挂（被反驳=refuted）');
+    // 世界进度一个字节都不许动
+    assert.equal(w.meta.tick, 42);
+    assert.equal(w.chronicle.length, 1);
+    assert.equal(w.agendas.length, 1);
+    assert.equal(w.events.length, 1);
+    assert.equal(Object.keys(w.weights).length, 4);
+    assert.equal(w.entities.length, 4);
+});
+
+test('leg25 e：可重入幂等——第二次加载零变化（不产生无谓落盘）', () => {
+    const w = oldWorld();
+    seedAndBackfill(w, { entries: BOOK_ENTRIES });
+    const snap = JSON.stringify(w);
+    const r2 = seedAndBackfill(w, { entries: BOOK_ENTRIES });
+    assert.equal(r2.changed, false, '★第二次 changed=false ⇒ loadWorld 不写盘');
+    assert.equal(r2.backfilled, 0);
+    assert.equal(r2.seed.seeded, 0);
+    assert.equal(JSON.stringify(w), snap, '世界逐字节不变');
+});
+
+test('leg25 e：取不到正文 ⇒ 退回老行为（只搬名册字段，不误判、不报错）', () => {
+    const w = oldWorld();
+    const r = seedAndBackfill(w, { entries: [] });          // 书没读到
+    assert.equal(r.seed.seeded, 0, '不新建实体');
+    assert.equal(r.changed, false, '无书可读 ⇒ 零变化（不空写；下轮读到书再补）');
+    assert.equal(w.entities.find((e) => e.name === '清玄真人').parent, undefined, '没有正文就不许猜归属');
+});
+
 test('web/index.js 接线回归锁：模块可加载（顶层零 DOM 守卫不破）+ 三处修复点仍在文件里', async () => {
     // ①真加载：web/index.js 的纪律是「模块顶层零 DOM」（node --test 可动态导入）——动态导入真跑一遍，
     //   比文本匹配强（语法/顶层雷/顶层 DOM 访问都会当场炸）。
@@ -234,5 +306,8 @@ test('web/index.js 接线回归锁：模块可加载（顶层零 DOM 守卫不�
     assert.match(src, /if \(!rot(?:ation)?\.ok\) throw new Error\(rot(?:ation)?\.error\)/, 'E2：队列 save 面把轮转失败抛出去（不静默当成功）');
     assert.doesNotMatch(src, /catch \(_\) \{\s*return world;\s*\}/, 'E2：旧「吞异常返回原世界」实现已消失');
     assert.match(src, /seedBookEntities\(/, 'E4：名册入账仍在 loadWorld 入口');
+    assert.match(src, /seedAndBackfill\(/, 'leg25 e：loadWorld 走可重入收口 seedAndBackfill（不是内联老逻辑）');
+    assert.match(src, /worldBookCached\(\)/, 'leg25 e：可重入补齐要拿真书正文（零 token 兜底靠它）');
+    assert.match(src, /seedBookEntities\(seed, \{ entries:/, 'leg25 e：初始化创建世界时也把真书正文交给名册落账');
     assert.match(src, /flushHotMeta\(\)/, 'E4：名册入账后有显式落盘路径');
 });

@@ -744,7 +744,28 @@ export function factionScaleFromEntry(content, name) {
     return '';
 }
 
-export function seedBookEntities(ssot) {
+/**
+ * seedBookEntities(ssot, { entries }) → { seeded, folded, skippedLocation, warnings, fieldsAttached?, parentVerified?, parentDemoted? }
+ * 名册 → 实体账（幂等：已在册的按名号跳过，**不重建、不覆盖**——这条有测试锁）。
+ *
+ * `entries`（可选，第二十五棒 e 追加）：**真书条目**（`{ comment/name, content, key }`）——
+ *   为什么需要它：名册条目 `canon.bookEntities` **不带正文**（它只是名号表），而零 token 兜底
+ *   （成员行反推归属 / 紧贴名号的档位标签 / 势力规模原话）**必须读正文**才跑得动。
+ *   ⇒ 初始化链路与**存量世界补齐**共用这一条路径：传了 entries 就有兜底，不传则只有模型抽来的字段。
+ *   纯函数纪律：只读 entries，不改它；调用方传入自己的副本。
+ */
+export function seedBookEntities(ssot, { entries = null } = {}) {
+    const rawEntries = Array.isArray(entries) ? entries.filter((e) => e && typeof e === 'object') : [];
+    const contentOfBookName = new Map();
+    const keyOfBookName = new Map();
+    for (const e of rawEntries) {
+        const nm = String(e.comment ?? e.name ?? '').trim();
+        if (!nm) continue;
+        if (!contentOfBookName.has(nm)) {
+            contentOfBookName.set(nm, String(e.content ?? ''));
+            keyOfBookName.set(nm, e.key);
+        }
+    }
     const book = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
     if (!book.length) return { seeded: 0, folded: 0, skippedLocation: 0, warnings: [] };
     const positions = ssot.context?.positions || [];
@@ -783,6 +804,7 @@ export function seedBookEntities(ssot) {
     //   建索引的来源只有一处：书条目里被判为 **kind=faction** 的名号 + 其正文成员行。
     //   ★为什么必须限定 kind=faction：实测把"小节标题/泛称"当节点会推出「散修→散修」「虞昭华→人族皇朝」（假关系）。
     const orgRosterMap = new Map();
+    const contentFor = (b) => (typeof b?.content === 'string' && b.content ? b.content : (contentOfBookName.get(String(b?.name).trim()) ?? ''));
     for (const b of book) {
         const canonName = resolveCanonName(b.name);
         const canonItem = canonName ? idx.get(canonName) : null;
@@ -790,7 +812,7 @@ export function seedBookEntities(ssot) {
         if (!isFaction) continue;
         const m = /^[-*·•\s]*([^\s(（:：、,]{2,20})\s*[（(]/gm;
         const set = new Set();
-        for (const mm of String(b.content ?? '').matchAll(m)) set.add(mm[1].trim());
+        for (const mm of contentFor(b).matchAll(m)) set.add(mm[1].trim());
         if (!set.size) continue;
         // 登记在**书条目名**（复合名）与 **canon 名**（短名）两个键下——模型写哪个都该认。
         for (const key of [b.name, canonName].filter(Boolean)) {
@@ -960,10 +982,10 @@ export function seedBookEntities(ssot) {
         textOfName.set(k, textOfName.has(k) ? `${textOfName.get(k)}\n${text}` : text);
     };
     for (const b of book) {
-        const content = String(b.content ?? '');
+        const content = contentFor(b);
         if (!content) continue;
         addText(b.name, content);
-        for (const nm of rosterOfOrg(b)) addText(nm, content);
+        for (const nm of rosterOfOrg({ content })) addText(nm, content);
     }
     const tierWords = (ssot.context?.setting?.frozen?.canon?.powerScale || []).map((p) => String(p?.level ?? '')).filter(Boolean);
 
@@ -1006,7 +1028,7 @@ export function seedBookEntities(ssot) {
             fieldsAttached += 1;
         }
         // 势力「规模/性质」同款兜底（`[势力: X (原话)]` / `核心底蕴: 原话`）——势力不写角色档位，只抄它自己的原话。
-        const entryTextOf = new Map(book.map((b) => [String(b.name).trim(), String(b.content ?? '')]));
+        const entryTextOf = new Map(book.map((b) => [String(b.name).trim(), contentFor(b)]));
         for (const e of ssot.entities || []) {
             if (e.kind !== 'faction' || (typeof e['规模'] === 'string' && e['规模'].trim())) continue;
             const src = entryTextOf.get(e.name) || textOfName.get(e.name);

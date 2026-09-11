@@ -18,7 +18,7 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   第二十五棒 d 追加：查书前置步的异步 bookText 修通 + **取书路径改 ST 官方指针**
 //   （`data.extensions.world`，旧法读 `character.world` 恒空 ⇒ 取书 0 条 ⇒ 假「书未明述」）
 //   + 未查态 title 属性截断修复 + **查书补全三件套**（批量补全/单实体重查/选人可见）。
-export const PANEL_BUILD = 'leg25e-v1-affiliation';
+export const PANEL_BUILD = 'leg25e-reentry-backfill';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

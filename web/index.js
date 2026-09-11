@@ -519,6 +519,10 @@ async function autoComposeSource() {
             });
         } catch (_) {}
     }
+    // 第二十五棒 e：把**真书条目**随源一起交出去——名册落账那一步（seedBookEntities）的零 token 兜底
+    //   （成员行反推归属 / 紧贴名号的档位标签 / 势力规模原话）**必须读正文**，而 canon 名册条目只是名号表。
+    //   这里已经收过一次条目，顺手带出，免得为了拿正文再收一遍（同一份数据取两次＝两次真实取书）。
+    res.worldInfoEntries = entries;
     return res;
 }
 
@@ -966,6 +970,20 @@ function shortErr(err) {
 }
 
 // 世界注入入口（K36 推进后 / 导入后 / 加载热账后调用）
+// 第二十五棒 e：名册落账（**可重入**）——世界加载与初始化共用同一个收口。
+// 为什么需要它：这一步在 leg24 之后只搬 name/kind，而**已建好的世界是持久化的**（账停在当年那份代码上）
+//   ⇒ 归属/档位/规模那块永远缺。把它做成幂等可重入、挂在世界加载上 ⇒ 老世界一刷新就自己补上。
+// 安全性质（全部有测试锁）：幂等（第二次 zero 变化）、只填空栏、不新建实体（`seeded` 恒 0）、
+//   零 token（纯读真书正文，不调模型）、不碰世界进度（tick/事件/盘算/编年/权重/已查字段）。
+// 提成导出函数是为了**能被真测**：写在 loadWorld 里就只能测它的复制品（本仓纪律：测试不许自带被测逻辑的复制品）。
+export function seedAndBackfill(hotWorld, { entries = [] } = {}) {
+    const before = countLedgerEntries(hotWorld);
+    const seed = seedBookEntities(hotWorld, { entries });
+    const seededDelta = countLedgerEntries(hotWorld) - before;
+    const backfilled = (seed.fieldsAttached ?? 0) + (seed.parentVerified ?? 0);
+    return { seed, seededDelta, backfilled, changed: seed.seeded > 0 || seededDelta > 0 || backfilled > 0 };
+}
+
 export async function loadWorld() {
     resetBookCache();   // leg25 d：换聊天/换卡/换世界 ⇒ 取书缓存必须失效（它按会话缓存全量世界书）
     const meta = readHotMeta();
@@ -993,13 +1011,22 @@ export async function loadWorld() {
     const hotWorld = migrated;   // 迁移返回新对象（不可变风格）——后续一律用迁移后的世界
     // 审计修复 E4：名册入账只改内存（seedBookEntities 就地 push 实体 + 预填权重）→ 账本真变了就落盘。
     // 变没变只认 countLedgerEntries 前后差（幂等：没变不写盘，不产生无谓写盘）。
-    const before = countLedgerEntries(hotWorld);
-    const seed = seedBookEntities(hotWorld);   // K37 生通道① + 第十九棒 K43：书名录幂等入账（全量棋盘：无席位截断、子势力折叠、权重预填）
-    const seededDelta = countLedgerEntries(hotWorld) - before;
-    if (seed.seeded > 0 || seededDelta > 0 || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
+    // 第二十五棒 e：**名册落账这一步做成可重入**（挂在世界加载上）——老账停在老代码上（当年只搬 name/kind），
+    //   这一步幂等、零 token、只填空栏、不新建实体（`seeded` 恒 0）、不碰世界进度 ⇒ 每次加载重跑安全。
+    //   真书正文从取书缓存拿（同一次会话只读一遍）；取不到就退回"只有名册字段"的老行为，绝不阻塞加载。
+    let bookEntriesForSeed = [];
+    try {
+        const cachedBook = await worldBookCached();
+        bookEntriesForSeed = cachedBook?.entries || [];
+    } catch (err) {
+        console.warn('[story-world-v2] 名册落账：取书失败（本轮只有名册字段，零 token 兜底跳过）', String(err?.message || err));
+    }
+    const { seed, seededDelta, backfilled, changed } = seedAndBackfill(hotWorld, { entries: bookEntriesForSeed });
+    if (changed || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(hotWorld));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
-        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta });
+        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta, backfilled });
+        else if (backfilled > 0) console.info('[story-world-v2] 名册落账可重入：本次补齐', { 归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0 });
     }
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(hotWorld, { oldVolumes: LISTED_VOLUMES });
@@ -1169,7 +1196,9 @@ if (typeof window !== 'undefined') {
                 // D 组修复（leg25）：位置集 = 书里现成的地名（kind='location' 条目 + 各条目明述的所在）
                 // + 兜底词「未明」永远在集内。旧法写死 ['未明'] → 全员同位置、移动不可能。
             };
-            seedBookEntities(seed);
+            // 第二十五棒 e：初始化创建世界时就把真书正文交给名册落账（零 token 兜底要用正文）；
+            //   随后 `loadWorld()` 还会再跑一次（幂等）——两处同一条路径，谁先跑都不重不漏。
+            seedBookEntities(seed, { entries: src.worldInfoEntries || [] });
             // B 组接线：世界必须真的有一枚玩家棋子（否则五条"禁写玩家"守卫、掩码、影响通道全是死的）。
             // leg25 c：开档描述的**四维解析整段删除**（那个小调用连同 player-setup/player-inject 两个模块一起没了）
             //   ——四维浮点已不存在（没法精确表示；手拍值让"编的"看起来像"算的"）。
