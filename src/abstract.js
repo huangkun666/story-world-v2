@@ -439,7 +439,7 @@ function rosterNamesOf(e) {
     return out;
 }
 // 已收下的条目吸收一个新条目的信息：**一切按"缺什么补什么"，绝不覆盖已有**（明述优先、书序/正名优先）。
-function absorbInto(kept, e, seenNames) {
+function absorbInto(kept, e) {
     if (!kept.kind && e.kind) kept.kind = e.kind;
     if (!kept.parent && e.parent) kept.parent = e.parent;
     if (!kept.location && e.location) kept.location = e.location;
@@ -447,45 +447,88 @@ function absorbInto(kept, e, seenNames) {
     if (e.fields && typeof e.fields === 'object') {
         kept.fields = { ...(e.fields || {}), ...(kept.fields || {}) };   // 已有键优先
     }
-    for (const a of (Array.isArray(e.aliases) ? e.aliases : [])) {
-        const s = rosterNorm(a);
-        // 别名里若写着另一个**完整条目名**，那该由那个条目自己承载，不要塞进别人的别名表（防自造重复）
-        if (!s || s === rosterNorm(kept.name) || seenNames.has(s)) continue;
-        if (!Array.isArray(kept.aliases)) kept.aliases = [];
-        if (!kept.aliases.includes(s)) kept.aliases.push(s);
-    }
 }
 // ★导出是为了**能被真测**（与 autoComposeSource / bookEntriesForInherit 同一治法）：
 //   跨块合并是"接线类"逻辑，只有真跑才能证明它把同义异名合掉了——否则又是"测试全绿而实机没合"。
 //
-// ★裁决口径（**故意保持最简**，见下方"为什么砍掉复杂裁决"）：
-//   去重键 = **名字 ∪ 别名**；先见到的条目当正名（`name`），其余叫法全部进它的 `aliases`；字段"缺什么补什么"。
+// ★口径（**故意保持最简**）：
+//   把每条条目的 `name` 与它的 `aliases` 看成同一实体的多个叫法 → **并查集合并**（同组 = 同一实体）；
+//   每组取**最先出现**的那个叫法当 `name`，组内其余叫法全进 `aliases`；字段"缺什么补什么"，绝不覆盖。
 //
-// 为什么砍掉复杂裁决（如实留档，别再加回去）：
-//   为了让"书里更正式的那个名字"胜出，我先加了一套排序裁决（书里真有 `【名】` 条目 > 不是长名截断 >
-//   被指认次数 > 名字长度 > 书序）。**四层规则，每层都在修上一层的洞**，而且当场出真 bug：
+// ★为什么是并查集而不是"逐个查表合并"（**对抗式自查当场抓出的真 bug**）：
+//   旧写法是"来一条、找它有没有和已收下的撞名"，只能合**直连**的一对。实测真模型输出是这样的**链**：
+//     `人族皇朝 ← [大虞、大虞皇朝]` 与 `大虞皇朝 ← [大虞]`（两块各出一条，共享 `大虞`）
+//   ⇒ 旧法把第一条收下、第二条"没撞上已收的名字"又收下 ⇒ **留下 2 条，碎片没治好**（目的本身没达成）。
+//   并查集是机械的：只要两个叫法出现在同一条里，它们就同组；组与组还会**传递合并**（A→B→C 也是 1 条）。
+//
+// 为什么砍掉"复杂裁决"（如实留档，别再加回去）：
+//   为了让"书里更正式的那个名字"胜出，我曾加一套排序裁决（书里真有 `【名】` 条目 > 不是长名截断 >
+//   被指认次数 > 名字长度 > 书序）。**四层规则，每层都在修上一层的洞**，且当场出真 bug：
 //   `isTruncation` 写宽了一点 ⇒ `【名号10】` 里的"名号1"被判成截断 ⇒ `名号1000..1999` 排到队尾、
-//   反而先被收下，再把真正的 `名号0..999` 当别名吃掉（`名号0` 跑到第 1990 位，既有书序锁当场红）。
-//   教训：**"哪个叫法当 name"是次要诉求**（碎片化治没治好、叫法丢没丢才是主诉求），
-//   为一个次要诉求叠四层判据，收益小、面积大、还引入了新的错法。故整组裁掉。
-//   代价（如实登记 G4）：正名可能落到一个较短的叫法上（如 `大虞皇朝` 而不是 `人族皇朝`）；
+//   反而先被收下，再把真正的 `名号0..999` 当别名吃掉（既有书序锁当场红）。故整组裁掉。
+//   代价（如实登记 G4）：正名可能落到一个较短叫法上（如 `大虞皇朝` 而不是 `人族皇朝`）；
 //   **但所有叫法都保留在 aliases 里**，按名字或别名查册都能命中 ⇒ 对下游（归属/位置/展示）无影响。
 export function dedupeRoster(entities = []) {
-    const seenNames = new Set();          // 去重键（名字 ∪ 别名）
-    const kept = [];
+    // ① 只留有名字的条目（顺手去掉"名字/别名里的空白与非法项"——别名表里的 ""/null/数字一律不进来）
+    const items = [];
     for (const e of entities) {
         if (!e || !rosterNorm(e.name)) continue;
-        const keys = rosterNamesOf(e);
-        const hit = keys.find((k) => seenNames.has(k));
-        if (hit) {
-            const target = kept.find((x) => rosterNamesOf(x).includes(hit));
-            if (target) absorbInto(target, e, seenNames);
-            continue;
+        const aliases = [];
+        for (const a of (Array.isArray(e.aliases) ? e.aliases : [])) {
+            if (typeof a !== 'string') continue;              // 非字符串不是叫法
+            const s = rosterNorm(a);
+            if (s && s !== rosterNorm(e.name) && !aliases.includes(s)) aliases.push(s);
         }
-        for (const k of keys) seenNames.add(k);
-        kept.push(e);
+        items.push({ e, name: rosterNorm(e.name), aliases });
     }
-    return kept;
+    // ② 并查集：把"同一条里出现过的叫法"全并到一组（父指针 + 路径压缩）
+    const parent = new Map();
+    const find = (x) => {
+        let r = x;
+        while (parent.get(r) !== r) r = parent.get(r);
+        while (parent.get(x) !== r) { const nx = parent.get(x); parent.set(x, r); x = nx; }
+        return r;
+    };
+    const union = (a, b) => {
+        if (!parent.has(a)) parent.set(a, a);
+        if (!parent.has(b)) parent.set(b, b);
+        const ra = find(a); const rb = find(b);
+        if (ra !== rb) parent.set(rb, ra);
+    };
+    for (const it of items) {
+        if (!parent.has(it.name)) parent.set(it.name, it.name);
+        for (const a of it.aliases) union(it.name, a);
+    }
+    // ③ 分组：组内叫做法的**首次出现顺序**决定谁当 name（先见到的当正名）
+    const order = new Map();                                  // 叫法 → 首次出现序号
+    let seq = 0;
+    for (const it of items) {
+        for (const n of [it.name, ...it.aliases]) if (!order.has(n)) order.set(n, seq++);
+    }
+    const groups = new Map();                                 // 根 → [叫法…]
+    for (const n of order.keys()) {
+        const r = find(n);
+        if (!groups.has(r)) groups.set(r, []);
+        groups.get(r).push(n);
+    }
+    // ④ 每组产出**一条**：name = 组内最先出现的叫法；其余叫法进 aliases；字段按书序"缺什么补什么"
+    const out = [];
+    for (const members of groups.values()) {
+        members.sort((a, b) => order.get(a) - order.get(b));
+        const inGroup = new Set(members);                     // 本组叫法（含链上的中间叫法）
+        const primary = members[0];
+        const kept = { name: primary };
+        if (members.length > 1) kept.aliases = members.slice(1);
+        for (const it of items) {
+            // 只要这条条目的任何一个叫法落进本组，它就是本组成员 ⇒ 字段并入
+            if (!inGroup.has(it.name) && !it.aliases.some((a) => inGroup.has(a))) continue;
+            absorbInto(kept, it.e);
+        }
+        out.push(kept);
+    }
+    // ⑤ 组间按"该组最先出现的叫法"排回书序（保持确定性，仍是书序）
+    out.sort((a, b) => order.get(a.name) - order.get(b.name));
+    return out;
 }
 
 // 拆半递归（v1 tryChunk 同款精神）：块首试无效 → 对半拆（保内容，不空等重试）→ 拆不动保底重试一次 → 仍无效跳过降级。
