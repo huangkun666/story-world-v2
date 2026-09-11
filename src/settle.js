@@ -10,7 +10,12 @@ import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.j
 
 export const AGENDA_CAPS = { perTick: 2, open: 15, topLevel: 5 };
 const AGENDA_STAGE_FALLBACK = '谋划';   // 新盘算缺省阶段（ssot schema 要求 stage 非空）
-export const VERDICT_HURT_THRESHOLD = 0.05;   // K15 败露判据（细案 §3.4，T3 已拍板；提案态——随 GC 数字一并报批）
+// leg25 f（用户拍板「X1 认账简化」）：`VERDICT_HURT_THRESHOLD = 0.05` **已删除**。
+//   它曾是 K15「败露」判据的阈值（报批 #11 定案）。原判据吃 `hurtWindow`（近 2 tick 负向 δ），
+//   而该字段随四维属性一起失去写入方（全仓无写入点、真账 563 实体里 0 个有它）⇒ 判据恒假、
+//   分支永不可达、常量成死参数。**不新造判据**（引擎没有任何"计划被打回"的客观输入，见下 adjudicate 注释），
+//   改为把满步终局措辞从「达成」收回为「结清」——引擎只证明"期满收摊"，不下"此事办成了"的判断。
+//   全文依据：`docs/spec-failure-verdict-and-visibility.md` §2。旧值留档：0.05（报批 #11）。
 
 // K19 事件产率上限 / 链尾结清窗（因果链细案 §3.1/§3.2，T1/T2 已拍板；均提案态——曲线支撑：
 // 产率 max 4/tick 开局、稳态 1（细案 §1 配套曲线）；正式报批走报批支线，铁律 2/8）
@@ -55,25 +60,39 @@ const entityName = (world, id) => world.entities.find((e) => e.id === id)?.name 
 //   后者一旦成立，前者不再需要——四维整体不存在了。
 export const ATTRS_REMOVED_AT = 'attrsRemovedAt';
 export const LEGACY_ATTRS_PURGED = 'legacyAttrsPurged';
+// ★leg25 f：本口同时负责**第二个已死字段** `hurtWindow`（保留函数名以免动一大片调用面，职责写在这里）。
+//   `hurtWindow` 是"近 2 tick 负向 δ"窗口，唯一消费者是已删除的「败露」判据，`ssot.schema` 里也已摘掉该键
+//   （`additional:false` ⇒ 残留会让整份文档校验不过）。**两处摘除都是无条件、幂等的**——这正是治
+//   "删字段只删一半"那个老洞：不做"没 attrs 就原样返回"的提前退出，否则"只有 hurtWindow 残留"的账
+//   会带着字段过 schema、越走越远（ledger 里 `attrs 只删了一半` 的同类病）。
 export function migrateLegacyAttrs(ssot) {
     if (!ssot || typeof ssot !== 'object') return ssot;
     const meta = ssot.meta || {};
-    if (meta[ATTRS_REMOVED_AT] !== undefined) return ssot;   // 已摘过：原样返回（幂等）
     const purged = {};
     let changed = false;
+    let hurtDropped = 0;
     const entities = (ssot.entities || []).map((e) => {
-        if (!e.attrs || typeof e.attrs !== 'object' || !Object.keys(e.attrs).length) return e;
-        purged[e.id] = e.attrs;                              // 旧值留档（不许无声消失）
-        changed = true;
+        const hasAttrs = e.attrs && typeof e.attrs === 'object' && Object.keys(e.attrs).length;
+        const hasHurt = e.hurtWindow !== undefined;
+        if (!hasAttrs && !hasHurt) return e;
         const next = { ...e };
-        delete next.attrs;
+        if (hasAttrs) { purged[e.id] = e.attrs; delete next.attrs; }   // 旧值留档（不许无声消失）
+        if (hasHurt) { delete next.hurtWindow; hurtDropped += 1; }
+        changed = true;
         return next;
     });
     if (!changed) return ssot;                                // 无可摘即不改一字（幂等：字节一致）
+    // ★闸门语义（leg25 f 修正）：`attrsRemovedAt` 只是"attrs 那一轮迁过"的**留痕**，不再是提前退出的理由——
+    //   提前退出正是"只残留 hurtWindow 的账带着死字段过 schema"那个洞的成因。
+    //   闸门改为**写一次不改**（既有值优先），既保住"值不变"的口径，也不再拿它当跳过清理的借口。
     return {
         ...ssot,
         entities,
-        meta: { ...meta, [ATTRS_REMOVED_AT]: meta.tick ?? 0, [LEGACY_ATTRS_PURGED]: { ...(meta[LEGACY_ATTRS_PURGED] || {}), ...purged } },
+        meta: {
+            ...meta,
+            [ATTRS_REMOVED_AT]: meta[ATTRS_REMOVED_AT] ?? meta.tick ?? 0,
+            ...(Object.keys(purged).length ? { [LEGACY_ATTRS_PURGED]: { ...(meta[LEGACY_ATTRS_PURGED] || {}), ...purged } } : {}),
+        },
     };
 }
 
@@ -82,9 +101,11 @@ export function migrateLegacyAttrs(ssot) {
 //   （边界钳制、首值落账、静默方自我增强被拒、空裁定措辞、属性编年、hurtWindow 输入）——
 //   四维浮点既然不存在（没法精确表示；手拍值让"编的"看起来像"算的"，design-core §4 第 1 条），
 //   契约层连 `stateChanges` 整条都删了，这里自然无可裁。
-//   ⚠️ 连带后果（如实登记，勿当 bug）：盘算"败露"判据原本吃 hurtWindow（近 2 tick 负向 δ），
-//     负向 δ 随属性消失 ⇒ 败露分支失去输入（hurtWindow 恒为空，判据落到达成一侧）。
-//     这是"删掉那个数"的直接后果；要恢复"败露"得另立**不依赖假精度**的判据（待拍板，未擅自发明）。
+//   ✅ leg25 f 处置（用户拍板「X1 认账简化」）：连带后果**已收口**，不再是欠账——
+//     满步终局的「败露」支与 `VERDICT_HURT_THRESHOLD` **一并删除**；措辞由「达成」改「**结清**」。
+//     依据：引擎手上没有任何"计划被打崩/落空"的客观输入（`agenda` 不落 `source`；父终结时
+//     `parentId` 被 delete；`memory.done` 只记"做过什么"；50 tick 合成跑满步盘算 done=3、"起手未动"0 例）
+//     ⇒ 与其新造一个数字，不如把结论收回引擎职权边界内。详见 `docs/spec-failure-verdict-and-visibility.md` §2。
 function adjudicate(world, step, tick, warnings) {
     const checked = checkWorldStep(step, world);
     if (!checked.ok) {
@@ -376,12 +397,21 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
         if (a.progress >= a.maxSteps) {
             a.closed = true;
             closedIds.add(a.id);
-            // K15 满步三态（细案 §3.4 → A-6；模型无直接终结通道，结局全归引擎）：
-            // 判序 = 变形（有在飞子 → 事业移交诸子，断链转独立）→ 败露（近 2 tick 负 δ ≥0.05 提案）→ 达成。
-            // 判序决策（记台账）：托孤优先——任何有在飞子的终结必先断链，子盘算不悬挂已死之父；
-            // 败露/达成只在无子时按伤害窗口裁决；三种终止都终结产果（§4.4④）。
+            // 满步终局（K15 细案 §3.4 → A-6 的 leg25 f 修订；模型无直接终结通道，结局全归引擎）：
+            //   判序 = **变形**（有在飞子 → 事业移交诸子，断链转独立）→ **结清**（无子时期满收摊）。
+            // ★leg25 f 修订（用户拍板「X1 认账简化」，细案 `spec-failure-verdict-and-visibility.md` §2）：
+            //   原第三支「败露」**已删除**——它的判据吃 `hurtWindow`（近 2 tick 负向 δ），
+            //   而那个字段随四维属性一起失去写入方（实测：真账 563 实体里 0 个有它），
+            //   ⇒ `|0| >= 0.05` 恒假 ⇒ **该分支永不可达**，且 `VERDICT_HURT_THRESHOLD` 成了死参数。
+            //   为什么不是"另立一条判据"而是删掉：引擎手上**根本没有任何"计划被打崩/落空"的客观输入**
+            //   （`agenda` 不落 `source`；父终结时 `parentId` 被 delete；`memory.done` 只记"做过什么"），
+            //   实测 50 tick 合成跑满步盘算 `memory.done=3`——"起手未动"0 例。
+            //   ⇒ 与其造一个新数字（触碰「宁缺勿造」），不如**把结论收回到引擎的职权边界内**：
+            //   引擎能证明的只有"步数走完了、没人拦"，所以措辞从「达成」（= 对世界下判断）改为
+            //   **「结清」**（= 账房把这一笔收摊）——与红线 1「引擎不裁胜负」同源。
+            //   "未竟而终"由既有通道承担：模型提议取消（K22：提议 + 理由 + 引擎裁决 + 托孤 + 联闭）。
             const sons = world.agendas.filter((x) => x.parentId === a.id && !x.closed);
-            let verdict = '达成';
+            let verdict = '结清';
             if (sons.length) {
                 verdict = '变形';
                 for (const s of sons) delete s.parentId;   // 诸子断链转独立（树在结算中演化）
@@ -392,31 +422,19 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
                     kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
                 });
             } else {
-                const owner = world.entities.find((x) => x.id === a.owner);
-                const hw = owner?.hurtWindow || [0, 0];
-                if (Math.abs((hw[0] ?? 0) + (hw[1] ?? 0)) >= VERDICT_HURT_THRESHOLD) {
-                    verdict = '败露';
-                    chronicle.push({
-                        id: `ch_${tick}_fin_${a.id}`,
-                        tick,
-                        text: `盘算「${a.goal}」满步结算：败露——功败垂成（${entityName(world, a.owner)}）`,
-                        kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
-                    });
-                } else {
-                    chronicle.push({
-                        id: `ch_${tick}_fin_${a.id}`,
-                        tick,
-                        text: `盘算「${a.goal}」满步结算：达成（终结产果 §4.4④）`,
-                        kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
-                    });
-                }
+                chronicle.push({
+                    id: `ch_${tick}_fin_${a.id}`,
+                    tick,
+                    text: `盘算「${a.goal}」满步结算：结清（期满收摊，终结产果 §4.4④）`,
+                    kind: a.visibility === 'concealed' ? 'shade' : 'scheme',
+                });
             }
-            // K14 兑现落痕（细案 §3.3 → A-5 后半）：仅"达成"态兑现——败露/变形不记（K15 三态后收紧）
-            if (verdict === '达成' && a.parentId) {
+            // K14 兑现落痕（细案 §3.3 → A-5 后半）：仅"结清"态兑现——变形不记（托孤之子尚未有果）
+            if (verdict === '结清' && a.parentId) {
                 const parent = world.agendas.find((x) => x.id === a.parentId);
                 if (parent) {
                     parent.memory.done.push(`兑现：${a.goal}`);
-                    // K21 暗处渲染：concealed 兑现不留痕——父 done 属账照写，编年抑制（子达成是暗处的成果，不上桌）
+                    // K21 暗处渲染：concealed 兑现不留痕——父 done 属账照写，编年抑制（子结清是暗处的成果，不上桌）
                     if (a.visibility !== 'concealed') {
                         chronicle.push({
                             id: `ch_${tick}_ful_${a.id}`,
@@ -695,24 +713,15 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle);
 
     // leg25 c：`hurtByEntity`（属性负向 δ 收集）随属性裁定一并删除——没有负向 δ 可收。
-    //   连带：下方 hurtWindow 的惰性写已无写入方（对旧账残留只做滑动清零，见该块注释）。
+    // leg25 f：原来这里还有一段"把旧账残留的 hurtWindow 滑零自删"的补丁。**整段删除**——
+    //   那段之所以存在，是因为当时还想让窗口"自己归零后消失"；既然该键已从 schema 摘掉、消费者
+    //   （败露判据）也已删除，残留就该**在载入时无条件摘除**（`migrateLegacyAttrs`，与 attrs 同一口）。
+    //   留着滑零块等于把"死字段"在账上多留几轮——正是"删字段只删一半"那类病的温床。
     if (!adjudicate(world, gstep, tick, warnings)) {
         // 不可达（check 已过），防御
         return { ok: false, ssot, stage: { warnings, chronicle } };
     }
     const born = spawnEntities(world, gstep, tick, warnings, chronicle);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
-    // K15 三态判据窗口（细案 §3.4）：实体粒度近 2 tick 负向 δ。
-    //   leg25 c（如实登记）：负向 δ 的来源是 `stateChanges` 的实际生效值，而该字段已随四维浮点删除
-    //   ⇒ **本窗口已无写入方**（`cur` 恒为 0）。此块保留只为把**旧账残留**的 hurtWindow 滑零自删
-    //   （不留在账上误导）；盘算"败露"判据因此失去输入，落在达成一侧——要恢复须另立不依赖假精度的判据。
-    for (const e of world.entities) {
-        const cur = 0;
-        if (e.hurtWindow) {
-            const next = [cur, e.hurtWindow?.[0] ?? 0];
-            if (next[0] === 0 && next[1] === 0) delete e.hurtWindow;
-            else e.hurtWindow = next;
-        }
-    }
     // K19 事件产率上限（因果链细案 §3.2 → A-2）：按提议序保留前 ≤N，超限拒建 + 警告（"事件洪峰"——与盘算大厦顶
     // 同哲学：双面无痕于世界，留痕于 simLog）；门控后、影响通道前——被拒不涉影响/挂链/编年
     if (gstep.newEvents.length > EVENT_CAPS.perTick) {

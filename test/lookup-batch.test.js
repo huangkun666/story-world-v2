@@ -37,13 +37,15 @@ test('leg25 d：force 能推倒「书未明述」重查（否则旧 bug 误标�
     const e = w.entities.find((x) => x.id === 'e_a');
     // 常规闸：absent 一律跳过（这是设计，不是 bug）
     assert.deepEqual(missingFields(e, w.meta), [], '常规口径下 absent 已定案 → 不查');
-    // 覆盖闸：absent 必须能被重查
-    assert.deepEqual(forcedFields(e, w.meta), ['实力', '位置'], '★force 必须能覆盖 absent');
-    assert.deepEqual(pickOneForLookup(w, 'e_a', { forceFields: 'absent' }).missing, ['实力', '位置']);
+    // 覆盖闸：absent 必须能被重查（**显式面**——leg25 f 起默认面只剩实力）
+    const BOTH = ['实力', '位置'];
+    assert.deepEqual(forcedFields(e, w.meta, BOTH), BOTH, '★force 必须能覆盖 absent');
+    assert.deepEqual(forcedFields(e, w.meta), ['实力'], '★默认面口径：只覆盖「实力」（位置已摘出默认面）');
+    assert.deepEqual(pickOneForLookup(w, 'e_a', { forceFields: 'absent' }).missing, ['实力'], '默认面 force 只重查实力');
     // 重试上限卡住的也要能覆盖
     const w2 = world();
     w2.meta.entityFields = { e_a: { attempts: { 实力: { count: ENTITY_LOOKUP_MAX_ATTEMPTS, state: 'pending' } }, fields: {}, sources: [] } };
-    assert.deepEqual(forcedFields(w2.entities[1], w2.meta), ['实力'], '★卡在重试上限的也要能重查');
+    assert.deepEqual(forcedFields(w2.entities[1], w2.meta, BOTH), ['实力'], '★卡在重试上限的也要能重查');
 });
 
 test('leg25 d：force 默认不动「已有值」的栏（除非显式 forceFields=all）', () => {
@@ -51,8 +53,9 @@ test('leg25 d：force 默认不动「已有值」的栏（除非显式 forceFiel
     w.entities[1]['实力'] = 'T9渡劫巅峰';                       // 已有值
     w.meta.entityFields = { e_a: { attempts: { 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] } };
     const e = w.entities[1];
-    assert.deepEqual(forcedFields(e, w.meta), ['位置'], '已有值那栏不动（只覆盖 absent）');
-    assert.deepEqual(forcedFields(e, w.meta, undefined, { forceFields: 'all' }), ['实力', '位置'], 'forceFields=all 才连已有值一起重查');
+    const BOTH = ['实力', '位置'];
+    assert.deepEqual(forcedFields(e, w.meta, BOTH), ['位置'], '已有值那栏不动（只覆盖 absent）');
+    assert.deepEqual(forcedFields(e, w.meta, BOTH, { forceFields: 'all' }), BOTH, 'forceFields=all 才连已有值一起重查');
 });
 
 // ---------- ② 分批：按条目去重（本细案最容易做错的地方） ----------
@@ -79,7 +82,7 @@ test('leg25 d：分批跳过无需要的实体（已有值/已定案不占批次
     w.meta.entityFields = { e_p1: { attempts: { 实力: { count: 1, state: 'absent' }, 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] } };
     const r = await planBatches({ world: w, ids: ['e_p1', 'e_a', 'e_b'], bookText: async () => ({ ok: true, entries: [] }) });
     const skippedIds = r.skipped.map((s) => s.id).sort();
-    assert.deepEqual(skippedIds, ['e_a', 'e_p1'], 'e_a 两栏都有值、e_p1 两栏已定案 → 都不必查');
+    assert.deepEqual(skippedIds, ['e_a', 'e_p1'], 'e_a 实力已有值、e_p1 实力已定案 → 都不必查（默认面只问实力）');
     assert.ok(r.batches[0].ids.includes('e_b'), '只有 e_b 真需要查');
 });
 
@@ -87,10 +90,14 @@ test('leg25 d：批量查询走通一次并落账（runBatchLookup）', async ()
     const w = world();
     const transport = async () => '{"玄一道祖":{"实力":"T9渡劫巅峰","位置":"昆仑山"}}';
     const bookText = async () => ({ ok: true, entries: [{ name: '昆仑道宫', text: '- 玄一道祖 (男, T9渡劫巅峰): 人族守护神，居昆仑山。' }] });
+    // leg25 f（X4）：默认面只问「实力」⇒ ok 记 1；显式带上位置那条腿时才记 2。
     const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 5 });
-    assert.equal(r.stats.ok, 2, '实力+位置都落账');
+    assert.equal(r.stats.ok, 1, '★默认面：只落「实力」一栏');
     assert.equal(r.ssot.entities.find((x) => x.id === 'e_a')['实力'], 'T9渡劫巅峰');
     assert.equal(r.ssot.meta.entityFields.e_a.attempts['实力'].state, 'ok');
+    const r2 = await runBatchLookup({ ssot: world(), transport, bookText, ids: ['e_a'], tick: 5, fields: ['实力', '位置'] });
+    assert.equal(r2.stats.ok, 2, '显式要两栏 ⇒ 实力 + 位置都落账（位置那条腿仍是可用能力）');
+    assert.equal(r2.ssot.entities.find((x) => x.id === 'e_a')['位置'], '昆仑山');
 });
 
 test('leg25 d：批量里「书没读到」仍然不许写 absent（本轮修的那条红线在批量面同样成立）', async () => {
@@ -247,7 +254,8 @@ test('leg25 d（C1）：location 只写位置集原有项（唯一断言：不�
     const transport = async () => '{"玄一道祖":{"实力":"T8大乘中期","位置":"南荒部洲·十万大山"}}';
     const bookText = async () => ({ ok: true, entries: [{ name: '混乱之地·万妖盟', text: '- 玄一道祖 (男, T8大乘中期): 盟主。所在地: 南荒部洲·十万大山' }] });
     return import('../src/entity-lookup.js').then(async ({ runBatchLookup }) => {
-        const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 7 });
+        // leg25 f（X4）：位置那条腿要**显式**要（默认面只剩实力）
+        const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 7, fields: ['实力', '位置'] });
         const e = r.ssot.entities.find((x) => x.id === 'e_a');
         assert.equal(e['位置'], '南荒部洲·十万大山', '原话照抄留档');
         assert.equal(e.location, '十万大山', 'location = 集内更长的那一项');
@@ -347,7 +355,7 @@ test('leg25 d：查书抽到的位置标"书里原话"（与结构推导分开�
     w.entities = [{ id: 'e_a', kind: 'character', name: '玄一道祖', location: '未明' }];
     const transport = async () => '{"玄一道祖":{"位置":"南荒部洲·十万大山"}}';
     const bookText = async () => ({ ok: true, entries: [{ name: '万妖盟', text: '所在地: 南荒部洲·十万大山' }] });
-    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 4 });
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 4, fields: ['实力', '位置'] });
     assert.equal(r.ssot.entities[0].location, '十万大山');
     assert.equal(r.ssot.meta.entityFields.e_a.位置来源, '书里原话', '★模型从原话抽的 ⇒ "书里原话"');
 });
@@ -396,7 +404,7 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
 test('leg25 d：批量进度与按钮随 config 进面板（渲染层不持任务状态）', () => {
     const w = world();
     const idle = renderEntitiesHtml(w, { config: { lookupTask: null } });
-    assert.ok(idle.includes('⬇ 补全全册实力/位置'), '未在跑 → 显示启动按钮');
+    assert.ok(idle.includes('⬇ 补全全册实力'), '未在跑 → 显示启动按钮');
     assert.ok(idle.includes('data-action="lookup-batch-all"'));
     const running = renderEntitiesHtml(w, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } });
     assert.ok(running.includes('■ 停止补全 4/623'), '在跑 → 显示停止 + 进度');

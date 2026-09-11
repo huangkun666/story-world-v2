@@ -216,12 +216,21 @@ test('leg25 c 迁移：留档并入既有 legacyAttrsPurged（历史留档不被
 test('leg25 c 迁移：幂等——闸在则绝不重扫（连跑三次同对象/同字节）', () => {
     const once = migrateLegacyAttrs(legacyWorld());
     const twice = migrateLegacyAttrs(once);
-    assert.equal(twice, once, '第二次原对象返回（闸为幂等依据，不靠"扫完没发现"）');
+    assert.equal(twice, once, '第二次原对象返回（没东西可摘即不改一字）');
     assert.equal(JSON.stringify(migrateLegacyAttrs(twice)), JSON.stringify(once), '连跑三次逐字节一致');
-    // 闸在 + 账上又冒出 attrs（旧版本账/手工错账）→ 照旧不重扫：动这条闸 = 动承重墙（每次载入都重扫大账）
+    // ★leg25 f 语义修正：`attrsRemovedAt` **不再是"提前退出"的理由**（这一点当年是故意锁死的）。
+    //   为什么改：提前退出会让"只残留 hurtWindow（或又被写回 attrs）的账"带着死字段过 schema——
+    //   `ssot.schema` 的 `additional:false` 会直接拒，而那正是台账里"attrs 只删了一半"那个老洞的同款。
+    //   现口径：闸只是"attrs 那一轮迁过"的**留痕**，摘除**无条件、幂等**；闸值写成"既有值优先、不覆盖"。
     const stale = legacyWorld();
     stale.meta[ATTRS_REMOVED_AT] = 2;
-    assert.equal(migrateLegacyAttrs(stale), stale, '已迁过的账原样返回（哪怕行里还留着 attrs）');
+    const out = migrateLegacyAttrs(stale);
+    assert.equal(out.entities.every((e) => e.attrs === undefined), true,
+        '★闸在位也照摘：死字段不许因为"迁移过了"而留在账上（那会让 schema 拒整份文档）');
+    assert.equal(out.meta[ATTRS_REMOVED_AT], 2, '闸值保留既有值（不覆盖，溯源不失真）');
+    // 干净账（无 attrs 无 hurtWindow）连跑：原对象返回，逐字节不变
+    const clean = { meta: { tick: 3 }, entities: [{ id: 'e_a', kind: 'character', name: '甲', location: 'x' }] };
+    assert.equal(migrateLegacyAttrs(clean), clean, '无可摘 → 原对象（不空写）');
 });
 
 // 迁移后世界过 SSOT schema：**已解阻塞**（2026-09-11 后续棒）——`ssot.schema.js` 的 meta 已补声明

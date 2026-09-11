@@ -146,8 +146,8 @@ export const worldStepSchema = {
         // leg25 c（用户令「删」）：`stateChanges`（模型提议的属性增量：{entity, attr, delta, actor, cause}）
         //   **整条删除**——它改的就是四维浮点（兵力/权位/人脉/耳目），而四维已不存在
         //   （没法精确表示；手拍值让"编的"看起来像"算的"，design-core-leg23 §4 第 1 条）。
-        //   连带影响如实登记：盘算"败露"判据原吃 hurtWindow（近 2 tick 负向 δ，来源就是这里），
-        //   负向 δ 一起消失 ⇒ 败露分支失去输入（详见 settle.js adjudicate 注释）。
-        //   要恢复"败露"须另立**不依赖假精度**的判据（待拍板，未擅自发明）。
+        //   ✅ leg25 f 收口：它的连带后果（盘算"败露"判据失去 hurtWindow 输入）已按用户拍板处置——
+        //   删掉败露支与 `VERDICT_HURT_THRESHOLD`、满步终局措辞改「结清」，**不新造判据**
+        //   （引擎没有任何"计划被打回"的客观输入）。详见 `docs/spec-failure-verdict-and-visibility.md` §2。
     },
 };

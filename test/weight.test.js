@@ -1,20 +1,23 @@
 // story-world-v2/test/weight.test.js
-// K1 单测（分量引擎细案 §4 K1 验收）→ **leg25 c 改写**（用户令「删」四维浮点）。
+// K1 单测（分量引擎细案 §4 K1 验收）→ **leg25 c 改写**（用户令「删」四维浮点）→ **leg25 f 再删掩码**。
 // 改写缘由（design-core-leg23 §4 第 1 条 + §2.2 三条硬规矩）：兵力/权位/人脉/耳目这几个概念
 //   **没法精确表示**（书里没刻度、现实里也没有），压成 0–1 是拿精确外壳装模糊内容；
 //   手拍值比没有更坏——它让"编的"看起来像"算的"。故 src/weight.js 里 COEFFS/NEUTRAL_ATTR 整条删除，
-//   computeWeight 签名保留但**不吃属性**：= clamp01(layerBase × envFactor)；visibilityMask **只剩位置**。
+//   computeWeight 签名保留但**不吃属性**：= clamp01(layerBase × envFactor)。
+// leg25 f：`visibilityMask` / `isVisible` / `MASK` **整组删除**（用户拍板「X3 删掉掩码」）——
+//   它后期只剩"同地 1.0 / 异地 0.5"两个取值，而阈值 0.25 使**两者都过闸** ⇒ 恒真、挡不住任何事实。
 // 本文件锁的三件事（换载体不换意图）：
 //   ① 属性彻底退场——传什么都不改结果（防它借尸还魂 / 改名续用）；
 //   ② 剩下的两个真输入（层基线、张力）方向正确；
-//   ③ 掩码只剩"位置"这一条零歧义事实（同地/异地二元判定为能力上限）。
-// 已删断言（机制没了，不是遗漏；理由写在报告里）：系数单调、缺键=中立 0.5、显式全零/全满、MASK.intelBase、obsFloor 修边。
+//   ③ **已删机制不许留名**（反向锁：掩码组、死参数、中立属性表都在此钉死）。
+// 已删断言（机制没了，不是遗漏；理由见 `docs/spec-failure-verdict-and-visibility.md`）：
+//   系数单调、缺键=中立 0.5、显式全零/全满、MASK.intelBase、obsFloor 修边、掩码数值与阈值两端。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as W from '../src/weight.js';
 import {
-    computeWeight, computeWeightAtTick, activityFactor, visibilityMask, isVisible, spreadRadius,
-    DECAY, MASK, NEUTRAL_TENSION, FACTION_BASELINE, RIPPLE_TARGET_CAP,
+    computeWeight, computeWeightAtTick, activityFactor, spreadRadius,
+    DECAY, NEUTRAL_TENSION, FACTION_BASELINE, RIPPLE_TARGET_CAP,
 } from '../src/weight.js';
 
 const CHAR = 'character';
@@ -43,8 +46,10 @@ test('公式（leg25 c）：删掉的常量不许留名——COEFFS / NEUTRAL_AT
     //   若有人日后把 hardPower 改名成别的键再把系数表加回来，这里当场红。
     assert.equal(W.COEFFS, undefined, '系数表已删（四维退场后没有"系数"可谈）');
     assert.equal(W.NEUTRAL_ATTR, undefined, '中立属性表已删——它唯一的存在理由是"缺键时公式取什么默认值"，而公式已不吃属性');
-    assert.equal(MASK.intelBase, undefined, '掩码的"情报"项已删（同样是手拍的 0–1）');
-    assert.equal(MASK.obsFloor, undefined, 'obsFloor 修边随比值项一并删除（比值没了，断崖无从谈起）');
+    // leg25 f：掩码整组退场（不是"只剩位置"，是**连位置那条也没了**——它挡不住任何事实）
+    assert.equal(W.MASK, undefined, '★掩码常量组已删（两个取值都过阈值 ⇒ 恒真 = 假机制）');
+    assert.equal(W.visibilityMask, undefined, '★visibilityMask 已删——不是留着不用，是不许留名');
+    assert.equal(W.isVisible, undefined, '★isVisible 已删（它的唯一消费者随掩码一起退场）');
 });
 
 test('公式：层基线 × 张力，钳回 [0,1]（势力层基线 0.85——leg25 c 无属性化后重基线）', () => {
@@ -118,33 +123,11 @@ test('衰减：衰减后分量 = 公式分 × 因子（唯一还在动的那一�
     assert.ok(Math.abs(computeWeightAtTick(null, CHAR, NEUTRAL_TENSION, grace + 1) - (1 - DECAY.character.rate)) < 1e-12);
 });
 
-test('掩码（leg25 c）：只剩位置——同地 1.0 / 异地 0.5（零歧义事实，二元判定为能力上限）', () => {
-    assert.equal(MASK.posSame, 1.0);
-    assert.equal(MASK.posDiff, 0.5);
-    assert.equal(visibilityMask({ sameLocation: true }), 1.0);
-    assert.equal(visibilityMask({ sameLocation: false }), 0.5);
-    // 旧参数形状（intel / 分量对）一律不再参与：与"只传位置"逐字节一致
-    assert.equal(visibilityMask({ intel: 0, sameLocation: true }), 1.0, '耳目数量不再是输入');
-    assert.equal(visibilityMask({ intel: 1, sameLocation: false }), 0.5);
-    assert.equal(visibilityMask({ srcWeight: 0.01, obsWeight: 0.99, sameLocation: true }), 1.0, '分量比项早已退场');
-    assert.equal(visibilityMask({ srcWeight: 9, obsWeight: 0, sameLocation: false }), 0.5, '零分量观察者不再"全瞎"');
-});
-
-test('掩码：阈值两端（门槛线 = MASK.threshold，恰好等于阈值算可见）', () => {
-    assert.equal(MASK.threshold, 0.25);
-    assert.ok(isVisible(visibilityMask({ sameLocation: true })), '同地 1.0 → 可见');
-    assert.ok(isVisible(visibilityMask({ sameLocation: false })), '异地 0.5 → 可见（> 阈值）');
-    assert.ok(isVisible(MASK.threshold), '恰好等于阈值 → 可见（≥ 语义）');
-    assert.ok(!isVisible(MASK.threshold - 1e-9), '门槛下一格 → 不可见');
-});
-
-test('掩码（leg25）：入参缺省不抛（唯一真源被多方调用，鲁棒性）', () => {
-    // 缺省 sameLocation=false → 按异地位（现法口径：不因数据缺失而放宽可见性；
-    //   "事件位置缺失该按同地/异地/中立取哪一值"仍是源注释里登记未拍板的待办）。
-    assert.equal(visibilityMask(), MASK.posDiff, '缺省 → 异地 0.5');
-    assert.equal(visibilityMask({ 未知字段: 1 }), MASK.posDiff, '多余入参不影响');
-    assert.equal(visibilityMask({ sameLocation: true, 未知字段: 1 }), 1.0);
-});
+// leg25 f（用户拍板「X3 删掉掩码」）：原四则掩码断言（只剩位置 / 阈值两端 / 入参缺省鲁棒 / 旧参数形状）
+//   **整组退场**——测的对象（MASK / visibilityMask / isVisible）已从 src/weight.js 删除。
+//   为什么不改成"新口径的断言"续用：那三件东西的删除理由不是"换了个公式"，而是
+//   **它恒真、一个事实都没挡住**（两取值 1.0/0.5 都 ≥ 阈值 0.25）。给一个不存在的机制编新断言，
+//   正是本项目禁的"改名续用"。反活锁写在上一则（`W.MASK === undefined` 等三条）。
 
 test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限=固定提案常量（校验侧强制）', () => {
     assert.equal(spreadRadius(0), 1);

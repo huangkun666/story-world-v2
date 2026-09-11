@@ -20,7 +20,8 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   + 未查态 title 属性截断修复 + **查书补全三件套**（批量补全/单实体重查/选人可见）。
 //   第二十五棒 f 追加：**位置继承的接线修通**（`bookEntriesForInherit` + 三处调用点）——
 //   之前那句"接线断了而测试全绿"让真账 563 实体真位置恒 0、位置列整列「未载」；现首开面板即推 173。
-export const PANEL_BUILD = 'leg25f-location-inherit';
+//   同棒另删两处死机制：盘算满步的「败露」支（判据输入早随四维消失）+ 可见性掩码（两取值都过阈值=恒真）。
+export const PANEL_BUILD = 'leg25f-no-dead-mechanisms';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -467,7 +468,7 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
     const task = config?.lookupTask || null;
     const batchBtn = task
         ? `<button class="sw2-btn" data-action="lookup-batch-all" title="再点一次可停；已查到的都留账">■ 停止补全 ${task.cursor}/${task.total}</button>`
-        : `<button class="sw2-btn" data-action="lookup-batch-all" title="把全册在册实体的实力/位置按需查一遍（借世界推进分批跑，不阻塞推进；再点一次可停）">⬇ 补全全册实力/位置</button>`;
+        : `<button class="sw2-btn" data-action="lookup-batch-all" title="把全册在册角色的实力按需查一遍（借世界推进分批跑，不阻塞推进；再点一次可停）。位置不在这里查——它由零 token 的组织驻地结构推断供给，打开面板时自动补">⬇ 补全全册实力</button>`;
     const batchHint = task
         ? `<span class="sw2-hint">补全中 ${task.cursor}/${task.total}（成功 ${task.success} · 未加载到 ${task.pending} · 书未明述 ${task.absent} · 失败 ${task.failed}）——随世界推进分批跑</span>`
         : '';

@@ -5,7 +5,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runTick } from '../src/tick.js';
 import { renderStreams } from '../src/streams.js';
-import { visibilityMask, MASK } from '../src/weight.js';
+// leg25 f（X3 删掉掩码）：原 `import { visibilityMask, MASK }` 已删——那两个名字从 src/weight.js 退场。
+//   本文件用**命名空间导入**做反活锁断言（`weightMod.visibilityMask === undefined`），
+//   这样"有人把它加回来"会当场红，而不是靠"没人 import"这种沉默证据。
+import * as weightMod from '../src/weight.js';
 
 const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
 const EXTRACT_FIX = JSON.parse(readFileSync(new URL('./fixtures/extract-samples.json', import.meta.url), 'utf8'));
@@ -137,30 +140,39 @@ test('K10（leg25 c 改写）：可见性只随**位置事实**升降——**源
     assert.ok(hasLine(weak.injection, '北山动静'), '异地同样照常可见');
 });
 
-test('K10（leg25 c 改写）：掩码真的会挡事——判据是位置（同地 1.0 / 异地 0.5），不是任何编出来的数', () => {
-    // "会挡事"必须在**掩码层**锁死：只看注入结果的话，同地与异地都在阈值之上，看不出差别。
-    assert.equal(visibilityMask({ sameLocation: true }), 1.0, '同地 = posSame');
-    assert.equal(visibilityMask({ sameLocation: false }), 0.5, '异地 = posDiff');
-    assert.equal(visibilityMask({}), 0.5, '什么都没给 ⇒ 落"异地"一侧（不因缺数据放宽可见性）');
-    assert.equal(MASK.threshold, 0.25, '阈值 0.25：异地 0.5 在门槛之上，所以"异地仍可见"是设计而非漏判');
-
-    // 注入层面的对应事实：玩家换个位置（离开黄府去北山），同一条动向的判定随之翻转——位置是真的在起作用。
+test('leg25 f（X3 删掉掩码）：注入侧不再做可见性过滤——两侧同向、全局可见，不制造两套真相', () => {
+    // 删除理由（`docs/spec-failure-verdict-and-visibility.md` §3）：掩码后期只剩"同地 1.0 / 异地 0.5"，
+    //   而阈值 0.25 ⇒ **两个取值都过闸**，这道判断没有任何事实挡得住（死参数 + 假机制）。
+    //   现口径：观棋侧（你的权利，ANCHOR §3⑥）与注入侧**都全局可见**。
     const atHome = renderStreams(maskWorld({ at: '黄府' }), stage3, null);
     const away = renderStreams(maskWorld({ at: '北山' }), stage3, null);
-    assert.ok(hasLine(atHome.injection, '近处大事'), '玩家在黄府 → 近处大事同地');
-    assert.ok(hasLine(away.injection, '北山动静'), '玩家挪到北山 → 北山那条变为同地');
+    // ①玩家换位置**不再改变**注入内容（旧法这里会翻转判定）
+    assert.equal(atHome.injection, away.injection, '★玩家位置不再影响注入内容（掩码已删）');
+    // ②同地/异地/以及"事件没给位置"三条一律照常注入
+    for (const [nm, r] of [['黄府', atHome], ['北山', away]]) {
+        assert.ok(hasLine(r.injection, '近处大事'), `${nm}：近处大事照常注入`);
+        assert.ok(hasLine(r.injection, '北山动静'), `${nm}：异地条目照常注入`);
+    }
+    // ③"事件位置缺失该取同地/异地/中立"这个**未拍板**的登记项随之失去对象（不再需要这个概念）
+    const w = maskWorld({});
+    delete w.events.find((e) => e.id === 'ev_src').position;
+    const r2 = renderStreams(w, stage3, null);
+    assert.ok(hasLine(r2.injection, '近处大事'), '事件没给位置：照样注入（不再有"缺失取哪一值"的判定）');
+    // ④反活锁：掩码组不许留名
+    assert.equal(weightMod.visibilityMask, undefined, '★visibilityMask 已删（不是留着不用）');
+    assert.equal(weightMod.MASK, undefined, '★MASK 已删');
 });
 
-test('K10：无玩家世界注入降级全见（P-E），观棋侧恒全局', () => {
+test('K10：无玩家世界注入照常全见（P-E），观棋侧恒全局', () => {
     const r = renderStreams(maskWorld({ playerId: null }), stage3, null);
     assert.ok(hasLine(r.injection, '近处大事') && hasLine(r.injection, '远处琐事') && hasLine(r.injection, '北山动静'), '全见');
     assert.ok(r.observer.join('\n').includes('远处琐事'), '观棋侧全见（上帝视角不变）');
 });
 
-test('K10（leg25 c 改写）：零分量玩家照常看得见 + 行迹并入不受掩码影响', () => {
+test('K10（leg25 c/f 改写）：零分量玩家照常看得见 + 行迹并入不受影响', () => {
     const r = renderStreams(maskWorld({ w: 0 }), stage3, { verb: '修炼' });
     assert.ok(hasLine(r.injection, '近处大事'), '照常可见（旧法：零分量 → 注入仅余行迹）');
-    assert.ok(r.injection.includes('【你的行迹】修炼'), '行迹照旧并入（行迹是玩家自己的动作，不查掩码）');
+    assert.ok(r.injection.includes('【你的行迹】修炼'), '行迹照旧并入（行迹是玩家自己的动作）');
     assert.ok(r.observer.join('\n').includes('◆ [tick 5]'), '观棋照常');
 });
 
@@ -168,31 +180,5 @@ test('K10（leg25 c 改写）：零分量玩家照常看得见 + 行迹并入不
 //   为什么删：那条测的是"账面缺 intel → 替它编一个中立 0.5"。而现在①`intel` 这个键已不存在；
 //   ②"缺数据就给个默认值"正是 design-core-leg23 §2.2 硬规矩一要治的病——**空着就是空着**，
 //   引擎不许替世界编数。所以这条不是"改断言续用"，而是整条退场（换名保留中立值同样是被禁的）。
-
-test('K10（leg25）：事件位置缺失 → 按"异地"一侧算（不得因缺数据反而放宽可见性）；判定为显式判真', () => {
-    // 事实：MASK.posDiff=0.5、阈值 0.25 → 异地 m 在门槛之上（正因如此"异地"仍在注入里）。
-    //   所以"缺位置 vs 真异地"在**输出可见性**上分不开，用**掩码数值**分辨：两者必须都取 posDiff 一侧。
-    const w = maskWorld({});
-    const evMid = w.events.find((e) => e.id === 'ev_mid');   // 位置=北山（异地；玩家在黄府）
-    const evSrc = w.events.find((e) => e.id === 'ev_src');   // 位置=黄府（同地）
-    const r = renderStreams(w, stage3, null);
-    assert.ok(hasLine(r.injection, '远处琐事'), '真异地 m=0.5 ≥ 阈值 → 可见');
-    assert.ok(hasLine(r.injection, '近处大事'), '真同地 m=1.0 → 可见');
-    assert.equal(visibilityMask({ sameLocation: evMid.position === '黄府' }), 0.5, '真异地 → 0.5');
-
-    delete evSrc.position;                                   // 位置缺失（旧写法 `undefined === '黄府'` 恒假 → 也是异地，行为逐字节一致）
-    const r2 = renderStreams(w, stage3, null);
-    assert.equal(
-        JSON.stringify(r2.injection.replace('近处大事', 'X')), JSON.stringify(r.injection.replace('近处大事', 'X')),
-        '缺位置的那条与"真异地"的判定结果完全一致（同一条动向照常注入）',
-    );
-    assert.ok(hasLine(r2.injection, '近处大事'), '缺位置 → 按异地一侧 → m=0.5 → 可见');
-    // 反向对照：若把"缺位置"误判成**同地**，m 会变成 1.0 → 与"真异地"的那条**不同值**。
-    // 用掩码数值直接锁死口径（避免只靠可见性看不见差别）：
-    assert.equal(visibilityMask({ sameLocation: false }), 0.5, '异地一侧 = 0.5');
-    assert.equal(visibilityMask({ sameLocation: true }), 1.0, '同地一侧 = 1.0');
-    assert.equal(MASK.threshold, 0.25, '阈值 0.25（异地 0.5 在门槛之上）');
-    // 并锁死"情报不再参与"：任何 intel 值都不得改变结果（防旧法无声复活）。
-    assert.equal(visibilityMask({ intel: 0, sameLocation: false }), 0.5, 'intel 不再是入参：给 0 也取 posDiff');
-    assert.equal(visibilityMask({ intel: 1, sameLocation: true }), 1.0, 'intel 不再是入参：给 1 也取 posSame');
-});
+// leg25 f 续：连"事件位置缺失该按同地/异地/中立取哪一值"这个**未拍板**登记项也一并退场——
+//   掩码删除后，注入侧不再有可见性判定，这个问题**没有对象**了（见上「X3 删掉掩码」一则）。

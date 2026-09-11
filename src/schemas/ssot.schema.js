@@ -117,7 +117,12 @@ export const ssotSchema = {
                     //   （实测教训：删字段只删一半最危险——引擎不写、契约仍收，看起来删了其实没有）。
                     race: { kind: 'string', minLength: 1 },   // leg20：种族标签（抽象带入；可选=旧世界零扰动）
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
-                    hurtWindow: { kind: 'array', minItems: 2, maxItems: 2, items: { kind: 'number' } },   // K15：近 2 tick 负向 δ 窗口 [本 tick, 上一 tick]（三态判据用；惰性写——全 0 删字段）
+                    // leg25 f（用户拍板「X1 认账简化」）：`hurtWindow` 键**已删除**。
+                    //   它是 K15「败露」判据的输入（近 2 tick 负向 δ），而该判据随四维属性失去来源
+                    //   （字段全仓无写入方、真账 563 实体里 0 个有它）⇒ 判据不可达、键成死字段。
+                    //   与其留着让人以为还有"伤害窗口"，不如连键一起摘掉（旧账残留由
+                    //   `migrateLegacyAttrs` 在载入时无条件摘除，见 settle.js）。
+                    //   依据：`docs/spec-failure-verdict-and-visibility.md` §2。
                     status: { kind: 'string', enum: ['active', 'retired', 'dead'] },   // K37/实体治理 §3.7 状态契约（可选=缺省 active；旧世界零扰动）；dead=终局不复归；retired=可复归
                     parent: { kind: 'string', minLength: 1 },   // 第十九棒/C7：从属方单存——character→所属势力/分支名，faction→上级势力名（书中明述；可选=旧世界零扰动）
                     branches: { kind: 'array', items: { kind: 'string', minLength: 1 } },   // 第十九棒/C8：势力实体分支表（子势力名号平铺；可选=旧世界零扰动）

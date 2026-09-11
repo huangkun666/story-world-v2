@@ -81,10 +81,12 @@ test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 
         assert.ok(world.agendas.some((p) => p.id === a.parentId), `父链可回溯：${a.id} → ${a.parentId}`);
     }
     assert.ok(world.agendas.some((a) => (a.memory?.promises?.length ?? 0) >= 1), '有父盘算记下了委派（promises 写入）');
-    assert.ok(world.agendas.some((a) => (a.memory?.done ?? []).some((d) => d.includes('兑现'))), '有委派子达成 → 兑现落痕（done）');
+    assert.ok(world.agendas.some((a) => (a.memory?.done ?? []).some((d) => d.includes('兑现'))), '有委派子结清 → 兑现落痕（done）');
     assert.ok(world.chronicle.some((c) => c.text.includes('变形') && c.text.includes('事业移交诸子')), '变形编年（托孤分支别处照常触发）');
-    assert.ok(world.chronicle.some((c) => c.text.includes('达成')), '达成编年存在');
-    assert.ok(!world.chronicle.some((c) => c.text.includes('败露')), '零伤害冒烟无败露（语义精确区分）');
+    // leg25 f：无子满步的措辞由「达成」改「结清」（引擎只证"期满收摊"，不下"办成了"的判断）
+    assert.ok(world.chronicle.some((c) => c.text.includes('结清')), '结清编年存在');
+    assert.ok(!world.chronicle.some((c) => c.text.includes('达成')), '★「达成」这个判断已收回（不许回潮）');
+    assert.ok(!world.chronicle.some((c) => c.text.includes('败露')), '★「败露」分支已删（不是不可达，是不存在）');
     // V9 延续：预算 / 体积（事件池无裁剪=已知队列项，随因果链强化阶段——界 80KB 防膨胀回归）
     assert.ok(metrics.maxPackTokens <= EVOLUTION_BUDGET_TOKENS, `输入峰 ${metrics.maxPackTokens}/4000`);
     const sizes = metrics.bytes.map((b) => b.bytes);

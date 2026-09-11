@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     ROUND_PICK_CAP, AGENDA_INVOLVED_CAP, ENTITY_LOOKUP_MAX_ATTEMPTS, ENTITY_LOOKUP_MAX_FAILS,
+    ENTITY_LOOKUP_FIELDS,
     buildSelectPrompt, runSelect, fallbackCandidates,
     missingFields, buildLookupPrompt, runLookup, applyLookup,
     noteFailure, noteSuccess, lookupDisabled, runEntityLookupStep,
@@ -92,14 +93,17 @@ test('细案 ①：兜底名单 = 玩家 + 在飞盘算属主（引擎事实，�
 test('细案 ②：缺字段判定——已有值/已定案/到重试上限 → 不再查', () => {
     const w = world();
     const e = w.entities[2];
-    assert.deepEqual(missingFields(e, w.meta), ['实力', '位置'], '全新实体两栏都缺');
+    // ★leg25 f（X4）：本模块的**默认面只剩「实力」**——位置改由零 token 结构推断供给，不再主动问模型。
+    assert.deepEqual(missingFields(e, w.meta), ['实力'], '★默认面：全新实体只缺「实力」（位置不在面里）');
+    assert.equal(ENTITY_LOOKUP_FIELDS.includes('位置'), false, '★位置已从默认面摘掉（防回潮）');
+    assert.deepEqual(missingFields(e, w.meta, ['实力', '位置']), ['实力', '位置'], '显式给面时两栏都缺（位置那条腿仍是可用能力）');
     e['实力'] = 'T9渡劫巅峰';
-    assert.deepEqual(missingFields(e, w.meta), ['位置'], '有值那栏不再查');
+    assert.deepEqual(missingFields(e, w.meta, ['实力', '位置']), ['位置'], '有值那栏不再查');
     delete e['实力'];
     const meta = { entityFields: { [e.id]: { attempts: { 实力: { count: 1, state: 'ok' }, 位置: { count: 1, state: 'absent' } } } } };
-    assert.deepEqual(missingFields(e, meta), [], 'ok / absent 都已定案 → 不再查');
+    assert.deepEqual(missingFields(e, meta, ['实力', '位置']), [], 'ok / absent 都已定案 → 不再查');
     const meta2 = { entityFields: { [e.id]: { attempts: { 实力: { count: ENTITY_LOOKUP_MAX_ATTEMPTS, state: 'pending' } } } } };
-    assert.deepEqual(missingFields(e, meta2), ['位置'], '到重试上限 → 停手（防死循环），另一栏照旧');
+    assert.deepEqual(missingFields(e, meta2, ['实力', '位置']), ['位置'], '到重试上限 → 停手（防死循环），另一栏照旧');
 });
 
 test('细案 ②：查书 prompt 只喂选中实体的原文，且写清口径（文本类型 / 势力不抽实力 / 不许判断）', () => {
@@ -116,6 +120,7 @@ test('细案 ②：有值 → 落账 + 留痕（value/from/fetchedAt/sources 齐
         ssot: w, ids: ['e_bk_2'],
         byName: { 玄一道祖: { 实力: 'T9渡劫巅峰', 位置: '昆仑山玉虚秘境' } },
         sources: { e_bk_2: ['昆仑道宫'] }, tick: 3,
+        fields: ['实力', '位置'],   // leg25 f：位置那条腿要**显式**要（不再是默认面）
     });
     const e = out.ssot.entities.find((x) => x.id === 'e_bk_2');
     assert.equal(e['实力'], 'T9渡劫巅峰', '原话落账（文本，不做任何加工）');
@@ -148,6 +153,7 @@ test('细案 ②（核心）：模型没给这一栏 → 记 pending，**绝不�
         ssot: w, ids: ['e_bk_2', 'e_new'],
         byName: { 玄一道祖: { 位置: '昆仑山' }, 无名客: null },
         sources: { e_bk_2: ['昆仑道宫'], e_new: [] }, tick: 1,
+        fields: ['实力', '位置'],   // leg25 f：显式要两栏（默认面只剩实力）
     });
     const attemptsA = out.ssot.meta.entityFields.e_bk_2.attempts;
     assert.equal(attemptsA['实力'].state, 'pending', '书里有条目、模型没给 → pending（下轮可再试）');
@@ -194,9 +200,10 @@ test('细案 ②：调用失败（byName=null）→ 一个字节都不写（这�
 
 test('细案 ②：幂等——已定案的实体不再进查询面；重复回写逐字节一致', () => {
     const w = world();
-    const first = applyLookup({ ssot: w, ids: ['e_bk_2'], byName: { 玄一道祖: { 实力: 'T9渡劫巅峰' } }, sources: { e_bk_2: ['昆仑道宫'] }, tick: 1 });
+    const first = applyLookup({ ssot: w, ids: ['e_bk_2'], byName: { 玄一道祖: { 实力: 'T9渡劫巅峰' } }, sources: { e_bk_2: ['昆仑道宫'] }, tick: 1, fields: ['实力', '位置'] });
     const e = first.ssot.entities.find((x) => x.id === 'e_bk_2');
-    assert.deepEqual(missingFields(e, first.ssot.meta), ['位置'], '实力已定案 → 只差位置');
+    assert.deepEqual(missingFields(e, first.ssot.meta, ['实力', '位置']), ['位置'], '实力已定案 → 只差位置（显式面口径）');
+    assert.deepEqual(missingFields(e, first.ssot.meta), [], '★默认面口径：实力已定案 ⇒ 无事可查（位置不在默认面）');
     const again = applyLookup({ ssot: first.ssot, ids: ['e_bk_2'], byName: { 玄一道祖: { 实力: 'T9渡劫巅峰' } }, sources: { e_bk_2: ['昆仑道宫'] }, tick: 2 });
     assert.equal(again.ssot.entities.find((x) => x.id === 'e_bk_2')['实力'], 'T9渡劫巅峰', '值不变');
     assert.deepEqual(again.ssot.meta.entityFields.e_bk_2.sources, ['昆仑道宫'], 'sources 不重复堆叠');
@@ -309,8 +316,7 @@ test('细案 ⑤：runTick 前置步——选人/查书结果进包，主调用�
     assert.ok(sawPack.includes('e_bk_1') && sawPack.includes('e_bk_2'), '实体段名单 = LLM 选的那两个（不是引擎镜头截出来的）');
 });
 
-test('细案 ⑤（leg25 d 回归）：**异步** bookText 也必须走通——浏览器接线 `bookTextForEntity` 就是 async', async () => {
-    // 本用例锁的是一条真 bug（用户实拍"看不到属性"的真因）：`runLookup`/`sources` 原先**同步**调用
+test('细案 ⑤（leg25 d 回归）：**异步** bookText 也必须走通——浏览器接线 `bookTextForEntity` 就是 async', async () => {    // 本用例锁的是一条真 bug（用户实拍"看不到属性"的真因）：`runLookup`/`sources` 原先**同步**调用
     //   注入的 bookText，而浏览器 `web/index.js:576 bookTextForEntity` 是 async ⇒ 拿到 Promise、
     //   `.length` 为 undefined、`.map` 抛 TypeError → 前置步被 tick.js 的 catch 静默吞掉 →
     //   `applyLookup` 永不执行 → 盘上 `meta.entityFields` 恒为 0 条（查书功能整个没生效）。
@@ -337,9 +343,11 @@ test('细案 ⑤（leg25 d 回归）：**异步** bookText 也必须走通——
     assert.equal(r.ok, true, `前置步不得炸掉 tick：${r.error || ''}`);
     const e2 = r.ssot.entities.find((e) => e.id === 'e_bk_2');
     assert.equal(e2['实力'], 'T9渡劫巅峰', '★异步 bookText：查回来的实力落账');
-    assert.equal(e2['位置'], '昆仑山', '★异步 bookText：位置同样落账');
+    // leg25 f（X4）：位置那条腿已从默认面摘掉（改由零 token 结构推断供给），故此处不再断言 `位置` 落账
+    //   ——本条测的是**异步接线**，不是"位置能不能查"；走前置步（`runEntityLookupStep`）时面由默认常量决定。
     const rec = r.ssot.meta?.entityFields?.e_bk_2;
     assert.ok(rec, '★`meta.entityFields` 必须真的建起来（旧实现恒为 0 条——这正是用户看到的症状）');
+    assert.equal(e2['位置'], undefined, '★默认面不含位置 ⇒ 该键不该被写（显式要才有）');
     assert.equal(rec.attempts['实力'].state, 'ok', '查书标记：有值 → ok');
     assert.equal(rec.fields['实力'].from, '玄一道祖条目', '留痕 from = 查过的世界书条目名');
     assert.ok(rec.sources.includes('玄一道祖条目'), 'sources 记下这次查了哪条');
@@ -368,7 +376,9 @@ test('细案 ⑤（leg25 d 回归）：异步 bookText 抛错 → 不写痕、�
     const rec = r.ssot.meta?.entityFields?.e_bk_2;
     assert.ok(rec, '取书失败也要留可重试的痕（否则无法区分"没查过"与"查过但没读成"）');
     assert.equal(rec.attempts['实力'].state, 'pending', '★读不到书 → pending（可重试），绝不是 absent');
-    assert.equal(rec.attempts['位置'].state, 'pending', '★位置同理');
+    // leg25 f（X4）：默认面已不含「位置」，故此处只锁"实力"那一栏的失败语义；
+    //   "位置同理"由 applyLookup 的显式面用例覆盖（见 ② 各则）。
+    assert.equal(rec.attempts['位置'], undefined, '★默认面不问位置 ⇒ 不产生该栏的痕迹');
     assert.deepEqual(rec.sources, [], '没读到书 → sources 不得记条目名');
     assert.ok(!JSON.stringify(rec).includes('absent'), '★一个 absent 都不许出现（读不到 ≠ 书里没有）');
 });
