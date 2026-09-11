@@ -50,6 +50,18 @@ export function selectCandidates(world, { cap = ROUND_PICK_CAP } = {}) {
     return { ents, idIndex, cap };
 }
 
+// 选人名单的一行。leg25 d（细案 spec-lookup-batch-refresh §5）：补上账上**已有**的「实力/位置」原话——
+//   为什么必须有：选人原先只给 id/名字/类别，而主调用（pack.js:111）反而带实力 ⇒ **选拔的人比用人的信息还少**，
+//   于是"两个差距极大的实体被摆到同一场斗争"这件事引擎既无从避免、也无环节拦得住（用户 2026-09-11 提出）。
+//   口径（一条都不能破）：①只摆**书里的原话**（引擎不换算、不排序、不比较——design-core §4 第 1 条）；
+//   ②**未查/没有的写 `—`，绝不填占位值/默认值**（硬规矩二「空着就是空着」）；③势力不显示实力（旧口径）。
+export function selectRosterLine(e) {
+    const kind = e.kind === 'faction' ? '势力' : '角色';
+    const val = (f) => (typeof e[f] === 'string' && e[f].trim() ? e[f].trim() : '—');
+    const power = e.kind === 'faction' ? '—' : val('实力');
+    return `${e.id}\t${e.name}\t${kind}\t${power}\t${val('位置')}`;
+}
+
 export function buildSelectPrompt(world, { cap = ROUND_PICK_CAP, moveFact = null } = {}) {
     const { ents } = selectCandidates(world, { cap });
     const agendas = (world?.agendas || []).filter((a) => !a.closed);
@@ -63,7 +75,9 @@ export function buildSelectPrompt(world, { cap = ROUND_PICK_CAP, moveFact = null
         `2. 最多 ${cap} 个，宁可少不可凑数；没有该出手的就少选；`,
         '3. 只输出严格 JSON，不要任何解释文字：{"pick":["<id>","<id>"]}',
         '———— 在册名号（书序，未排序、未裁剪）————',
-        ents.map((e) => `${e.id}\t${e.name}\t${e.kind === 'faction' ? '势力' : '角色'}`).join('\n'),
+        '（列：id / 名号 / 类别 / 实力 / 位置。实力与位置是**书里的原话**，未查到的写 — 。',
+        '  它只帮你判断"谁做得到、谁跟谁碰得上"，**不是分数、不含引擎判断**；不要拿它推断剧情。）',
+        ents.map(selectRosterLine).join('\n'),
         '———— 在飞盘算 ————',
         agendas.length ? agendas.map((a) => `${a.owner}：${a.goal}（${a.progress ?? 0}/${a.maxSteps ?? 0}）`).join('\n') : '（无）',
         '———— 未决事件 ————',
@@ -135,6 +149,131 @@ export function missingFields(entity, meta, fields = ENTITY_LOOKUP_FIELDS) {
         if ((rec.attempts?.[f]?.count ?? 0) >= ENTITY_LOOKUP_MAX_ATTEMPTS) return false;   // 到重试上限 → 停手
         return true;
     });
+}
+
+// ---------- 覆盖重查（leg25 d，细案 spec-lookup-batch-refresh §4.2）----------
+// 背景：`absent`（书未明述）是**永久闸**——missingFields 对 absent/ok 一律跳过。
+//   而 leg25 d 之前存在两个真 bug（取书读错字段 + 异步 bookText 被当同步用），
+//   已把一批字段**误写成** `absent`；不开口子它们永远查不动（假「书未明述」不可自愈）。
+// 口径（用户 2026-09-11 拍板「要：带覆盖开关」）：
+//   forceFields = 'absent'（默认）→ 只重查**被定为 absent 或卡在重试上限**的字段
+//   forceFields = 'all'            → 连已有值的字段也重查（面板上另有一个勾选，默认不选）
+export const FORCE_MODES = ['absent', 'all'];
+export function forcedFields(entity, meta, fields = ENTITY_LOOKUP_FIELDS, { forceFields = 'absent' } = {}) {
+    const rec = meta?.entityFields?.[entity.id] || {};
+    return fields.filter((f) => {
+        if (forceFields === 'all') return true;                                    // 连已有值也重查
+        const hasValue = typeof entity[f] === 'string' && entity[f].trim();
+        if (hasValue) return false;                                                // 已有值不动（除非 all）
+        const st = rec.attempts?.[f]?.state;
+        // 只覆盖"已定案为 absent"与"卡在重试上限"两类；`ok` 必有值，上面已被 hasValue 挡掉
+        if (st === 'absent') return true;
+        if ((rec.attempts?.[f]?.count ?? 0) >= ENTITY_LOOKUP_MAX_ATTEMPTS) return true;
+        return false;
+    });
+}
+
+/**
+ * pickOneForLookup(world, id, { fields, forceFields }) → { entity, fields, missing }
+ * 单个实体这一轮该查哪几栏。`forceFields` 非空 = 覆盖模式（能清掉假的「书未明述」）。
+ */
+export function pickOneForLookup(world, id, { fields = ENTITY_LOOKUP_FIELDS, forceFields = null } = {}) {
+    const entity = (world?.entities || []).find((e) => e.id === id) || null;
+    if (!entity) return { entity: null, fields: [], missing: [] };
+    const missing = forceFields
+        ? forcedFields(entity, world?.meta, fields, { forceFields })
+        : missingFields(entity, world?.meta, fields);
+    return { entity, fields, missing };
+}
+
+// ---------- 批量补全的分批（细案 §3.1：**按条目载荷打包**，不按实体个数）----------
+/**
+ * planBatches({ world, ids, fields, forceFields, budgetChar, bookText }) → { batches, totalEntries, totalChars, skipped }
+ * 分批口径（这是本细案最容易做错的一处，实测教训见 `spec-lookup-batch-refresh.md` §7 订正）：
+ *   · 载荷 = 这批实体**命中条目的并集**（实体大量共享条目：吞天妖王/混元妖圣同属一条）⇒ **条目级去重**；
+ *   · 一条实体进哪批，取决于它的条目能不能装进当前批预算；装不下就封批；
+ *   · 按实体个数分批（如"每 15 个一次"）会**严重高估**调用次数——那是错的。
+ * 纯函数：只做规划，不调模型（bookText 只用于"这条实体命中哪些条目"的确定性查询）。
+ */
+export async function planBatches({ world, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, budgetChar = 60000, bookText = null } = {}) {
+    const idIndex = new Map((world?.entities || []).map((e) => [e.id, e]));
+    const skipped = [];
+    const todo = [];
+    for (const id of ids) {
+        const e = idIndex.get(id);
+        if (!e) { skipped.push({ id, reason: 'not-in-roster' }); continue; }
+        const { missing } = pickOneForLookup(world, id, { fields, forceFields });
+        if (!missing.length) { skipped.push({ id, reason: 'nothing-to-ask' }); continue; }
+        todo.push({ id, entity: e, missing });
+    }
+    const batches = [];
+    const entrySeen = new Set();
+    const totalEntryKeys = new Set();
+    let cur = null;
+    const keysOf = async (e) => {
+        if (typeof bookText !== 'function') return [];
+        const src = await resolveBookSource(bookText, e);
+        return src.ok ? (src.entries || []) : [];
+    };
+    for (const item of todo) {
+        const entries = await keysOf(item.entity);
+        // 这一条给本批带来的**新增**载荷（条目级去重；用条目名+文本长度当键，避免同一条重复计费）
+        const fresh = entries.filter((x) => {
+            const k = `${x?.name ?? ''}\u0000${String(x?.text ?? '').length}`;
+            return !entrySeen.has(k);
+        });
+        const addChar = fresh.reduce((s, x) => s + String(x?.text ?? '').length, 0);
+        if (cur && cur.chars + addChar > budgetChar) { batches.push(cur); cur = null; }
+        if (!cur) cur = { ids: [], chars: 0, entries: 0, items: [] };
+        cur.ids.push(item.id);
+        cur.items.push(item);
+        cur.chars += addChar;
+        for (const x of fresh) {
+            const k = `${x?.name ?? ''}\u0000${String(x?.text ?? '').length}`;
+            entrySeen.add(k);
+            totalEntryKeys.add(k);
+            cur.entries += 1;
+        }
+    }
+    if (cur && cur.ids.length) batches.push(cur);
+    return {
+        batches,
+        totalEntries: totalEntryKeys.size,
+        totalChars: batches.reduce((s, b) => s + b.chars, 0),
+        skipped,
+    };
+}
+
+/**
+ * runBatchLookup({ ssot, transport, bookText, ids, fields, forceFields, tick }) → { ssot, stats, warning, calls }
+ * 查**指定的一批**实体（面板单实体 / 批量补全的分批，都走这里；与每轮前置步同一收口）。
+ * 与 runEntityLookupStep 的区别：不选人（名单由调用方给定），其余口径完全一致。
+ */
+export async function runBatchLookup({ ssot, transport, bookText, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, tick = 0 } = {}) {
+    const out = { ssot, stats: null, warning: null, calls: 0 };
+    if (!transport || !ids.length) return out;
+    const { batches, skipped } = await planBatches({ world: ssot, ids, fields, forceFields, bookText });
+    if (skipped.length) out.warning = `${skipped.length} 个实体无需查（${skipped.slice(0, 3).map((s) => s.reason).join('/')}）`;
+    const flat = batches.flatMap((b) => b.items);
+    if (!flat.length) return out;
+    const idList = flat.map((x) => x.id);
+    const res = await runLookup({ world: ssot, transport, ids: idList, bookText });
+    out.calls += 1;
+    if (res.byName === null) {
+        out.warning = `查书调用失败：${res.error}`;
+        return { ...out, ssot: noteFailure(ssot, tick) };    // 失败不写痕（这回没查成 ≠ 书里没有）
+    }
+    let readFailed = false;
+    const sources = {};
+    for (const it of flat) {
+        const src = await resolveBookSource(bookText, it.entity);
+        if (!src.ok) readFailed = true;
+        sources[it.id] = src.ok ? src.entries.map((x) => x?.name ?? x) : undefined;
+    }
+    if (readFailed) out.warning = '查书取不到世界书原文（本轮不写「书未明述」，下轮再试）';
+    const applied = applyLookup({ ssot, ids: idList, byName: res.byName, sources, tick, fields });
+    out.stats = applied.stats;
+    return { ...out, ssot: noteSuccess(applied.ssot) };
 }
 
 export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS) {
@@ -326,28 +465,14 @@ export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0,
     const need = out.picks.map((id) => idIndex.get(id)).filter(Boolean).filter((e) => missingFields(e, ssot.meta).length);
     if (!need.length) return { ...out, ssot: noteSuccess(ssot) };   // 全部已有字段 → 零调用
 
-    const res = await runLookup({ world: ssot, transport, ids: need.map((e) => e.id), bookText });
-    out.calls += 1;
-    if (res.byName === null) {
-        out.warning = `查书调用失败：${res.error}`;
-        return { ...out, ssot: noteFailure(ssot, tick) };          // 失败：不写任何痕迹
-    }
-    // sources 语义（applyLookup 用它决定 ok/pending/absent）：
-    //   `undefined` = **这一轮没读成书**（取书抛错/书没取到）→ 必须记 pending，**绝不记 absent**
-    //   `[]`        = 书读到了、但书里确实没有该名号的条目 → 才允许记 absent（书未明述）
-    //   `[...]`     = 查了这几条世界书条目
-    // 第二十五棒 d：原实现取书失败时给 `[]`，与"书里没有"同形 ⇒ 把读不到书误记成「书未明述」并**永久锁死**。
-    let readFailed = false;
-    const sources = {};
-    for (const e of need) {
-        const src = await resolveBookSource(bookText, e);   // 与 runLookup **同一次取数口径**（取一次用两次）
-        if (!src.ok) readFailed = true;
-        sources[e.id] = src.ok ? src.entries.map((x) => x?.name ?? x) : undefined;
-    }
-    if (readFailed) out.warning = '查书取不到世界书原文（本轮不写「书未明述」，下轮再试）';
-    const applied = applyLookup({ ssot, ids: need.map((e) => e.id), byName: res.byName, sources, tick });
-    out.stats = applied.stats;
-    return { ...out, ssot: noteSuccess(applied.ssot) };
+    // 与 runBatchLookup 同一收口（选定名单后的一切完全一致：取数一次用两次 / sources 语义 / 回写）
+    const batch = await runBatchLookup({
+        ssot, transport, bookText, ids: need.map((e) => e.id), tick,
+    });
+    out.calls += batch.calls || 1;
+    out.stats = batch.stats;
+    if (batch.warning) out.warning = batch.warning;
+    return { ...out, ssot: batch.ssot };
 }
 
 // ---------- R2：单个盘算一轮内涉及的实体（属主 + 行动方 + 被波及方；逐轮算，不新增存储字段） ----------

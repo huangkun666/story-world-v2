@@ -25,7 +25,7 @@ import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport
 import { composeInitSource } from '../src/init-source.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
-import { runEntityLookupStep } from '../src/entity-lookup.js';
+import { runEntityLookupStep, runBatchLookup, pickOneForLookup, planBatches } from '../src/entity-lookup.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
@@ -167,7 +167,8 @@ export function refreshWorld(world, { config, oldVolumes = [] } = {}) {
         // 每次重绘把设置表单清空（「填了却报未配置、刷新即丢」根因之二）
         const cfg = config ?? modelSettings() ?? {};
         sw2LastWorld = world;   // K41：链视图入口持引用（同一对象，零第二份状态）
-        const out = renderAll(world, { config: cfg, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter } });
+        // leg25 d：批量补全进度随 config 进渲染层（渲染层不碰任务状态——面板零第二份状态纪律）
+        const out = renderAll(world, { config: { ...cfg, lookupTask: batchTaskStatus() }, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter } });
         const chipWorld = win.querySelector('#sw2_world_chip');
         if (chipWorld) chipWorld.textContent = `世界：${out.header.world || '—'}`;
         const chipTick = win.querySelector('#sw2_tick_chip');
@@ -632,6 +633,28 @@ async function worldBookCached() {
     return sw2BookCache;
 }
 
+// B6（leg25 d，细案 spec-lookup-batch-refresh §B6）：在条目正文里**定位到该名号自己那一行**。
+//   为什么值得做：v2 只会"命中条目→整条给"，而用户的书格式高度规整——
+//   `- 吞天妖王 (男, T8大乘中期): 现任盟主(饕餮蛟龙混血)。极度残暴且野心勃勃…`
+//   实力/位置**就在这一行里**，整条 548 字符里 4/5 是别人的资料。定位到这一行 ⇒ 载荷骤降、且更准。
+//   形态依据（不是词表——用户明令过"被很多词表法弄得很烦"）：v1 的 `powerFromNameContext`
+//   （`plugins/story-world/src/director.js:127`）实证过的写法：名字紧跟括号/冒号标签，且**不许跳过中间文字**。
+//   取数纪律：定位不到就**退回整条**（= 现在行为，零回归）；定位到的行**原样照抄**，不改一个字。
+export function locateNameLine(content, name) {
+    const text = String(content ?? '');
+    const nm = String(name ?? '').trim();
+    if (!text || !nm) return null;
+    // 行首「- 名号」+ 紧跟的括号标签（可带性别）或冒号；行首一律接受（正文成员表就是这形态）
+    const re = new RegExp(`^[-*·•\\s]*${escapeRegExp(nm)}\\s*(?:[（(]|[：:])[^\\n]*`, 'm');
+    const m = re.exec(text);
+    return m ? m[0].trim() : null;
+}
+
+// 正则转义（名号里可能出现 () 等字符）
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function bookTextForEntity(entity) {
     const name = String(entity?.name || '').trim();
     if (!name) return { ok: true, entries: [] };
@@ -654,11 +677,120 @@ async function bookTextForEntity(entity) {
     });
     return {
         ok: true,
-        entries: hit.slice(0, 4).map((e) => ({
-            name: String(e?.comment || name).trim(),
-            text: String(e?.content || '').slice(0, 1200),   // 单条截断防御（防巨条目灌爆查询 prompt）
-        })).filter((x) => x.text),
+        entries: hit.slice(0, 4).map((e) => {
+            const full = String(e?.content || '').slice(0, 1200);   // 单条截断防御（防巨条目灌爆查询 prompt）
+            // B6：先按名号定位到它自己那一行——定位到就**只喂这一行**（载荷从整条降到一行，且更准）；
+            //   定位不到退回整条（零回归）。注意：在**截断前**的正文里定位，避免"行在 1200 之后"被误判为没有。
+            const line = locateNameLine(String(e?.content || ''), name);
+            return {
+                name: String(e?.comment || name).trim(),
+                text: line || full,
+                located: Boolean(line),
+            };
+        }).filter((x) => x.text),
     };
+}
+
+// ---------- 批量补全任务（leg25 d，细案 spec-lookup-batch-refresh §3.2）----------
+// 借轮次分批跑：世界照常推进，每轮顺手补一批。**不阻塞推进**是硬要求（世界优先）。
+// 状态只在内存（刷新即丢）——已查到的字段早已落账，重开继续即可（missingFields 自然只剩没查的）。
+const BATCH_PER_TICK = 1;          // 每轮最多跑几批（细案 §10 B2：1 批，不拖慢推进）
+let sw2BatchTask = null;           // { ids, cursor, done:[], failed:[], success, pending, absent, forceFields, chars }
+
+export function batchTaskStatus() {
+    if (!sw2BatchTask) return null;
+    const t = sw2BatchTask;
+    return {
+        total: t.ids.length, cursor: t.cursor, remaining: t.ids.length - t.cursor,
+        success: t.success, pending: t.pending, absent: t.absent, failed: t.failed.length,
+        forceFields: t.forceFields,
+    };
+}
+
+export function stopBatchTask() {
+    if (!sw2BatchTask) return false;
+    sw2BatchTask = null;
+    return true;
+}
+
+// 状态条文案（批量在跑时优先显示进度——用户点完按钮要看得见动静）
+function batchStatusText() {
+    const s = batchTaskStatus();
+    if (!s) return null;
+    return `⬇ 补全中 ${s.cursor}/${s.total}（成功 ${s.success} · 未加载到 ${s.pending} · 书未明述 ${s.absent} · 失败 ${s.failed}）`;
+}
+
+/** 单个实体查一次（面板行内「查」/「重查」）。forceFields=null 只补缺；'absent' 覆盖假「书未明述」。 */
+export async function lookupOneEntity(id, { forceFields = null } = {}) {
+    const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
+    if (!world) return { ok: false, error: '暂无世界' };
+    const settings = modelSettings();
+    const resolved = resolveBrowserTransport(settings);
+    if (!resolved) return { ok: false, error: '模型通道未配置' };
+    const { entity, missing } = pickOneForLookup(world, id, { forceFields });
+    if (!entity) return { ok: false, error: '账上无此实体' };
+    if (!missing.length) return { ok: false, error: '该实体没有要查的栏（都是已定案的值）' };
+    const res = await runBatchLookup({
+        ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
+        ids: [id], forceFields, tick: world?.meta?.tick ?? 0,
+    });
+    if (!res.stats) return { ok: false, error: res.warning || '查书未执行' };
+    writeHotMeta(hotAccountShape(res.ssot));
+    await flushHotMeta();
+    sw2LastWorld = res.ssot;
+    refreshWorld(res.ssot, { oldVolumes: LISTED_VOLUMES });
+    return { ok: true, stats: res.stats, warning: res.warning, entity: res.ssot.entities.find((x) => x.id === id) };
+}
+
+/** 启动批量补全（全量在册实体）。重复触发 = 重新排队（不动已查到的字段）。 */
+export function startBatchTask({ forceFields = 'absent', ids = null } = {}) {
+    const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
+    if (!world) return { ok: false, error: '暂无世界' };
+    const all = (ids && ids.length) ? ids : (world.entities || []).filter((e) => e.status !== 'dead' && e.status !== 'retired').map((e) => e.id);
+    sw2BatchTask = {
+        ids: all, cursor: 0, failed: [], success: 0, pending: 0, absent: 0, forceFields,
+    };
+    return { ok: true, total: all.length };
+}
+
+/** 跑一批（由 tick 前置步调用；也在手动触发时立即跑一批，手感不用等下一轮）。 */
+async function runBatchChunk(resolved) {
+    const t = sw2BatchTask;
+    if (!t) return null;
+    const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
+    if (!world) { sw2BatchTask = null; return { warning: '暂无世界，批量补全已停' }; }
+    const { batches } = await planBatchesLazy(world, t);
+    if (!batches.length) {
+        const summary = `批量补全完成：成功 ${t.success} · 未加载到 ${t.pending} · 书未明述 ${t.absent} · 失败 ${t.failed.length}`;
+        sw2BatchTask = null;
+        return { warning: null, done: true, summary };
+    }
+    const batch = batches[0];
+    const res = await runBatchLookup({
+        ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
+        ids: batch.ids, forceFields: t.forceFields, tick: world?.meta?.tick ?? 0,
+    });
+    t.cursor += batch.ids.length;
+    if (res.stats) {
+        t.success += res.stats.ok || 0;
+        t.pending += res.stats.pending || 0;
+        t.absent += res.stats.absent || 0;
+    } else {
+        t.failed.push(...batch.ids);
+    }
+    if (res.ssot) {
+        writeHotMeta(hotAccountShape(res.ssot));
+        await flushHotMeta();
+        sw2LastWorld = res.ssot;
+    }
+    return { warning: res.warning, done: false };
+}
+
+// 规划下一批（只取第一批；planBatches 是纯函数，这里只做"从游标往后"的切片）
+async function planBatchesLazy(world, task) {
+    const rest = task.ids.slice(task.cursor);
+    if (!rest.length) return { batches: [] };
+    return planBatches({ world, ids: rest, forceFields: task.forceFields, bookText: bookTextForEntity });
 }
 
 async function advanceTick({ world, dialogue }) {
@@ -672,14 +804,30 @@ async function advanceTick({ world, dialogue }) {
         transport: resolved.transport, ssot: world, dialogue, extractCtx: {},
         // 前置步：① 选本轮上场实体（LLM，≤15）→ ② 只对缺字段者查书（模型）→ ③ 引擎回写查书标记。
         // 失败零阻塞：任一步失败都退回引擎镜头，世界照常推进（细案 §4）。
-        preStep: async ({ ssot: cur, move }) => runEntityLookupStep({
-            ssot: cur,
-            transport: diagExtract(resolved),
-            bookText: bookTextForEntity,
-            tick: cur?.meta?.tick ?? 0,
-            moveFact: move,
-            prevPicks: sw2LastPicks,
-        }),
+        // leg25 d 追加：批量补全**借轮次**跑在这里（每轮 ≤BATCH_PER_TICK 批）——世界照常推进，
+        //   补全是搭车的；两条路都走同一个 runBatchLookup 收口。
+        preStep: async ({ ssot: cur, move }) => {
+            const pre = await runEntityLookupStep({
+                ssot: cur,
+                transport: diagExtract(resolved),
+                bookText: bookTextForEntity,
+                tick: cur?.meta?.tick ?? 0,
+                moveFact: move,
+                prevPicks: sw2LastPicks,
+            });
+            if (!sw2BatchTask) return pre;
+            let world2 = pre?.ssot || cur;
+            for (let i = 0; i < BATCH_PER_TICK; i += 1) {
+                if (!sw2BatchTask) break;
+                const r = await runBatchChunk(resolved);
+                if (r?.done) { setStatus(r.summary); break; }
+                if (r?.warning) console.warn('[story-world-v2] 批量补全:', r.warning);
+            }
+            // 批量改了账 ⇒ 把前置步的 ssot 换成批量后的（落盘点据此写盘）
+            if (sw2LastWorld) world2 = sw2LastWorld;
+            setStatus(batchStatusText());
+            return { ...pre, ssot: world2 };
+        },
         // 落盘点：前置步的新字段**必须落盘**，否则 Ctrl+F5 一次就重查一遍（细案 §7）。
         onPreStep: async (pre) => {
             if (!pre?.ssot) return;
@@ -815,6 +963,39 @@ export async function loadWorld() {
 if (typeof window !== 'undefined') {
     window.__sw2Actions = window.__sw2Actions || {};
     const bus = window.__sw2Actions;
+
+    // ---------- leg25 d：查书补全的两个入口（面板行内「查/重查」+ 批量补全）----------
+    // 单实体：即时查一次（不必等下一轮世界推进），查完立即落盘 + 重绘
+    bus['lookup-entity'] = async (payload) => {
+        const id = payload?.entity;
+        if (!id) return;
+        const forceFields = payload?.force === 'all' ? 'all' : (payload?.force ? 'absent' : null);
+        setStatus(`正在查书：${payload?.name || id}…`);
+        try {
+            const r = await lookupOneEntity(id, { forceFields });
+            if (!r.ok) { setStatus(`⚠ ${r.error}`); return; }
+            const e = r.entity || {};
+            const got = ['实力', '位置'].filter((f) => typeof e[f] === 'string' && e[f].trim())
+                .map((f) => `${f}：${e[f]}`).join(' · ');
+            setStatus(`${e.name || id} → ${got || '书里没给出可用原话'}${r.warning ? `（${r.warning}）` : ''}`);
+        } catch (err) {
+            setStatus(`⚠ 查书失败：${err?.message || err}`);
+        }
+    };
+
+    // 批量补全：借轮次分批跑，不阻塞世界推进；再点一次 = 停
+    bus['lookup-batch-all'] = async (payload) => {
+        if (sw2BatchTask) {
+            const s = batchTaskStatus();
+            stopBatchTask();
+            setStatus(`已停：补全到 ${s.cursor}/${s.total}（成功 ${s.success}）——已查到的都留账`);
+            return;
+        }
+        const forceFields = payload?.force === 'all' ? 'all' : 'absent';
+        const started = startBatchTask({ forceFields });
+        if (!started.ok) { setStatus(`⚠ ${started.error}`); return; }
+        setStatus(batchStatusText() || `补全排队中（共 ${started.total} 个实体）——随世界推进分批跑，再点一次可停`);
+    };
 
     bus['read-volume'] = async (payload) => {
         const volId = payload?.vol;

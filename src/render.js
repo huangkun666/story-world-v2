@@ -17,8 +17,8 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   麾下成员序由分量序改**名号序**（A1）。← 看到 `+a1b` 后缀即已载入这两条。
 //   第二十五棒 d 追加：查书前置步的异步 bookText 修通 + **取书路径改 ST 官方指针**
 //   （`data.extensions.world`，旧法读 `character.world` 恒空 ⇒ 取书 0 条 ⇒ 假「书未明述」）
-//   + 未查态 title 属性截断修复。
-export const PANEL_BUILD = 'leg25d-world-pointer';
+//   + 未查态 title 属性截断修复 + **查书补全三件套**（批量补全/单实体重查/选人可见）。
+export const PANEL_BUILD = 'leg25d-lookup-batch';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -314,7 +314,18 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 
 // ============ 角色与势力页 ============
 
-export function renderEntitiesHtml(world) {
+// 行内查书按钮（leg25 d）：有已定案的栏 → 同时给「重查」；否则只给「查」。
+//   口径：查 = forceFields null（只补没定案的）；重查 = forceFields 'absent'（连「书未明述」推倒重来）。
+function lookupButtons(e, lookupState) {
+    const settled = ['实力', '位置'].some((f) => ['ok', 'absent'].includes(lookupState(f)));
+    const ask = `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" title="只补还没定案的栏（已查到的原话不动）">查</button>`;
+    const again = settled
+        ? `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" data-force="absent" title="连「书未明述」也推倒重查——旧版取书 bug 误标的假「书未明述」靠这个清掉">重查</button>`
+        : '';
+    return `${ask}${again}`;
+}
+
+export function renderEntitiesHtml(world, { config = null } = {}) {
     // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、镜头徽、分支/隶属
     const lens = new Set(lensList(world).map((x) => x.e.id));
     // leg24 片1（停抄书）：行内「补抽」与头部「补抽未抽属性/隶属」两枚按钮下掉——
@@ -391,13 +402,27 @@ export function renderEntitiesHtml(world) {
             + `<div class="sw2-eattrs">${[powerChip, posChip].filter(Boolean).join('') || '<span class="sw2-nodata-text">实力/位置未查（轮到时会按需去世界书取原话）</span>'}</div>`
             + `<div class="sw2-eagenda">${agenda ? `<b>${escapeHtml(agenda.goal)}</b> ${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}<br>${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}` : (e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。')}${status}${affil}${branch}${organ}${crewHtml}${crewPowerHtml}</div>`
             + `<div class="sw2-eactive">最近活跃<br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
+            // leg25 d：行内两个入口（细案 §6）。**未查过**只需「查」（补缺）；**已定案**（含被旧 bug
+            //   误标的「书未明述」）给「重查」——它走 force 覆盖，否则 absent 是永久闸、永远查不动。
+            + `<div class="sw2-elookup">${lookupButtons(e, lookupState)}</div>`
             + `</div>`;
     });
     const allEnts = world.entities || [];
     const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
     // leg25 c：原「其中 N 位账面无数」随四维一起删除——没有数值维度了，"账面无数"这个说法失去所指。
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div><div class="sw2-entity-list">${rows.join('')}</div>`
-        + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。</div>`;
+    // leg25 d（细案 spec-lookup-batch-refresh §6）：批量补全入口 + 进度（进度由 config 注入，
+    //   渲染层不持任务状态——面板零第二份状态纪律）。
+    const task = config?.lookupTask || null;
+    const batchBtn = task
+        ? `<button class="sw2-btn" data-action="lookup-batch-all" title="再点一次可停；已查到的都留账">■ 停止补全 ${task.cursor}/${task.total}</button>`
+        : `<button class="sw2-btn" data-action="lookup-batch-all" title="把全册在册实体的实力/位置按需查一遍（借世界推进分批跑，不阻塞推进；再点一次可停）">⬇ 补全全册实力/位置</button>`;
+    const batchHint = task
+        ? `<span class="sw2-hint">补全中 ${task.cursor}/${task.total}（成功 ${task.success} · 未加载到 ${task.pending} · 书未明述 ${task.absent} · 失败 ${task.failed}）——随世界推进分批跑</span>`
+        : '';
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
+        + `<div class="sw2-list-tools" style="margin:6px 0 8px">${batchBtn}${batchHint}</div>`
+        + `<div class="sw2-entity-list">${rows.join('')}</div>`
+        + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。每行的<b>查</b>=只补没定的栏，<b>重查</b>=连「书未明述」也推倒重查（旧版误标的假「书未明述」靠它清掉）。</div>`;
 }
 
 // ============ 设定档案页（A-6：展示与 setting.frozen 逐字段一致） ============
@@ -626,7 +651,7 @@ export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {
         board: renderBoardHtml(world),
         chronicle: renderChronicleHtml(world, { oldVolumes, filter: view.chronicleFilter ?? null }),
         archive: renderArchiveHtml(world, { oldVolumes }),
-        entities: renderEntitiesHtml(world),
+        entities: renderEntitiesHtml(world, { config }),
         setting: renderSettingHtml(world),
         settings: renderSettingsHtml(world, { config, oldVolumes }),
         header: {
