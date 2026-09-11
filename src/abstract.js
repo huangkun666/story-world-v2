@@ -457,31 +457,23 @@ function absorbInto(kept, e, seenNames) {
 }
 // ★导出是为了**能被真测**（与 autoComposeSource / bookEntriesForInherit 同一治法）：
 //   跨块合并是"接线类"逻辑，只有真跑才能证明它把同义异名合掉了——否则又是"测试全绿而实机没合"。
+//
+// ★裁决口径（**故意保持最简**，见下方"为什么砍掉复杂裁决"）：
+//   去重键 = **名字 ∪ 别名**；先见到的条目当正名（`name`），其余叫法全部进它的 `aliases`；字段"缺什么补什么"。
+//
+// 为什么砍掉复杂裁决（如实留档，别再加回去）：
+//   为了让"书里更正式的那个名字"胜出，我先加了一套排序裁决（书里真有 `【名】` 条目 > 不是长名截断 >
+//   被指认次数 > 名字长度 > 书序）。**四层规则，每层都在修上一层的洞**，而且当场出真 bug：
+//   `isTruncation` 写宽了一点 ⇒ `【名号10】` 里的"名号1"被判成截断 ⇒ `名号1000..1999` 排到队尾、
+//   反而先被收下，再把真正的 `名号0..999` 当别名吃掉（`名号0` 跑到第 1990 位，既有书序锁当场红）。
+//   教训：**"哪个叫法当 name"是次要诉求**（碎片化治没治好、叫法丢没丢才是主诉求），
+//   为一个次要诉求叠四层判据，收益小、面积大、还引入了新的错法。故整组裁掉。
+//   代价（如实登记 G4）：正名可能落到一个较短的叫法上（如 `大虞皇朝` 而不是 `人族皇朝`）；
+//   **但所有叫法都保留在 aliases 里**，按名字或别名查册都能命中 ⇒ 对下游（归属/位置/展示）无影响。
 export function dedupeRoster(entities = []) {
     const seenNames = new Set();          // 去重键（名字 ∪ 别名）
     const kept = [];
-    // ★谁是正名：**被最多条目当别名指认的那个名字**（正名不该被别人当别名指）。
-    //   为什么必须这么定（实测逼出）：块2 看不到 `【人族皇朝】` 的定义，模型会把 `大虞皇朝` 当正名、
-    //   把 `人族皇朝` 写进它的 aliases —— 与块1 的指向**正好相反**。旧法"谁有别名谁赢"于是让 `大虞皇朝` 赢了，
-    //   合并结果成了 `大虞皇朝 ← [人族皇朝、大虞]`（正名错）。按"被指认次数"裁决就翻回来了：
-    //   `人族皇朝` 被指 1 次、`大虞皇朝` 被指 0 次 ⇒ 留 `人族皇朝`。
-    //   一律按"缺什么补什么"拼字段，绝不覆盖已有（明述优先）。
-    const inbound = new Map();            // 名字 → 被多少条目写成别名
     for (const e of entities) {
-        for (const a of (Array.isArray(e?.aliases) ? e.aliases : [])) {
-            const s = rosterNorm(a);
-            if (s) inbound.set(s, (inbound.get(s) || 0) + 1);
-        }
-    }
-    const wonBy = (e) => {                // 分数越高越像正名；并列时保持原顺序（书序）
-        const ns = rosterNamesOf(e);
-        return Math.max(...ns.map((n) => inbound.get(n) || 0));
-    };
-    const ordered = entities
-        .map((e, i) => ({ e, i }))
-        .sort((a, b) => wonBy(b.e) - wonBy(a.e) || a.i - b.i)
-        .map((x) => x.e);
-    for (const e of ordered) {
         if (!e || !rosterNorm(e.name)) continue;
         const keys = rosterNamesOf(e);
         const hit = keys.find((k) => seenNames.has(k));

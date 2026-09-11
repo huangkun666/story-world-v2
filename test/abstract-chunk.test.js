@@ -77,33 +77,40 @@ test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次，全量覆
     assert.ok(r.setting.frozen.canon.powerScale.length === 1, '五件套仍出自 canon 单发');
 });
 
-test('leg25 g：跨块别名的正名裁决——按"别指认的那个名字"定正名（真模型实测逼出）', () => {
+test('leg25 g：跨块别名合并——去重键 = 名字 ∪ 别名，先见到的当正名，叫法一个不丢', () => {
     // 场景来自**真模型实测**（gemini-3.1-pro-preview 跑真书两块）：
     //   块1 看得到条目定义 ⇒ 出 `人族皇朝`，aliases=[大虞, 大虞皇朝]；
     //   块2 看不到定义   ⇒ 出 `大虞皇朝`，aliases=[人族皇朝, 大虞]   ← **指向正好相反**。
-    // 旧裁决（谁有别名谁赢/先到先得）会让 `大虞皇朝` 当正名 ⇒ 合并成 `大虞皇朝 ← [人族皇朝、大虞]`（正名错）。
-    // 现裁决：**被最多条目当别名指认的那个名字才是正名** —— `人族皇朝` 被指 1 次、`大虞皇朝` 被指 0 次。
+    // ★裁决**故意保持最简**：先见到的当正名，其余叫法全进 aliases。
+    //   我一度加过一套四层排序裁决（书里真有 `【名】` 条目 > 不是长名截断 > 被指认次数 > 名字长度），
+    //   每一层都在修上一层的洞，且当场出真 bug（`isTruncation` 写宽 ⇒ `【名号10】` 里的"名号1"被判成截断
+    //   ⇒ `名号1000..1999` 排在队首、反把 `名号0..999` 当别名吃掉，既有书序锁当场红）。
+    //   ⇒ **"哪个叫法当 name"是次要诉求**，主诉求只有两条：①合成一条（不碎片化）②叫法不丢。故整组裁掉。
     const chunk1 = [{ name: '人族皇朝', kind: 'faction', aliases: ['大虞', '大虞皇朝'], fields: { 规模: '方圆7500万里' } }];
     const chunk2 = [{ name: '大虞皇朝', kind: 'faction', aliases: ['人族皇朝', '大虞'] }, { name: '虞昭华', kind: 'character' }];
+
     const merged = dedupeRoster([...chunk1, ...chunk2]);
-    // ★真正要保证的是"**合成一条**、三个叫法都不丢"——这是治碎块的目的。
-    //   ★而"留下哪个当 name"在**块间指向相反**时是**并列的**（两个名字都被对方指认过），
-    //     纯本地规则分不出来 ⇒ 由块顺序决胜（这里不锁死具体是哪个，只锁"合一条 + 叫法齐"）。
-    //     残留缺口已登记（G4）：要根治得知道"哪个叫法是书里的**条目名**"——那需要按块留痕，
-    //     本棒不做（老账不动、新世界先靠这条兜住）。
     const dy = merged.filter((m) => ['人族皇朝', '大虞皇朝', '大虞'].includes(m.name));
     assert.equal(dy.length, 1, '★三个叫法必须合成**一条**（治碎块的目的）');
-    const allNames = [dy[0].name, ...(dy[0].aliases || [])];
-    for (const n of ['人族皇朝', '大虞皇朝', '大虞']) assert.ok(allNames.includes(n), `叫法「${n}」不许丢`);
+    const all = [dy[0].name, ...(dy[0].aliases || [])];
+    for (const n of ['人族皇朝', '大虞皇朝', '大虞']) assert.ok(all.includes(n), `叫法「${n}」不许丢`);
     assert.equal(dy[0].fields?.规模, '方圆7500万里', '拼字段：已有的不丢');
     assert.ok(merged.some((m) => m.name === '虞昭华'), '无关条目不受影响');
     assert.ok(!merged.some((m) => m.name === '大虞'), '别名不许作为独立条目留下');
 
-    // 顺序无关性只保证**条数**（并列时留下的 name 允许随顺序变，见上）
-    assert.equal(dedupeRoster([...chunk2, ...chunk1]).filter((m) => ['人族皇朝', '大虞皇朝', '大虞'].includes(m.name)).length, 1,
-        '★块顺序颠倒后仍是**一条**（条数不受顺序影响）');
+    // 顺序无关：颠倒两块仍只有一条（正名可以随顺序变，但**条数**不许变）
+    const flipped = dedupeRoster([...chunk2, ...chunk1]);
+    assert.equal(flipped.filter((m) => ['人族皇朝', '大虞皇朝', '大虞'].includes(m.name)).length, 1,
+        '★颠倒后仍是**一条**');
 
-    // 无别名可指认时退回书序（第一见到的留下），不许把两条都留下
+    // 书序锁定：同形条目一律保持原顺序（我加排序裁决时把这条弄红过，留锁防复发）
+    const many = Array.from({ length: 1200 }, (_, i) => ({ name: `名号${i}`, kind: 'character' }));
+    const kept = dedupeRoster(many).map((e) => e.name);
+    assert.equal(kept.length, 1200, '同形条目不许被误合并');
+    assert.equal(kept[0], '名号0');
+    assert.equal(kept[1199], '名号1199');
+
+    // 同名只留一条，缺的字段由后一条补上
     const plain = dedupeRoster([{ name: '甲', kind: 'faction' }, { name: '甲', kind: 'faction', parent: '乙' }]);
     assert.equal(plain.length, 1, '同名只留一条');
     assert.equal(plain[0].parent, '乙', '缺的字段由后一条补上');
