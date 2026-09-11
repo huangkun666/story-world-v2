@@ -6,11 +6,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    pickOneForLookup, forcedFields, missingFields, planBatches, runBatchLookup,
+    pickOneForLookup, forcedFields, missingFields, planBatches, runBatchLookup, resolveBookSource,
     buildSelectPrompt, ENTITY_LOOKUP_MAX_ATTEMPTS,
 } from '../src/entity-lookup.js';
 import { renderAll, renderEntitiesHtml } from '../src/render.js';
-import { characterBookEntries, characterWorldNames, locateNameLine } from '../web/index.js';
+import { characterBookEntries, characterWorldNames, locateNameLine, locateNameSnippet, bookEntryText } from '../web/index.js';
 
 const world = (over = {}) => ({
     version: 1,
@@ -146,8 +146,75 @@ test('leg25 d（B6）：按名号定位到它自己那一行；定位不到退�
         '★名字后不是紧跟括号/冒号 → 不许远距离抓（防抓错成别人）');
 });
 
-// ---------- ⑤ ★接线审计：画了按钮就必须有人接 ----------
+// ---------- ④b 取原文：定位失败时**不许**退回到被截断的整条（否则 1200 截断风险仍在） ----------
 
+// ★测**真函数** `bookEntryText`（从 web/index.js 导出）。第一版我自带了一份镜像 helper，
+//   变异测试把真实现弄坏它照样绿 ⇒ 等于没测。教训：测试不许自带被测逻辑的复制品。
+const bookTextOf = (content, name = '吞天妖王', comment = '某条目') => async () => ({
+    ok: true,
+    entries: [{ name: comment, ...bookEntryText(content, name) }],
+});
+
+test('leg25 d：名号描述行在 1200 字符之后时，取原文必须仍能拿到它（否则又是假「书未明述」）', async () => {
+    // 用户质疑（2026-09-11）：「你不是按行直接命中吗，那还有 1200 的风险吗」——**有**：
+    //   locateNameLine 只认**行首**形态（`- 名号 (…)` / `名号：…`）。若正文把该名号写在段落里
+    //   （非行首），定位失败 → 退回 `content.slice(0,1200)` → 描述行落在 1200 之后就被切掉
+    //   → 模型在喂进去的原文里找不到它 → 记 absent → **假的「书未明述」**（与旧 bug 同款病）。
+    const filler = Array.from({ length: 40 }, (_, i) => `设定条目第${i}行：`.padEnd(40, '畴')).join('\n');   // > 1200 字符
+    const tail = '上古秘辛记载：吞天妖王于北荒现身，气息T8大乘中期，无人敢挡。';
+    const content = `${filler}\n${tail}`;
+    assert.ok(content.indexOf('吞天妖王') > 1200, '前置：该名号确实落在 1200 字符之后');
+    // 行首形态定位不到（它不在行首）——这是本用例的前提
+    assert.equal(locateNameLine(content, '吞天妖王'), null, '行首形态确实定位不到（段落里的提及）');
+    // 取原文：必须仍把含该名号的片段喂出去
+    const src = await resolveBookSource(bookTextOf(content), { name: '吞天妖王' });
+    assert.ok(src.ok, '书读到了');
+    const text = (src.entries[0] || {}).text || '';
+    assert.ok(text.includes('吞天妖王'), `★必须命中该名号（否则模型看不到 → 记 absent → 假「书未明述」）：${text.slice(0, 80)}`);
+    assert.ok(text.includes('T8大乘中期'), '描述原话在喂出的文本里');
+});
+
+test('leg25 d：段落形态提及 → 只喂那一段（不是整条，也不截断丢它）', async () => {
+    const filler = Array.from({ length: 40 }, (_, i) => `设定条目第${i}行：`.padEnd(40, '畴')).join('\n');
+    const content = `${filler}\n上古秘辛记载：吞天妖王于北荒现身，气息T8大乘中期，无人敢挡。\n另有一段无关记载：某甲某乙。`;
+    const src = await resolveBookSource(bookTextOf(content), { name: '吞天妖王' });
+    const text = (src.entries[0] || {}).text || '';
+    assert.ok(text.length < content.length / 2, '只喂相关那一段，不是整条');
+    assert.ok(!text.includes('某甲某乙'), '不带无关段落');
+});
+
+test('leg25 d：三档取文本的边界——都不许丢掉该名号，也不许多搬无关段落', () => {
+    const name = '吞天妖王';
+    // ①行首形态 → 只这一行
+    const withLine = '代表人物:\n- 吞天妖王 (男, T8大乘中期): 现任盟主。\n- 金刚猿王 (男, T6化神巅峰): 战王。';
+    const a = bookEntryText(withLine, name);
+    assert.equal(a.located, 'line');
+    assert.ok(a.text.startsWith('- 吞天妖王') && !a.text.includes('金刚猿王'), '行首形态：只给这一行');
+    // ②段落形态（行首定位不到）→ 给含它的那一段，且不受 1200 限制
+    const long = `${'填充'.repeat(900)}\n上古秘辛：吞天妖王于北荒现身，气息T8大乘中期。\n无关段落：某甲某乙。`;
+    assert.ok(long.indexOf(name) > 1200, '前置：名号在 1200 之后');
+    assert.equal(locateNameLine(long, name), null, '行首形态确实定位不到');
+    const b = bookEntryText(long, name);
+    assert.equal(b.located, 'snippet', '★落到段落兜底，而不是"退回截断整条"');
+    assert.ok(b.text.includes(name) && b.text.includes('T8大乘中期'), '★名号与描述原话都在');
+    // ③正文里根本没有 → 退回截断整条（此时丢它是对的：它确实没出现）
+    const none = '甲'.repeat(5000);
+    const c = bookEntryText(none, name);
+    assert.equal(c.located, 'none');
+    assert.equal(c.text.length, 1200, '退回时仍受截断防御约束');
+});
+
+test('leg25 d：★测试不许自带被测逻辑（本棒踩过：镜像 helper 让变异测试失去意义）', async () => {
+    // 这一条是纪律锁：`bookEntryText` 必须是**从 web/index.js 导出的真函数**，测试直接调它。
+    //   第一版我自带了一份镜像 helper，把真实现弄坏它照样绿 ⇒ 等于没测。
+    const mod = await import('../web/index.js');
+    assert.equal(typeof mod.bookEntryText, 'function', '真实现必须可被测试直接调用（导出）');
+    // 真函数必须真的走三档（行首 / 段落 / 兜底），任何一档被摘掉都会在上一条用例里变红
+    const src = String(mod.bookEntryText);
+    assert.ok(src.includes('locateNameLine') && src.includes('locateNameSnippet'), '两档定位都在真函数体内');
+});
+
+// ---------- ⑤ ★接线审计：画了按钮就必须有人接 ----------
 test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（防"按钮画了没人接"）', async () => {
     // 这一条治的是本棒反复踩的那类病：接线断了而测试全绿（异步 bookText / 卡挂世界指针都是这么漏的）。
     const savedW = globalThis.window;

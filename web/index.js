@@ -655,6 +655,54 @@ function escapeRegExp(s) {
     return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// B6 兜底（leg25 d 修，用户质疑「按行命中还有 1200 风险吗」——**有**，这条就是补它）：
+//   `locateNameLine` 只认**行首**形态（`- 名号 (…)` / `名号：…`）；正文若把名号写在**段落中间**
+//   （"上古秘辛记载：吞天妖王于北荒现身，气息T8大乘中期"），行首定位失败 ⇒ 旧实现退回
+//   `content.slice(0,1200)` ⇒ 描述落在 1200 之后就被切掉 ⇒ 模型看不到 ⇒ 记 absent ⇒
+//   **假的「书未明述」**（与本棒治过的病同款）。
+//   兜底口径：**在完整正文里**定位含该名号的那一段，整段照抄（不截断——截断正是要避免的事）。
+//   仍然零词表、零改写：只是"把那几行搬出来"。
+export function locateNameSnippet(content, name) {
+    const text = String(content ?? '');
+    const nm = String(name ?? '').trim();
+    if (!text || !nm) return null;
+    const m = new RegExp(escapeRegExp(nm)).exec(text);
+    if (!m) return null;
+    // 以名号为中心，**按段落/句子边界**向两侧扩（不是固定 ±N 字符——那会把相邻无关段落一起拖进来）
+    const softBreak = /[\n。；;]/;              // 句子/段落边界（扩到它为止）
+    const hardStop = /[\n]/;                    // 硬边界：绝不超过一个段落
+    const EXPAND = 300;
+    let from = m.index;
+    for (let i = m.index - 1; i >= 0 && m.index - i <= EXPAND; i -= 1) {
+        from = i;
+        if (hardStop.test(text[i])) break;
+        if (softBreak.test(text[i])) break;
+    }
+    let to = m.index + nm.length;
+    for (let i = to; i < text.length && i - (m.index + nm.length) <= EXPAND; i += 1) {
+        to = i + 1;
+        if (hardStop.test(text[i])) break;
+        if (softBreak.test(text[i])) break;
+    }
+    const seg = text.slice(from, to).trim();
+    return seg || null;
+}
+
+// 一条命中的条目的取文本（三档，**都不许把该名号切掉**——切掉它 = 模型看不到 = 假「书未明述」）：
+//   ①行首形态（`- 名号 (…)` / `名号：…`）→ 只喂这一行（最省、最准）
+//   ②段落形态（名号出现在句子中间）→ 喂含它的那一段（在**完整正文**里找，不受 1200 限制）
+//   ③都没有 → 才退回截断后的整条（此时它确实没在正文里出现）
+// 提成独立导出函数是为了**能被真测**：写在 bookTextForEntity 里就只能测它的复制品（本棒踩过——
+//   我第一版测试自带一份镜像 helper，变异测试把真实现弄坏它照样绿，等于没测）。
+export function bookEntryText(content, name, cap = 1200) {
+    const raw = String(content ?? '');
+    const line = locateNameLine(raw, name);
+    if (line) return { text: line, located: 'line' };
+    const snippet = locateNameSnippet(raw, name);
+    if (snippet) return { text: snippet, located: 'snippet' };
+    return { text: raw.slice(0, cap), located: 'none' };   // 单条截断防御（防巨条目灌爆查询 prompt）
+}
+
 async function bookTextForEntity(entity) {
     const name = String(entity?.name || '').trim();
     if (!name) return { ok: true, entries: [] };
@@ -678,14 +726,11 @@ async function bookTextForEntity(entity) {
     return {
         ok: true,
         entries: hit.slice(0, 4).map((e) => {
-            const full = String(e?.content || '').slice(0, 1200);   // 单条截断防御（防巨条目灌爆查询 prompt）
-            // B6：先按名号定位到它自己那一行——定位到就**只喂这一行**（载荷从整条降到一行，且更准）；
-            //   定位不到退回整条（零回归）。注意：在**截断前**的正文里定位，避免"行在 1200 之后"被误判为没有。
-            const line = locateNameLine(String(e?.content || ''), name);
+            const picked = bookEntryText(e?.content, name);
             return {
                 name: String(e?.comment || name).trim(),
-                text: line || full,
-                located: Boolean(line),
+                text: picked.text,
+                located: picked.located,
             };
         }).filter((x) => x.text),
     };
