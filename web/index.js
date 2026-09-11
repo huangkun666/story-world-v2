@@ -25,7 +25,7 @@ import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport
 import { composeInitSource, normalizeEntryKey } from '../src/init-source.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
-import { runEntityLookupStep, runBatchLookup, pickOneForLookup, planBatches } from '../src/entity-lookup.js';
+import { runEntityLookupStep, runBatchLookup, pickOneForLookup, planBatches, deriveLocationFromBook } from '../src/entity-lookup.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
@@ -1034,6 +1034,20 @@ export function seedAndBackfill(hotWorld, { entries = [] } = {}) {
     return { seed, seededDelta, backfilled, changed: seed.seeded > 0 || seededDelta > 0 || backfilled > 0 };
 }
 
+/**
+ * inheritLocations(world, { entries }) → { ssot, inherited }
+ * 位置继承（零 token 结构推断）的**加载期收口**：组织条目驻地 → 成员实体的 `location`。
+ * 为什么要在加载期也跑一遍（leg25 f）：`runBatchLookup` 里那条路只在**真去查书/真推进一轮**时才走，
+ *   而玩家打开面板看实体表是**最常见的入口**——不补这一刀，位置列会一直停在「未载」直到他推一轮，
+ *   用户会以为这功能不存在（同一个坑 leg25 d 在"属性看不到"上踩过一次）。
+ * 纪律：纯函数、零 token、幂等（只填空位：已有真位置的不动）；取不到书 ⇒ 原样返回（不猜位置）。
+ */
+export function inheritLocations(world, { entries = [] } = {}) {
+    if (!Array.isArray(entries) || !entries.length) return { ssot: world, inherited: 0 };
+    const d = deriveLocationFromBook({ world, entries });
+    return { ssot: d.ssot, inherited: d.stats?.inherited ?? 0 };
+}
+
 export async function loadWorld() {
     resetBookCache();   // leg25 d：换聊天/换卡/换世界 ⇒ 取书缓存必须失效（它按会话缓存全量世界书）
     const meta = readHotMeta();
@@ -1067,14 +1081,22 @@ export async function loadWorld() {
     // leg25 f：改走 `bookEntriesForInherit` 同一取数口（失败给空数组 + 上控制台），三处口径一致。
     const bookEntriesForSeed = await bookEntriesForInherit();
     const { seed, seededDelta, backfilled, changed } = seedAndBackfill(hotWorld, { entries: bookEntriesForSeed });
-    if (changed || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
-        writeHotMeta(hotAccountShape(hotWorld));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
+    // leg25 f：**位置继承也挂在加载期**（零 token、幂等、只填空位）——打开面板即见效，
+    //   不必等玩家推一轮或点「查」。与名册落账共用同一份条目，一次落盘。
+    const loc = inheritLocations(hotWorld, { entries: bookEntriesForSeed });
+    const world2 = loc.ssot;
+    if (changed || loc.inherited > 0 || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
+        writeHotMeta(hotAccountShape(world2));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
-        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta, backfilled });
-        else if (backfilled > 0) console.info('[story-world-v2] 名册落账可重入：本次补齐', { 归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0 });
+        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited });
+        else if (backfilled > 0 || loc.inherited > 0) {
+            console.info('[story-world-v2] 名册落账可重入：本次补齐', {
+                归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0, 位置: loc.inherited,
+            });
+        }
     }
     LISTED_VOLUMES = await listOldVolumes();
-    refreshWorld(hotWorld, { oldVolumes: LISTED_VOLUMES });
+    refreshWorld(world2, { oldVolumes: LISTED_VOLUMES });
 }
 
 // ---------- K35：真实动作总线（阅卷/导出/导入；其余按钮随 K36 接调度） ----------

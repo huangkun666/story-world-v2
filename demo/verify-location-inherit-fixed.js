@@ -45,3 +45,11 @@ const res2 = await runBatchLookup({
     ids: ['e_bk_1'], fields: ENTITY_LOOKUP_FIELDS, tick: w?.meta?.tick ?? 0, bookEntries: entries,
 });
 console.log(`\n幂等自证：第二次跑 locationInherited = ${res2.locationInherited}（应为 0）`);
+
+// 加载期收口（loadWorld 走的那条）：从"全是占位值"的世界再跑一遍，应当同样推 173
+const { inheritLocations } = await import('../web/index.js');
+const fresh = JSON.parse(JSON.stringify(w));
+const lr = inheritLocations(fresh, { entries });
+console.log(`\n★加载期收口 inheritLocations（打开面板即生效）= ${lr.inherited} 个位置`);
+const lr2 = inheritLocations(lr.ssot, { entries });
+console.log(`  幂等自证：第二次 = ${lr2.inherited}（应为 0）`);

@@ -183,6 +183,34 @@ test('leg25 f：★同一批条目走 runBatchLookup 真收口——位置继承
     assert.equal(e.location, '西极贺洲西极昆仑山玉虚秘境', '★跑完整收口后位置真的落账了');
 });
 
+test('leg25 f：★加载期收口 inheritLocations——打开面板即见效（不必等推一轮或点「查」）', async () => {
+    const mod = await import('../web/index.js?inherit3');
+    assert.equal(typeof mod.inheritLocations, 'function', '加载期收口必须导出（可真测）');
+    const w = worldWithPlaceholder();
+    const r = mod.inheritLocations(w, { entries: BOOK_ENTRIES });
+    assert.ok(r.inherited >= 4, `★打开面板即推断（实际 ${r.inherited}）`);
+    const e = r.ssot.entities.find((x) => x.name === '玄一道祖');
+    assert.equal(e.location, '西极贺洲西极昆仑山玉虚秘境', '★成员位置落账');
+    assert.equal(r.ssot.meta.entityFields[e.id].位置来源, '结构推导', '★来源标「结构推导」（不是书里对这个名号自己的明述）');
+    // 取不到书 ⇒ 原样返回（不猜位置、不报错）
+    const w2 = worldWithPlaceholder();
+    const r2 = mod.inheritLocations(w2, { entries: [] });
+    assert.equal(r2.inherited, 0);
+    assert.equal(r2.ssot.entities.find((x) => x.name === '玄一道祖').location, '未明', '没书就不许猜（留占位）');
+    // 幂等：已有真位置的不动
+    const r3 = mod.inheritLocations(r.ssot, { entries: BOOK_ENTRIES });
+    assert.equal(r3.inherited, 0, '★幂等：第二次 0（加载期反复跑安全）');
+});
+
+test('leg25 f：★loadWorld 加载链里必须有位置继承这一刀（防"接了但没挂上"）', async () => {
+    const src = await readFile(new URL('../web/index.js', import.meta.url), 'utf8');
+    assert.match(src, /const loc = inheritLocations\(hotWorld, \{ entries: bookEntriesForSeed \}\)/,
+        '★loadWorld 里真的调了位置继承（与名册落账共用同一份条目）');
+    assert.match(src, /loc\.inherited > 0/, '★推断出东西时要落盘（否则只在内存）');
+    assert.match(src, /refreshWorld\(world2, \{ oldVolumes: LISTED_VOLUMES \}\)/,
+        '★渲染的是**推断后**的世界（否则界面还是旧的）');
+});
+
 test('leg25 f：★三处生产调用点都必须把条目喂给收口（防再次断线）', async () => {
     const src = await readFile(new URL('../web/index.js', import.meta.url), 'utf8');
     // 三个入口各必须出现一次「bookEntries: await bookEntriesForInherit()」：
