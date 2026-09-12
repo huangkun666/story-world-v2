@@ -135,5 +135,9 @@ test('半径与波及上限（片3）：半径公式保留（死代码，无调�
     assert.ok(spreadRadius(0.6) > spreadRadius(0.4), '半径那把尺还在（尽管已无调用者）');
     // leg25：删掉 `maxRippleTargets()` 包装函数的三则断言——该函数生产 0 调用（唯一用处是返回本常量），
     //   上限的强制点已改在 check-step（校验 newEvents[].ripples 条数），常量本体仍在此锁值。
-    assert.equal(RIPPLE_TARGET_CAP, 3, '波及目标数上限=固定提案值（不再随分量变：旧法 ceil(2×分量)）');
+    // leg29（用户 2026-09-12 令「事件波及也改成 15 个」，leg28 令停手未实施）：3 → 15。
+    //   ★15 不是实际最先咬人的天花板——`AGENDA_INVOLVED_CAP` 也是 15，且其集合含属主 + 本步全部
+    //     动作方 + 波及名单 ⇒ 属主自行动时单事件最多波及 14（实测见 src/weight.js 常量处注释）。
+    //     本用例只锁"常量本体改了没有"，两者咬合由 worldstep 的上限用例与 prompts 的告知面锁覆盖。
+    assert.equal(RIPPLE_TARGET_CAP, 15, '波及目标数上限=固定值（leg29：3 → 15，用户令；不再随分量变：旧法 ceil(2×分量)）');
 });

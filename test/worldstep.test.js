@@ -104,6 +104,45 @@ test('校验（leg25）：一次事件波及目标数上限——≤RIPPLE_TARGE
     assert.ok(rOver.errors.some((e) => e.includes('$.newEvents[0].ripples')), '错误路径指向 ripples');
 });
 
+// ★leg29（用户令「事件波及也改成 15 个」）：改后**上限不是最先咬人的那道闸**——本用例把这条咬合钉死。
+//   实测（真 checkWorldStep + 真常量）：`checkAgendaInvolvement` 的集合 = 盘算属主 + **本步全部**
+//   actions 的 entity/target + 波及名单，而波及名单是它的子集 ⇒ 有效天花板 = 15 −（属主与行动方去重后的个数）。
+//   为什么必须锁：只把常量改成 15 就交差，模型照"至多 15 个"写出 15 条会被涉及的闸拒掉、白烧一整轮——
+//   这正是告知面（prompts 铁律 8 写"实际最多 14 人"）要防的事。改涉及口径若打破本用例，必须同时改提示词。
+test('校验（leg29）：波及上限 15 与「单盘算一轮涉及 ≤15」的咬合——属主自行动时单事件最多波及 14（15 即被拒）', () => {
+    const world = JSON.parse(JSON.stringify(GOLDEN));
+    const base = world.entities[0];
+    for (let i = world.entities.length; i <= 20; i++) {
+        world.entities.push({ ...base, id: `e_extra_${i}`, name: `${base.name}${i}` });
+    }
+    const owner = world.agendas.find((a) => !a.closed).owner;              // 真夹具里的在飞盘算属主
+    const others = world.entities.map((e) => e.id).filter((id) => id !== owner);
+
+    // 波及名单与行动方**不重叠**（被波及的是别人）——上一版夹具拿行动方当波及目标，
+    // 集合去重把两者并成一个 ⇒ 读数恒等于 N、**根本量不到咬合**（假绿）。
+    const mk = (n) => {
+        const s = validStep();
+        s.actions = [{ entity: owner, verb: '推进', position: '商路' }];
+        s.newEvents[0].ripples = others.slice(0, n);
+        return s;
+    };
+
+    const at14 = checkWorldStep(mk(14), world);   // 属主 1 + 波及 14 = 涉及 15
+    assert.equal(at14.ok, true, `波及 14（涉及 15）应过：${at14.errors.join('; ')}`);
+
+    const at15 = checkWorldStep(mk(15), world);   // 属主 1 + 波及 15 = 涉及 16 > 15
+    assert.equal(at15.ok, false, '波及 15 会被「涉及 >15」拒整步（不是被波及闸拒——波及 15 恰好等于上限）');
+    assert.ok(at15.errors.some((e) => e.includes('一轮内涉及实体上限') && e.includes('16')),
+        `拒绝文案应来自涉及闸且报出实际条数 16：${at15.errors.join('; ')}`);
+    assert.ok(!at15.errors.some((e) => e.includes('波及目标数上限')),
+        `★ 15 条不得再触发波及闸——若此条红，说明上限又被改回去了：${at15.errors.join('; ')}`);
+
+    // 真·超限（16 > RIPPLE_TARGET_CAP）仍必须被波及闸抓住——上限有强制点这件事不许因改值而丢
+    const at16 = checkWorldStep(mk(16), world);
+    assert.ok(at16.errors.some((e) => e.includes('波及目标数上限') && e.includes(String(RIPPLE_TARGET_CAP))),
+        `16 条应触发波及闸并带上限值：${at16.errors.join('; ')}`);
+});
+
 // ---------- 主调用管线（伪造 transport） ----------
 
 const fakeTransport = (step) => async () => ({ text: JSON.stringify(step) });

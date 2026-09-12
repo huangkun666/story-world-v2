@@ -143,7 +143,8 @@ export function checkWorldStep(step, ssot) {
 
     // ⑤ 波及：ripples 必须是存在的实体；且**条数 ≤ 上限**（leg25：RIPPLE_TARGET_CAP 自此有强制点——
     //    此前"一次事件波及 ≤3"只是 weight.js 里一个没人调用的函数返回值，校验侧对条数只字未提＝纸面机制；
-    //    超限**拒整步**（世界如实不动），上限值从 weight.js 导入，不写死字面量）
+    //    超限**拒整步**（世界如实不动），上限值从 weight.js 导入，不写死字面量。
+    //    leg29：上限 3 → 15（用户令）；★改后**本闸不是最先咬人的那道**——见下 ⑥ 的涉及闸）
     for (const [i, ev] of step.newEvents.entries()) {
         const ripples = ev.ripples || [];
         if (ripples.length > RIPPLE_TARGET_CAP) {
@@ -158,7 +159,11 @@ export function checkWorldStep(step, ssot) {
     //    单个盘算**一轮内**涉及的实体（属主 + 行动方/目标 + 被波及方）≤ AGENDA_INVOLVED_CAP(15)，
     //    逐轮算、不新增存储字段（agenda 里没有涉及名单，加字段=加机制）；超限**拒整步**
     //    （用户拍板取 (a)：与 ripples 超限同款——上限不拒绝就是纸面机制，leg25 G 组的教训）。
-    //    与 RIPPLE_TARGET_CAP(3) 并存不冲突：一个盘算可有多个事件，各自 ≤3，合计 ≤15 由本闸兜住。
+    //    与 RIPPLE_TARGET_CAP 并存不冲突：一个盘算可有多个事件，各自受限，合计 ≤15 由本闸兜住。
+    //    ★leg29（RIPPLE_TARGET_CAP 3 → 15）后两道闸边界重合，实测有效天花板（真函数跑）：
+    //      属主自行动 → 单事件最多波及 14；属主 + 1 个行动方 → 13；+3 个 → 12；+5 个 → 10
+    //      （因为本闸把属主 + 本步全部 actions 的 entity/target + 波及名单并成一个集合，波及名单是子集）。
+    //      ⇒ 超限一律**拒整步**；告知面口径写在 prompts.js 铁律 8。
     const involved = checkAgendaInvolvement(step, world);
     for (const v of involved.violations) {
         errors.push(`$.actions: 盘算「${v.agendaId}」一轮内涉及实体上限 ${involved.cap}（当前 ${v.count} 个：${v.sample.join('/')}…）`);
