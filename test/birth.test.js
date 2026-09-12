@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { settleTick } from '../src/settle.js';
+import { settleTick, AGENDA_CAPS } from '../src/settle.js';
 import { gateWorldStep } from '../src/gate.js';
 import { buildEvolutionPack } from '../src/pack.js';
 import { validate } from '../src/schema.js';
@@ -111,22 +111,27 @@ test('K14/A-3：在飞全局 ≤15——顶满时新提议拒建，世界其余�
     assert.ok(!r.ssot.agendas.some((a) => a.goal === '越限谋划'), '不落账');
 });
 
-test('K14/A-3：顶层 ≤5——顶层顶满时 state 源（顶层）拒、parent 源（子）过', () => {
+test('K14/A-3：顶层上限（读真源）——顶层顶满时 state 源（顶层）拒、parent 源（子）过', () => {
+    // ★leg31：夹具**不再写死"5"**，改为按真源 `AGENDA_CAPS.topLevel` **动态顶满**。
+    //   为什么必须改（本用例当场红过）：leg31 按用户令把 topLevel 5 → 10 之后，写死造 5 个顶层
+    //   就**顶不满**了 ⇒ 那条 state 源提议被放行 ⇒ 假红。写法照 leg29 那条波及上限用例的惯例：
+    //   **直接读真源常量，改上限则本用例随之成立**（数字只允许有一个真源）。
     const world = structuredClone(TREE);
-    for (let i = 0; i < 4; i++) {
+    const topCount = () => world.agendas.filter((a) => !a.closed && !a.parentId).length;
+    for (let i = 0; topCount() < AGENDA_CAPS.topLevel; i++) {
         world.agendas.push({
             id: `a_top_${i}`, owner: i % 2 ? 'e_lead' : 'e_court', goal: `顶层务${i}`, stage: '进行',
             visibility: 'known', maxSteps: 5, progress: 0,
             memory: { promises: [], done: [], blocked: [], turnsAlive: 1 },
         });
-    }   // a_root + a_top_0..3 = 5 顶层
+    }   // 顶满：现有顶层数 == AGENDA_CAPS.topLevel
     const step = emptyStep([
         na('e_court', '新顶层', { type: 'state' }),
         na('e_court', '新子务', { type: 'parent', ref: 'a_root' }),
     ]);
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    assert.ok(r.stage.warnings.some((x) => x.includes('盘算大厦顶（顶层 ≤5')), r.stage.warnings.join('; '));
+    assert.ok(r.stage.warnings.some((x) => x.includes(`盘算大厦顶（顶层 ≤${AGENDA_CAPS.topLevel}`)), r.stage.warnings.join('; '));
     assert.ok(!r.ssot.agendas.some((a) => a.goal === '新顶层'), '顶层上限拒建');
     assert.ok(r.ssot.agendas.some((a) => a.goal === '新子务'), '子盘算不受顶层上限约束');
 });

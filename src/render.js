@@ -57,7 +57,13 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   分段对象，不是 pack 文本），但**模型看到的东西变了**（entities 段从对象数组改成行式表格，
 //   `MAIN_PROMPT_V` v2-agenda-t1-6 → v2-agenda-t1-7）⇒ 构建号照旧往前走一格：
 //   否则"页面还是旧的"与"新表达法已生效"无法用构建号区分（leg29 立此规矩）。
-export const PANEL_BUILD = 'leg31-entity-table';
+//   ★leg31b（世界变宽·保守档）：`AGENDA_CAPS.topLevel` 5 → 10（用户令「先走保守的」）——这是**引擎判据**
+//   的一次真改动（先前四道闸全是只测不改），且它以"盘算条数 ~2 倍"直接改变世界演化形状
+//   ⇒ 属主面 3 → 8、盘算 4 → 9 条（细案 `docs/spec-world-widening.md` §5.5）；**界面零变化**，
+//   但**世界行为变了** ⇒ 构建号照旧走一格（同 leg29 立的规矩）。
+//   ⚠**构建号里不许出现引擎术语**：本棒第一版起名 `leg31b-agenda-top10` ⇒ 当场被 K33/A-3 那三条
+//   "玩家可见文本零引擎术语"的用例抓红（**构建号渲染在实体表表头 = 玩家视线内**）⇒ 改为不含禁词的写法。
+export const PANEL_BUILD = 'leg31b-top10-wider-world';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

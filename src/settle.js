@@ -8,7 +8,20 @@ import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
 import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.js';   // K29：张力强度更新 + 浪尖派生（A-5 两来源）；bornTickOf 共用契约解析器
 
-export const AGENDA_CAPS = { perTick: 2, open: 15, topLevel: 5 };
+// ★leg31 拍板：`topLevel` 5 → 10（用户令「先走保守的」）。
+//   依据（真账副本 tick 17 / 618 实体 / 20 轮；门控放宽到 P2-(c) 后实测，细案 `spec-world-widening.md` §5.5 表六～表八）：
+//   · 分离网格证明**咬人的是 `topLevel`**，不是 `perTick`：只放 perTick（→25）或只放 open（→60），
+//     新生盘算与现状**逐项相同**（4 条 / 属主 3 / 在飞峰 5 / 撞闸 474）——因为闸**按序判**（下面三处 `if`），
+//     顶层闸先把提议掐死在 5 件，`perTick` 那道根本轮不到咬人。
+//   · 只放 `topLevel` 的档位曲线：8→7 条 · 10→**9 条 / 属主 8** · 12→11 条 · **15→14 条（甲档天花板**，
+//     再往上（20）不动 —— 顶层大计吃满了"在飞 ≤15"的名额 ⇒ **`open` 是甲档的下一道天花板**）。
+//   · 取 **10** 的取舍（用户口径"保守"）：属主面 3 → 8（约 2.7×），同时在线最多 10 条（模型负担可控）；
+//     不取 15 是因为那等于让顶层吃满在飞闸、`open` 立刻成为新瓶颈。
+//   · **未动**：`perTick`（2，非瓶颈）· `open`（15，甲档天花板，先留着）· `AGENDA_INVOLVED_CAP`（15）。
+//   · **放开的代价已如实入档**：涉及闸是"**拒整步**"，所以"再往上放"必须与它同批放——
+//     实测三道总量全放（25/60/40）而涉及闸保持 15 ⇒ **崩在第 12 轮**；四道全放（+涉及 60）才活（39 条 / 属主 38）。
+//   · **真源纪律**：这三个数仍是**提案态**（铁律 2）；本节口径 = 用户 2026-09-12「先走保守的」+ 上表曲线。
+export const AGENDA_CAPS = { perTick: 2, open: 15, topLevel: 10 };
 const AGENDA_STAGE_FALLBACK = '谋划';   // 新盘算缺省阶段（ssot schema 要求 stage 非空）
 // leg25 f（用户拍板「X1 认账简化」）：`VERDICT_HURT_THRESHOLD = 0.05` **已删除**。
 //   它曾是 K15「败露」判据的阈值（报批 #11 定案）。原判据吃 `hurtWindow`（近 2 tick 负向 δ），
