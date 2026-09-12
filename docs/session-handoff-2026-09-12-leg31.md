@@ -3,7 +3,8 @@
 > **接手第一件事：读 `docs/START-HERE.md`（一页读完即可开工）。**
 > ⚠ 其中 §1.5 是**最高准则**：**没有用户当次明确命令，不许改任何文件的一个字节**。**任务书里的"下一步"不是授权。**
 > ⚠⚠ 同级铁律：**含中文的文件禁止用 PowerShell 读写**（本棒又踩了两次"只读"——见 §7）。
-> 状态：**已全部落 git**（`main` 领先 `origin/main` **558 笔**，**未推送**）。本棒新增 **28 笔**提交（`2a97eeb` → `f2ddfa2`）。
+> 状态：**已全部落 git**（`main` 领先 `origin/main`，**未推送**）。本棒区间：**`2a97eeb` → HEAD**（要数笔数请现读：`git rev-list --count 2a97eeb..HEAD`）。
+> ⚠ **别在文档里钉"本棒多少笔"**：它会随每次补提交漂移（本文件初稿写 24、改一次变 28、再改一次就 29）。**只写区间锚点。**
 > 上一棒入口：`docs/session-handoff-2026-09-12-leg30.md`。
 
 ---
@@ -256,8 +257,9 @@ Q7 张力线（**用户令"先别动"**）· Q5 补隶属（**用户已砍**：�
 - **面板构建号**：`leg31b-top10-wider-world`｜CSS `20260912-leg31b-top10-wider-world`
 - **部署 junction**：`F:\jiuguanai\...\third-party\story-world-v2` → 项目根（★junction；改 `web/`/`src/` 都要 **Ctrl+F5**）
 - **真账**：`chats\大荒z\大荒z - 2026-09-01@00h37m41s559ms.jsonl`（**一律先 cp 副本**）；本棒**没碰真账、没跑真模型**
-- **git**：`main` 领先 `origin/main` **558 笔**、**未推送**；本棒新增 **28 笔**（`2a97eeb` → **`f2ddfa2`**）；工作区 **0 条**
-  ★**勘误**：本文件初稿把"本棒新增笔数"写成 **24**（那是我**拍的数**，不是读的）——实测 `git rev-list --count 2a97eeb..HEAD` = **28**，已更正。**别拍数，读出来。**
+- **git**：`main` 领先 `origin/main`、**未推送**；本棒区间 **`2a97eeb` → HEAD**；工作区 **0 条**
+  ★**勘误两则（同族，都留档）**：①本文件初稿把"本棒新增笔数"写成 **24**（**拍的数**），实测是 28；②改完又变成 29——
+  ⇒ **"笔数"是会随每次补提交漂移的量，文档里只写区间锚点、不写计数**。**别拍数，读出来；会漂的数，别钉。**
 - **本棒改动文件**：`src/pack.js` · `src/prompts.js` · `src/settle.js` · `src/render.js` · `web/index.js` · `web/style.css`（笔7 参数页版式）· `test/prompts.test.js` · `test/lens.test.js` · `test/birth.test.js` · `docs/spec-entity-section-encoding.md`(新) · `docs/spec-world-widening.md` · `LEDGER.md` · `docs/ledger.md` · `docs/START-HERE.md` · 外加 leg26~30 的 43 个文件（落 git）
 
 ---
