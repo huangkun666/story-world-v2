@@ -83,18 +83,29 @@ test('leg33·① actions[].position 与 newEntities[].location 同一趟归一�
     assert.equal(c.location, '北俱荒洲', `入局坐标写干净地名（不是「未明」、更不是带注解的），实际「${c.location}」`);
 });
 
-test('leg33·② 判据强度不变：剥掉注解后**仍在集外**的，照旧拒整步（真·编了个地名）', () => {
+// ★leg33c 口径反转（用户拍板「位置变成自由文本，位置集干脆删了」）：这一格原来锁"集外仍拒"，
+//   现在**集外照收**。留档原因：那不是"判据强度"，而是**一个跨书不成立的判据**
+//   （8 本真实世界书只有 3 本有干净地名表；真账 134 个地点被截到 59 ⇒ 书里真有的地名反被拒）。
+//   ★但本文件上半部分（剥「（推）」注解 + 三处归一）**一个字节没松**，仍全部成立。
+test('leg33c·位置是自由文本：集外地名**照收**（不再拒整步），但要留痕；「（推）」照旧被剥', () => {
     const w = baseWorld();
-    // ① 纯编的假地名 —— 照旧拒
-    const r1 = checkWorldStep(step({
+    const s = step({
         newEvents: [{ title: '奇事', source: { type: 'state' }, position: '不存在的地方', ripples: ['e_far'] }],
-    }), w);
-    assert.ok(!r1.ok && r1.errors.some((e) => e.includes('不在世界位置集')), '编地名必须仍被拒（本改动只剥引擎注解，不放松判据）');
-    // ② ★最阴的一路：拿注解去"伪装"一个集外地名 —— 剥完还是集外 ⇒ 仍拒
-    const r2 = checkWorldStep(step({
-        newEvents: [{ title: '奇事', source: { type: 'state' }, position: '不存在的地方（推）', ripples: ['e_far'] }],
-    }), w);
-    assert.ok(!r2.ok && r2.errors.some((e) => e.includes('不在世界位置集')), '★注解不许成为"编地名"的免死牌');
+    });
+    const r1 = checkWorldStep(s, w);
+    assert.equal(r1.ok, true, `位置是自由文本，集外不许拒整步：${r1.errors.join('; ')}`);
+    assert.ok((r1.warnings || []).some((x) => x.startsWith('位置集外:')), `集外要留痕：${JSON.stringify(r1.warnings)}`);
+    const r = settleTick({ ssot: w, step: s });
+    assert.equal(r.ok, true, r.stage.warnings.join('; '));
+    const ev = r.ssot.events.find((e) => e.title === '奇事');
+    assert.equal(ev.position, '不存在的地方', '★集外位置**照原样落账**（旧法会拒整步；leg32f 那套"归一到未明"只留给 newEntities 的空值）');
+    assert.ok(r.stage.warnings.some((x) => x.startsWith('位置集外:')), `留痕要进世界警告流（观测面）：${r.stage.warnings.join('; ')}`);
+    // ★剥注解这层不许松：带注解的集外地名 ⇒ 注解被剥掉、值仍是那串集外文本
+    const s2 = step({
+        newEvents: [{ title: '奇事二', source: { type: 'state' }, position: '不存在的地方（推）', ripples: ['e_far'] }],
+    });
+    checkWorldStep(s2, w);
+    assert.equal(s2.newEvents[0].position, '不存在的地方', '★注解照旧被剥（这一层是 leg33 的成果，leg33c 没动它）');
 });
 
 test('leg33·normalizePosition 本体：只剥尾部注解、只 trim，不做任何替换或猜测', () => {

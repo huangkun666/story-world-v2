@@ -20,11 +20,12 @@ function indexIds(ssot) {
 
 export function checkWorldStep(step, ssot) {
     const errors = [];
+    const warnings = [];   // ★leg33c：非致命留痕面（与 errors 分开——见下 ④ 位置段）
     const world = ssot;   // 别名：本函数沿用 ssot 命名，涉及面计算读 world.agendas/events
 
     // ① 形状：真 schema 强制
     const r = validate(step, worldStepSchema);
-    if (!r.ok) return { ok: false, errors: r.errors };
+    if (!r.ok) return { ok: false, errors: r.errors, warnings: [] };
 
     const { entityIds, agendaIds, eventIds, positions } = indexIds(ssot);
     const playerId = ssot.context?.playerId;   // K8：玩家棋子标注（红线 1 代码化）
@@ -167,21 +168,35 @@ export function checkWorldStep(step, ssot) {
         }
     }
 
-    // ④ 位置：事件/动作位置 ⊆ 世界状态位置集（§3.2：不得为贴近玩家而移动）
-    //   ★leg33：先把「（推）」注解剥掉——那是**引擎自己**打在实体表 location 列上的标记（leg31），
-    //     模型把格子原样抄回来（`北俱荒洲（推）`）不是编地名。**就地归一**（同一趟校验里，
-    //     下游 settle 落账读到的是剥过的值；该步本来就是重建对象，不是改调用方的输入）。
-    //     剥掉之后仍不在集内的 ⇒ 真·编地名，照旧拒整步（不改判据强度，只去掉引擎注解的假阳性）。
+    // ④ 位置：**自由文本**（★leg33c 用户拍板「要么就直接将位置变成自由文本就好了，位置集干脆删了」）
+    //
+    // 这一段的判据在 leg33c 被**换过**，全历程留档（免得下一棒又把它加回来）：
+    //   · 旧（切片 §3.2 起）：「事件/动作位置 ⊆ 世界位置集」，不在集内 ⇒ **拒整步**。
+    //     原文动机是"不得为贴近玩家而移动位置"——防的是"把世界搬到主角脚下"，**不是"地名要合规"**。
+    //   · leg33：先剥「（推）」注解（那是**引擎自己**打在实体表 location 列上的标记，模型抄回来会被误判）。
+    //   · ★leg33c：**闸整个去掉**，改成留痕。三条依据（都是实测，见 `LEDGER.md` leg33 行）：
+    //     ① **跨书不成立**：位置集来源是 `kind='location'` 的抽取条目，而 8 本真实世界书里只有 3 本
+    //        有干净地名表（仓库自带 `demo/audit-mechanism-genericity.js` 的"机制②"读数 3/8）；
+    //        其余 4 本位置集退化成 `['未明']` ⇒ 位置闸在这类书里**近乎失效**（写什么都错）。
+    //     ② **大书里在切真地名**：真账 canon 有 **134** 个地点条目，旧 `derivePositions` 按书序**截到 60**
+    //        ⇒ 模型写书里真有的 `太清境`/`万魔殿` 反被拒整步。
+    //     ③ **位置早就不参与机制**（定案「只做呈现、不做机制」）：白名单不换来任何机制收益，
+    //        却换来"大书切真地名、小书全员未明"两件坏事。
+    //   ★保留下来的（这才是原动机，没丢）：剥「（推）」注解 + **集外留痕**。
+    //     留痕不是判据，是**观测面**——"这本书的位置集够不够"从此是个可数的量。
+    //   ★同族先例：`newEntities` 的位置不在集内早已是"归一 + 留痕、不拒整步"（leg32f）。
+    //   ⚠机器可读承诺：本段留痕一律以 `位置集外:` 开头且**不进 errors**；
+    //     故它**不计入拒签率分子**（`settle.js` 的拒签口径只数 `裁定:`/`校验拒绝:`/`提议丢弃`）。
     for (const ev of step.newEvents) ev.position = normalizePosition(ev.position);
     for (const a of step.actions) if (a.position != null) a.position = normalizePosition(a.position);
     for (const [i, ev] of step.newEvents.entries()) {
         if (!positions.has(ev.position)) {
-            errors.push(`$.newEvents[${i}].position: " ${ev.position}" 不在世界位置集（${[...positions].join('/')}）`);
+            warnings.push(`位置集外: $.newEvents[${i}].position="${ev.position}"（不在参照表内，照收——参照表不是闸）`);
         }
     }
     for (const [i, a] of step.actions.entries()) {
         if (a.position != null && !positions.has(a.position)) {
-            errors.push(`$.actions[${i}].position: "${a.position}" 不在世界位置集`);
+            warnings.push(`位置集外: $.actions[${i}].position="${a.position}"（不在参照表内，照收——参照表不是闸）`);
         }
     }
 
@@ -231,5 +246,5 @@ export function checkWorldStep(step, ssot) {
         }
     }
 
-    return { ok: errors.length === 0, errors };
+    return { ok: errors.length === 0, errors, warnings };
 }

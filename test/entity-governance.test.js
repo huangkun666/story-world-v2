@@ -166,17 +166,29 @@ test('leg32f·同名新实体 = 丢掉那条提议，**不许拒整步**（用�
     assert.ok(r2.stage.warnings.some((x) => x.includes('提议丢弃') && x.includes('商贾')), `丢弃要留痕：${r2.stage.warnings.join('; ')}`);
 });
 
-test('leg32f·位置不在集内 = 归一到「未明」并留痕，**不许拒整步**（同族：模型编了个地名）', () => {
+// ★leg33c 口径反转（用户拍板「位置变成自由文本，位置集干脆删了」）：这一格原本锁的是
+//   **leg32f 的"归一到「未明」"**——现在改成**照收**。为什么反转：位置集跨书不成立
+//   （8 本真实世界书只 3 本有干净地名表；真账 134 个地点被截到 59 ⇒ 书里真有的地名反被抹成「未明」）。
+//   ★leg32f 那条原则**没丢**：它真正要保的是「**提案被丢掉 ≠ 世界步不合法**」——即**不许拒整步**。
+//   本用例继续锁这一条，只是把"归一"换成"照收 + 留痕"。
+//   ⚠只有**空值**才归「未明」（空着就是空着＝形态判断，不是位置判据）。
+test('leg33c·位置是自由文本：集外地名**照收**（不再抹成「未明」），留痕；空值才归「未明」', () => {
     const w = structuredClone(baseWorld());
     w.entities.find((e) => e.id === 'e_merchant').lastActiveTick = 0;
     const r1 = checkWorldStep(step({ newEntities: [{ name: '游方僧', location: '不知何处', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }), w);
-    assert.equal(r1.ok, true, `位置编错不该拒整步：${r1.errors.join('; ')}`);
+    assert.equal(r1.ok, true, `位置集外不该拒整步：${r1.errors.join('; ')}`);
+    // ⚠留痕点在 `settle.js` 的 spawnEntities（`newEntities` 的位置在落账那一步归一/留痕），
+    //   不在 check-step（那里没有实体段的位置校验）——故断言写在 r2，不写在 r1。
     const r2 = settleTick({ ssot: w, step: step({ newEntities: [{ name: '游方僧', kind: 'character', location: '不知何处', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }) });
     assert.equal(r2.ok, true, r2.stage.warnings.join('; '));
     const c = r2.ssot.entities.find((e) => e.name === '游方僧');
-    assert.ok(c, '人照常入局（位置不对不等于这个人不该存在）');
-    assert.equal(c.location, '未明', `非法位置归一到「未明」（空着就是空着），实际 ${c.location}`);
-    assert.ok(r2.stage.warnings.some((x) => x.includes('位置不在集内')), `归一要留痕：${r2.stage.warnings.join('; ')}`);
+    assert.ok(c, '人照常入局');
+    assert.equal(c.location, '不知何处', '★集外位置**照原样落账**（旧法抹成「未明」——那让"大书里写得出、账上记不住"）');
+    assert.ok(r2.stage.warnings.some((x) => x.startsWith('位置集外:')), `留痕要进世界警告流：${r2.stage.warnings.join('; ')}`);
+    // ★空值仍归「未明」：空着就是空着（形态判断，与位置集无关）
+    const r3 = settleTick({ ssot: w, step: step({ newEntities: [{ name: '无名客', kind: 'character', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }) });
+    assert.equal(r3.ok, true, r3.stage.warnings.join('; '));
+    assert.equal(r3.ssot.entities.find((e) => e.name === '无名客').location, '未明', '没给位置 ⇒ 中立词');
 });
 
 test('A-10 生·dialogueFact 源：依据册命中才放行；依据册随落子记账', () => {

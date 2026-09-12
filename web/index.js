@@ -504,7 +504,18 @@ function nextPlayerId(entities = []) {
     return `e_p${max + 1}`;
 }
 
-export const POSITIONS_CAP = 60;   // 提案：位置集上限（超出按书序截断；防巨书灌爆输入）
+// ★leg33c（用户拍板「位置变成自由文本，位置集干脆删了」）：**位置集从"闸"降级为"参照表"**，
+//   并且**不再截断**。两件事分开说，别混：
+//   ① 降级：`check-step.js` 的位置段不再拒整步（集外只留痕）、`settle.js` 的 spawnEntities 集外照收。
+//      依据：位置线的定案本来是"只做呈现、不做机制"（START-HERE §1），而白名单却一直在当硬闸；
+//      实测 8 本真实世界书里只有 3 本有干净地名表（`demo/audit-mechanism-genericity.js` 机制②），
+//      其余 4 本退化成 `['未明']` ⇒ 闸在那些书上近乎失效。⇒ 参照表留给模型/面板/位置继承用，
+//      但**不再决定"模型配不配写这个地名"**。
+//   ② 不截断：**`POSITIONS_CAP` 已作废**（原来是 60，按书序截断防巨书灌爆输入）。真账实测截掉的代价：
+//      canon 有 **134** 个地点条目，被切到 59 ⇒ 模型写书里真有的 `太清境`/`万魔殿`/`落英谷` 反被拒整步。
+//      参照表已实测极轻（134 项 ≈ 600 字符 ≈ **180 est**），且**不参与 trimPack 裁剪** ⇒ 省钱的理由不成立。
+//   ⚠保留 `cap` 形参只为兼容既有调用点（传 0/负 = 不截断）；生产路径不再传它。
+export const POSITIONS_CAP = Infinity;   // ★已作废（留常量名防旧调用点炸）；见上 ②
 export function derivePositions(setting, { fallback = '未明', cap = POSITIONS_CAP } = {}) {
     const book = setting?.frozen?.canon?.bookEntities || [];
     const seen = [];
@@ -519,7 +530,9 @@ export function derivePositions(setting, { fallback = '未明', cap = POSITIONS_
             push(b.name);
         }
     }
-    return [fallback, ...seen.filter((s) => s !== fallback).slice(0, Math.max(0, cap - 1))];
+    // cap 缺省 = Infinity ⇒ 全收；显式传有限值才截断（既有用例自设上限时仍可测）
+    const room = Number.isFinite(cap) ? Math.max(0, cap - 1) : seen.length;
+    return [fallback, ...seen.filter((s) => s !== fallback).slice(0, room)];
 }
 
 export function attachPlayerPiece(world, playerName) {

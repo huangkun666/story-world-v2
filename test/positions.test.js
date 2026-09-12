@@ -32,12 +32,21 @@ test('D-2 不发明地名：书里没有的一律不进集；空书/缺 setting 
     assert.deepEqual(derivePositions({}), ['未明']);
 });
 
-test('D-3 上限防御：超出 cap 按书序截断，兜底词仍稳定在首位', () => {
-    const book = Array.from({ length: POSITIONS_CAP + 20 }, (_, i) => ({ name: `地${i}`, kind: 'location' }));
+// ★leg33c：这一格反转了。旧口径＝位置集按书序**截到 POSITIONS_CAP=60**；现在**不截断**。
+//   依据（真账实测）：canon 有 **134** 个地点条目，被截掉 75 个真地名（`太清境`/`万魔殿`/`落英谷`…），
+//   而模型写这些名字时**反被位置闸拒整步**。参照表实测极轻（134 项 ≈ 600 字符 ≈ 180 est）且不参与裁剪。
+//   ★同时锁住"cap 形参还活着"（显式传有限值仍能截断——旧调用点不至于炸）。
+test('D-3 已作废（leg33c）：位置集**不再截断**——书里多少地点就收多少；显式 cap 仍可截', () => {
+    const book = Array.from({ length: 200 }, (_, i) => ({ name: `地${i}`, kind: 'location' }));
     const pos = derivePositions(settingOf(book));
-    assert.equal(pos.length, POSITIONS_CAP, '不超过上限（防巨书灌爆输入）');
+    assert.equal(pos.length, 201, '200 个地点 + 兜底词「未明」全收（★不再按书序截断）');
     assert.equal(pos[0], '未明');
-    assert.equal(pos[1], '地0', '按书序取前 N');
+    assert.equal(pos[1], '地0');
+    assert.equal(pos[200], '地199', '★最后一个地点必须还在——旧法会把它切掉');
+    // 显式传有限 cap：仍按书序截断（兼容旧调用点/自设上限的用法）
+    const capped = derivePositions(settingOf(book), { cap: 10 });
+    assert.equal(capped.length, 10, '显式 cap=10 ⇒ 截到 10 项');
+    assert.equal(capped[0], '未明');
 });
 
 test('D-4 落地效力：位置集建好后，实体真的分散到书里说的地方（不再全员「未明」）', () => {

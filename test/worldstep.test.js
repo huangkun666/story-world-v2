@@ -50,18 +50,26 @@ test('校验：plot 源 ref 必须是已有盘算', () => {
     assert.ok(r.errors.some((e) => e.includes('plot 源 ref 必须是已有盘算 id')));
 });
 
-test('校验：事件位置必须在世界位置集（§3.2 主角中心化防回潮）', () => {
+// ★leg33c（用户拍板「位置变成自由文本，位置集干脆删了」）：这一格反转了。
+//   旧判据（切片 §3.2 起）＝事件/动作位置 ∉ 世界位置集 ⇒ **拒整步**；现在**不拒**，只留痕。
+//   依据（实测，见 LEDGER.md leg33 行）：① 8 本真实世界书里只有 3 本有干净地名表（其余退化成 ['未明']，
+//   闸近乎失效）；② 真账 canon 134 个地点条目被 derivePositions 截到 59 ⇒ 模型写书里真有的地名反被拒。
+//   ★但原动机**不许丢**：这条用例要同时锁住"集外不再拒 + 留痕要出得来"。
+test('校验：事件位置**集外不再拒整步**，但必须留痕（leg33c 口径：位置是自由文本，位置集只是参照表）', () => {
     const step = validStep();
-    step.newEvents[0].position = '玩家脚边';   // 为贴近玩家而移动 → 拒绝
+    step.newEvents[0].position = '太清境';   // 书里真有的地名（旧 derivePositions 会把它截掉）
     const r = checkWorldStep(step, GOLDEN);
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes('不在世界位置集')));
+    assert.equal(r.ok, true, `位置是自由文本，集外不许拒整步：${r.errors.join('; ')}`);
+    assert.ok((r.warnings || []).some((w) => w.startsWith('位置集外:')), `集外要留痕（观测面）：${JSON.stringify(r.warnings)}`);
+    assert.equal(r.errors.length, 0, '留痕**不许**进 errors（否则又变成拒整步）');
 });
 
-test('校验：动作位置越界拒绝；未知实体/盘算/波及拒绝', () => {
+test('校验：动作位置同样只留痕不拒；且**未知实体/盘算/波及照旧拒**（别把别的闸一起放松）', () => {
     const step1 = validStep();
     step1.actions[0].position = '九霄云外';
-    assert.equal(checkWorldStep(step1, GOLDEN).ok, false);
+    const r1 = checkWorldStep(step1, GOLDEN);
+    assert.equal(r1.ok, true, `动作位置也是自由文本：${r1.errors.join('; ')}`);
+    assert.ok((r1.warnings || []).some((w) => w.startsWith('位置集外:')), '动作集外同样要留痕');
 
     const step2 = validStep();
     step2.actions[0].entity = 'e_ghost';

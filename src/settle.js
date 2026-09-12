@@ -144,6 +144,9 @@ function adjudicate(world, step, tick, warnings) {
         for (const e of checked.errors) warnings.push(`校验拒绝: ${e}`);
         return false;
     }
+    // ★leg33c：非致命留痕面（位置集外）随拒签面一起上报——留痕不是判据，是观测面。
+    //   它**不计入拒签率**（拒签口径只数 `裁定:`/`校验拒绝:`/`提议丢弃`），见 check-step ④ 段末的承诺。
+    for (const w of checked.warnings || []) warnings.push(w);
     return true;
 }
 
@@ -627,13 +630,19 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
         //   和"他站在哪"混为一谈。座标编错，人还是该入场的（空着就是空着）。
         let location = ne.location;
         // ★leg33：同一趟归一——模型可能把实体表格子里的「（推）」注解一起抄进 location
-        //   （`normalizePosition` 与 check-step 的位置闸读同一份真源；剥完仍在集外才归一到「未明」）。
+        //   （`normalizePosition` 与 check-step 的位置段读同一份真源）。
+        // ★leg33c（用户拍板「位置变成自由文本，位置集干脆删了」）：**位置集不再是闸**——
+        //   集外地名**照收**（模型的创作权），只留痕。旧法把它归一到「未明」，
+        //   于是"大书里写得出、账上却记不住"（书里 134 个地点被截到 60，模型写 `太清境` 就被抹成未明）。
+        //   只有**空值**才归「未明」（空着就是空着——这是形态，不是判据）。
         const locNorm = normalizePosition(location);
-        if (!new Set(world.context?.positions || []).has(locNorm)) {
-            warnings.push(`提议丢弃: 「${ne.name}」位置不在集内（「${location}」）——归一到「未明」（空着就是空着）`);
-            location = '未明';
+        if (typeof locNorm === 'string' && locNorm.trim()) {
+            location = locNorm.trim();
+            if (!new Set(world.context?.positions || []).has(location)) {
+                warnings.push(`位置集外: 「${ne.name}」的位置「${location}」不在参照表内（照收——参照表不是闸）`);
+            }
         } else {
-            location = locNorm;
+            location = '未明';
         }
         // leg25 c：入局**不再落任何数值**——四维已不存在（书里的说法走 `实力` 文本态）。
         const ent = {
@@ -763,6 +772,8 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     const chronicle = [];
     const tick = world.meta.tick + 1;
     world.meta.tick = tick;
+    // ★leg33c：位置集外的非致命留痕先收（`pre.warnings`）——玩家的这一步也要能看到"这本书的位置够不够"。
+    for (const w of pre.warnings || []) warnings.push(w);
     const playerId = world.context?.playerId ?? null;   // K8/K9：玩家棋子标注（红线 1 代码化就位）
     const playerAffected = [];                          // K9：影响通道审计
     bookDialogue(world, moveFact, tick);                // K37：对话依据册记账（moveFact.object 命中）

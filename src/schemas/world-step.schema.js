@@ -45,16 +45,21 @@ export const worldStepSchema = {
                 },
             },
         },
-        newEntities: {   // K37/实体治理（§3.7 生通道②）：模型提议新实体入局——带源三型（book/event/dialogueFact）；出生/单轮上限/从属校验全归引擎（K45：席位上限已废）
+        newEntities: {   // K37/实体治理（§3.7 生通道②）：模型提议新实体入局——带源四型（book/event/dialogueFact/entity）；出生/单轮上限/从属校验全归引擎（K45：席位上限已废）
             kind: 'array',
             items: {
                 kind: 'object',
                 additional: false,
-                required: ['name', 'location', 'source'],
+                // ★leg33c：`location` 从 required 里**拿掉**（用户拍板「位置变成自由文本，位置集干脆删了」）。
+                //   为什么：① 位置早就不参与机制（定案「只做呈现」），没有理由强制模型为每个新人编一个地名；
+                //   ② 真账 canon 有 **134** 个地点条目、旧 `derivePositions` 只收 59 ⇒ 模型写书里真有的地名
+                //      也可能"不在集内"，强制它填 = 逼它编 ⇒ 与"空着就是空着"（§2 第 2 条）冲突。
+                //   口径：**给了就照收**（集外也收，只留痕）；**没给就落「未明」**（`settle.js` spawnEntities）。
+                required: ['name', 'source'],
                 props: {
                     name: { kind: 'string', minLength: 1 },
                     kind: { kind: 'string', enum: ['faction', 'character'] },
-                    location: { kind: 'string', minLength: 1 },
+                    location: { kind: 'string', minLength: 1 },   // 可省：驻点（自由文本；给了照收，没给落「未明」）
                     entity: { kind: 'string', minLength: 1 },   // 提议者实体 id（静默判定用；dialogueFact 源可填观察者）
                     parent: { kind: 'string', minLength: 1 },   // K45/C7：所属势力名（可省——书/对话中已知的门派或势力；引擎校验目标在册且为势力，不满足弃关系）
                     // leg25 c：入局 `attrs`（四维浮点提议）**整条删除**——四维已不存在（见 ssot.schema 注释）。
@@ -62,8 +67,9 @@ export const worldStepSchema = {
                     //   为什么加：旧三型（book/event/dialogueFact）都要求"书上写过 / 有事件 / 对话里点过名"
                     //   ⇒ **书上没写的人永远进不来**。真账实测 38 轮只有 4 个属主、614 人从未出场，
                     //   模型只能在同一批名字里翻来覆去（用户：「只有将创作权交在 llm 手里才能活起来」）。
-                    //   ★这不放开"编事实"：牵出者必须**在册且未灭**（`check-step.js` 硬闸），
-                    //   名字非空不重名、位置仍须 ∈ 位置集、每轮新生仍 ≤ ENTITY_BIRTH_PER_TICK。
+                    //   ★这不放开"编事实"：牵出者必须**在册且未灭**（`check-step.js` 硬闸），名字非空不重名，
+                    //   每轮新生仍 ≤ ENTITY_BIRTH_PER_TICK。
+                    //   ⚠（leg33c 更正）旧注释这里写"位置仍须 ∈ 位置集"——**该判据已废**，位置改自由文本。
                     source: {
                         kind: 'object',
                         additional: false,

@@ -82,10 +82,10 @@
 //      并明确要求**名单要被用掉**（一轮至少让一个新名字真出现在输出里），同时**别当任务清单全塞进去**。
 //   ★边界未松：静默门只多了一个**引擎机械选出的、每轮 12 人**的口子；
 //     四道总量闸（perTick/open/topLevel/涉及）照旧管着 ⇒ 不会炸量。
-// ★leg33 升位：铁律 3 补一句「位置值要写位置集里的地名本身，实体表 location 列尾部的「（推）」是标记、不是地名的一部分」
-//   ——起因是真机实测：模型把实体表格子原样抄成 `北俱荒洲（推）` ⇒ 位置闸拒整步（引擎注解的假阳性）。
-//   引擎侧同时加了 `src/position.js` 的归一（两层都做：事前说清 + 事后兜住）。
-export const MAIN_PROMPT_V = 'v2-agenda-t1-15';
+// ★leg33c 升位：铁律 3 把位置口径改成**自由文本**（用户拍板「位置变成自由文本，位置集干脆删了」）——
+//   位置集从硬闸降级为参照表；跨书实测 8 本里只有 3 本有干净地名表，且大书里 134 个地点被截到 59
+//   ⇒ 模型写书里真有的地名反被拒整步。引擎侧同步：`check-step.js` 集外只留痕、`settle.js` 集外照收。
+export const MAIN_PROMPT_V = 'v2-agenda-t1-16';
 
 export const OUTPUT_TEMPLATE = `{
   "actions": [
@@ -116,10 +116,12 @@ export const MAIN_PROMPT = `你是世界模拟器。你的输入是世界自身�
 铁律：
 1. 你只提议，引擎结算。你输出的一切是提案。玩家棋子的行动后果归引擎，你只写世界对它的反应与其他实体的行动；永远不要替玩家棋子写行动。
 2. 事件必须有源，三类之一：盘算（plot，ref=推进它的盘算 id）/ 状态（state，ref=处境或省略）/ 波及（ripple，ref=上游事件 id，必填，且必须引用输入中已存在的事件）。
-3. 事件与动作的位置必须来自输入的位置集；不得为贴近玩家棋子而移动位置。
-   ★**位置值**要写**位置集里的那个地名本身**（如 "北俱荒洲"）。实体表 location 列尾部可能带「（推）」
-   ——那只是"这个位置是引擎推断的"的**标记**，**不是地名的一部分**：往 newEvents[].position /
-   actions[].position / newEntities[].location 里写时**必须把「（推）」去掉**（写 "北俱荒洲"，不写 "北俱荒洲（推）"）。
+3. 事件与动作的位置**写出来就行**——唯一不许的是**为贴近玩家棋子而把谁搬过去**。
+   ★**位置值**：优先写**输入 positions 里出现过的那个地名本身**（如 "北俱荒洲"）——那是这本书的地点表。
+   ★但**位置不是闸**：书里真有的别处地名（书的层级写法，如 "太清境"）**也照写**，引擎照收、不会因此拒整步。
+   实体表 location 列尾部可能带「（推）」——那只是"这个位置是引擎推断的"的**标记**，**不是地名的一部分**：
+   往 newEvents[].position / actions[].position / newEntities[].location 里写时**必须把「（推）」去掉**
+   （写 "北俱荒洲"，不写 "北俱荒洲（推）"）。
 4. actions 的 entity、agendaAdvances 的 agendaId 必须引用输入中存在的 id。
 5. 玩家棋子只是输入中的一枚棋子，不是主角；谁值得动由你在名单内决定——手上有在办的事、刚出过手、被点名的那几位优先；引擎只做门控与拦矛盾。
    ★★**并且：玩家棋子这一枚不许你替它走**（实测栽过：认领之后模型照样让主角出手，整步被拒、世界原样不动）。
@@ -173,7 +175,7 @@ export const MAIN_PROMPT = `你是世界模拟器。你的输入是世界自身�
 
 ${OUTPUT_TEMPLATE}
 
-字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；newEvents[].ripples=被波及的**实体 id 列表**（照抄输入实体；绝不填事件/盘算 id——事件引用走 source.type="ripple" + ref；★**上限 15 人，且计入"单盘算一轮涉及 ≤15"⇒ 实际最多 14 人**，超限整步被拒）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；stage=起始阶段（可省）；visibility=明暗（known/concealed）；maxSteps=步数上限（1..8，可省，引擎钳制）；source.type=来源（event/parent/state）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（来自输入位置集）；entity=提议者实体 id（可省——dialogueFact 源可省略）；数值限定 0..1，省略=这一维空着（没有据）——只有你提议才会落账）；parent=所属势力名（可省——书/对话中已知的门派或势力，未明述不填；引擎校验目标在册且为势力，不满足则弃关系）；source.type=来源（book/event/dialogueFact/entity）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名、entity=在册实体 id）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
+字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；newEvents[].ripples=被波及的**实体 id 列表**（照抄输入实体；绝不填事件/盘算 id——事件引用走 source.type="ripple" + ref；★**上限 15 人，且计入"单盘算一轮涉及 ≤15"⇒ 实际最多 14 人**，超限整步被拒）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；stage=起始阶段（可省）；visibility=明暗（known/concealed）；maxSteps=步数上限（1..8，可省，引擎钳制）；source.type=来源（event/parent/state）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（优先取输入 positions 里的地名，书里别处的地名也照写）；entity=提议者实体 id（可省——dialogueFact 源可省略）；数值限定 0..1，省略=这一维空着（没有据）——只有你提议才会落账）；parent=所属势力名（可省——书/对话中已知的门派或势力，未明述不填；引擎校验目标在册且为势力，不满足则弃关系）；source.type=来源（book/event/dialogueFact/entity）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名、entity=在册实体 id）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
 
 只输出 JSON 本体，不要解释。`;
 

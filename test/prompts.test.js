@@ -31,13 +31,17 @@ function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick 
 }
 const ent = (id, name, kind, extra = {}) => ({ id, kind, name, location: '中央', ...extra });
 
-test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-15：leg33「（推）」注解不许当位置值 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-15');
-    // ★leg33：位置值必须写位置集里的干净地名，实体表 location 列尾部的「（推）」是标记不是地名的一部分。
-    //   起因：真机实测模型抄成 `北俱荒洲（推）` ⇒ 位置闸拒整步。契约层负责"事前不让它写"，引擎层负责兜住。
-    assert.ok(MAIN_PROMPT.includes('北俱荒洲（推）'), '铁律 3 必须给出"写错的例子"（模型照抄实体表格子的那个形态）');
-    assert.ok(MAIN_PROMPT.includes('必须把「（推）」去掉'), '铁律 3 必须明说要去掉注解');
-    assert.ok(MAIN_PROMPT.includes('不是地名的一部分'), '铁律 3 必须讲清注解与地名的区别');
+test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-16：leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-16');
+    // ★leg33c：位置口径改成**自由文本**（用户拍板「位置变成自由文本，位置集干脆删了」）——
+    //   旧契约说"必须写位置集里的地名"，与引擎新口径（集外照收）**必须一致**，否则又在教模型自我审查。
+    assert.ok(MAIN_PROMPT.includes('位置不是闸'), '铁律 3 必须明说"位置不是闸"（模型别自我审查）');
+    assert.ok(MAIN_PROMPT.includes('也照写'), '铁律 3 必须允许写书里真有的别处地名');
+    assert.ok(!MAIN_PROMPT.includes('位置必须来自输入的位置集'), '旧的"必须来自位置集"措辞不得回潮');
+    // ★leg33 的成果一个字节没松：「（推）」注解照旧必须剥掉（那是引擎自己打的标记）
+    assert.ok(MAIN_PROMPT.includes('北俱荒洲（推）'), '铁律 3 保留"写错的例子"（模型照抄实体表格子的形态）');
+    assert.ok(MAIN_PROMPT.includes('必须把「（推）」去掉'), '铁律 3 保留"要去掉注解"');
+    assert.ok(MAIN_PROMPT.includes('不是地名的一部分'), '铁律 3 保留注解与地名的区别');
     // H1（leg24 片3 起那个数已退场、且不随行入包 P3）：提示词不再拿分量说"谁值得动"
     assert.ok(!MAIN_PROMPT.includes('分量'), '提示词对模型不再提"分量"（模型看不到它——P3）');
     assert.ok(!MAIN_PROMPT.includes('分量与盘算决定谁值得动'), '旧铁律 5 措辞不得回潮');
