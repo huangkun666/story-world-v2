@@ -80,8 +80,8 @@
 .sw2-env-row .sw2-env-bar{height:5px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
 .sw2-env-row .sw2-env-bar i{display:block;height:100%;border-radius:3px;}
 .sw2-env-row .sw2-env-val{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-dim);text-align:right;}
-.sw2-env-row.sw2-danger .sw2-env-val{color:var(--sw2-red);font-weight:700;}
-.sw2-env-row.sw2-danger .sw2-env-name{color:var(--sw2-red);}
+/* leg26：`.sw2-danger`（越阈危险带）整条下架——档位没有"危险/安全"之分，引擎对参数零表态。
+   同批下架 `.sw2-env-bar.sw2-env-unknown`（空心条）——档位是原话，不画条。 */
 .sw2-clash-main{font-size:14.5px;font-weight:700;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
 .sw2-clash-main .sw2-int{font-size:12px;font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-amber);font-weight:400;}
 .sw2-clash-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}
@@ -137,8 +137,35 @@
 .sw2-ev-mark.nodata{color:var(--sw2-text-faint);border-style:dashed;}
 .sw2-nodata-text{font-size:11.5px;color:var(--sw2-text-faint);font-style:italic;}
 .sw2-env-row.sw2-nodata .sw2-env-val{color:var(--sw2-text-faint);font-size:11px;}
-.sw2-env-bar.sw2-env-unknown{background:transparent;border:1px dashed var(--sw2-line-soft);}
 .sw2-nodata-tag{margin-left:5px;font-size:10px;padding:0 4px;border:1px dashed var(--sw2-line-soft);border-radius:7px;}
+/* leg26：参数页的下拉（世界参数档位）——沿用面板既有观感，不新造组件 */
+.sw2-param-select{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:3px 7px;font-size:12px;font-family:inherit;min-width:96px;line-height:1.4;}
+/* 展开的原生列表：给了字号就跟着走（macOS/部分浏览器仍按系统渲染，这里只管能管的那部分） */
+.sw2-param-select option{font-size:12px;font-family:inherit;}
+.sw2-param-select:focus{outline:none;border-color:var(--sw2-text-faint);}
+.sw2-param-val{color:var(--sw2-amber);}
+/* leg26 c：参数的性质标签（自变量/因变量）——因变量只是呈现，没有旋钮 */
+.sw2-param-kind{margin-left:6px;font-size:10px;padding:1px 6px;border-radius:7px;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}
+.sw2-param-kind-dep{border-style:dashed;}
+
+/* ---------- leg27 后：修参数页版式（用户实机：「参数的ui页太丑了，说明文字太大，下拉表刚拉开没多久自己就关了」）----------
+   病的准确名字（读真码 + 数真 CSS 行确认，不是感觉）：
+     ① `.sw2-row` **全仓没有基础规则**——`renderParamsHtml` 一直在吐 `<div class="sw2-row">`（label/值/em 三段），
+        却只有 `.sw2-cold-mgmt .sw2-row` 与快照页两个**局部**变体 ⇒ 那些行在参数页上排成一竖列裸文本。
+     ② `em` 说明文字**没有任何字号声明** ⇒ 继承面板正文 14px（比面板里所有辅助文字都大）⇒「说明文字太大」。
+     ③ 卡片无行距 ⇒ 说明文字换行后与值、与下一行贴在一起 ⇒「太丑」。
+   修法：给 `.sw2-row` 补**一条基础规则**（三栏对齐：标签 / 值·控件 / 说明），并给 `.sw2-set-card` 定行距。
+   ⚠ 为什么敢做全局（而不是新造 `sw2-param-row`）：`.sw2-row` 的**生产者只有两处**（参数页 + 快照页，
+     后者另有 `.sw2-snap-*` 专用类），旧账里没有第三种用法 ⇒ 补基础规则不会误伤别页。
+     两个既有局部变体（`.sw2-cold-mgmt .sw2-row` / 快照行）选择器更具体 ⇒ 优先级不受影响。 */
+.sw2-row{display:flex;align-items:baseline;gap:12px;padding:7px 0;font-size:13px;color:var(--sw2-text-dim);}
+.sw2-row > span:first-child{flex:none;min-width:52px;color:var(--sw2-text);}
+.sw2-row > em{font-style:normal;font-size:11.5px;line-height:1.5;color:var(--sw2-text-faint);flex:1;min-width:0;}
+.sw2-row + .sw2-row{border-top:1px dashed var(--sw2-line-soft);}
+.sw2-row b.sw2-param-val{flex:none;color:var(--sw2-amber);font-weight:600;min-width:44px;}
+.sw2-set-card .sw2-actions{display:flex;gap:8px;flex:none;}
+.sw2-set-card .sw2-btn{padding:4px 12px;font-size:12.5px;}
+.sw2-set-card.sw2-actions-inline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .sw2-ecert{display:flex;flex-wrap:wrap;gap:5px;}
 .sw2-agenda{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);margin-bottom:6px;}
 .sw2-agenda b{color:var(--sw2-text);font-weight:600;}
