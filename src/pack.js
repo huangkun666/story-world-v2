@@ -23,7 +23,74 @@ export const LENS_RECENT_TICKS = 5;   // 提案（片3）：镜头第③段"近�
 //   trimPack 被接进生产路径后，任何一次"只改一处"的编辑都可能让裁剪路径上的调用点悬空
 //   （报错形态：`ReferenceError: est is not defined`，且**只在真的超预算时才炸**，小世界冒烟看不见）。
 //   现在两处共用同一个函数：没有第二份可漂移的副本，也没有"函数声明在调用点之后"的写法。
-const estTokensOf = (value) => Math.ceil(JSON.stringify(value).length / TOKEN_RATIO);
+//
+// ★leg31 实体段表达法收改（细案 `docs/spec-entity-section-encoding.md`）：
+//   量体**必须与真正发出去的文本同一个函数**，否则预算就成了"两把尺子"。故本函数改走 `packTextOf`
+//   （= 面向模型的唯一序列化口径），实体段按行式表格称重，不再按实体逐个 JSON 对象称重。
+const estTokensOf = (value) => Math.ceil(packTextOf(value).length / TOKEN_RATIO);
+
+// ---------- leg31：实体段行式表格（表达法收改，零信息损失） ----------
+// 病根（真账 tick 17 实测，618 实体）：实体段吃整包 96.8%，而其 56,047 个字符里
+//   **键名 45.5% + JSON 标点 10.8% = 56% 是纯结构开销**（618 行各写一遍 `"kind":` …），真内容·汉字只占 12.2%。
+//   ⇒ 表头只写一次、行内 TAB 分列 ⇒ 整包 est 19,306 → 9,789（**−49.3%**，下界口径亦 ≥49.6%）。
+// ★只改**序列化**、不改**内部形状**：`pack.entities` 仍是对象数组 ⇒ trimPack 的按行删键（.slim/.idOnly）、
+//   面板、测试判据**全部零连扰**；`JSON.parse(pack.text)` 往返性也仍成立（整段换成一个字符串格）。
+// 空值 = **空列**（不用 `—` 充数，沿用硬规矩二"空着就是空着"）；`locationNote`（`（推）`）**并进 location 值**，
+//   因为它是"结构推断"标记、不是独立事实，并进去信息零损失（实测 3,231 个非空格逐格还原一致）。
+// 分隔符实测：真账 618 行全部值（含 members 逐元素）对 TAB/竖线/换行**命中 0**；
+//   但那是**单本读数**（泛用性铁律 §2 第 3 条）⇒ 下方 `entityTableAnomalies` 把它变成**出包期机械自检**，不靠"我看过没问题"。
+export const ENTITY_TABLE_HEADER = ['id', 'kind', 'name', 'location', 'parent', '实力', 'members'].join('\t');
+const ENTITY_TABLE_COLS = ENTITY_TABLE_HEADER.split('\t');
+
+// 一行的取值（缺列返回 ''）
+const entityCell = (r, f) => {
+    if (f === 'location') return r.location == null ? '' : `${r.location}${r.locationNote ?? ''}`;
+    if (f === 'members') return Array.isArray(r.members) && r.members.length ? r.members.join('、') : '';
+    return r[f] == null ? '' : String(r[f]);
+};
+// ★**保留全列对齐**（细案 §2.2/§8 的决定）：尾部空列**不收**——虽然收掉能多省 481 est（51.8% vs 49.3%），
+//   但"某行少几列"会让模型误判列序（`e_p1` 那行若只剩 4 列，"第 6 列是 members"这条就读不出来了）。
+//   **不拿可读性换这 1.6 个百分点**。空列一律写空字符串（TAB 相邻）。
+const entityRowText = (r) => ENTITY_TABLE_COLS.map((f) => entityCell(r, f)).join('\t');
+
+// ★自检（不改变输出，只上报）：任一格的**值本身**含 TAB/换行 ⇒ 会串列，必须显形（判据 C）。
+//   ⚠实现纪律：**不许用"数 TAB 个数"判**——`entityRowText` 会收掉尾部空列（`e_p1` 只有 4 列），
+//   按 TAB 计数对"尾部缺列"永远数不出来（本判据的第一版就栽在这，被新加的用例当场抓红）。
+export function entityTableAnomalies(rows) {
+    const bad = [];
+    for (const r of Array.isArray(rows) ? rows : []) {
+        const cellHasDelim = ENTITY_TABLE_COLS.some((f) => /[\t\n]/.test(entityCell(r, f)));
+        if (cellHasDelim) bad.push(r?.id ?? '(无 id)');
+    }
+    return bad;
+}
+
+// 行式块：表头 + 每行一条（每行末尾的 `\n` 在 JSON 里要转义成 2 字符 ⇒ 用 join 拼、不留尾空行）
+function entityTableBlock(rows) {
+    if (!Array.isArray(rows) || !rows.length) return '';
+    return ENTITY_TABLE_HEADER + '\n' + rows.map(entityRowText).join('\n');
+}
+
+// 行式块 → 对象数组（**仅供判据 D 做无损核对**，生产路径不回读：check-step 校验拿的是 ssot，不是 pack）
+export function parseEntityTableBlock(block) {
+    const [head, ...lines] = String(block ?? '').split('\n');
+    const cols = head.split('\t');
+    return lines.filter((l) => l !== '').map((l) => {
+        const parts = l.split('\t');
+        const row = {};
+        cols.forEach((f, i) => { if (parts[i]) row[f] = parts[i]; });
+        const m = /^(.+?)（推）$/.exec(row.location ?? '');
+        if (m) { row.location = m[1]; row.locationNote = '（推）'; }
+        if (row.members) row.members = row.members.split('、');
+        return row;
+    });
+}
+
+// ★面向模型的**唯一**序列化口径：只有实体段换行式块，其余九段逐字节不变；
+//   未带 entities 的值走原样 —— 故 `lensList` 对**单行**量体（无 entities 键）零扰动。
+export function packTextOf(pack) {
+    return JSON.stringify(pack, (key, value) => (key === 'entities' ? entityTableBlock(value) : value));
+}
 
 export function lensList(ssot, { lensMaxTokens = LENS_DEFAULT_MAX_TOKENS, moveFact = null } = {}) {
     const est = (line) => estTokensOf(line);   // 行内估体：估的是**单行字符串**（与整包估计同一个函数）
@@ -167,7 +234,15 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
         enumerable: false, writable: false, configurable: false,
     });
     trimPack(pack, EVOLUTION_BUDGET_TOKENS);
-    const text = JSON.stringify(pack);
+    // 判据 C（细案 §5）：行式分隔符冲突**出包期机械自检**，不靠"我看过没问题"。
+    //   单本实测命中 0，但那是单本读数 ⇒ 一旦某世界书的名字里带 TAB/换行，这里如实上报（并并入 trimmed 痕迹）。
+    const anomalies = entityTableAnomalies(pack.entities);
+    if (anomalies.length) {
+        pack.tableAnomalies = anomalies.slice(0, 5);
+        if (!pack.trimmed) pack.trimmed = [];
+        pack.trimmed.push('entities.tableAnomaly');
+    }
+    const text = packTextOf(pack);   // ★细案 §2.1：唯一序列化口径；estTokensOf 同一个函数 ⇒ 不存在"两把尺子"
     return { pack, text, estTokens: Math.ceil(text.length / TOKEN_RATIO) };
 }
 

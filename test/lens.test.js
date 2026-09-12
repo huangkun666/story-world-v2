@@ -208,18 +208,41 @@ test('leg25: 未超预算 → pack.trimmed 缺省（不写该键）、输出与�
 // 为什么要有这一则：裁剪只在"真的超预算"时才执行，小世界冒烟/现有集成用例永远走不到那条分支，
 //   于是裁剪路径上的任何错误（悬空的辅助名、写错的字段）都会在单测里隐形、只在真实长跑里炸。
 //   本用例把超预算世界喂进 runTick（tick.js:14 → buildEvolutionPack → trimPack），端到端锁死该路径。
+// ★leg31 夹具重造（实体段表达法收改后**旧夹具已结构性失效**，实测见下）：
+//   旧夹具 = "1500 个无成员实体"硬吃预算。改动后实体行成本减半 ⇒ 该夹具 est 只有 20,396（不超）。
+//   ★但**单纯加行数不可能救回它**：`lensList` 自带 `LENS_DEFAULT_MAX_TOKENS=30000` 的独立上限、
+//     逐行截前缀 ⇒ 实测 pad 2000/2500/3000 时镜头只装 1817/1783/1776 行、实体段自我封顶 ~24,900，
+//     整包**永远够不到 30,000**（pad 3000 时 est 仍 24,852）。故必须按 `trimPack` 的**剪枝设计**造夹具：
+//     ①成员满的势力（`members` 是它第一刀要逐出的重字段）②未决事件 ③在飞盘算（带 memory，第五刀要砍的）。
+//   实测挑选（六种配置，本文件外真账复现）：势力300/事件300/盘算300 ⇒ trimmed 前四刀全中、est 落回 28,247。
 test('leg25: runTick 端到端——超预算世界不炸且全程落在预算内（裁剪路径进集成车道）', async () => {
     const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
     const world = structuredClone(GOLDEN);
     const base = world.entities[0];                          // e_merchant（大荒商帮 @ 临渊城）
-    const pad = Array.from({ length: 1500 }, (_, i) => ({
-        ...structuredClone(base), id: `e_pad_${i}`, name: `守卫${i}号长名为了吃预算`,
+    // ① 成员满的势力：members 是 trimPack 第一刀（entities.slim）要逐出的字段 —— 不这样造就触发不了剪枝
+    const ROSTER = Array.from({ length: 60 }, (_, i) => `成员${i}号长名字`);
+    const pad = Array.from({ length: 300 }, (_, i) => ({
+        ...structuredClone(base), id: `e_pad_${i}`, kind: 'faction', name: `守卫${i}号长名为了吃预算`,
+        branches: [`分舵甲${i}`, `分舵乙${i}`], organs: [`堂口${i}`], members: ROSTER,
     }));
     world.entities = [...world.entities, ...pad];
+    // ② 未决事件（第四刀 pendingEvents）③ 在飞盘算带 memory（第五刀 agendas.detail）
+    //   ⚠必须是**追加**而不是覆盖：本用例的 step 引用 golden 世界里原有的 `a_1` 盘算，
+    //   覆盖掉 agendas 会让"超预算世界不炸"这条断言红成"未知盘算 a_1"（与裁剪路径无关的假红）。
+    world.events = [...(world.events || []), ...Array.from({ length: 300 }, (_, i) => ({
+        id: `ev_pad_${i}`, title: `未决事件${i}号长标题为了吃预算`, source: { type: 'plot', ref: 'a_1' }, position: '临渊城', closed: false,
+    }))];
+    world.agendas = [...(world.agendas || []), ...Array.from({ length: 300 }, (_, i) => ({
+        id: `a_pad_${i}`, owner: `e_pad_${i}`, goal: `谋划第${i}件事的长目标描述为了吃预算`, stage: '阶段', visibility: 'known',
+        progress: 1, maxSteps: 4, parentId: null, closed: false,
+        memory: { promises: ['旧诺言甲', '旧诺言乙'], done: [], blocked: ['受阻原因'], turnsAlive: 3 },
+    }))];
     world.weights = Object.fromEntries(world.entities.map((e) => [e.id, 0.5]));
 
-    const p0 = buildEvolutionPack(world, null);              // 前提：这份世界真的超预算
-    assert.ok(p0.pack.trimmed?.length > 0, `夹具必须真的超预算（trimmed=${JSON.stringify(p0.pack.trimmed)}）`);
+    const p0 = buildEvolutionPack(world, null);              // 前提：这份世界真的触发了裁剪
+    assert.ok(p0.pack.trimmed?.length > 0,
+        `夹具必须真的超预算并触发剪枝（est=${p0.estTokens} / trimmed=${JSON.stringify(p0.pack.trimmed ?? null)}）——`
+        + '若为空说明夹具又随世界成本变化而失效，须按 trimPack 的剪枝设计重造，**不许靠加行数硬堆**');
 
     const step = {
         actions: [{ entity: 'e_merchant', verb: '沿商路北上巡查', position: '商路' }],
