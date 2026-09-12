@@ -87,8 +87,9 @@ test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；�
     w.events.push({ id: 'ev_closed', title: '旧事', source: { type: 'state' }, position: '临渊城', ripples: [], closed: true });
     const cases = [
         [{ name: 'A', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_closed' } }, 'event 源必须引已存在未决事件'],
-        [{ name: '商贾', location: '大营', entity: 'e_merchant', source: { type: 'book', ref: '商贾' } }, '账上已有同名实体'],
-        [{ name: 'B', location: '郊外', entity: 'e_merchant', source: { type: 'event', ref: 'e_merchant' } }, '不在世界位置集'],
+        // ★leg32f：原来这里还有一条「重名 ⇒ 拒」。**已按用户实机反馈撤掉**——重名是"丢掉那条提议"
+        //   （账上已有的那个人正在册），不是"世界步不合法"；旧法会让整轮陪葬（连同玩家这一轮的行动）。
+        //   新的judgment在下面 leg32f 那两条用例里（含"同一步里别的事照常落账"）。
         [{ name: 'C', location: '大营', entity: 'e_player', source: { type: 'event', ref: 'x' } }, '模型禁写玩家'],
         [{ name: 'D', location: '大营', entity: 'e_ghost', source: { type: 'event', ref: 'x' } }, '未知提议者'],
     ];
@@ -96,6 +97,86 @@ test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；�
         const r = checkWorldStep(step({ newEntities: [ne] }), w);
         assert.ok(!r.ok && r.errors.some((e) => e.includes(frag)), `${frag}: ${r.errors.join('; ')}`);
     }
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+// ★leg32e·小说家条款（细案 `docs/spec-novelist-clause.md` §3.2）第一片：**给"该出场但书上没写的人"一条路**
+//   病（真账 tick 38 实测）：38 轮只有 **4 个属主**，其余 **614 人从未出场**——不是模型不想写别人，
+//   而是入局源只有 book/event/dialogueFact 三型 ⇒ **书上没写过的人永远进不来**（用户：「只有将创作权
+//   交在 llm 手里才能活起来」）。新源型 `entity` = **由在册实体牵出**（ref=那个实体 id）。
+//   形态判据（全机械可核，不用词表）：①牵出者必须在册且未灭 ②名字非空且不重名（既有）③位置仍须∈位置集（既有，
+//   本片**不动**位置口径——位置线已定案"不参与机制"）④`ENTITY_BIRTH_PER_TICK` 兜住雪崩（既有，数字**不动**）。
+test('leg32e 生·entity 源：新面孔由**在册实体牵出**入局（从前这个源型不存在 ⇒ 书上没写的人永远进不来）', () => {
+    const w = structuredClone(baseWorld());
+    w.entities.find((e) => e.id === 'e_merchant').lastActiveTick = 0;   // 提议者须"刚出过手"，否则被门控滤（片3 结构判据）
+    // 契约层：entity 源是合法枚举值
+    const okShape = validate(step({ newEntities: [{ name: '游方剑客', location: '大营', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }), worldStepSchema);
+    assert.equal(okShape.ok, true, `契约层应接受 entity 源：${okShape.errors.join('; ')}`);
+    const r = settleTick({ ssot: w, step: step({ newEntities: [{ name: '游方剑客', kind: 'character', location: '大营', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }) });
+    assert.equal(r.ok, true, r.stage.warnings.join('; '));
+    const c = r.ssot.entities.find((e) => e.name === '游方剑客');
+    assert.ok(c, '★新面孔必须真的落账（这是这条通道的意义）');
+    assert.ok(r.stage.chronicle.some((x) => x.text.includes('「游方剑客」入局')), `编年要有入局行：${r.stage.chronicle.map((x) => x.text).join(' / ')}`);
+    assert.equal(validate(r.ssot, ssotSchema).ok, true, '入局后世界仍过 SSOT schema');
+});
+
+test('leg32e 生·entity 源的两条硬闸：牵出者必须**在册**且**未灭**（无源之物不存在不放松）', () => {
+    const w = structuredClone(baseWorld());
+    w.entities.find((e) => e.id === 'e_merchant').lastActiveTick = 0;
+    // ① 牵出一个**不存在**的实体 → 拒（否则就是凭空造人，正是"编数/编事实"那条红线）
+    const r1 = checkWorldStep(step({ newEntities: [{ name: '甲', location: '大营', entity: 'e_merchant', source: { type: 'entity', ref: 'e_ghost' } }] }), w);
+    assert.ok(!r1.ok && r1.errors.some((e) => e.includes('未知实体')), `未知牵出者必须拒：${r1.errors.join('; ')}`);
+    // ② 已覆灭者不能牵人（死人不生事）
+    const w2 = structuredClone(w);
+    w2.entities.find((e) => e.id === 'e_du').status = 'dead';
+    const r2 = checkWorldStep(step({ newEntities: [{ name: '乙', location: '大营', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }), w2);
+    assert.ok(!r2.ok && r2.errors.some((e) => e.includes('已覆灭')), `已灭者不能牵人：${r2.errors.join('; ')}`);
+    // ③ 缺 ref → 拒（无源不入局）
+    const r3 = checkWorldStep(step({ newEntities: [{ name: '丙', location: '大营', entity: 'e_merchant', source: { type: 'entity' } }] }), w);
+    assert.ok(!r3.ok && r3.errors.some((e) => e.includes('无源不入局')), `缺 ref 必须拒：${r3.errors.join('; ')}`);
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+// ★leg32f（用户实机报错「⚠ 演算失败：$.newEntities[0].name: 账上已有同名实体「白小娥」（已有者不重建）（世界原样未动，可重试）」）：
+//   病的形状：模型把**账上已经有的人**又当新实体提了一次（它眼里那个人物是从对话/事件里冒出来的"新面孔"），
+//   而 check-step 把这种**无害的重复**判成致命错 ⇒ **整步被拒** ⇒ 那一轮**所有别的事也一起丢了**
+//   （用户同一轮还看到"主角的行动也被演了"——正是整步被拒/重试的连带观感）。
+//   口径（本仓已立的原则）：**重复注册是"提案被丢掉"，不是"世界步不合法"**——
+//   账上已有的那个人**本来就在册**，丢掉这条提议对世界零损害；把整轮陪葬才是真损害。
+//   判据：①重新提议同名 → 不拒整步 ②那条提议被丢并**留痕**（不许静默）③同一步里的正常提议照常落账。
+test('leg32f·同名新实体 = 丢掉那条提议，**不许拒整步**（用户实机踩到的"白小娥"案）', () => {
+    const w = structuredClone(baseWorld());
+    w.entities.find((e) => e.id === 'e_merchant').lastActiveTick = 0;
+    // ① 单条：不再报错（旧法 `账上已有同名实体` 是致命错）
+    const r1 = checkWorldStep(step({ newEntities: [{ name: '商贾', location: '大营', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }), w);
+    assert.equal(r1.ok, true, `重新提议同名不该拒整步：${r1.errors.join('; ')}`);
+    // ② 整步：同名提议 + 一个正常动作 + 一条正常新线 → 整步照常落账，只有那条提议被丢
+    const r2 = settleTick({
+        ssot: w,
+        step: step({
+            actions: [{ entity: 'e_merchant', verb: '清点货账' }],
+            newAgendas: [{ entity: 'e_merchant', goal: '试探风向', visibility: 'known', maxSteps: 2, source: { type: 'state' } }],
+            newEntities: [{ name: '商贾', location: '大营', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }],
+        }),
+    });
+    assert.equal(r2.ok, true, r2.stage.warnings.join('; '));
+    assert.equal(r2.ssot.entities.filter((e) => e.name === '商贾').length, 1, '★不许重建同名实体（仍只有原来那一个）');
+    assert.ok(r2.ssot.agendas.some((a) => a.goal === '试探风向'), '★同一步里的正常新线必须照常落账（这正是旧法陪葬掉的东西）');
+    // ③ 留痕：不许静默丢（"被丢掉"这件事要能被看见/被计数）
+    assert.ok(r2.stage.warnings.some((x) => x.includes('提议丢弃') && x.includes('商贾')), `丢弃要留痕：${r2.stage.warnings.join('; ')}`);
+});
+
+test('leg32f·位置不在集内 = 归一到「未明」并留痕，**不许拒整步**（同族：模型编了个地名）', () => {
+    const w = structuredClone(baseWorld());
+    w.entities.find((e) => e.id === 'e_merchant').lastActiveTick = 0;
+    const r1 = checkWorldStep(step({ newEntities: [{ name: '游方僧', location: '不知何处', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }), w);
+    assert.equal(r1.ok, true, `位置编错不该拒整步：${r1.errors.join('; ')}`);
+    const r2 = settleTick({ ssot: w, step: step({ newEntities: [{ name: '游方僧', kind: 'character', location: '不知何处', entity: 'e_merchant', source: { type: 'entity', ref: 'e_du' } }] }) });
+    assert.equal(r2.ok, true, r2.stage.warnings.join('; '));
+    const c = r2.ssot.entities.find((e) => e.name === '游方僧');
+    assert.ok(c, '人照常入局（位置不对不等于这个人不该存在）');
+    assert.equal(c.location, '未明', `非法位置归一到「未明」（空着就是空着），实际 ${c.location}`);
+    assert.ok(r2.stage.warnings.some((x) => x.includes('位置不在集内')), `归一要留痕：${r2.stage.warnings.join('; ')}`);
 });
 
 test('A-10 生·dialogueFact 源：依据册命中才放行；依据册随落子记账', () => {

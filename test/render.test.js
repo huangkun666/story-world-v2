@@ -11,6 +11,7 @@ import {
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
     renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
 } from '../src/render.js';
+import { AGENDA_CAPS } from '../src/settle.js';
 import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -244,6 +245,37 @@ test('K33/A-3：六页签玩家可见文本零引擎术语（黑名单；标签/
     assert.ok(text.includes('盘算')); // 玩家通词放行（共识样例 v3）
 });
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+// ★leg32（用户实机「盘算并没有变多甚至一点变化都没有」追出来的真缺陷）：
+//   世界变宽那次把 `AGENDA_CAPS.topLevel` 5 → 10，**面板上的分母却是写死的 `/5`**——
+//   于是"世界真的变宽了"与"面板还写着 5"同时成立，玩家**无法从面板判断任何变宽实验是否奏效**。
+//   这不是观感问题，是**同一个数字有了两个真源**（引擎一份、面板一份），而面板那份永远不会自己更新。
+//   判据写成**关系式**（不钉字面）：面板上的分母必须 = 引擎真源的值，引擎改到哪它就跟到哪。
+test('★leg32：面板分母不再写死——/15 与顶层 /N 都读引擎真源（防"改了引擎面板不变"）', () => {
+    const { infoband } = renderBoardHtml(world());
+    const openCap = (infoband.match(/<div class="sw2-big-num">\d+<small>\/(\d+)<\/small>/) || [])[1];
+    const topCap = (infoband.match(/顶层 \d+\/(\d+)/) || [])[1];
+    assert.equal(Number(openCap), AGENDA_CAPS.open, `在飞分母应 = AGENDA_CAPS.open(${AGENDA_CAPS.open})，实际 ${openCap}`);
+    assert.equal(Number(topCap), AGENDA_CAPS.topLevel, `顶层分母应 = AGENDA_CAPS.topLevel(${AGENDA_CAPS.topLevel})，实际 ${topCap}`);
+});
+
+test('★leg32：参数页摆出引擎尺度三个上限（只读；无旋钮、不落 dynamic.env）', () => {
+    const html = renderParamsHtml(world());
+    // 三个上限值如实上板（口径 = 与引擎真源逐项相符，不钉"10/15/2"这种会漂的字面）
+    assert.match(html, new RegExp(`同时最多几件大计[\\s\\S]{0,80}?>${AGENDA_CAPS.topLevel}</b>`), '大计上限');
+    assert.match(html, new RegExp(`总数上限[\\s\\S]{0,80}?>${AGENDA_CAPS.open}</b>`), '在办总数上限');
+    assert.match(html, new RegExp(`每轮新生上限[\\s\\S]{0,80}?>${AGENDA_CAPS.perTick}</b>`), '每轮新生上限');
+    // 只读：这块里不许有旋钮（旋钮 = 玩家以为能拧，而引擎参数不是白名单档位、也不该被当输入）
+    const seg = html.slice(html.indexOf('sw2-cap-card'));
+    assert.ok(seg, '参数页应有引擎尺度块（sw2-cap-card）');
+    assert.ok(!seg.includes('<select'), '★引擎尺度的上限块里不许出现 <select>');
+    assert.ok(!seg.includes('data-action="set-param"'), '★引擎尺度的上限块不许挂写通道（它不可拧）');
+    // 不许把这个块误当成"参数"去写进 dynamic.env：那三个键不该出现在 env 里
+    for (const k of ['perTick', 'open', 'topLevel']) {
+        assert.ok(!html.includes(`data-param="${k}"`), `上限 ${k} 不许做成可写参数`);
+    }
+});
+
 test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世情=未聚，不混张力）；张力归张力行；参数档位如实列出', () => {
     const { digest, infoband } = renderBoardHtml(world());
     assert.match(digest, /大势未聚，各方各走各的路/);   // leg21：本世界无 situation → 时局句不再拼张力
@@ -260,7 +292,7 @@ test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世�
     assert.match(infoband, /近10轮事件 0 件/);                    // 本夹具 events 为空 → 0 件
     assert.ok(!infoband.includes('>72<'), '推导出的强度数字不再上面板');
     assert.match(infoband, /逼黄坤入洗煞之局（第32轮）/);         // 浪尖 → 盘算目标（id 不透传）
-    assert.match(infoband, /<div class="sw2-big-num">3<small>\/15<\/small>/);
+    assert.match(infoband, new RegExp(`<div class="sw2-big-num">3<small>/${AGENDA_CAPS.open}</small>`));
 });
 
 test('leg20 世情句领大势：situation 进时局句主句与信息带（原文措辞；拼装增量保留）', () => {

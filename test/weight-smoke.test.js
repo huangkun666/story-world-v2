@@ -62,7 +62,7 @@ test('重量冒烟 100 tick（leg24 片3 结构门控重基线）：静默面=�
     for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] >= sizes[i - 1] - 8000, `归档台阶允许下降 ${sizes[i]} < ${sizes[i - 1]}（t${metrics.bytes[i].tick}）`);
     const finalBytes = JSON.stringify(world).length;
     assert.ok(finalBytes < 50000, `终态体积 ${finalBytes} < 50KB`);
-    console.log(`[K6 曲线·leg24 片3 重基线] 100t: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 新生 0/≤2 · 滤除 ${metrics.droppedTotal}（旧判据 147——生成器不为静默方提案） · 静默面 e_mid 34 / e_lo 100 tick · 应答累计 ${metrics.liftedTotal} · 警告 1（预期） · 终态 ${finalBytes}B`);
+    console.log(`[K6 曲线·leg24 片3 重基线] 100t: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤${SLICE_AGENDA_CAP} · 新生 0/≤${SLICE_NEWBORN_CAP} · 滤除 ${metrics.droppedTotal}（旧判据 147——生成器不为静默方提案） · 静默面 e_mid 34 / e_lo 100 tick · 应答累计 ${metrics.liftedTotal} · 警告 1（预期） · 终态 ${finalBytes}B`);
 });
 
 test('重量冒烟（片3 重基线）：衰减曲线分段单调（以 e_hi 为例：t30 已衰减 → t50 活跃回满 → t60 起再衰减）', async () => {

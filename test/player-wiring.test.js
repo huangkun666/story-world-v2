@@ -112,6 +112,21 @@ test('B-6 接线后的真实效果：四条"禁写玩家"守卫不再恒假 + �
     const c = checkWorldStep(step({ entityFates: [{ entity: r.playerId, verdict: 'dead', source: { type: 'event', ref: 'ev_1' } }] }), w);
     assert.equal(c.ok, false);
     assert.ok(c.errors.some((e) => e.includes('玩家不可灭') || e.includes('模型禁写玩家')), c.errors.join('; '));
+    // ⑤ ★leg32h（用户：「又把主角演了」）：**推进玩家的盘算** → 拒。
+    //   为什么补这一条：上面①②③④ 拦的都是"提议"，而 `agendaAdvances` 是**另一条腿**——
+    //   账上只要已经有属于玩家的盘算（旧账/合并前遗留），模型就能靠它一直替玩家演下去。
+    //   真账实测（tick 50）：主角「黄坤」被当新实体入局（e_42_1），模型替他开线并一轮轮推进，
+    //   done 里全是"以雷法锁定薛铁衣气机，展开殊死搏杀"这类**玩家自己的选择**。
+    const pw = structuredClone(w);
+    pw.agendas = [{ id: 'a_hero', owner: r.playerId, goal: '复仇', stage: '起手', visibility: 'known', maxSteps: 4, progress: 0, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }];
+    const e5 = checkWorldStep(step({ agendaAdvances: [{ agendaId: 'a_hero', step: '玩家自己拔刀杀上去' }] }), pw);
+    assert.equal(e5.ok, false, '推进玩家盘算必须拒（不许替玩家做选择）');
+    assert.ok(e5.errors.some((x) => x.includes('模型禁写玩家')), e5.errors.join('; '));
+    // 对照：**别人的**盘算推进照常放行（别把整条腿堵死）
+    const pw2 = structuredClone(w);
+    pw2.agendas = [{ id: 'a_other', owner: r.playerId === 'e_x' ? 'e_y' : 'e_x', goal: '别人的事', stage: '起手', visibility: 'known', maxSteps: 4, progress: 0, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }];
+    const e6 = checkWorldStep(step({ agendaAdvances: [{ agendaId: 'a_other', step: '照常推进' }] }), pw2);
+    assert.equal(e6.ok, true, `非玩家盘算的推进不该被拦：${e6.errors.join('; ')}`);
     // ⑤ 注入侧走"有玩家"分支：掩码口径生效（不再整段降级全见）
     const stage = { chronicle: [{ id: 'ch_1', tick: 1, text: '某地生变', eventRef: 'ev_1' }], warnings: [] };
     const w3 = { ...w, events: [{ id: 'ev_1', title: '某地生变', source: { type: 'state' }, position: '未明', ripples: [], closed: false }] };

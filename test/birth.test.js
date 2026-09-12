@@ -9,6 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { settleTick, AGENDA_CAPS } from '../src/settle.js';
+// ★leg32g：待启用名单的**真源函数**（夹具要用它判断"哪一轮轮到谁"）
+import { computeIdleFaces, IDLE_FACES_TOP } from '../src/pack.js';
 import { gateWorldStep } from '../src/gate.js';
 import { buildEvolutionPack } from '../src/pack.js';
 import { validate } from '../src/schema.js';
@@ -28,14 +30,64 @@ function makeQuiet(world, id) {
     return w;
 }
 
+// ★leg32g：**把 tick 推到"待启用名单轮到别人"的那一轮**。
+//   为什么需要：引擎每轮机械递 `IDLE_FACES_TOP`(12) 张冷门脸（`idleFaces`）给模型，而名单上的人**获得一次起头资格**
+//   （门控 `gateWorldStep` 第 4 参）⇒ 若目标实体**每轮都在名单上**，他就永远轮不开。
+//   ⚠两版都栽在这上面，如实留档：①第一版直接拿 tree-world 轮转——池里只有 1 个冷门；
+//   ②第二版只补了 1 个伴（池=2）——**池比名单还短，12 个名额把池全装下了** ⇒ 照样每轮都在名单里。
+//   ⇒ 本辅助补**足够多的**冷门实体（池 > IDLE_FACES_TOP），轮转才真正生效。
+function worldWithIdlePool(world) {
+    const w = structuredClone(world);
+    for (let i = 0; i < IDLE_FACES_TOP + 8; i++) {
+        const id = `e_spare${String(i).padStart(2, '0')}`;
+        if (!w.entities.some((e) => e.id === id)) {
+            w.entities.push({ id, kind: 'character', name: `闲人${i}`, location: w.entities[0].location });
+        }
+    }
+    return w;
+}
+function tickWhereNotSpotlight(world, id) {
+    const w = worldWithIdlePool(world);
+    for (let t = 0; t < 200; t++) {
+        w.meta.tick = t;
+        if (!computeIdleFaces(w).some((f) => f.id === id)) return w;
+    }
+    throw new Error(`找不到"${id} 不在待启用名单"的 tick（冷门池必须大于名单长度 ${IDLE_FACES_TOP}）`);
+}
+function tickWhereSpotlight(world, id) {
+    const w = worldWithIdlePool(world);
+    for (let t = 0; t < 200; t++) {
+        w.meta.tick = t;
+        if (computeIdleFaces(w).some((f) => f.id === id)) return w;
+    }
+    throw new Error(`找不到"${id} 在待启用名单"的 tick`);
+}
+
 test('K14/A-2（片3）：静默方提议被 gate 滤除（双面无痕：不落账、不编年、simLog 审计计数）', () => {
-    const quiet = makeQuiet(TREE, 'e_min');
+    // ★leg32g：推到"这一轮的名额不轮到 e_min"的那一轮 ⇒ 测的仍是"纯静默滤除"这条语义
+    const quiet = tickWhereNotSpotlight(makeQuiet(TREE, 'e_min'), 'e_min');
     const r = settleTick({ ssot: quiet, step: emptyStep([na('e_min', '夺旗', { type: 'state' })]) });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
     assert.deepEqual(r.ssot.meta.simLog[0].silent.includes('e_min'), true, '结构静默（无在办 + 久未出手）');
     assert.equal(r.ssot.meta.simLog[0].silentDropped.e_min, 1, 'newAgendas 滤除计入审计');
     assert.ok(!r.ssot.agendas.some((a) => a.goal === '夺旗'), '不落账');
     assert.ok(!r.ssot.chronicle.some((c) => c.text.includes('由处境而生')), '不编年');
+});
+
+// ★★leg32g：**待启用名单上的人可以起头**——这是那个自锁闭环的出口，必须有一条判据钉住它。
+//   背景（真账 tick 38 实测）：613 人从没出过手 ⇒ 按结构三条件永远静默 ⇒ 即使模型照名单给他开线，
+//   提议也会被静默门丢掉 ⇒ 名单空转。⇒ 门控多收一个参数：名单上的人**获得一次起头资格**（只限 newAgendas）。
+test('leg32g：待启用名单上的人可以起头（同一实体，轮到他的那一轮提议就不再被滤）', () => {
+    const base = makeQuiet(TREE, 'e_min');
+    // ① 轮到他的那一轮：提议**透传并落账**
+    const r1 = settleTick({ ssot: tickWhereSpotlight(base, 'e_min'), step: emptyStep([na('e_min', '自立门户', { type: 'state' })]) });
+    assert.equal(r1.ok, true, r1.stage.warnings.join('; '));
+    assert.equal(r1.ssot.meta.simLog[0].silentDropped.e_min, undefined, '★名单上的人提议**不再被静默门滤**');
+    assert.ok(r1.ssot.agendas.some((a) => a.goal === '自立门户'), '★他的线真的落账了（名单不是空转）');
+    // ② 同一实体、不在他那一轮：照旧被滤（名额只在这一轮给他，不是永久开门）
+    const r2 = settleTick({ ssot: tickWhereNotSpotlight(base, 'e_min'), step: emptyStep([na('e_min', '另一桩事', { type: 'state' })]) });
+    assert.equal(r2.ssot.meta.simLog[0].silentDropped.e_min, 1, '不在他那一轮 ⇒ 照旧静默被滤（名额不永久）');
+    assert.ok(!r2.ssot.agendas.some((a) => a.goal === '另一桩事'));
 });
 
 test('K14/A-2（片3）：被点名应答方（lifted）可以提议——gate 透传 + settle 落账', () => {
@@ -81,33 +133,39 @@ test('leg29/N3：新盘算的**出生理由落账**（event 源带 ref / state �
     }
 });
 
-test('K14/A-3：每 tick 新生 ≤2——第三条拒建 + 警告，前两条照常', () => {    const step = emptyStep([
-        na('e_lead', '整军', { type: 'state' }),
-        na('e_court', '运粮', { type: 'state' }),
-        na('e_lead', '募新兵', { type: 'state' }),
-    ]);
+test('K14/A-3：每 tick 新生上限（读真源）——超出的那条拒建 + 警告，前几条照常', () => {
+    // ★leg32：夹具**不再写死"3 条提议 / 拒第 3 条"**，改为按真源 `AGENDA_CAPS.perTick` 多提一条。
+    //   为什么必须改（本用例当场红过）：leg32 把 perTick 2 → 3 之后，写死 3 条就**超不了限**了
+    //   ⇒ 那条提议被放行 ⇒ 假红。写法与下面那条顶层用例同惯例：**读真源，改上限则本用例随之成立**。
+    const N = AGENDA_CAPS.perTick + 1;
+    const goals = Array.from({ length: N }, (_, i) => `整军${i + 1}`);
+    const step = emptyStep(goals.map((g) => na('e_lead', g, { type: 'state' })));
     const r = settleTick({ ssot: TREE, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    assert.equal(r.ssot.agendas.length, 5, '3 旧 + 2 新');
-    assert.ok(r.ssot.agendas.some((a) => a.goal === '整军') && r.ssot.agendas.some((a) => a.goal === '运粮'));
-    assert.ok(!r.ssot.agendas.some((a) => a.goal === '募新兵'), '第三条被拒');
-    assert.ok(r.stage.warnings.some((x) => x.includes('盘算大厦顶（每 tick 新生 ≤2')), r.stage.warnings.join('; '));
-    assert.equal(r.ssot.agendas.filter((a) => a.id.startsWith('a_1_')).length, 2);
+    assert.equal(r.ssot.agendas.length, 3 + AGENDA_CAPS.perTick, `3 旧 + ${AGENDA_CAPS.perTick} 新`);
+    for (const g of goals.slice(0, AGENDA_CAPS.perTick)) {
+        assert.ok(r.ssot.agendas.some((a) => a.goal === g), `前 ${AGENDA_CAPS.perTick} 条照常落账：${g}`);
+    }
+    assert.ok(!r.ssot.agendas.some((a) => a.goal === goals[N - 1]), '超出的那条被拒');
+    assert.ok(r.stage.warnings.some((x) => x.includes(`盘算大厦顶（每 tick 新生 ≤${AGENDA_CAPS.perTick}`)), r.stage.warnings.join('; '));
+    assert.equal(r.ssot.agendas.filter((a) => a.id.startsWith('a_1_')).length, AGENDA_CAPS.perTick);
 });
 
-test('K14/A-3：在飞全局 ≤15——顶满时新提议拒建，世界其余照常', () => {
+test('K14/A-3：在飞全局上限（读真源）——顶满时新提议拒建，世界其余照常', () => {
     const world = structuredClone(TREE);
-    for (let i = 0; i < 14; i++) {
+    const openCount = () => world.agendas.filter((a) => !a.closed).length;
+    // ★leg32：同惯例——按真源顶满（旧版写死 14 条，`open` 15 → 20 之后就顶不满了）
+    for (let i = 0; openCount() < AGENDA_CAPS.open; i++) {
         world.agendas.push({
             id: `a_bulk_${i}`, owner: i % 2 ? 'e_lead' : 'e_court', goal: `旁务${i}`, stage: '进行',
             visibility: 'known', maxSteps: 5, progress: 0, parentId: 'a_root',
             memory: { promises: [], done: [], blocked: [], turnsAlive: 1 },
         });
-    }   // a_root + 14 子 = 15 在飞；顶层 1（未顶）
+    }   // 顶满在飞（顶层未顶：bulk 全挂 a_root 之下）
     const step = emptyStep([na('e_lead', '越限谋划', { type: 'state' })]);
     const r = settleTick({ ssot: world, step });
     assert.equal(r.ok, true, r.stage.warnings.join('; '));
-    assert.ok(r.stage.warnings.some((x) => x.includes('盘算大厦顶（在飞全局 ≤15')), r.stage.warnings.join('; '));
+    assert.ok(r.stage.warnings.some((x) => x.includes(`盘算大厦顶（在飞全局 ≤${AGENDA_CAPS.open}`)), r.stage.warnings.join('; '));
     assert.ok(!r.ssot.agendas.some((a) => a.goal === '越限谋划'), '不落账');
 });
 

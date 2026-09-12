@@ -25,11 +25,11 @@ function treeStepGen(t, world) {
     const agendaAdvances = open.map((a) => ({ agendaId: a.id, step: `第 ${t} 步`, stage: '推进' }));
     const newAgendas = [];
     if (t === 1) {
-        newAgendas.push(
-            na('e_lead', '超编提议 A', { type: 'state' }),
-            na('e_court', '超编提议 B', { type: 'state' }),
-            na('e_lead', '超编提议 C', { type: 'state' }),
-        );   // 超限样本：第 3 条拒建 + 警告（盘算大厦顶）
+        // ★leg32：样本条数按真源 `perTick` 多提一条（旧版写死"三连提、第 3 条拒"——
+        //   perTick 2 → 3 之后就超不了限 ⇒ 假红）。口径：**恰好造出 1 条超限**，下游警告/拒建计数不变。
+        for (let k = 0; k <= SLICE_NEWBORN_CAP; k++) {
+            newAgendas.push(na('e_lead', `超编提议 ${k + 1}`, { type: 'state' }));
+        }   // 超限样本：第 perTick+1 条拒建 + 警告（盘算大厦顶）
     }
     if (t % 5 === 0 && t < 100) {
         if ((t / 5) % 2 === 0) {
@@ -48,7 +48,9 @@ test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 
     const { world, metrics } = await runSmoke({ ssot: TREE, extractCtx: EXTRACT_FIX.context, ticks: 100, stepGen: treeStepGen });
     assert.equal(metrics.ticks, 100);
     // 通用断言器（assertSmoke）不适用：其口径为切片级（零警告 + 20KB 界）；树冒烟按本测试集合断言（铁律 8：曲线先例）
-    // A-3 GC 三档上限（引擎执行实证）：每 tick 新生 ≤2 / 在飞 ≤15 / 顶层 ≤5
+    // A-3 GC 三档上限（引擎执行实证）：每 tick 新生 ≤2 / 在飞 ≤15 / 顶层 ≤10
+    //   ★leg32：断言常量已改为**从引擎真源派生**（`smoke.js` 读 `AGENDA_CAPS`）——
+    //   旧版这里另抄了一份 5，而引擎 leg31b 已改 10 ⇒ 两份数会各自漂。
     assert.ok(metrics.maxPerTickBirths <= SLICE_NEWBORN_CAP, `每 tick 新生峰 ${metrics.maxPerTickBirths}`);
     assert.ok(metrics.peakOpenAgendas <= SLICE_AGENDA_CAP, `在飞峰 ${metrics.peakOpenAgendas}`);
     assert.ok(metrics.peakTopLevel <= SLICE_TOP_CAP, `顶层峰 ${metrics.peakTopLevel}`);
@@ -57,7 +59,12 @@ test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 
     // A-2 静默滤除（双面无痕统计）：**leg24 片3 判据换成结构三条件后，滤除量从 310 掉到 8**——
     //   旧法靠"分量低于阈值"把大批实体摁成静默；新法里"手上有在办盘算"就活跃（a_son2 正因此在飞），
     //   只有真正三条件齐（无在办 ∧ 久未出手 ∧ 无人点名）的少数提议被滤。这正是用户要的方向。
-    assert.equal(metrics.droppedTotal, 8, `滤除累计 ${metrics.droppedTotal}（片3：结构判据，只剩真正"没你的事"的提议）`);
+    //   ★★leg32g（本行由 8 改为 0，如实记原因）：本夹具的冷门池里**只有 e_min 一个**
+    //   （e_lead 是 top-1 保送、e_court 有在办盘算）⇒ 它**每一轮都在"待启用名单"上**
+    //   ⇒ 按 leg32g 的新口径它**获得起头资格**，提议不再被静默门丢掉 ⇒ 滤除归零。
+    //   这不是回归：那 8 条正是"引擎认定没你的事、又被机械轮到"的提议——现在轮到就该能起头（闭环出口）。
+    //   名额的公平性由 `idleFaces` 的**轮转**保证（池 > 名单长度时每轮换一批），见 `test/lens.test.js` 的 leg32g 用例。
+    assert.equal(metrics.droppedTotal, 0, `滤除累计 ${metrics.droppedTotal}（leg32g：唯一冷门者在名单上 ⇒ 起头不被滤）`);
     assert.equal(metrics.liftedTotal, 0, '无点名样本 → 零应答');
     // A-4 树形态：委派落账（parentId 存在）+ 父 promises 写 + 兑现落痕 + 变形托孤
     // leg24 片3：带 parentId 的落账 11 → 2——同一台生成器，但门控换了判据：**周期提议方在提议那一刻
@@ -92,7 +99,7 @@ test('K16 树冒烟 100 tick：GC 三档上限实证 + 拒建警告精确集合 
     const sizes = metrics.bytes.map((b) => b.bytes);
     for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] >= sizes[i - 1], `字节单调 ${sizes[i]} < ${sizes[i - 1]}`);
     assert.ok(sizes[sizes.length - 1] < 80000, `终态 ${sizes[sizes.length - 1]}B < 80KB`);
-    console.log(`[K16 曲线] 树 100t（leg24 片3 结构门控）: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 顶层峰 ${metrics.peakTopLevel}/≤5 · 新生 ${metrics.newbornsTotal}（每 tick 峰 ${metrics.maxPerTickBirths}/≤2） · 拒建 ${metrics.rejectedTotal} · 滤除 ${metrics.droppedTotal}（旧判据下 310） · 委派 ${withParent.length}（旧 11） · 警告 ${metrics.warningsTotal} · 终态 ${sizes[sizes.length - 1]}B`);
+    console.log(`[K16 曲线] 树 100t（leg24 片3 结构门控）: 输入峰 ${metrics.maxPackTokens}/4000 · 在飞峰 ${metrics.peakOpenAgendas}/≤${SLICE_AGENDA_CAP} · 顶层峰 ${metrics.peakTopLevel}/≤${SLICE_TOP_CAP} · 新生 ${metrics.newbornsTotal}（每 tick 峰 ${metrics.maxPerTickBirths}/≤${SLICE_NEWBORN_CAP}） · 拒建 ${metrics.rejectedTotal} · 滤除 ${metrics.droppedTotal}（旧判据下 310） · 委派 ${withParent.length}（旧 11） · 警告 ${metrics.warningsTotal} · 终态 ${sizes[sizes.length - 1]}B`);
 });
 
 test('K16 树冒烟：确定性（两次 100 tick 逐字节一致）', async () => {

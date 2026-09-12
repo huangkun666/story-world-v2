@@ -150,7 +150,9 @@ test('leg25: 超预算输入 → 按固定剪枝序裁剪、estTokens 落回预�
     assert.ok(Array.isArray(p.pack.trimmed) && p.pack.trimmed.length > 0, `裁剪标记应非空：${JSON.stringify(p.pack.trimmed)}`);
     assert.ok(!p.pack.trimmed.includes('budgetOverrun'), '固定剪枝序应足够压进预算（不留越界痕迹）');
     // 固定剪枝序：必须是固定序的**前缀**（前项成立后续项才有意义）
-    const order = ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail'];
+    // ★leg32c：序尾新增 `closedAgendas`（已了结盘算台账——最可牺牲的一段，最后才裁）
+    // ★leg32g：再增 `idleFaces`（待启用名单——**整段丢**，不截短：名单靠轮转保证公平）
+    const order = ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail', 'closedAgendas', 'idleFaces'];
     assert.deepEqual(p.pack.trimmed, order.slice(0, p.pack.trimmed.length), `裁剪必须是固定序前缀：${JSON.stringify(p.pack.trimmed)}`);
     // 痕迹与内容一致：被裁的段确实是降级后的形态
     if (p.pack.trimmed.includes('entities.slim')) {
@@ -183,7 +185,7 @@ test('leg25: 固定剪枝序用尽仍越界 → 留 budgetOverrun 痕迹（不�
         agendas: [], pendingEvents: [], recentClosedEvents: [], playerMove: null, dialogueBook: [],
     };
     const cut = trimPack(pack, 1);
-    assert.deepEqual(cut, ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail', 'budgetOverrun'], '固定序走完仍越界 → 追加越界痕迹');
+    assert.deepEqual(cut, ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail', 'closedAgendas', 'idleFaces', 'budgetOverrun'], '固定序走完仍越界 → 追加越界痕迹');
     assert.deepEqual(pack.trimmed, cut, '痕迹写进包里（机器可读）');
     assert.equal(pack.entities.length, 1, '越界也不清空视野（镜头人数不丢）');
 });
@@ -201,7 +203,9 @@ test('leg25: 未超预算 → pack.trimmed 缺省（不写该键）、输出与�
     assert.deepEqual(p.pack.agendas[0].memory, { turnsAlive: 1 }, '盘算 memory 原样保留（未被裁）');
     assert.deepEqual(Object.keys(p.pack.pendingEvents[0]), ['id', 'title', 'source', 'position'], '未决事件详情原样保留');
     // 逐字节锁：与手工构造的"旧版出包形状"一致（键序=对象字面量序，无 trimmed 插入）
-    assert.deepEqual(Object.keys(p.pack), ['world', 'tension', 'setting', 'positions', 'entities', 'agendas', 'pendingEvents', 'recentClosedEvents', 'playerMove', 'dialogueBook']);
+    // ★leg32c：新增 `closedAgendas`（已了结盘算台账）——键序由 pack 字面量决定，此处如实锁上
+    // ★leg32g：新增 `idleFaces`（待启用名单）
+    assert.deepEqual(Object.keys(p.pack), ['world', 'tension', 'setting', 'positions', 'entities', 'agendas', 'pendingEvents', 'recentClosedEvents', 'playerMove', 'dialogueBook', 'closedAgendas', 'idleFaces']);
 });
 
 // ---------- leg25：**端到端**裁剪路径（真实 runTick 车道，不只是直调 buildEvolutionPack）----------
@@ -257,4 +261,97 @@ test('leg25: runTick 端到端——超预算世界不炸且全程落在预算�
     assert.ok(r.pack.estTokens <= EVOLUTION_BUDGET_TOKENS, `主调用输入 est=${r.pack.estTokens} 必须 ≤ 预算`);
     assert.ok(Array.isArray(r.pack.pack.trimmed) && r.pack.pack.trimmed.length > 0, '裁剪痕迹随包透出（模型/调试者可见）');
     assert.ok(r.streams.observer.length > 0, '双流照常渲染');
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+// ★★leg32g（用户：「还是不行啊，永远围绕那几个势力是为什么」）：**待启用名单**（`idleFaces`）。
+//   量穿的闭环（真账 tick 38）：那几家出手 ⇒ `lastActiveTick` 常新 ⇒ 镜头永远排最前 ⇒ 模型总写他们；
+//   而 613 人从没出过手 ⇒ 永远排最后 ⇒ 模型想不起他们（56 条事件只点名过 5 个实体）。
+//   ⇒ 光喊"换镜头"没用（模型手上没有"该轮到谁"的名单）⇒ 引擎每轮**机械**递一小撮冷门名字进包。
+//   判据锁三件：①筛选口径（排除在办/玩家/保送/刚出手/已被点名的）②**按 tick 轮转**（每轮换一批）
+//   ③确定性（同一 world 两次出包逐字节一致——名单不许抖）。
+// ★★leg32h（用户：「都是围绕一件事展开的，没有并行的效果」）：**陈旧死链头不进包**。
+//   实测（真账 tick 50）：58 条事件里独立链头**只有 1 条**——「万法阁商队集结」**挂了 49 轮还开着**
+//   （`state` 源按设计永不自动闭环），已无人牵动（ripples 只 1 人）却每轮占着模型眼前的未决池
+//   ⇒ 模型永远只见"一个当下焦点" ⇒ 新势力只能挤进同一条线当配角 ⇒ 读起来"都围绕一件事"。
+//   口径：**账上保留、不闭环**（那是世界的事实），只是别再让它占模型眼前的位子。
+test('leg32h·陈旧死链头不进包（世界照旧留着它，只是不再占模型的焦点）', () => {
+    const mk = (tick, ageOld) => mkWorld({
+        entities: [ent('e_a', '甲', 'character'), ent('e_b', '乙', 'faction')],
+        events: [
+            // 老 state 事件（id 里的数字 = 出生 tick），只牵动 1 人 ⇒ 死链头
+            { id: `ev_${tick - ageOld}_1`, title: '很久以前的集结', source: { type: 'state' }, position: '中央', ripples: ['e_a'], closed: false },
+            // 刚起的 state 事件 ⇒ 照常进包（新链头要紧）
+            { id: `ev_${tick}_1`, title: '刚起的事', source: { type: 'state' }, position: '中央', ripples: ['e_a'], closed: false },
+            // 老 state 事件但**牵动 ≥2 人** ⇒ 仍进包（它还是活的线，不是死链头）
+            { id: `ev_${tick - ageOld}_2`, title: '很多人牵涉的旧事', source: { type: 'state' }, position: '中央', ripples: ['e_a', 'e_b'], closed: false },
+            // ripple 源不论多老都进包（它有上游，闭环走涟漪窗）
+            { id: `ev_${tick - ageOld}_3`, title: '挂在别人因果上的旧事', source: { type: 'ripple', ref: `ev_${tick - 1}_1` }, position: '中央', ripples: ['e_a'], closed: false },
+        ],
+        agendas: [], tick,
+    });
+    const w = mk(50, 49);
+    const ids = buildEvolutionPack(w, null).pack.pendingEvents.map((e) => e.id);
+    assert.ok(!ids.includes('ev_1_1'), `★挂了 49 轮的死链头不该再进包：${JSON.stringify(ids)}`);
+    assert.ok(ids.includes('ev_50_1'), '刚起的链头照常进包');
+    assert.ok(ids.includes('ev_1_2'), '老但牵动多人的线仍进包（它还是活的）');
+    assert.ok(ids.includes('ev_1_3'), 'ripple 源不论多老都进包（有上游，闭环另走涟漪窗）');
+    // ★账上不许被删/被闭环：过滤只发生在"进包"这一步
+    assert.equal(w.events.filter((e) => e.id === 'ev_1_1').length, 1, '老链头仍在账上');
+    assert.equal(w.events.find((e) => e.id === 'ev_1_1').closed, false, '★不替世界闭环它（只不进包）');
+});
+
+test('leg32g·待启用名单：把"该轮到却没露过面的人"递到模型眼前（治"永远围绕那几个势力"）', () => {
+    // 夹3：一个玩家 + 保送者 + 有在办者 + 刚出手者 + 若干冷门
+    //   ★playerId 必须在**工厂里**就设好（本用例第一版把 `w.context.playerId = ...` 写在调用点，
+    //   而 ④ 那一步是 `buildEvolutionPack(mk(10), null)` 直接调用 ⇒ **没设 playerId** ⇒ 玩家混进名单
+    //   ⇒ 两次出包不一致的**假红**。教训：夹具的"世界状态"必须在工厂里一次成型，调用点不许补状态。
+    const mk = (tick) => {
+        const w = mkWorld({
+            entities: [
+                ent('e_top', '保送者', 'faction'),                       // 首个 active = 保送（永远可动）
+                ent('e_player', '你', 'character'),
+                ent('e_busy', '在办者', 'faction'),
+                ent('e_fresh', '刚出手者', 'character', { lastActiveTick: tick - 1 }),
+                ent('e_cold1', '冷门甲', 'character'),
+                ent('e_cold2', '冷门乙', 'faction'),
+                ent('e_cold3', '冷门丙', 'character'),
+                ent('e_cold4', '冷门丁', 'character'),
+                // 冷门池要**大于名单长度**，轮转才看得出来（否则 offset 恒 0 ⇒ 名单永远同一批）
+                ...Array.from({ length: 20 }, (_, i) => ent(`e_rest${String(i).padStart(2, '0')}`, `闲人${i}`, 'character')),
+            ],
+            agendas: [{ id: 'a_1', owner: 'e_busy', goal: '在办的事', stage: 's', visibility: 'known', progress: 1, maxSteps: 3, closed: false, memory: { turnsAlive: 1 } }],
+            events: [],
+            tick,
+        });
+        w.context.playerId = 'e_player';
+        return w;
+    };
+    const p = buildEvolutionPack(mk(10), null);
+    const faces = p.pack.idleFaces;
+    const ids = faces.map((f) => f.id);
+    assert.ok(Array.isArray(faces) && faces.length > 0, `名单必须有内容：${JSON.stringify(faces)}`);
+    // ⓪ 每条都要**带名字**（模型要"从名单里挑人"，光给 id 它无从判断谁是谁）
+    for (const f of faces) {
+        assert.ok(f.id && f.name, `名单每条要有 id+name：${JSON.stringify(f)}`);
+        assert.ok(['faction', 'character'].includes(f.kind), `kind 要在册：${JSON.stringify(f)}`);
+    }
+    // ① 口径：在办 / 玩家 / 保送 / 刚出手 一律不在名单里
+    for (const bad of ['e_busy', 'e_player', 'e_top', 'e_fresh']) {
+        assert.ok(!ids.includes(bad), `★${bad} 不该出现在待启用名单里（它有别的出场路径）`);
+    }
+    // ② 冷门都在（本例只有 4 个冷门，全部入名单）
+    for (const good of ['e_cold1', 'e_cold2', 'e_cold3', 'e_cold4']) {
+        assert.ok(ids.includes(good), `冷门 ${good} 应在名单里`);
+    }
+    // ③ ★轮转：下一轮换一批人露头（同一批人不能永远霸着名单）
+    const faces2 = buildEvolutionPack(mk(11), null).pack.idleFaces;
+    assert.notDeepEqual(faces2.map((f) => f.id), ids, '★名单必须按 tick 轮转（否则又是"永远那几个"）');
+    // ④ 确定性：同一 world 两次出包逐字节一致（名单不许抖）
+    const again = buildEvolutionPack(mk(10), null).pack.idleFaces;
+    assert.deepEqual(again, faces, `同一 tick 两次出包名单必须一致（first=${JSON.stringify(faces)} again=${JSON.stringify(again)}）`);
+    // ⑤ 已被点名的（未决事件波及）不进名单——他有正当出场路径，别浪费名额
+    const w3 = mk(10);
+    w3.events = [{ id: 'ev_1', title: '事', source: { type: 'state' }, position: '中央', ripples: ['e_cold1'], closed: false }];
+    assert.ok(!buildEvolutionPack(w3, null).pack.idleFaces.includes('e_cold1'), '被点名者不进名单（他已被解锁）');
 });

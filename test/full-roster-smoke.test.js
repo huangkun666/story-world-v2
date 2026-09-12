@@ -4,7 +4,7 @@
 // 镜头 30k 预算内（全量入镜实证）、坏账 0、观测台三读数可出（驻留=镜头口径）、确定性。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runSmoke } from '../src/smoke.js';
+import { runSmoke, SLICE_AGENDA_CAP } from '../src/smoke.js';
 import { seedBookEntities } from '../src/abstract.js';
 import { scanDanglingRefs, residencyStats, rejectionStats } from '../src/observatory.js';
 import { lensList, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
@@ -68,5 +68,5 @@ test('K47 全量棋盘 100t：345+ 实体连跑——无超席强制、全册保
     assert.equal(JSON.stringify(world), JSON.stringify(worldB), '确定性逐字节');
     // K47 曲线（铁律 8：落台账）
     const sizes = metrics.bytes.map((b) => b.bytes);
-    console.log(`[K47 曲线] 全量棋盘 100t: 实体 ${world.entities.length}（全册） · 输入峰 ${metrics.maxPackTokens}/${EVOLUTION_BUDGET_TOKENS} · 在飞峰 ${metrics.peakOpenAgendas}/≤15 · 警告 ${metrics.warningsTotal} · 驻留 p50=${res.lensIdle.p50} p90=${res.lensIdle.p90} 摸鱼 ${res.loungers.length} · 终态 ${sizes[sizes.length - 1]}B`);
+    console.log(`[K47 曲线] 全量棋盘 100t: 实体 ${world.entities.length}（全册） · 输入峰 ${metrics.maxPackTokens}/${EVOLUTION_BUDGET_TOKENS} · 在飞峰 ${metrics.peakOpenAgendas}/≤${SLICE_AGENDA_CAP} · 警告 ${metrics.warningsTotal} · 驻留 p50=${res.lensIdle.p50} p90=${res.lensIdle.p90} 摸鱼 ${res.loungers.length} · 终态 ${sizes[sizes.length - 1]}B`);
 });
