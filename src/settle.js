@@ -2,7 +2,7 @@
 // 结算管线（S5）：按序 校验 → 薄裁定 → 因果挂链 → 一致性检查 → 分量重算（常量占位）→ 落账 → 编年 → GC/度量。
 // 纯函数：输入 SSOT 不被修改，返回新世界。硬规则出处：ANCHOR §3②/§4.2/§4.4/§4.5、切片细案 S5、长跑防线细案 §2.5。
 import { checkWorldStep } from './check-step.js';
-import { buildEvolutionPack } from './pack.js';
+import { buildEvolutionPack, computeIdleFaces } from './pack.js';
 import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
@@ -21,7 +21,21 @@ import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.j
 //   · **放开的代价已如实入档**：涉及闸是"**拒整步**"，所以"再往上放"必须与它同批放——
 //     实测三道总量全放（25/60/40）而涉及闸保持 15 ⇒ **崩在第 12 轮**；四道全放（+涉及 60）才活（39 条 / 属主 38）。
 //   · **真源纪律**：这三个数仍是**提案态**（铁律 2）；本节口径 = 用户 2026-09-12「先走保守的」+ 上表曲线。
-export const AGENDA_CAPS = { perTick: 2, open: 15, topLevel: 10 };
+// ★leg32 拍板：三道总量闸一起放开一档（用户令「你把世界变宽试试」，2026-09-12）：2/15/10 → **3/20/15**。
+//   ★先说清楚**这次为什么不是"再抬一道"**（leg31 的读法在本棒被真账推翻）：
+//   · leg31 量的是**确定性桩**——桩每轮提议 25 条、且允许同一属主堆多条线 ⇒ 那时 `topLevel` 是瓶颈。
+//   · 真账（tick 27）量到的是另一回事：**模型每 2–3 轮才提 1 条新线，且一个属主同时只跑一条**
+//     ⇒ 22 轮 9 条 / 27 轮 12 条，**顶层峰值 2**（上限 5 都没碰到）、在飞稳定 1–3 条。
+//   · 结论：**这批闸在真账里几乎从不咬人** ⇒ 抬它们**本身不会**让世界变宽（本棒实测：只抬/只开门
+//     在桩口径下 born 9→14→19，但"在飞"的**稳态**始终由"出生率 × 线寿命"决定，不由闸决定）。
+//   · 那为什么还要抬？**把上限从"挡路的怀疑对象"里摘出去** ⇒ 以后再看"世界窄"，可以确定不是它们，
+//     而是**供给侧**（模型提不提新线）。同时给真模型留出余量：真账 t24 出现过"一轮提 2 条新线"，
+//     `perTick` 由 2 抬到 3，让这种轮不再丢线。
+//   · **未动**：`AGENDA_INVOLVED_CAP`（15）—— 它是"拒整步"，且真账至今**零次触发**（无 校验拒绝 警告），
+//     放开它没有需求；而 leg31 实测"总量全放 + 涉及闸不动 ⇒ 崩在第 12 轮"，故**不同批碰它**。
+//   · 代价与自证：抬完跑 `node --test` + `node demo/smoke-demo.js`（切片世界新生 0/tick，此闸不参与）；
+//     面板分母已改读真源 ⇒ 这次**界面上能直接看见**上限变成 15/20/3（改前那版写死 5，看不见）。
+export const AGENDA_CAPS = { perTick: 3, open: 20, topLevel: 15 };
 const AGENDA_STAGE_FALLBACK = '谋划';   // 新盘算缺省阶段（ssot schema 要求 stage 非空）
 // leg25 f（用户拍板「X1 认账简化」）：`VERDICT_HURT_THRESHOLD = 0.05` **已删除**。
 //   它曾是 K15「败露」判据的阈值（报批 #11 定案）。原判据吃 `hurtWindow`（近 2 tick 负向 δ），
@@ -594,14 +608,29 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
             warnings.push(`裁定: 入局限额（每 tick 新生 ≤${ENTITY_BIRTH_PER_TICK}）：「${ne.name}」被拒`);
             continue;
         }
-        if (world.entities.some((e) => e.name === ne.name)) continue;   // 重名拒（check 已查，防御）
+        if (world.entities.some((e) => e.name === ne.name)) {
+            // ★leg32f：同名 = **丢掉这条提议**（账上已有的那个人正在册，丢掉它对世界零损害），
+            //   而**不是**判整步不合法。旧法在 check-step 里报致命错 ⇒ 整轮（含玩家这一轮的行动）陪葬
+            //   （用户实机：「$.newEntities[0].name: 账上已有同名实体「白小娥」…（世界原样未动，可重试）」）。
+            //   ⚠留痕不许省：静默丢弃也要能被看见、被计数（`提议丢弃:` 已并入 simLog 的 rejected 口径）。
+            warnings.push(`提议丢弃: 「${ne.name}」账上已有同名实体（已有者不重建）`);
+            continue;
+        }
         const kind = ne.kind || 'character';
+        // ★leg32f：位置不在集内 ⇒ 归一到「未明」并留痕（不拒整步、不拒这个人）。
+        //   为什么归一：位置线已定案"不可靠、不参与机制、包里'有就给'"，拿它当硬闸会把"这个人该不该存在"
+        //   和"他站在哪"混为一谈。座标编错，人还是该入场的（空着就是空着）。
+        let location = ne.location;
+        if (!new Set(world.context?.positions || []).has(location)) {
+            warnings.push(`提议丢弃: 「${ne.name}」位置不在集内（「${location}」）——归一到「未明」（空着就是空着）`);
+            location = '未明';
+        }
         // leg25 c：入局**不再落任何数值**——四维已不存在（书里的说法走 `实力` 文本态）。
         const ent = {
             id: `e_${tick}_${born.length + 1}`,
             kind,
             name: ne.name,
-            location: ne.location,
+            location,
             lastActiveTick: tick,
         };
         // K45/C7（用户 2026-09-09 拍板：提示词约束为主）：newEntities 可带 parent=所属势力名——目标在册且为势力且未灭才落；否则弃关系+警告（照常入局）
@@ -615,7 +644,11 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
         born.push(ent);
         const why = ne.source.type === 'event'
             ? `因事件「${(world.events || []).find((e) => e.id === ne.source.ref)?.title ?? ''}」而生`
-            : ne.source.type === 'book' ? '名载书中' : '屡被提及，声名鹊起';
+            : ne.source.type === 'book' ? '名载书中'
+                : ne.source.type === 'entity'
+                    // ★leg32e：牵出者写**名**不写 id（与全仓"引擎 id 不透传玩家视线"同口径）
+                    ? `由「${world.entities.find((e) => e.id === ne.source.ref)?.name ?? ''}」牵出`
+                    : '屡被提及，声名鹊起';
         chronicle.push({ id: `ch_${tick}_ent_${ent.id}`, tick, text: `「${ent.name}」入局（${why}）`, kind: 'major' });
     }
     return born;
@@ -725,7 +758,11 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     bookDialogue(world, moveFact, tick);                // K37：对话依据册记账（moveFact.object 命中）
 
     // ②' 主动作权门控（K2，细案 §3.2）：校验之后、裁定之前。滤除静默方主动作——不落账、不编年、不注入（双面无痕）；被点名可应答。
-    const gate = gateWorldStep(step, ssot, moveFact);
+    // ★★leg32g：第 4 个参数＝**本轮待启用名单**（引擎机械选出、也随包递给模型的那 12 个）。
+    //   为什么必须传进来：名单上的人按结构三条件是静默的 ⇒ 模型照名单给他开线也会被门控丢掉
+    //   ⇒ 那份名单就成了空转（"规则与引擎判据必须对得上"）。传进来 ⇒ 他们获得**一次起头资格**。
+    const spotlight = new Set(computeIdleFaces(ssot).map((f) => f.id));
+    const gate = gateWorldStep(step, ssot, moveFact, spotlight);
     const gstep = gate.step;
     // K14 出生裁判（盘算树细案 §3.2 落点：gate 之后、裁定之前）：GC 上限 → 落账 → 挂因/委派留痕 → 环检测自动拆
     const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle);
@@ -790,8 +827,10 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     //   （那条警告已不可能产生）。
     const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates']
         .reduce((n, k) => n + (step[k]?.length ?? 0), 0);
+    // ★leg32f：`提议丢弃:` 并入拒签分子——它在语义上与"裁定拒"同类（模型提了、世界没落账），
+    //   漏掉它会让拒签率**低估**（丢掉的东西不计入分子 ⇒ 读数失真）。
     const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)
-        + warnings.filter((w) => w.startsWith('裁定:') || w.startsWith('校验拒绝:')).length;
+        + warnings.filter((w) => w.startsWith('裁定:') || w.startsWith('校验拒绝:') || w.startsWith('提议丢弃')).length;
     recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected);
 
     return { ok: true, ssot: world, stage: { chronicle, warnings, events } };

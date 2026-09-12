@@ -21,8 +21,15 @@
 // ============================ leg24 片3「拆引擎裁定」============================
 export const QUIET_TICKS = 3;   // 提案（片3 新增）：静默判定里"久未出手"的轮数门（原 SILENCE_THRESHOLD 已删）
 
-export function gateWorldStep(step, world, moveFact = null) {
+export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
     const agendaOwner = new Map((world.agendas || []).map((a) => [a.id, a.owner]));
+    // ★★leg32g：**"这一轮被轮到的人"名单**（引擎每轮机械选出、随包一起递给模型的那 12 个）。
+    //   为什么它必须在这里也算一份：静默门的语义是"不许主动作"，而那 614 人**从没出手过、也没人点名**
+    //   ⇒ 按结构三条件永远静默 ⇒ **模型就算照名单给他们开线，提议也会被这道门丢掉**（自锁闭环的第二半）。
+    //   ⇒ 名单上的人**获得一次"起头"的资格**（只限 newAgendas：自己立一条线，从此成为活跃方）。
+    //   ★边界：①名单由引擎机械选出（不是模型自选，模型改不了它）②只放开"起头"这一种主动作
+    //   ③已有盘算属主本来就不静默 ④每轮仍受 perTick/topLevel 两道闸管 ⇒ 不会炸量。
+    const spotlightSet = spotlight instanceof Set ? spotlight : new Set(spotlight || []);
     // K37：状态面（active 才算门控成员；retired/dead 从点名/静默/提议面剔除）
     const statusOf = new Map(world.entities.map((e) => [e.id, e.status || 'active']));
     const gated = (e) => (statusOf.get(e.id) ?? 'active') === 'active';
@@ -62,6 +69,8 @@ export function gateWorldStep(step, world, moveFact = null) {
     const lifted = [...silentSet].filter((id) => named.has(id));
     const liftedSet = new Set(lifted);
     const active = (id) => !silentSet.has(id) || liftedSet.has(id);
+    // ★leg32g：名单上的人**可以起头**（只限 newAgendas，见函数头注释）——这是那个自锁闭环的出口
+    const canStart = (id) => active(id) || spotlightSet.has(id);
 
     const dropped = { actions: [], agendaAdvances: [], plotEvents: [], newAgendas: [], agendaCancels: [], newEntities: [] };
     const actions = (step.actions || []).filter((a) => {
@@ -85,7 +94,9 @@ export function gateWorldStep(step, world, moveFact = null) {
     const newAgendas = (step.newAgendas || []).filter((na) => {
         // K14 出生裁判（细案 §3.2 → A-2）：新盘算提议 = 主动作——静默方提议被滤除（双面无痕）；
         // 被点名应答方（lifted）可以提议；下一轮重新判定。
-        if (active(na.entity)) return true;
+        // ★leg32g：**本轮被轮到的人**也可以提议（`canStart`）——否则"模型照名单给他开线、引擎照样丢掉"，
+        //   那份名单就成了空转（这是本棒自己抓出来的机制漏洞：规则与引擎判据必须对得上）。
+        if (canStart(na.entity)) return true;
         dropped.newAgendas.push(na.entity);
         return false;
     });

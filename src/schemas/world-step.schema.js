@@ -58,12 +58,18 @@ export const worldStepSchema = {
                     entity: { kind: 'string', minLength: 1 },   // 提议者实体 id（静默判定用；dialogueFact 源可填观察者）
                     parent: { kind: 'string', minLength: 1 },   // K45/C7：所属势力名（可省——书/对话中已知的门派或势力；引擎校验目标在册且为势力，不满足弃关系）
                     // leg25 c：入局 `attrs`（四维浮点提议）**整条删除**——四维已不存在（见 ssot.schema 注释）。
+                    // ★leg32e（小说家条款 §3.2 第一片）：源型增 `entity` = **由在册实体牵出**（ref=那个实体 id）。
+                    //   为什么加：旧三型（book/event/dialogueFact）都要求"书上写过 / 有事件 / 对话里点过名"
+                    //   ⇒ **书上没写的人永远进不来**。真账实测 38 轮只有 4 个属主、614 人从未出场，
+                    //   模型只能在同一批名字里翻来覆去（用户：「只有将创作权交在 llm 手里才能活起来」）。
+                    //   ★这不放开"编事实"：牵出者必须**在册且未灭**（`check-step.js` 硬闸），
+                    //   名字非空不重名、位置仍须 ∈ 位置集、每轮新生仍 ≤ ENTITY_BIRTH_PER_TICK。
                     source: {
                         kind: 'object',
                         additional: false,
                         required: ['type'],
                         props: {
-                            type: { kind: 'string', enum: ['book', 'event', 'dialogueFact'] },
+                            type: { kind: 'string', enum: ['book', 'event', 'dialogueFact', 'entity'] },
                             ref: { kind: 'string' },
                         },
                     },

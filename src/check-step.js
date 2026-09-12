@@ -34,6 +34,8 @@ export function checkWorldStep(step, ssot) {
         if (playerId && a.entity === playerId) errors.push(`$.actions[${i}].entity: 模型禁写玩家 "${playerId}"（红线 1 代码化）`);
         if (!entityIds.has(a.entity)) errors.push(`$.actions[${i}].entity: 未知实体 "${a.entity}"`);
     }
+    // ★leg32h（用户：「又把主角演了」）：**禁写玩家的面上加一条——不许推进玩家的盘算**（见 ②b' 段落的实现）。
+    //   为什么放在 ②b'：它属于"身份/因果"校验（盘算属主 == 玩家），与 agendaAdvances 的形状校验同段。
     // leg25 c（用户令「删」）：`stateChanges` 的整段校验（玩家禁写 / 未知实体 / 属性白名单 / actor 在册）
     //   随契约层该字段一并删除——四维浮点不存在了，没有属性变更可校验。
 
@@ -62,6 +64,17 @@ export function checkWorldStep(step, ssot) {
     }
     for (const [i, ad] of step.agendaAdvances.entries()) {
         if (!agendaIds.has(ad.agendaId)) errors.push(`$.agendaAdvances[${i}].agendaId: 未知盘算 "${ad.agendaId}"`);
+        // ★leg32h（用户：「又把主角演了」）：**红线 1 补一个缺口——不许推进玩家的盘算**。
+        //   实测机制（真账 tick 50）：玩家棋子叫「你」（`attachPlayerPiece` 初始化时没拿到玩家名），
+        //   而主角「黄坤」在 t42 被模型当**新实体**入局（`e_42_1`）⇒ 世界账里两个平行的人
+        //   ⇒ 模型很尽责地替黄坤开了盘算并**一轮轮推进**（done 里全是"以雷法锁定薛铁衣气机、展开殊死搏杀"
+        //   这类**玩家自己的选择**）。既有四条守卫只拦"提议"（actions/newAgendas/newEntities/entityFates），
+        //   **没拦"推进"** ⇒ 账上只要已有属于玩家的盘算（旧账/合并前遗留），模型就能一直替玩家演下去。
+        //   本条堵上：**玩家的盘算不由模型推进**——玩家那一步只由玩家自己的落子进入世界。
+        const owner = (ssot.agendas.find((a) => a.id === ad.agendaId) || {}).owner;
+        if (playerId && owner === playerId) {
+            errors.push(`$.agendaAdvances[${i}].agendaId: 模型禁写玩家（红线 1 代码化；不许推进玩家的盘算 "${ad.agendaId}"）`);
+        }
     }
     // ②c 取消通道（K18/因果链 T5）：提议放弃——agendaId 必须存在且未结算（"已结算盘算不可取消"）；
     // 模型只有提议权，裁决归引擎；玩家不是模拟主体（agendaCancels 无 entity 通道，形状天然无玩家面）
@@ -82,7 +95,7 @@ export function checkWorldStep(step, ssot) {
         if (playerId && ne.entity === playerId) errors.push(`$.newEntities[${i}].entity: 模型禁写玩家（红线 1 代码化；玩家不是入局提议者）`);
         if (ne.entity && !entityIds.has(ne.entity)) errors.push(`$.newEntities[${i}].entity: 未知提议者 "${ne.entity}"`);
         if (!ne.source?.type || !ne.source.ref) {
-            errors.push(`$.newEntities[${i}].source: 无源不入局——新实体必须带源引用（book/event/dialogueFact）`);
+            errors.push(`$.newEntities[${i}].source: 无源不入局——新实体必须带源引用（book/event/dialogueFact/entity）`);
             continue;
         }
         const stype = ne.source.type;
@@ -93,10 +106,34 @@ export function checkWorldStep(step, ssot) {
         } else if (stype === 'book') {
             if (!bookNames.has(ref)) errors.push(`$.newEntities[${i}].source: book 源必须命中书名录（当前 ref="${ref}"）`);
         } else if (stype === 'dialogueFact') {
-            if (!booked.has(ref)) errors.push(`$.newEntities[${i}].source: dialogueFact 源必须命中对话依据册（当前 ref="${ref}"）`);
+            // ★leg32i：错误信息**不许再说假话**（用户贴回来过一条把人看懵的）：
+            //   模型提议 `dialogueFact` 源、ref 指向「白小娥」——而白小娥**明明就在账上**
+            //   （她是静默实体、不在依据册里）。旧信息只说"必须命中对话依据册"，读者以为账上没有这个人。
+            //   ⇒ 现在按**三种真实情况**分别报：①账上已有同名实体（那就别入局，她已经在册）
+            //   ②名字在依据册里但没到门槛 ③压根没被点过名。
+            const existing = ssot.entities.find((e) => e.name === ref);
+            if (existing && !booked.has(ref)) {
+                errors.push(`$.newEntities[${i}].source: 「${ref}」**账上已有这个实体**（${existing.id}）——他/她已在册，不需要入局（dialogueFact 源是给"还没入册、但对话里反复被点名的人"用的）`);
+            } else if (!booked.has(ref)) {
+                errors.push(`$.newEntities[${i}].source: dialogueFact 源必须命中对话依据册（当前 ref="${ref}" 既不在依据册、也不在账上——只有"对话里反复被点名"的对象才走这一型）`);
+            }
+        } else if (stype === 'entity') {
+            // ★leg32e（小说家条款 §3.2 第一片）：**由在册实体牵出**——给"该出场但书上没写的人"一条路。
+            //   两条硬闸（全机械可核）：①牵出者**必须在册** ②**必须未灭**。
+            //   为什么这两条不能松：「无源之物不存在」是"因果生成"与"凭空造人"的唯一分界；
+            //   而死者不生事（与 entityFates 的"dead=终局"一致）。
+            const src = ssot.entities.find((e) => e.id === ref);
+            if (!src) errors.push(`$.newEntities[${i}].source: entity 源必须引出在册实体（当前 ref="${ref}" 未知实体）`);
+            else if ((src.status || 'active') === 'dead') errors.push(`$.newEntities[${i}].source: entity 源不能引已覆灭实体（"${src.name}" 已灭，死者不生事）`);
         }
-        if (ssot.entities.some((e) => e.name === ne.name)) errors.push(`$.newEntities[${i}].name: 账上已有同名实体「${ne.name}」（已有者不重建）`);
-        if (!positions.has(ne.location)) errors.push(`$.newEntities[${i}].location: "${ne.location}" 不在世界位置集`);
+        // ★leg32f（用户实机：「$.newEntities[0].name: 账上已有同名实体「白小娥」（已有者不重建）」整步被拒）：
+        //   ① 同名**不再报致命错**——账上已有的那个人本来就在册，**丢掉这条提议对世界零损害**；
+        //      旧法把它判成"世界步不合法"⇒ 整轮（连同玩家这一轮的行动）一起陪葬。丢掉由 `settle.js`
+        //      的 `spawnEntities` 静默执行 + **留痕警告**（不许静默：丢弃也要能被看见、被计数）。
+        //   ② 位置**不再报致命错**——模型编了个不在集内的地名，不等于"这个人不该存在"；
+        //      由 `spawnEntities` 归一到 `未明`（空着就是空着）+ 留痕警告。
+        //   两条都遵同一口径：**"提案被丢掉" ≠ "世界步不合法"**——后者才该拒整步。
+        //   ⚠仍然**致命**的（不许陪葬的反而）：未知提议者 / 无源 / 源 ref 不存在（那是真的凭空造人）。
         // leg25 c：入局 `attrs`（四维浮点提议）的校验整段删除——契约层该字段已删（四维不存在）。
     }
     for (const [i, f] of (step.entityFates || []).entries()) {
