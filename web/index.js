@@ -1,40 +1,50 @@
 // story-world-v2/web/index.js
-// K30 骨架 + K34 渲染接线（编排层·浏览器侧）：ST 插件入口——面板挂载 + 六页签渲染刷新。
+// K30 骨架 + K34 渲染接线（编排层·浏览器侧）：ST 插件入口——面板挂载 + 八页签渲染刷新。
 // 范式实读 v1（manifest/js/settings.html/ui.js）后仿写，命名空间 sw2_ 全隔离：
 //   ① settings.html 模板经 ctx.renderExtensionTemplateAsync 注入（缺模板有最小回退窗）；
 //   ② 扩展菜单「魔杖」入口挂 extensionsMenu；③ 弹窗 z-index 压顶内联规则（id 特异性）；
 //   ④ css 带版本查询防浏览器缓存吞修复；⑤ 全局错误网进状态条。
-// K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入六页签；
+// K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll, renderVolumeReadHtml, renderChainViewHtml } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml, renderChainViewHtml, LABELS } from '../src/render.js';
 import { expandChain } from '../src/chain.js';
 import { migrateLegacyAttrs } from '../src/settle.js';   // leg24 片4：旧账一次性清理（读到热账后、渲染前）
 import {
     hotAccountShape, loadHotAccount, planChronicleRotation, countLedgerEntries,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
 } from '../src/storage.js';
-import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer } from '../src/abstract.js';
+import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer, describeProgress } from '../src/abstract.js';
 // leg24 片1（停抄书）：runAttrsRound / runRelationRound / applyRosterAttrs / refineEntityAttrs 四个入口随
 // 「抄书流水线」整条删除（名册里不再有从书里抄来的属性/隶属，补抽按钮与 bus 动作同批下掉）。
 // bookFingerprint 的浏览器侧唯一用途是补抽前的指纹守卫，随之删除（书指纹仍由 extractWorldSetting 写进 setting）。
-import { createIdbVolumeStore } from './idb-backend.js';
+import { createIdbVolumeStore, createIdbSnapshotStore } from './idb-backend.js';
+import { describeSnapshots, planStep, planRetention, restoreFrom } from '../src/snapshot.js';   // leg27 后：快照容错（纯逻辑在 src，本层只编排）
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
 import { composeInitSource, normalizeEntryKey } from '../src/init-source.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
+import { PARAM_KEYS, SWITCH_PARAMS, isParamKey, normalizeParam, switchOn } from '../src/params.js';   // leg26：世界参数档位（参数页写通道的白名单真源）
+// leg26 b：记忆投递（引擎事实 → 记忆插件）。★leg27 i：这条 import 一旦少了**任何**被用到的常量——
+//   漏了它会让**成功日志那一行**抛 ReferenceError，而调用点的 `.catch(() => {})` 把错误吞掉 ⇒
+//   投递其实写完了、插件里却什么都没有（用户实机报「上次投递失败：MEMORY_TABLE_MILESTONES is not defined」）。
+//   ★leg30：`MEMORY_TABLE_MILESTONES`（史卷纪要）**已从 src/memory-bridge.js 删除**——"前史"不再是第三张表，
+//   它是「世界大事」里**成段的行**（里程碑的 span 折成一行 `第 1–10 轮 · 前史`），理由见那个文件顶部 ②.2。
+import { buildMemoryPayload, pushToMemory, MEMORY_TABLE_STATE, MEMORY_TABLE_EVENTS, PLUGIN_TABLE_STATE, PLUGIN_TABLE_EVENTS, LEGACY_TABLE_IDS } from '../src/memory-bridge.js';
+const EVENTS_TABLE_NAME = MEMORY_TABLE_EVENTS;   // leg27 h：自证面里要报"大事几条"（表名只在这里取一次，防两处漂移）
 import { runEntityLookupStep, runBatchLookup, pickOneForLookup, planBatches, deriveLocationFromBook } from '../src/entity-lookup.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 const VERSION = '0.1.0';
 const WINDOW_ID = 'story_world2_window';
-const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'settings'];
+// leg26：参数独立页签；leg27 后：第八页签「快照」
+const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'params', 'snapshots', 'settings'];
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260911-leg25g-map';
+const CSS_VERSION = '20260912-leg31-entity-table';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -168,7 +178,9 @@ export function refreshWorld(world, { config, oldVolumes = [] } = {}) {
         const cfg = config ?? modelSettings() ?? {};
         sw2LastWorld = world;   // K41：链视图入口持引用（同一对象，零第二份状态）
         // leg25 d：批量补全进度随 config 进渲染层（渲染层不碰任务状态——面板零第二份状态纪律）
-        const out = renderAll(world, { config: { ...cfg, lookupTask: batchTaskStatus() }, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter } });
+        // leg27 后：快照清单同理（config.snapshots = IDB 读回的元信息 + 一行事实摘要）
+        // leg27 h：记忆投递自证面同理（config.memoryPush = 上一次投递的实测结果）
+        const out = renderAll(world, { config: renderCfg(), oldVolumes, view: { chronicleFilter: sw2ChronicleFilter } });
         const chipWorld = win.querySelector('#sw2_world_chip');
         if (chipWorld) chipWorld.textContent = `世界：${out.header.world || '—'}`;
         const chipTick = win.querySelector('#sw2_tick_chip');
@@ -190,7 +202,9 @@ export function refreshWorld(world, { config, oldVolumes = [] } = {}) {
         const chronicleLen = Array.isArray(world.chronicle) ? world.chronicle.length : 0;
         const delta = sw2PrevChronicle == null ? null : chronicleLen - sw2PrevChronicle;
         sw2PrevChronicle = chronicleLen;
-        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`} · 窗口只读，不参与剧情`);
+        // leg27 h：记忆投递自证面随同一句状态栏出声（**它才是最后写状态栏的那一处**）
+        const memLine = memoryPushLine();
+        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`}${memLine ? ` · ${memLine}` : ''} · 窗口只读，不参与剧情`);
     } catch (err) {
         setStatus(`⚠ 渲染失败：${err?.message || err}`);
         console.warn('[story-world-v2] render failed:', err);
@@ -254,6 +268,10 @@ function writeHotMeta(meta) {
         if (typeof ctx.saveMetadataDebounced === 'function') ctx.saveMetadataDebounced();
         else if (typeof ctx.saveChat === 'function') ctx.saveChat().catch(() => {});
     } catch (_) {}
+    // leg27 后 · 快照容错：**唯一的落账收口**就是这里——挂在这一处 ⇒ 全步覆盖
+    //（查书前置步 / tick 演化 / 批量补全 / 单实体查 / 卷轮转 / 名册入账 / 初始化 / 导入 / 清演化层）。
+    // 纪律：**fire-and-forget**（不 await）+ 内部 try/catch ⇒ 快照失败绝不影响世界推进（同记忆投递）。
+    requestSnapshot(meta?.world, '落账');
 }
 
 // 显式落盘（关键路径 await 后报成功）：绕过防抖立即整聊天保存；重入守卫防并发双写。
@@ -274,21 +292,177 @@ async function flushHotMeta() {
     }
 }
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27 后 · 快照容错（细案 docs/spec-snapshot-fault-tolerance.md；用户拍板：IDB 独立库 / 保留 15 步 / 只回世界账）
+//   纯逻辑在 `src/snapshot.js`（可 Node 测），存储适配在 `web/idb-backend.js`（照旧卷同层同纪律）。
+//   本段只做编排：**何时拍** + **基准从哪来** + **失败怎么吞**。
+let sw2SnapChain = { seq: 0, anchorId: null, anchorSeq: null, anchorWorld: null };
+let sw2SnapQueue = Promise.resolve();   // 写串行（IDB 异步，不串行会竞态丢份）
+let sw2SnapLast = [];                   // 最近两份快照的**逐字节指纹**（去重用，最多两串）
+let sw2SnapInited = null;               // 链是否已与 IDB 对齐（null=未对齐）
+
+// ★leg27 e（用户实拍：s1 时间最新、s12 最旧，**id 序列与时间完全对不上**）：
+//   病 = **`seq` 只活在内存里，刷新即归零，而 IDB 里的旧快照还在**。
+//   IDB 键是 `${chatId}:${id}` ⇒ 刷新后新链又从 `s1` 开始 ⇒ **新快照把旧快照按 id 一份份覆盖**，
+//   各条链交织在一起（"越新的 id 时间越早"），且**重复份永远清不掉**（用户看到的"一下子多了这么多"）。
+//   ⇒ 治法：**加载时把链与 IDB 对齐**——`seq` 取盘上最大序号，**凭空续号、绝不回头覆盖**。
+//   对齐后 `anchorWorld` 为空 ⇒ 下一份自愿落 full（`planStep` 的既有规则），链头永远完整。
+async function ensureSnapshotChain() {
+    if (sw2SnapInited) return sw2SnapInited;
+    sw2SnapInited = (async () => {
+        try {
+            const metas = await snapshotStore().list();
+            const seqs = metas.map((s) => { const m = /^s(\d+)$/.exec(String(s.id ?? '')); return m ? Number(m[1]) : 0; });
+            const maxSeq = seqs.length ? Math.max(...seqs) : 0;
+            if (maxSeq > sw2SnapChain.seq) sw2SnapChain = { ...sw2SnapChain, seq: maxSeq };
+            console.info(`[story-world-v2] 快照链已对齐：盘上 ${metas.length} 份 · 最大序号 s${maxSeq}（新快照从 s${maxSeq + 1} 起，不再覆盖旧的）`);
+        } catch (err) {
+            console.warn('[story-world-v2] 快照链对齐失败（本次按新链处理）', String(err?.message || err));
+        }
+        return true;
+    })();
+    return sw2SnapInited;
+}
+
+function snapshotStore() {
+    const ctx = freshCtx();
+    const chatId = String(ctx?.chatId ?? ctx?.chatMetadata?.chat_id_hash ?? 'default');
+    return createIdbSnapshotStore(chatId);
+}
+
+/** 拍一份快照（异步 · 串行 · 零阻塞）。reason 只作可读标注，判据不放它身上。 */
+function requestSnapshot(world, reason) {
+    if (!world || typeof world !== 'object') return;
+    const snapshot = JSON.parse(JSON.stringify(world));   // 立即取副本（后续可能被就地改）
+    // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+    // ★leg27 d（用户实拍「**怎么一下子多了这么多，落账太细了还是 tick 吧**」，一屏 12 份、其中 11 份
+    //   「增量 · 0KB」、tick 全是「第 0 轮」、时间戳挤在同一秒）：
+    //   病的准确名字 = **"落账"不等于"世界动了"**。`writeHotMeta` 是**内存与盘面同步**的收口，
+    //   它会在"账本逐字节没变"时也被调用（名册落账/位置继承/迁移/快照回填/初始化那一串）。
+    //   我原来挂在它上面 ⇒ **对同一份世界反复拍快照**，其中还有**逐字节相同**的纯重复。
+    //   ⇒ 加**内容闸**：与上一份逐字节相同 ⇒ 直接不拍（"一步"的定义 = **世界真的变了**）。
+    //   这一闸同时把"落账太细"与"重复份"一起治掉：一个 tick 推进 = 一次真变化 = 一份快照。
+    const fp = JSON.stringify(world);
+    if (sw2SnapLast.includes(fp)) return;
+    sw2SnapLast = [fp, ...sw2SnapLast].slice(0, 2);
+    sw2SnapQueue = sw2SnapQueue.then(async () => {
+        try {
+            await ensureSnapshotChain();      // ★异步边界上再保一次（防 loadWorld 的第一次对齐竞态）
+            const p = planStep({
+                seq: sw2SnapChain.seq,
+                tick: world?.meta?.tick ?? null,
+                world: snapshot,
+                prevAnchorWorld: sw2SnapChain.anchorWorld,
+                prevAnchorId: sw2SnapChain.anchorId,
+                anchorSeq: sw2SnapChain.anchorSeq,
+                reason: String(reason || '落账'),
+            });
+            await snapshotStore().put(p.snapshot);
+            sw2SnapChain = { seq: p.nextSeq, anchorId: p.anchorId, anchorSeq: p.anchorSeq, anchorWorld: snapshot };
+            // 保留窗口 15 步 · 锚点完整性由 planRetention 保证：丢锚就丢它名下的 delta
+            const metas = await snapshotStore().list();
+            const plan = planRetention({ snapshots: metas });
+            if (plan.drop.length) await snapshotStore().drop(plan.drop);
+            console.info(`[story-world-v2] 快照 ${p.snapshot.id}（${p.snapshot.kind}${p.mode ? `·${p.mode}` : ''} · ${p.snapshot.bytes} 字节）· ${p.snapshot.reason} · 现有 ${metas.length - plan.drop.length} 份`);
+        } catch (err) {
+            // 失败零阻塞：只进控制台（世界推进永远优先）
+            console.warn('[story-world-v2] 快照失败（不影响世界推进）', String(err?.message || err));
+        }
+    });
+}
+
+/** 面板用：读快照清单 + 一行事实摘要（失败返回空，不抛） */
+export async function snapshotList() {
+    try {
+        const metas = await snapshotStore().list();
+        return { ok: true, list: metas, text: describeSnapshots(metas) };
+    } catch (err) {
+        return { ok: false, list: [], text: `快照不可读：${err?.message || err}` };
+    }
+}
+
+/**
+ * 回到某一步（**只回世界账**，用户拍板；对话记录不动）。
+ * 三条纪律：①恢复前**先给当前状态拍一份**（防"恢复错了回不来"）②链不可恢复 ⇒ 明确拒绝、世界原样不动
+ * ③恢复后落盘 + 重绘 + 把该份钉住（keepId）不被窗口剪掉。
+ */
+export async function restoreSnapshot(targetId) {
+    try {
+        const store = snapshotStore();
+        const all = await store.listAll();
+        const r = restoreFrom({ snapshots: all, targetId });
+        if (!r.ok) return { ok: false, error: r.error };
+        const current = loadHotAccount(readHotMeta()) || sw2LastWorld;
+        if (current) requestSnapshot(current, '恢复前自保');       // ②自保（异步，不阻塞这次恢复）
+        writeHotMeta(hotAccountShape(r.world));
+        const flushed = await flushHotMeta();
+        sw2LastWorld = r.world;
+        refreshWorld(r.world, { oldVolumes: LISTED_VOLUMES });
+        // 钉住该份 + 它需要的锚（keepId 闭包）
+        try {
+            const metas = await store.list();
+            const plan = planRetention({ snapshots: metas, keepId: String(targetId) });
+            if (plan.drop.length) await store.drop(plan.drop);
+        } catch (_) {}
+        const t = r.world?.meta?.tick;
+        return { ok: true, tick: t, plan: r.plan, flushed };
+    } catch (err) {
+        return { ok: false, error: String(err?.message || err) };
+    }
+}
+
+export async function clearSnapshots() {
+    try {
+        const n = await snapshotStore().clear();
+        // 三个内存态一起清：链、去重指纹、**对齐标记**（清了盘就必须允许重新对齐，否则新链又从头覆盖）
+        sw2SnapChain = { seq: 0, anchorId: null, anchorSeq: null, anchorWorld: null };
+        sw2SnapLast = [];
+        sw2SnapInited = null;
+        return { ok: true, removed: n };
+    } catch (err) {
+        return { ok: false, error: String(err?.message || err) };
+    }
+}
+
+/**
+ * 重置快照（清空 + 立刻给当前世界拍一份新链头）。
+ * 用途（用户实拍 12 份的来源）：盘上混着**旧代码/丢账时拍下的**快照——内容不可信、id 也乱。
+ * 一键丢掉那些、从"现在这份干净世界"重新起链。
+ */
+export async function resetSnapshots() {
+    const cleared = await clearSnapshots();
+    if (!cleared.ok) return cleared;
+    const current = loadHotAccount(readHotMeta()) || sw2LastWorld;
+    if (current) await requestSnapshot(current, '重置后链头');
+    return { ok: true, removed: cleared.removed };
+}
+
+async function refreshSnapshots({ silent = true } = {}) {
+    try {
+        await ensureSnapshotChain();          // ★先对齐（否则新链会从头覆盖旧链）
+        const r = await snapshotList();
+        sw2SnapshotCache = { list: r.list, text: r.text };
+        if (sw2LastWorld) refreshWorld(sw2LastWorld, { oldVolumes: LISTED_VOLUMES });
+    } catch (err) {
+        if (!silent) setStatus(`⚠ 快照刷新失败：${err?.message || err}`);
+    }
+}
+
 function volumeStore() {
     const ctx = freshCtx();
     const chatId = ctx?.chatId || 'default';
     return createIdbVolumeStore(String(chatId));
 }
 
-// ---------- K36：异步编排接线（A-4/A-5）----------
-// 线程模型：单例 tick 队列（防重入锁）；失败世界不动（引擎不变式）+ 状态条报错 + 重试路径；
-// 推进时机=回复完成后（MESSAGE_RECEIVED，2026-08-28 拍板：避免与主聊天 LLM 抢配额 429）；
-// CHAT_CHANGED → 世界重载（v1 同款）。
+// K36：轮次队列（setupAsyncTicks 装一次；dispatchAction 的手动补推要用它）
 let sw2TickQueue = null;
+
+// ---------- K34/K36：会话态（模块级 · 面板零第二份状态） ----------
 let sw2LastSettings = null;
 let sw2PrevChronicle = null;      // 上一渲染的编年行数（第十三棒：进展计数用）
 let sw2ChronicleFilter = null;    // K41 编年五筛视图态（kind Set；null=全选；纯视图态——不落 SSOT、不落盘，重绘保留，关面板重置）
-let sw2LastWorld = null;          // K41 链视图入口的世界引用缓存（同一对象引用，非第二份状态）
+let sw2LastWorld = null;          // K41：链视图入口持引用（同一对象，零第二份状态）
+let sw2SnapshotCache = null;      // leg27 后：快照清单（IDB 读回的元信息 + 摘要文案）——随 config 进渲染层，面板零第二份状态
 let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单（选人调用失败时退回它，再退兜底名单）
 
 function modelSettings() {
@@ -296,9 +470,6 @@ function modelSettings() {
     const raw = ctx?.extensionSettings?.['story_world_v2'] ?? null;
     return raw && typeof raw === 'object' ? raw : null;
 }
-
-// K36：设置页表单 ↔ extensionSettings 双向（v1 范式：即时写回 + saveSettingsDebounced）
-const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model', playerDesc: 'sw2_player_desc' };
 
 function readSettings() {
     const ctx = freshCtx();
@@ -316,12 +487,8 @@ function writeSetting(key, value) {
     try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
 }
 
-// ---------- leg25 检察官审计处置（B 组）：玩家棋子接线：建世界时真的给世界一枚玩家实体 ----------
-// 审计发现（旧法）：`context.playerId` **生产路径从不产生**（只有 test/ 与 demo/ 赋过值）→
-//   ①check-step 五条"模型禁写玩家"守卫全是 `if (playerId && …)` 恒假；②streams 走"无玩家"分支降级全见、
-//   掩码永不生效；③settle 的 K9 影响通道整体失效；④extractCtx 为空 → 对话依据册恒空 → dialogueFact 入局永不合法。
-// 现法：开新世界时**总是**建一枚玩家实体（书本名册里的玩家角色优先复用，否则新建 e_p<N>）并写 context.playerId；
-//   开档描述（设置页「你的开档描述」）**只在第一次**用来解析四维，之后冻结（引擎与模型都不再改它）。
+const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model', playerDesc: 'sw2_player_desc' };
+
 function nextPlayerId(entities = []) {
     let max = 0;
     for (const e of entities) {
@@ -331,15 +498,7 @@ function nextPlayerId(entities = []) {
     return `e_p${max + 1}`;
 }
 
-// ---------- leg25 检察官审计处置（D 组）：位置集从书里现成的地名建 ----------
-// 审计发现（旧法）：`context.positions` 建账时写死 `['未明']`、建账后**全仓无写入点** →
-//   613 个实体位置全落「未明」、位置校验退化为单值比较、"移动"在结构上不可能。
-// 来源不用新机制、不用模型猜：书里**本来就有**地名与驻点——canon.bookEntities 的 kind='location'
-//   条目（书的地名条目）+ 各条目的 location 串（书中明述的所在/驻地）。
-// 纪律：兜底词「未明」永远在集内（名册没带 location 的实体落在它上面，诚实表达"书没说"）；
-//   不发明新地名（集内每一个都来自书里的一行字）；上限只做防御（防超长书把位置列表灌爆 prompt）。
 export const POSITIONS_CAP = 60;   // 提案：位置集上限（超出按书序截断；防巨书灌爆输入）
-
 export function derivePositions(setting, { fallback = '未明', cap = POSITIONS_CAP } = {}) {
     const book = setting?.frozen?.canon?.bookEntities || [];
     const seen = [];
@@ -349,19 +508,14 @@ export function derivePositions(setting, { fallback = '未明', cap = POSITIONS_
         seen.push(s);
     };
     for (const b of book) {
-        // 书里明述"它坐落在哪"时，**这个条目贡献的是那个地方**（它自己的名字不是地方）
         if (b?.location) { push(b.location); continue; }
         if (b?.kind === 'location') {
-            // 结构标签（`<X帝麾下_Y>` 这类）不是地名——见 abstract 的 scanBookDeclarations 形态判据
-            if (String(b.name || '').includes('_')) continue;
             push(b.name);
         }
     }
     return [fallback, ...seen.filter((s) => s !== fallback).slice(0, Math.max(0, cap - 1))];
 }
 
-// 建玩家棋子：名册里已有同名者则复用（把 playerId 指过去），否则新建 e_p<N>。
-// 返回 {created, reused, playerId, name}（就地改 world —— 与 seedBookEntities 同风格）。
 export function attachPlayerPiece(world, playerName) {
     const nm = String(playerName || '').trim();
     const entities = world.entities || [];
@@ -376,16 +530,13 @@ export function attachPlayerPiece(world, playerName) {
         kind: 'character',
         name: nm || '你',
         location: (world.context?.positions || [])[0] || '未明',
-        // leg25 c：玩家棋子不再带 attrs（四维已删）——它和别的实体同尺：只有身份 + 位置。
-        lastActiveTick: 0,      // 头几轮不静默（与 spawnEntities 同口径）
+        lastActiveTick: 0,   // 头几轮不静默（与 spawnEntities 同口径——否则棋子一开始就被静默门滤掉）
     };
     world.entities = [...entities, ent];
     world.context = { ...(world.context || {}), playerId: id };
     return { created: true, reused: false, playerId: id, name: ent.name };
 }
 
-// 开档描述里写明姓名 → 给玩家棋子改名（id 不变：盘算/事件/编年里的引用都不受影响）。
-// 同名已存在（书里就有这个角色）→ 不新建、把棋子指过去（复用那条账）。
 export function namePlayerPiece(world, parsedName) {
     const nm = String(parsedName || '').trim();
     const pid = world.context?.playerId;
@@ -393,22 +544,13 @@ export function namePlayerPiece(world, parsedName) {
     const others = (world.entities || []).find((e) => e.name === nm && e.id !== pid);
     if (others) {
         world.context = { ...world.context, playerId: others.id };
-        world.entities = world.entities.filter((e) => e.id !== pid);   // 空棋子不留（它一格数据都没有）
+        world.entities = world.entities.filter((e) => e.id !== pid);   // 同名他人 ⇒ 合并，空棋子不留
         return { renamed: true, mergedInto: others.id, name: others.name };
     }
     world.entities = world.entities.map((e) => (e.id === pid ? { ...e, name: nm } : e));
     return { renamed: true, name: nm };
 }
 
-// 第十八棒：初始化设定源自动合订（编排层）——只有自动两条路：
-// 缺省自动合订 角色卡四件套 + 世界信息/卡内置世界书（世界书全量，大书分块抽取在 abstract 层）；
-// 恢复 v1「读取当前角色卡一键初始化」手感；原生 prompt 从初始化路径清除。
-// 取数形状宽容：世界信息兼容 三形态（旧版 ctx.worldInfo 数组/{entries} + 模块化 ST 的官方挂载世界）；
-// 失败上控制台诊断现场（形状未知时不再盲猜）。
-
-// 卡挂世界名：**ST 官方取的是 `data.extensions.world`**（world-info.js checkEmbeddedWorld 逐字：
-//   `characters[chid]?.data?.extensions?.world`）。旧法读 `character.world`——实测用户卡该字段不存在。
-//   保留 `character.world` 作旧版兼容（v1 时代同指针）。
 export function characterWorldNames(character) {
     const out = [];
     const seen = new Set();
@@ -416,15 +558,12 @@ export function characterWorldNames(character) {
         const s = String(v ?? '').trim();
         if (s && !seen.has(s)) { seen.add(s); out.push(s); }
     };
-    push(character?.world);                            // 旧版 ST 兼容
-    push(character?.data?.extensions?.world);          // 模块化 ST 官方指针（主口径）
-    push(character?.extensions?.world);                // 少数卡把 extensions 摆在顶层
+    push(character?.world);                            // 卡上写的 ST 世界信息名
+    push(character?.data?.extensions?.world);          // 另一种 ST 卡格式（数据段）
+    push(character?.extensions?.world);                // data.extensions 之外的 extensions 段
     return out;
 }
 
-// 卡**内置**世界书（`character_book`）→ ST 标准 worldInfo 条目形状。
-//   为什么必须有这条：内置书用的是**复数键 `keys`**，直接当 worldInfo 条目读会取不到 `key` ⇒ 匹配必然落空。
-//   不猜字段名：按 ST 自己的转换表逐项对照（`convertCharacterBook`，world-info.js:5370）。
 export function characterBookEntries(character) {
     const book = character?.character_book || character?.data?.character_book;
     const raw = book?.entries;
@@ -439,10 +578,8 @@ export function characterBookEntries(character) {
     })).filter((e) => e.content);
 }
 
-// 世界书条目收集（第十九棒实证修正）：模块化 ST 的 getContext() 无 worldInfo/character 字段——
-// 挂载世界在 extension_settings.world_info（已载表）+ globalSelect（附加名），条目经官方
-// ctx.loadWorldInfo(name) 取（getContext 暴露，服务端按名取、模块内缓存）。旧版 ctx.worldInfo 形态保留兼容。
-// 候选序 = 卡挂 world 字段 → globalSelect → 已载表键（去重）。
+// 世界书条目收集（三条来源：卡内置书 / 具名世界书 / 旧版 worldInfo 数组）——去重按"键+正文"指纹，
+// 同一本书被两条路取到时只算一次（leg25 e 实测：同一本书读两遍 499526 → 301538 字符）。
 async function collectWorldInfoEntries(ctx, character) {
     const legacy = ctx?.worldInfo;
     if (Array.isArray(legacy)) return { entries: legacy, worldSources: null, readable: true };
@@ -450,27 +587,15 @@ async function collectWorldInfoEntries(ctx, character) {
     const names = [];
     const seenName = new Set();
     const push = (n) => { if (n && typeof n === 'string' && n.trim() && !seenName.has(n)) { seenName.add(n); names.push(n.trim()); } };
-    push(character?.world); // 卡挂世界（v1 时代同指针：大荒z → 大荒-姬元真）
-    // leg25 d 修：**旧法只读 `character?.world`，实测用户卡上这个字段根本不存在**（大荒z.png 的
-    //   `card.world` 与 `data.world` 都是 null），ST 官方指针是 `data.extensions.world`
-    //   （world-info.js checkEmbeddedWorld：`characters[chid]?.data?.extensions?.world`）。
-    //   后果链：推不进名字 → 候选世界名空 → loadWorldInfo 一次没调 → 取书恒 0 条 →
-    //   按需查书把"读不到书"当成"书里没有该条目" → 写 absent「书未明述」并**永久锁死**那栏。
-    for (const n of characterWorldNames(character)) push(n);
-    const chatWi = ctx?.chatMetadata?.['world_info']; // 聊天级挂载（ST assignLorebookToChat 落 chat_metadata.world_info）
+    push(character?.world); // 卡上写的世界信息名（v1 同款：单卡 z 情形靠它）
+    const chatWi = ctx?.chatMetadata?.['world_info']; // 聊天级挂载（ST assignLorebookToChat 写 chat_metadata.world_info）
     if (typeof chatWi === 'string') push(chatWi); else if (Array.isArray(chatWi)) for (const n of chatWi) push(n);
     for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
     for (const n of Object.keys(ctx?.extensionSettings?.world_info ?? {})) push(n);
-    // 第二十五棒 e（五）：**条目去重**（按内容指纹）——治的是"同一本书被读两遍"。
-    //   实机实测（真卡 + 真书）：卡内置 `character_book`（235 条）与 ST 挂载世界书经 `loadWorldInfo` 取回的
-    //   是**同一本书**（466/468 条内容完全相同）⇒ 旧法直接 push 到一起 ⇒ 送进抽取的文本**翻倍**
-    //   （499,526 字符 / 424 条，顶到 50 万防御上限、`truncated: true`，白烧一半 token 且有截断风险）。
-    //   旧注释只说"候选世界名去重"——**名去了重，条目没去重**，这就是那个洞。
-    //   指纹 = 正文 + 主键（正文就是"是不是同一条"的判据；主键防同文异键被误并）。
     const fpOf = (e) => {
         const content = String(e?.content ?? '').trim();
         if (!content) return null;
-        return `${normalizeEntryKey(e)}\u0000${content}`;   // 与 init-source 同口径取主键（数组取首元素）
+        return `${normalizeEntryKey(e)}\u0000${content}`;   // 契约来自 init-source（键归一 + 正文）
     };
     const entries = [];
     const seenFp = new Set();
@@ -484,7 +609,7 @@ async function collectWorldInfoEntries(ctx, character) {
         }
         entries.push(e);
     };
-    for (const e of characterBookEntries(character)) addEntry(e);   // 卡内置书：不依赖 loadWorldInfo，有内容就是读到了
+    for (const e of characterBookEntries(character)) addEntry(e);   // 卡内置书：不花 loadWorldInfo，先收
     let loadedAny = false;
     const worldSources = [];
     for (const name of names) {
@@ -500,16 +625,11 @@ async function collectWorldInfoEntries(ctx, character) {
             worldSources.push({ name, ok: false, entries: 0 });
         }
     }
-    // readable = 真读到至少一本书（含卡内置书）——**不许**把"一本书都没读到"与"书里没有该条目"混为一谈
-    // dupEntries 只作诊断（同书两路来源的重复量），不进任何判据
     return { entries, worldSources, readable: loadedAny || entries.length > 0, dupEntries };
 }
 
-// 当前聊天角色卡（第十九棒实证修正）：模块化 ST 的 getContext() 没有 character 字段——单聊取
-// characters[characterId]（ST 内部同款索引语义），群聊取群成员卡（v1 chatMemberCards 同款：members=头像名）。
-// 旧版 ctx.character 保留兼容。不再回退 characters[0]——那是角色库首卡（内置 Assistant），不是当前聊天卡。
 function pickCharacter(ctx) {
-    if (ctx?.character && typeof ctx.character === 'object') return ctx.character; // 旧版 ST 兼容
+    if (ctx?.character && typeof ctx.character === 'object') return ctx.character; // 已解析好的 ST 卡
     const chars = ctx?.characters;
     if (!Array.isArray(chars)) return null;
     if (ctx?.groupId != null) {
@@ -555,32 +675,36 @@ export async function autoComposeSource() {
 // 合成演练从未真跑所以未炸；worldstep.js L12 同款双形取法早已存在）。空/非 JSON 响应现场上控制台。
 function diagExtract(resolved) {
     return async (p) => {
+        const t0 = Date.now();
+        const promptChars = Array.from(String(p ?? '')).length;
         try {
             const res = await resolved.transport(p);
             const text = typeof res === 'string' ? res : (res && typeof res === 'object' && typeof res.text === 'string' ? res.text : '');
             if (!text.trim()) {
                 console.warn('[story-world-v2] 抽取空响应', {
-                    promptLen: Array.from(p).length,
+                    promptLen: promptChars,
                     responseType: typeof res,
                     responseKeys: res && typeof res === 'object' ? Object.keys(res) : null,
                     textLen: text.length,
+                    ms: Date.now() - t0,
                 });
             } else {
+                let shape = 'ok';
                 try { JSON.parse(text); } catch (_) {
+                    shape = 'non-json';
                     console.warn('[story-world-v2] 抽取非JSON响应（原文前120字）', text.trim().replace(/\s+/g, ' ').slice(0, 120));
                 }
+                void shape;
             }
             return text;
         } catch (err) {
-            console.warn('[story-world-v2] 抽取调用异常', String(err?.message || err));
+            console.warn(`[story-world-v2] 抽取调用失败（输入 ${promptChars} 字符 · 已花 ${((Date.now() - t0) / 1000).toFixed(1)}s）`, String(err?.message || err));
             throw err;
         }
     };
 }
 
-// 第十九棒：初始化成功路径常驻取数诊断（交接任务书 §8.1 悬案实证用）——把「浏览器运行时到底取到了什么」
-// 整包上控制台：聊天身份/角色卡形态与挂载世界逐本条目数、worldInfo 形态、合订源组成预览、抽取产出尺寸。
-// 纯日志零行为变化（失败路径另有 autoComposeSource 的诊断 warn，此处抽取完成后统一补两侧事实，成败都打）。
+// 初始化诊断（leg27 起：抽取每段的真实字符数/耗时都在这里现身——用户"看不到日志"那一刀）
 function logInitDiagnostics(ctx, src, extractOut) {
     try {
         const char = pickCharacter(ctx);
@@ -591,61 +715,67 @@ function logInitDiagnostics(ctx, src, extractOut) {
         const wiEntries = Array.isArray(wi) ? wi : (wi && typeof wi === 'object' && Array.isArray(wi.entries) ? wi.entries : null);
         const pieces = ['description', 'scenario', 'personality', 'first_mes'].filter((k) => typeof char?.[k] === 'string' && char[k].trim());
         const canon = extractOut?.setting?.frozen?.canon;
-        console.info('[story-world-v2] 初始化取数诊断', {
+        console.info('[story-world-v2] 初始化诊断', {
             identity: { characterId: ctx?.characterId ?? null, groupId: ctx?.groupId ?? null, chatId: ctx?.chatId ?? null },
             character: {
                 name: char?.name ?? null,
-                world: char?.world ?? null, // 卡挂世界（模块化 ST 主取数指针）
+                world: char?.world ?? null, // 卡上的世界信息名（ST 卡字段）
                 pieces: pieces.length ? pieces : null,
-                book: charBook ? { at: char.character_book ? 'character_book' : 'data.character_book', entries: bookEntries ? bookEntries.length : null } : '无',
+                book: charBook ? { at: char.character_book ? 'character_book' : 'data.character_book', entries: bookEntries ? bookEntries.length : null } : '（无卡内置书）',
             },
             worldInfo: {
                 shape: wiShape,
                 entries: wiEntries ? wiEntries.length : null,
                 keys: wi && typeof wi === 'object' && !Array.isArray(wi) ? Object.keys(wi).slice(0, 20) : null,
                 preview: wiEntries ? wiEntries.slice(0, 2).map((e) => `${String(e.key ?? e.name ?? e.uid ?? '?')}: ${String(e.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)}`) : null,
-                mounted: src?.sourceDiag?.worldSources ?? null, // 逐本挂载世界：名称/取到与否/条目数（实证核心）
+                mounted: src?.sourceDiag?.worldSources ?? null, // 具名挂载：哪些书读到了/几条（防"书没挂上"被当"书里没有"）
             },
-            source: { ok: src?.ok, label: src?.label, usedChars: src?.usedChars, entryCount: src?.entryCount, pieceCount: src?.pieceCount, truncated: src?.truncated, preview: src?.text ? src.text.replace(/\s+/g, ' ').slice(0, 40) : null },
-            extract: extractOut ? { ok: extractOut.ok, cached: extractOut.cached, fingerprint: extractOut.fingerprint, errors: extractOut.errors || [], canonSize: canon ? { powerScale: canon.powerScale?.length || 0, rules: canon.rules?.length || 0, society: canon.society?.length || 0, techOrMagic: canon.techOrMagic?.length || 0, historyNotes: canon.historyNotes?.length || 0, bookEntities: canon.bookEntities?.length || 0 } : null } : null,
+            source: { ok: src?.ok, label: src?.label, usedChars: src?.usedChars, entryCount: src?.entryCount, pieceCount: src?.pieceCount, truncated: src?.truncated, preview: src?.text ? src.text.replace(/\s+/g, ' ').slice(0, 120) : null },
+            extract: extractOut ? { ok: extractOut.ok, cached: extractOut.cached, fingerprint: extractOut.fingerprint, errors: extractOut.errors || [], canonSize: canon ? { powerScale: canon.powerScale?.length ?? 0, factions: canon.factions?.length ?? 0, bookEntities: canon.bookEntities?.length ?? 0 } : null } : null,
         });
     } catch (_) {}
 }
 
-// K36 设置页表单 ↔ extension_settings 双向：表单值由渲染 config 注入（refreshWorld cfg），
-// 这里只刷密钥 placeholder——不再覆写 render 已注入的值（第十三棒修复根因之一）。
 function refreshSettingsHints() {
     const s = modelSettings() || {};
     const el = document.getElementById(SETTINGS_INPUTS.apiKey);
-    if (el) el.placeholder = s.apiKey ? '（已设置 · 留空=保持不变）' : '输入模型服务密钥';
+    if (el) el.placeholder = s.apiKey ? '（已保存 · 留空=不改）' : '（本机读取，不打印）';
 }
 
-// 窗口级事件委托（第十三棒修复根因之一）：原实现把监听绑在首次执行时尚不存在的输入节点上
-// （先绑后渲，绑定了个寂寞）——打字从未落账。委托挂在窗口上，innerHTML 重绘后监听不失效。
 function bindSettingsForm() {
     const win = document.getElementById(WINDOW_ID);
     if (!win || win.dataset.sw2SettingsBound) return;
     win.dataset.sw2SettingsBound = '1';
     const onField = (e) => {
+        // leg26：参数页的控件也走这条委托（`data-action="set-param"`）——旋钮与开关同一条写通道
+        const paramEl = e.target?.closest?.('[data-action="set-param"]') || (e.target?.getAttribute?.('data-action') === 'set-param' ? e.target : null);
+        if (paramEl) {
+            dispatchAction('set-param', { param: paramEl.getAttribute('data-param'), value: paramEl.getAttribute('data-value') ?? paramEl.value }, e);
+            return;
+        }
         const key = Object.keys(SETTINGS_INPUTS).find((k) => SETTINGS_INPUTS[k] === e.target?.id);
         if (!key) return;
         const v = e.target.value;
         if (key === 'apiKey') {
-            if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不动（防清密钥）
+            if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不改（防一次误清）
             return;
         }
         writeSetting(key, v);
     };
     win.addEventListener('input', onField);
     win.addEventListener('change', onField);
+    // ★leg27 c（用户实拍「下拉表刚拉开没多久自己就关了」的同批修复）：
+    //   `<select>` 有个老坑——**鼠标滚轮从它上面滚过就会改选中项**（不弹列表也改）。
+    //   面板一打开、滚轮滑过参数页那个下拉，就把一次**什么都没改**的动作变成一次落盘 + 状态栏弹出。
+    //   ⇒ 拦掉 `SELECT` 上的滚轮（键盘/点击照旧——那才是"玩家的手"）。
+    win.addEventListener('wheel', (e) => {
+        const el = e.target?.closest?.('[data-action="set-param"]');
+        if (el && el.tagName === 'SELECT') e.preventDefault();
+    }, { passive: false });
 }
 
-// 细案 spec-entity-field-lookup §3：查书用的**世界书原文**（编排层不读文件，由本层按名号取）。
-// 取数口径：账上实体名 → 世界书条目（comment 全等 或 key 含该名 或 comment 含该名）。
-//   实测（用户世界 235 条 × 账上 623 实体）：comment 全等命中 67、key 含名命中 533、comment 含名 104；
-//   同一名号可能命中多条 → 全给模型（宁多勿漏；"取最长的一条"这类取舍留给模型，引擎不替它选）。
-// leg25 d 修（**这是"书未明述"假话的真因之一**）：返回值从"裸数组"改为**带状态**：
-//   `{ ok: true, entries }`   = 书读到了，这就是匹配结果（entries 空 = 书里确实没有该条目 → 记 absent）
+// 取书结果按会话缓存。三态语义（**"读不到"与"书里没有"必须分形**——硬规矩二）：
+//   `{ ok: true, entries: [...] }` = 书读到了（条目可能为空 = 书里真没有）
 //   `{ ok: false }`           = **书没读到**（取书炸了/一本都没取到）→ 调用方**不写任何痕迹**，下轮再试
 //   旧法失败时 `return []`，与"书里没有"同形 ⇒ 引擎把读不到书记成「书未明述」并**永久锁死**该栏
 //   （违反硬规矩「绝不用空值反推『书里没有』」）。另：取书结果按会话缓存（原实现每个实体重取一遍全量书）。
@@ -686,72 +816,65 @@ export async function bookEntriesForInherit() {
 
 // B6（leg25 d，细案 spec-lookup-batch-refresh §B6）：在条目正文里**定位到该名号自己那一行**。
 //   为什么值得做：v2 只会"命中条目→整条给"，而用户的书格式高度规整——
-//   `- 吞天妖王 (男, T8大乘中期): 现任盟主(饕餮蛟龙混血)。极度残暴且野心勃勃…`
-//   实力/位置**就在这一行里**，整条 548 字符里 4/5 是别人的资料。定位到这一行 ⇒ 载荷骤降、且更准。
-//   形态依据（不是词表——用户明令过"被很多词表法弄得很烦"）：v1 的 `powerFromNameContext`
-//   （`plugins/story-world/src/director.js:127`）实证过的写法：名字紧跟括号/冒号标签，且**不许跳过中间文字**。
-//   取数纪律：定位不到就**退回整条**（= 现在行为，零回归）；定位到的行**原样照抄**，不改一个字。
 export function locateNameLine(content, name) {
     const text = String(content ?? '');
     const nm = String(name ?? '').trim();
     if (!text || !nm) return null;
-    // 行首「- 名号」+ 紧跟的括号标签（可带性别）或冒号；行首一律接受（正文成员表就是这形态）
-    const re = new RegExp(`^[-*·•\\s]*${escapeRegExp(nm)}\\s*(?:[（(]|[：:])[^\\n]*`, 'm');
+    // 行首（可带列表符号）出现名号，**紧跟着**冒号或圆括号属性 = 该名号自己那一行；
+    //   名号后面先跟别的字（`吞天妖王 与 金刚狮王 (…) 交战。`）⇒ 明确**不认**（防跨名号抓错人）。
+    const re = new RegExp(`^[-*·•\\s]*${escapeRegExp(nm)}\\s*(?:[：:]|\\()([^\\n]*)`, 'm');
     const m = re.exec(text);
     return m ? m[0].trim() : null;
 }
 
-// 正则转义（名号里可能出现 () 等字符）
 function escapeRegExp(s) {
     return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// B6 兜底（leg25 d 修，用户质疑「按行命中还有 1200 风险吗」——**有**，这条就是补它）：
-//   `locateNameLine` 只认**行首**形态（`- 名号 (…)` / `名号：…`）；正文若把名号写在**段落中间**
-//   （"上古秘辛记载：吞天妖王于北荒现身，气息T8大乘中期"），行首定位失败 ⇒ 旧实现退回
-//   `content.slice(0,1200)` ⇒ 描述落在 1200 之后就被切掉 ⇒ 模型看不到 ⇒ 记 absent ⇒
-//   **假的「书未明述」**（与本棒治过的病同款）。
-//   兜底口径：**在完整正文里**定位含该名号的那一段，整段照抄（不截断——截断正是要避免的事）。
-//   仍然零词表、零改写：只是"把那几行搬出来"。
 export function locateNameSnippet(content, name) {
+    const EXPAND = 160;   // 名号前后各取多少字符（够一句上下文，又不至于把整条灌进 prompt）
+    // ★边界优先级（leg25 d 的判据抓过一次）：**先找句读/换行（硬边界），找不到才退到逗号（软边界）**。
+    //   旧法见逗号就停 ⇒「…吞天妖王于北荒现身，」——把紧跟其后的「气息T8大乘中期」切掉了，
+    //   模型看不到档位原话 ⇒ 记 absent ⇒ **假的「书未明述」**（与本仓一直在治的那种病同款）。
+    const hardStop = /[\n。！？；]/;
+    const softBreak = /[，、]/;
     const text = String(content ?? '');
     const nm = String(name ?? '').trim();
     if (!text || !nm) return null;
     const m = new RegExp(escapeRegExp(nm)).exec(text);
     if (!m) return null;
-    // 以名号为中心，**按段落/句子边界**向两侧扩（不是固定 ±N 字符——那会把相邻无关段落一起拖进来）
-    const softBreak = /[\n。；;]/;              // 句子/段落边界（扩到它为止）
-    const hardStop = /[\n]/;                    // 硬边界：绝不超过一个段落
-    const EXPAND = 300;
-    let from = m.index;
-    for (let i = m.index - 1; i >= 0 && m.index - i <= EXPAND; i -= 1) {
-        from = i;
-        if (hardStop.test(text[i])) break;
-        if (softBreak.test(text[i])) break;
-    }
-    let to = m.index + nm.length;
-    for (let i = to; i < text.length && i - (m.index + nm.length) <= EXPAND; i += 1) {
-        to = i + 1;
-        if (hardStop.test(text[i])) break;
-        if (softBreak.test(text[i])) break;
-    }
+    const scan = (dir) => {
+        let hard = null;
+        let soft = null;
+        if (dir < 0) {
+            for (let i = m.index - 1; i >= 0 && m.index - i <= EXPAND; i -= 1) {
+                if (hardStop.test(text[i])) { hard = i + 1; break; }
+                if (soft === null && softBreak.test(text[i])) soft = i + 1;
+            }
+        } else {
+            const end = m.index + nm.length;
+            for (let i = end; i < text.length && i - end <= EXPAND; i += 1) {
+                if (hardStop.test(text[i])) { hard = i; break; }
+                if (soft === null && softBreak.test(text[i])) soft = i;
+            }
+        }
+        return { hard, soft };
+    };
+    const fromSide = scan(-1);
+    const toSide = scan(1);
+    const from = fromSide.hard !== null ? fromSide.hard : (fromSide.soft !== null ? fromSide.soft : Math.max(0, m.index - EXPAND));
+    const to = toSide.hard !== null ? toSide.hard : (toSide.soft !== null ? toSide.soft : Math.min(text.length, m.index + nm.length + EXPAND));
     const seg = text.slice(from, to).trim();
     return seg || null;
 }
 
-// 一条命中的条目的取文本（三档，**都不许把该名号切掉**——切掉它 = 模型看不到 = 假「书未明述」）：
-//   ①行首形态（`- 名号 (…)` / `名号：…`）→ 只喂这一行（最省、最准）
-//   ②段落形态（名号出现在句子中间）→ 喂含它的那一段（在**完整正文**里找，不受 1200 限制）
-//   ③都没有 → 才退回截断后的整条（此时它确实没在正文里出现）
-// 提成独立导出函数是为了**能被真测**：写在 bookTextForEntity 里就只能测它的复制品（本棒踩过——
-//   我第一版测试自带一份镜像 helper，变异测试把真实现弄坏它照样绿，等于没测）。
 export function bookEntryText(content, name, cap = 1200) {
     const raw = String(content ?? '');
     const line = locateNameLine(raw, name);
     if (line) return { text: line, located: 'line' };
     const snippet = locateNameSnippet(raw, name);
     if (snippet) return { text: snippet, located: 'snippet' };
-    return { text: raw.slice(0, cap), located: 'none' };   // 单条截断防御（防巨条目灌爆查询 prompt）
+    return { text: raw.slice(0, cap), located: 'none' };   // 定位不到才整条截断（cap 内），并如实标 located
 }
 
 async function bookTextForEntity(entity) {
@@ -761,12 +884,11 @@ async function bookTextForEntity(entity) {
     try {
         book = await worldBookCached();
     } catch (err) {
-        console.warn('[story-world-v2] 查书取原文失败（**不视为"书里没有"**，本轮跳过、下轮再试）', String(err?.message || err));
+        console.warn('[story-world-v2] 查书：取书失败（**不是"书里没有"**，不写任何痕迹，下轮再试）', String(err?.message || err));
         return { ok: false };
     }
-    // 一本书都没读到（世界书未挂载/取数失败）⇒ 读不到 ≠ 书里没有
     if (!book.readable) {
-        console.warn('[story-world-v2] 查书取不到世界书（世界书未挂载或不可读）——本轮不写查书标记，下轮再试');
+        console.warn('[story-world-v2] 查书：一本书都没读到（世界书没挂载/未加载）——本轮不写痕迹');
         return { ok: false };
     }
     const hit = (book.entries || []).filter((e) => {
@@ -787,9 +909,7 @@ async function bookTextForEntity(entity) {
     };
 }
 
-// ---------- 批量补全任务（leg25 d，细案 spec-lookup-batch-refresh §3.2）----------
-// 借轮次分批跑：世界照常推进，每轮顺手补一批。**不阻塞推进**是硬要求（世界优先）。
-// 状态只在内存（刷新即丢）——已查到的字段早已落账，重开继续即可（missingFields 自然只剩没查的）。
+// ---------- leg25 d：批量补全（借轮次跑；每轮 ≤BATCH_PER_TICK 批） ----------
 const BATCH_PER_TICK = 1;          // 每轮最多跑几批（细案 §10 B2：1 批，不拖慢推进）
 let sw2BatchTask = null;           // { ids, cursor, done:[], failed:[], success, pending, absent, forceFields, chars }
 
@@ -809,29 +929,130 @@ export function stopBatchTask() {
     return true;
 }
 
-// 状态条文案（批量在跑时优先显示进度——用户点完按钮要看得见动静）
+// 渲染 config（渲染层不持状态：任务/快照/记忆自证一律由本层注入）
+function renderCfg(extra = {}) {
+    return { ...(modelSettings() || {}), lookupTask: batchTaskStatus(), snapshots: sw2SnapshotCache, memoryPush: sw2MemoryPush, ...extra };
+}
+
+// 局部重绘（★leg27 后：`set-param` 原走整页重绘 ⇒ 销毁正在展开的 `<select>` ⇒ 列表自己关）。
+// 纪律：只换受影响页签的 innerHTML；失败只上控制台（局部重绘失败不该打断落账那条路）。
+function refreshSections(names) {
+    if (typeof document === 'undefined') return;
+    try {
+        const win = document.getElementById(WINDOW_ID);
+        if (!win || !sw2LastWorld) return;
+        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: { chronicleFilter: sw2ChronicleFilter } });
+        for (const name of names || []) {
+            const el = win.querySelector(`#sw2_view_${name}`);
+            if (!el) continue;
+            if (name === 'board') {
+                el.innerHTML = typeof out.board === 'string' ? out.board : BOARD_BLOCK_ORDER.map((k) => (out.board && out.board[k]) || '').join('');
+            } else if (typeof out[name] === 'string') {
+                el.innerHTML = out[name];
+            }
+        }
+    } catch (err) {
+        console.warn('[story-world-v2] 局部重绘失败（不影响落账）', String(err?.message || err));
+    }
+}
+
 function batchStatusText() {
     const s = batchTaskStatus();
     if (!s) return null;
-    return `⬇ 补全中 ${s.cursor}/${s.total}（成功 ${s.success} · 未加载到 ${s.pending} · 书未明述 ${s.absent} · 失败 ${s.failed}）`;
+    return `批量补全：第 ${s.cursor}/${s.total}（成功 ${s.success} · 待补 ${s.pending} · 书未载 ${s.absent} · 失败 ${s.failed}）`;
 }
 
-/** 单个实体查一次（面板行内「查」/「重查」）。forceFields=null 只补缺；'absent' 覆盖假「书未明述」。 */
+// ---------- leg27：抽取进度（用户「十多分钟了还是没抽好，我也看不到日志」那一刀） ----------
+// 进度文案：按**真实已花时间**算（旧法用"已完成段之和" ⇒ 正在跑的那段不在里面 ⇒ 恒显 0 秒 = 用户说的「读秒没变」）
+function extractionProgressText(events, elapsedMs) {
+    const fin = (events || []).filter((e) => e && e.phase === 'finish');
+    const done = fin.filter((e) => e.ok).length;
+    const spent = Number.isFinite(elapsedMs) ? elapsedMs : fin.reduce((n, e) => n + (Number(e.ms) || 0), 0);
+    const mins = Math.floor(spent / 60000);
+    const secs = Math.floor((spent % 60000) / 1000);
+    const cost = mins ? `${mins} 分 ${String(secs).padStart(2, '0')} 秒` : `${secs} 秒`;
+    const cur = (events || []).filter((e) => e && e.phase === 'start').slice(-1)[0] || null;
+    if (cur && cur.step === 'chunk') {
+        return `⏳ 抽取中 · 名册第 ${cur.index}/${cur.count} 块（${cur.chars} 字符）· 已 ${done} 段 · 已花 ${cost}`;
+    }
+    return `⏳ 抽取中 · 设定（${cur ? cur.chars : '—'} 字符）· 已花 ${cost}`;
+}
+
+/**
+ * 抽取进度处理器（leg27 F1/F1b）——导出以便**真测**（注入假计时器验"读秒在跳"）。
+ * 心跳口径：每 `intervalMs` 按**真实已花时间**重写一次状态栏；每 `heartbeatMs` 在控制台留一行"仍在跑"
+ * （"看不见在动"与"已经死了"在界面上完全同形——这是用户实机两次反馈逼出来的）。
+ */
+export function extractionProgressHandler(events, { setText = setStatus, intervalMs = 1000, now = () => Date.now(), setTimer = setInterval, clearTimer = clearInterval, log = (m) => console.info(m), heartbeatMs = 30000 } = {}) {
+    let timer = null;
+    let startedAt = null;
+    let lastText = null;
+    let heartbeatAt = null;
+    const render = (elapsedOverride) => {
+        const elapsed = Number.isFinite(elapsedOverride) ? elapsedOverride : (startedAt == null ? null : now() - startedAt);
+        const text = extractionProgressText(events, elapsed);
+        lastText = text;
+        try { setText(text); } catch (_) {}
+        return text;
+    };
+    const tick = () => {
+        try {
+            render();
+            if (heartbeatAt == null || now() - heartbeatAt >= heartbeatMs) {
+                heartbeatAt = now();
+                const cur = (events || []).filter((e) => e && e.phase === 'start').slice(-1)[0] || null;
+                const done = (events || []).filter((e) => e && e.phase === 'finish' && e.ok).length;
+                const label = cur ? (cur.step === 'canon' ? '设定' : `名册第 ${cur.index}/${cur.count} 块`) : '（准备中）';
+                try {
+                    log(`[story-world-v2] 抽取仍在跑：${label} · 已 ${done} 段 · 已花 ${Math.round((startedAt == null ? 0 : now() - startedAt) / 1000)} 秒（这一段还没返回属正常，单块是分钟级）`);
+                } catch (_) {}
+            }
+        } catch (_) {}
+    };
+    const stop = () => {
+        if (timer == null) return;
+        try { clearTimer(timer); } catch (_) {}
+        timer = null;
+    };
+    return {
+        onEvent: (ev) => {
+            try {
+                const label = ev.step === 'canon' ? '设定' : `名册第 ${ev.index}/${ev.count} 块`;
+                if (ev.phase === 'start') {
+                    if (startedAt == null) {
+                        startedAt = now();
+                        timer = setTimer(tick, intervalMs);      // ★心跳：让"它没死"每秒都看得见
+                        if (typeof timer?.unref === 'function') timer.unref();   // Node 侧别把进程吊住
+                    }
+                    console.info(`[story-world-v2] 抽取调用：${label} 开始（输入 ${ev.chars} 字符）`);
+                    render(0);                                    // 立刻出一次（别等 1 秒）
+                } else {
+                    console.info(`[story-world-v2] 抽取调用：${label} ${ev.ok ? '完成' : '失败'}（${ev.chars} 字符 · ${((ev.ms || 0) / 1000).toFixed(1)}s${ev.ok ? '' : ` · ${ev.error}`}）`);
+                    render();
+                }
+            } catch (_) { /* 进度上报绝不影响抽取 */ }
+        },
+        stop,
+        _state: () => ({ running: timer != null, lastText }),   // 供判据观测（"读秒在跳"必须可验）
+    };
+}
+
+// ---------- leg25 d：查书补全的两个入口（面板行内「查/重查」+ 批量补全） ----------
 export async function lookupOneEntity(id, { forceFields = null } = {}) {
     const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
-    if (!world) return { ok: false, error: '暂无世界' };
+    if (!world) return { ok: false, error: '还没有世界' };
     const settings = modelSettings();
     const resolved = resolveBrowserTransport(settings);
     if (!resolved) return { ok: false, error: '模型通道未配置' };
     const { entity, missing } = pickOneForLookup(world, id, { forceFields });
-    if (!entity) return { ok: false, error: '账上无此实体' };
-    if (!missing.length) return { ok: false, error: '该实体没有要查的栏（都是已定案的值）' };
+    if (!entity) return { ok: false, error: '账上没有这个实体' };
+    if (!missing.length) return { ok: false, error: '这一栏已经有原话了（要重查请用「重查」）' };
     const res = await runBatchLookup({
         ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
         ids: [id], forceFields, tick: world?.meta?.tick ?? 0,
-        bookEntries: await bookEntriesForInherit(),   // 位置继承：组织条目驻地 → 成员（零 token）
+        bookEntries: await bookEntriesForInherit(),   // ★leg25 f：这条路也必须吃位置继承（零 token 兜底）
     });
-    if (!res.stats) return { ok: false, error: res.warning || '查书未执行' };
+    if (!res.stats) return { ok: false, error: res.warning || '查书未成' };
     writeHotMeta(hotAccountShape(res.ssot));
     await flushHotMeta();
     sw2LastWorld = res.ssot;
@@ -839,10 +1060,9 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
     return { ok: true, stats: res.stats, warning: res.warning, entity: res.ssot.entities.find((x) => x.id === id) };
 }
 
-/** 启动批量补全（全量在册实体）。重复触发 = 重新排队（不动已查到的字段）。 */
 export function startBatchTask({ forceFields = 'absent', ids = null } = {}) {
     const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
-    if (!world) return { ok: false, error: '暂无世界' };
+    if (!world) return { ok: false, error: '还没有世界' };
     const all = (ids && ids.length) ? ids : (world.entities || []).filter((e) => e.status !== 'dead' && e.status !== 'retired').map((e) => e.id);
     sw2BatchTask = {
         ids: all, cursor: 0, failed: [], success: 0, pending: 0, absent: 0, forceFields,
@@ -850,15 +1070,14 @@ export function startBatchTask({ forceFields = 'absent', ids = null } = {}) {
     return { ok: true, total: all.length };
 }
 
-/** 跑一批（由 tick 前置步调用；也在手动触发时立即跑一批，手感不用等下一轮）。 */
 async function runBatchChunk(resolved) {
     const t = sw2BatchTask;
     if (!t) return null;
     const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
-    if (!world) { sw2BatchTask = null; return { warning: '暂无世界，批量补全已停' }; }
+    if (!world) { sw2BatchTask = null; return { warning: '世界不在了，批量补全中止' }; }
     const { batches } = await planBatchesLazy(world, t);
     if (!batches.length) {
-        const summary = `批量补全完成：成功 ${t.success} · 未加载到 ${t.pending} · 书未明述 ${t.absent} · 失败 ${t.failed.length}`;
+        const summary = `批量补全完成：成功 ${t.success} · 待补 ${t.pending} · 书未载 ${t.absent} · 失败 ${t.failed.length}`;
         sw2BatchTask = null;
         return { warning: null, done: true, summary };
     }
@@ -866,7 +1085,7 @@ async function runBatchChunk(resolved) {
     const res = await runBatchLookup({
         ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
         ids: batch.ids, forceFields: t.forceFields, tick: world?.meta?.tick ?? 0,
-        bookEntries: await bookEntriesForInherit(),   // leg25 f：批量补全那条路也要吃到位置继承
+        bookEntries: await bookEntriesForInherit(),   // leg25 f：批量补全同样吃位置继承
     });
     t.cursor += batch.ids.length;
     if (res.stats) {
@@ -884,13 +1103,13 @@ async function runBatchChunk(resolved) {
     return { warning: res.warning, done: false };
 }
 
-// 规划下一批（只取第一批；planBatches 是纯函数，这里只做"从游标往后"的切片）
 async function planBatchesLazy(world, task) {
     const rest = task.ids.slice(task.cursor);
     if (!rest.length) return { batches: [] };
     return planBatches({ world, ids: rest, forceFields: task.forceFields, bookText: bookTextForEntity });
 }
 
+// ---------- K36：每轮演化（前置步 + 主调用 + 落盘点） ----------
 async function advanceTick({ world, dialogue }) {
     const settings = modelSettings();
     sw2LastSettings = settings;
@@ -955,6 +1174,18 @@ export function setupAsyncTicks(ctx) {
         save: async (ssot) => {
             const rot = await ensureChronicleRotated(ssot);
             if (!rot.ok) throw new Error(rot.error);
+            // leg26 b：记忆投递（开关控制；**失败零阻塞**——绝不因为它让世界推进失败）
+            // leg27 h：投完**如实上报**（面板/状态栏/控制台三处自证；失败也不阻断世界）
+            if (switchOn(rot.hot, 'memoryEnabled')) {
+                const r = await pushMemoryNow(rot.hot).catch(() => ({ ok: false, reason: '抛错（见控制台）' }));
+                markMemoryPush(r, rot.hot?.meta?.tick);   // 状态栏那一句由 refreshWorld 统一报（顺序上它才是最后写状态栏的）
+                // ★leg29：投完**当场自检**并把结果打出来。为什么接在这里而不是等用户手抄控制台：
+                //   实机出现"控制台说投成了、插件里却看不到"的矛盾，而盘上那份是被 `saveChat()` 落盘的
+                //   **运行时对象**——只有投完那一刻的内存真相能回答"到底写没写进去"。一行，好抄也好贴。
+                if (r?.ok) console.info(memoryStoreCheckLine());
+            } else if (sw2MemoryPush) {
+                sw2MemoryPush = null;   // 开关关了 ⇒ 自证面归零（不许留着上一次的"已投"冒充本次）
+            }
             return rot.hot;
         },
         refresh: (hot) => { refreshWorld(hot, { oldVolumes: LISTED_VOLUMES }); },
@@ -1035,12 +1266,8 @@ export function seedAndBackfill(hotWorld, { entries = [] } = {}) {
 }
 
 /**
- * inheritLocations(world, { entries }) → { ssot, inherited }
- * 位置继承（零 token 结构推断）的**加载期收口**：组织条目驻地 → 成员实体的 `location`。
- * 为什么要在加载期也跑一遍（leg25 f）：`runBatchLookup` 里那条路只在**真去查书/真推进一轮**时才走，
- *   而玩家打开面板看实体表是**最常见的入口**——不补这一刀，位置列会一直停在「未载」直到他推一轮，
- *   用户会以为这功能不存在（同一个坑 leg25 d 在"属性看不到"上踩过一次）。
- * 纪律：纯函数、零 token、幂等（只填空位：已有真位置的不动）；取不到书 ⇒ 原样返回（不猜位置）。
+ * 位置继承（零 token 结构推断）——挂加载期，与名册落账同一份条目。
+ * 提成导出是为了真测（注入真条目真跑），与 `seedAndBackfill` 同治法。
  */
 export function inheritLocations(world, { entries = [] } = {}) {
     if (!Array.isArray(entries) || !entries.length) return { ssot: world, inherited: 0 };
@@ -1049,36 +1276,26 @@ export function inheritLocations(world, { entries = [] } = {}) {
 }
 
 export async function loadWorld() {
-    resetBookCache();   // leg25 d：换聊天/换卡/换世界 ⇒ 取书缓存必须失效（它按会话缓存全量世界书）
+    resetBookCache();   // leg25 d：取书缓存与聊天/卡绑定——每次载入世界都必须重取（否则换卡换书还吃旧缓存）
     const meta = readHotMeta();
     const world = meta ? loadHotAccount(meta) : null;
     if (!world) {
-        // 首开空态：仍渲染六页签空壳 ——「导入恢复」不依赖世界存在（2026-09-08 冒烟发现：
-        // 导入按钮在 renderSettingsHtml 内，无世界=设置页不渲染=首开导入死结；K38 前无创建链）
+        LISTED_VOLUMES = [];
         refreshWorld(EMPTY_WORLD, { oldVolumes: [] });
-        setStatus('尚无世界 · 「✨ 开始新世界」（设定源就绪后可初始化）或「⬆ 导入恢复」');
+        setStatus('还没有世界 · 点「✨ 开始新世界」（或「⬆ 导入恢复」一份旧档）');
         return;
     }
     const rot = await ensureChronicleRotated(world);
     if (!rot.ok) {
-        // E2：轮转失败如实上报——热账未剥段（编年完整），世界原样渲染，不许报「已同步」
-        LISTED_VOLUMES = await listOldVolumes();
+        // 轮转失败 = 世界不动（内存与盘上一致），如实报错不装成功（E2 语义）
         refreshWorld(rot.hot, { oldVolumes: LISTED_VOLUMES });
-        setStatus(`⚠ 冷档轮转失败：${rot.error}——世界原样未动（热账未剥段，编年完整保留），可重试`);
+        setStatus(`⚠ ${rot.error}——世界原样不动（热账没写），可重试`);
         return;
     }
     const hot = rot.hot;
-    // leg24 片4（旧账清理）：热账读到之后、渲染之前——一次把旧代码替模型编的四维默认值
-    //   （character 全 0.15 / faction 全 0.25，且书里无据者）批掉，界面"有据 4/4"不再骗人。
-    //   纯函数 + 幂等（leg25 c 起闸名 meta.attrsRemovedAt；留档仍进 meta.legacyAttrsPurged）。
-    const migrated = migrateLegacyAttrs(hot);
-    const hotWorld = migrated;   // 迁移返回新对象（不可变风格）——后续一律用迁移后的世界
-    // 审计修复 E4：名册入账只改内存（seedBookEntities 就地 push 实体 + 预填权重）→ 账本真变了就落盘。
-    // 变没变只认 countLedgerEntries 前后差（幂等：没变不写盘，不产生无谓写盘）。
-    // 第二十五棒 e：**名册落账这一步做成可重入**（挂在世界加载上）——老账停在老代码上（当年只搬 name/kind），
-    //   这一步幂等、零 token、只填空栏、不新建实体（`seeded` 恒 0）、不碰世界进度 ⇒ 每次加载重跑安全。
-    //   真书正文从取书缓存拿（同一次会话只读一遍）；取不到就退回"只有名册字段"的老行为，绝不阻塞加载。
-    // leg25 f：改走 `bookEntriesForInherit` 同一取数口（失败给空数组 + 上控制台），三处口径一致。
+    const migrated = migrateLegacyAttrs(hot);   // leg24 片4：旧账一次性清理（幂等）
+    const hotWorld = migrated;   // 旧账清理后的世界（下面所有落账都基于它）
+    // 名册落账（可重入）+ 位置继承：共用同一份条目，一次落盘
     const bookEntriesForSeed = await bookEntriesForInherit();
     const { seed, seededDelta, backfilled, changed } = seedAndBackfill(hotWorld, { entries: bookEntriesForSeed });
     // leg25 f：**位置继承也挂在加载期**（零 token、幂等、只填空位）——打开面板即见效，
@@ -1097,12 +1314,325 @@ export async function loadWorld() {
     }
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(world2, { oldVolumes: LISTED_VOLUMES });
+    refreshSnapshots();   // leg27 后：快照清单随世界加载刷新（异步，回来再重绘一次）
+}
+
+// ---------- leg26 b：记忆投递（引擎事实 → 记忆插件）----------
+/**
+ * 记忆插件适配器（YM 依赖注入，缺省 = 浏览器里的 `window.YuzukiMemory`）。
+ * ★leg27 g：`YM` 改成**依赖注入形参**——为的是**能真测**（本仓铁律「要真 ctx 的接线，
+ *   要么提成可导出函数真跑，要么写注入 fake ctx 的测试」）。下面那个 `loadState` 事故
+ *   （把用户档案清空）**单测抓不到就是因为原来没法注入**。
+ */
+// leg29：本插件写进记忆插件的记录 id **一律以 `sw2_` 开头**（见 src/memory-bridge.js 的前缀：
+//   `sw2_state` / `sw2_ev_` / `sw2_ev_open_` / `sw2_ev_span_`）。这个前缀是"我方命名空间"的边界：
+//   写入时**只清我方、只看这个前缀**，非此前缀的记录一律不动（防 leg27 g 那种覆盖用户数据的复发）。
+export const SW2_RECORD_PREFIX = 'sw2_';
+// leg29：逻辑表名 → 插件内置表 id（两张逻辑表对应两个插件槽位；见 src/memory-bridge.js 顶部留档）
+// ★leg30：**从三项收到两项**——"史卷纪要"已并入「世界大事」，不再是逻辑表（它是同一个列表里成段的行）。
+export const TABLE_ID_ALIAS = {
+    [MEMORY_TABLE_STATE]: PLUGIN_TABLE_STATE,
+    [MEMORY_TABLE_EVENTS]: PLUGIN_TABLE_EVENTS,
+};
+export function memoryStore(YM = (typeof window !== 'undefined' ? window.YuzukiMemory : null)) {
+    const Storage = YM?.Storage;
+    if (!Storage || typeof Storage.saveState !== 'function') return null;
+    const blank = () => {
+        const made = YM?.VariableInjector?.createDefaultState?.();
+        return made && typeof made === 'object' ? made : { tables: [], records: {}, activeRecordIds: {} };
+    };
+    return {
+        // 读现状：插件自己的 loadState 会做规范化；读不到就用它自己的默认态（**不自己造形状**）
+        //
+        // ★leg27 g（用户实机「**记忆插件也没有记录事件，还把插件原来的角色档案清空了**」）：
+        //   病 = 这一行原写 **`Storage.loadState?.(null, null)`**——第二参**显式传 `null`**。
+        //   插件签名是 `loadState(fallbackState, sessionId = getCurrentSessionId())`，**ES 形参默认值只在
+        //   `undefined` 时才生效** ⇒ 传 `null` 等于把 sessionId 定成 null ⇒ `getStorageKeys(null)` 返回空 ⇒
+        //   插件开头那句 `if (!keys.length) return normalizeState(null, fallbackState);` 直接拿 null 兜底返回
+        //   **非对象** ⇒ 本函数 `if (s && typeof s === 'object')` 不成立 ⇒ **退回 `blank()`**（自带表全空）⇒
+        //   `writeRecords` 再走 `saveState(..., { force: true })`（**force 会跳过插件全部保护闸**）把这份空态
+        //   写回 ⇒ **用户自己填的「角色档案」被逐条抹掉**（物品追踪/世界设定没填过，所以看着"还在"）。
+        //   ⇒ 治法：**把那行参数传成插件自己的默认态**（即"读不到时该用的兜底"，也正是形参的本意）——
+        //   `readState(null, null)` 这种"用 null 占位"的写法在本仓一律不许再用（null 不触发默认值）。
+        //   铁证（本机 vm 里跑插件**真存储代码**的对照，同一夹具）：
+        //     现行写法 ⇒ 投递前 character_profile 3 条 → 投递后 **0 条**（localStorage 与 chatMetadata 同时被清）
+        //     修法写法 ⇒ 投递前 3 条 → 投递后 **3 条**（item_tracking/world_setting 同样原样保留）
+        readState() {
+            const fallback = blank();
+            try {
+                // 传 fallback 而**不是 `null`**：插件签名 `loadState(fallbackState, sessionId = 当前会话)`——
+                // 传 null 会把 sessionId 定成 null（默认值不生效）⇒ 见上面那段事故留档。
+                const s = Storage.loadState?.(fallback);
+                if (s && typeof s === 'object') return s;
+            } catch (err) { console.warn('[story-world-v2] 读记忆状态失败：', err?.message || err); }
+            return fallback;
+        },
+        // 写记录：并进它的 state（表定义随首次写入一起给），再走它自己的 saveState 落盘
+        writeRecords(records, { tables = [], now = Date.now() } = {}) {
+            const state = this.readState() || blank();
+            // ★leg29：**旧表定义也要清掉**。三张逻辑表改用插件内置 id 之后（见 src/memory-bridge.js 顶部），
+            //   原来那三张自定义表（`世界状态/世界大事/史卷纪要`）若不删，插件会永远保留它们
+            //   （`normalizeState` 只保留"表定义还在"的那些记录键）⇒ 侧栏里挂着三张**永远不会再更新**的空表，
+            //   正是用户问的"为什么多出三个来"。只删这三个**我们自己创建的** id，别的一律不动。
+            const next = {
+                ...state,
+                tables: (Array.isArray(state.tables) ? state.tables : []).filter((t) => !LEGACY_TABLE_IDS.includes(t?.id)),
+                records: { ...(state.records || {}) },
+                activeRecordIds: { ...(state.activeRecordIds || {}) },
+            };
+            for (const id of LEGACY_TABLE_IDS) delete next.records[id];   // 旧表的记录一并送走（插件对无表定义的记录键不收）
+            // ★leg29：同 id 必须**覆盖**，不能"已存在就跳过"——插件里原本就有 `world_setting`/`item_tracking`
+            //   两张内置表（带它自己的列定义）⇒ 跳过的话，**我们给的列与显示名一个字都进不去**
+            //   （实测抓到的：盘上那两张表还是插件原列、侧栏还是"世界设定/物品追踪"，我们改了个寂寞）。
+            //   口径：这两张表**归我们管**（记录 id 一律 `sw2_` 前缀），所以定义以我方为准；别人的表不碰。
+            for (const t of tables) {
+                const at = next.tables.findIndex((x) => x?.id === t.id);
+                if (at >= 0) next.tables[at] = { ...t }; else next.tables.push({ ...t });
+            }
+            // ★leg29：**逻辑表**收进**插件内置表 id**（用户拍板「对齐插件内置表形状」；理由见
+            //   src/memory-bridge.js 顶部那一段：插件 `createTableWorkspaceView` 按 `table.id` 硬编码，
+            //   自定义 id 的详情视图是空 div）。映射：世界状态→world_setting、世界大事→item_tracking。
+            //   ★leg30：**从三张收到两张**——"史卷纪要"并进「世界大事」（里程碑 span 折成一行，见那个文件 ②.2）。
+            //   记录按 `table.id` 分组存储，同 id 的自然并成一列数组。
+            const byTable = new Map();
+            for (const [logical, list] of Object.entries(records)) {
+                const target = TABLE_ID_ALIAS[logical] || logical;
+                byTable.set(target, [...(byTable.get(target) || []), ...(Array.isArray(list) ? list : [])]);
+            }
+            for (const [tableId, list] of byTable.entries()) {
+                const incoming = Array.isArray(list) ? list : [];
+                const prev = Array.isArray(next.records[tableId]) ? next.records[tableId] : [];
+                // ★leg29 修（用户实机「投递是投递了但是看不到内容 / 为什么多出三个来」查证时发现）：
+                //   原来只做**按 id 合并**（push），于是：
+                //   ①状态表原来每轮一个新 id（`sw2_state_<tick>`）⇒ 旧轮次**越堆越多**（真账实测三条并存）；
+                //   ②大事表/史卷纪要的旧记录到轮换/退役后**永远留在插件里**。
+                //   改法：**先删掉本插件自己命名空间（`sw2_`）里"这次没投"的记录，再并入本次的**——
+                //   口径是"我方三张表以**本次投出的集合**为准"，同时**绝不碰任何非 `sw2_` 前缀的记录**
+                //   （用户自己加的、插件自己生成的，一律原样留着——leg27 g 那次数据丢失的教训）。
+                const incomingIds = new Set(incoming.map((r) => r?.id));
+                const merged = prev.filter((r) => !(typeof r?.id === 'string' && r.id.startsWith(SW2_RECORD_PREFIX) && !incomingIds.has(r.id)));
+                for (const rec of incoming) {
+                    const at = merged.findIndex((x) => x?.id === rec.id);
+                    if (at >= 0) merged[at] = rec; else merged.push(rec);
+                }
+                next.records[tableId] = merged;
+            }
+            Storage.saveState(next, next, undefined, { force: true, saveOrigin: 'story-world-v2', allowDuringSwitch: true, now });
+            // ★leg29：**通知插件"状态变了"**。为什么必须做：插件窗口是从它**自己的内存缓存**
+            //   （`memory-window.js` 的 `memoryState`）渲染的；我们绕过它的 UI 直接写存储，它不知道 ⇒
+            //   用户看到的是**旧快照**（现象：控制台自检说记录都在、插件里却还是旧表旧列，甚至看不到内容）。
+            //   插件官方留了这条通道：`window.addEventListener('yzm-memory-state-updated', reloadStateFromStorage)`
+            //   ——它收到就重读存储并重绘当前页。**不是我们发明的接口，是用它自己的同步机制**。
+            try {
+                if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+                    const ping = () => window.dispatchEvent(new CustomEvent('yzm-memory-state-updated', { detail: { source: 'story-world-v2', table: 'all' } }));
+                    ping();
+                    // ★leg29：**再补一次延迟重发**。为什么：插件的监听是在它自己的 UI 初始化时绑的
+                    //   （`if (!window.yzmMemoryStateUpdateBound) window.addEventListener(...)`），
+                    //   而用户**没打开过记忆窗口时它可能还没绑上** ⇒ 第一次派发没人接 ⇒ 它继续用内存里的
+                    //   旧状态（盘上 `saveOrigin=auto` 就是它随后回写的证据）。两次派发覆盖"开着窗口"与"刚打开"两种时机。
+                    if (typeof window.setTimeout === 'function') window.setTimeout(ping, 600);
+                    // ★leg29：**表名校正（一次，不循环）**。为什么：插件是从它**自己的内存状态**渲染侧栏的，
+                    //   而它随后会把自己那份写回存储 ⇒ 我们写的表名会被盖回去（记录值不受影响）。
+                    //   用户问的是"难道每次开新聊天都要自己改吗"——**不该**。所以这里在 700ms 后
+                    //   **只重写表定义里的 name**（不动任何记录），让我们的名字成为最后写入的那一个。
+                    //   一次为限：不做循环对抗（那是往第三方私有状态里塞脆写法），失败也只是名字回去，不影响内容。
+                    const wantNames = Object.fromEntries(tables.map((t) => [t.id, t.name]));
+                    if (typeof window.setTimeout === 'function') {
+                        window.setTimeout(() => {
+                            try {
+                                const after = window.SillyTavern?.getContext?.()?.chatMetadata?.yuzukiMemory;
+                                if (!after || !Array.isArray(after.tables)) return;
+                                let fixed = 0;
+                                for (const t of after.tables) if (wantNames[t.id] && t.name !== wantNames[t.id]) { t.name = wantNames[t.id]; fixed++; }
+                                if (!fixed) return;
+                                const pluginStorage = window.YuzukiMemory?.Storage;
+                                if (typeof pluginStorage?.saveState === 'function') pluginStorage.saveState(after, after, undefined, { force: true, saveOrigin: 'story-world-v2', allowDuringSwitch: true });
+                                console.info(`[story-world-v2] 记忆自检：表名被插件覆盖过，已校正 ${fixed} 张（${Object.values(wantNames).join(' / ')}）`);
+                            } catch (_) { /* 校正失败只是名字，不影响内容 */ }
+                        }, 700);
+                    }
+                }
+            } catch (_) { /* 插件不在/浏览器不支持 ⇒ 静默：世界推进永远优先 */ }
+            // ★leg29：**派发完再看一眼**，把"插件有没有把它自己那份缓存盖回来"记下来（只读，不改任何东西）。
+            //   真存储代码复演证明我们写出去的那份是对的 ⇒ 若此刻盘上表名不是我们的，就是**插件随后覆盖**，
+            //   而不是我们写错。留痕是为了下一次不用再猜。
+            try {
+                if (typeof window !== 'undefined') {
+                    const after = window.SillyTavern?.getContext?.()?.chatMetadata?.yuzukiMemory;
+                    const nameOf = (id) => (after?.tables || []).find((t) => t.id === id)?.name;
+                    if (nameOf(PLUGIN_TABLE_STATE) !== undefined && nameOf(PLUGIN_TABLE_STATE) !== DISPLAY_NAME_STATE) {
+                        console.info(`[story-world-v2] 记忆自检：表名被插件覆盖回去了（现为「${nameOf(PLUGIN_TABLE_STATE)}」，期望「${DISPLAY_NAME_STATE}」）——记录值不受影响`);
+                    }
+                }
+            } catch (_) { /* 纯留痕，失败无所谓 */ }
+        },
+    };
+}
+
+// ★leg27 i：导出是为了**能真测**（leg27 i 的事故恰恰是"投递其实跑完了、只在成功日志那行抛
+//   `MEMORY_TABLE_MILESTONES is not defined`，被调用点的 `.catch(() => {})` 吞掉 ⇒ 插件里什么都没有"）。
+//   判据必须走**真函数**——只调 `markMemoryPush`（喂现成结果）永远抓不到那条路。
+//   ★leg30：那条事故的常量已删（前史不再是表）⇒ 成功日志改为只报**实际投出的两张表**的条数；
+//   本函数仍必须走真路径，判据也就仍能抓到"日志行抛异常"这一类事故。
+export async function pushMemoryNow(world) {
+    try {
+        if (!world) return { ok: false, reason: 'no-world' };
+        const store = memoryStore();
+        if (!store) return { ok: false, reason: '插件未加载（柚月の记忆）' };
+        const r = pushToMemory(buildMemoryPayload(world), { store });
+        if (!r.ok) console.warn('[story-world-v2] 记忆投递未成：', r.reason);
+        else console.info('[story-world-v2] 记忆已投：', { [MEMORY_TABLE_STATE]: r.tick, 世界大事: (r.counts || {})[MEMORY_TABLE_EVENTS] ?? 0 });
+        return r;
+    } catch (err) {
+        console.warn('[story-world-v2] 记忆投递异常（已忽略，世界照常）：', err?.message || err);
+        return { ok: false, reason: String(err?.message || err) };
+    }
+}
+
+// ★leg29：**只读自检**（给排查用，不改任何状态）。
+//   为什么需要它：实机出现"控制台说记忆已投，但插件里看不到、盘上也没变"的矛盾——
+//   而盘上那份是被 `saveChat()` 落盘的**运行时对象**，只有浏览器内存里那一刻的真相能回答"到底写没写进去"。
+export function memoryStoreReport(YM = (typeof window !== 'undefined' ? window.YuzukiMemory : null)) {
+    try {
+        // ★leg30 修：这里原来**直接写 `window.SillyTavern`**——本模块其余地方一律用
+        //   `typeof window !== 'undefined'` 守卫（见 `memoryStore`），只有这一处漏了 ⇒ 在任何非浏览器环境
+        //   （Node 测试、vm 复演）里第一步就抛 `ReferenceError: window is not defined`，
+        //   被本函数的 catch 吞成一个 `{报错: ...}` ⇒ **这条自检从此永远不可测、也永远报不出东西**。
+        //   这正是它该被抓到的地方：判据要能真跑，不能只在浏览器里"应该没问题"。
+        const ctx = (typeof window !== 'undefined' ? window.SillyTavern?.getContext?.() : null);
+        const state = ctx?.chatMetadata?.yuzukiMemory ?? YM?.Storage?.loadState?.(YM?.VariableInjector?.createDefaultState?.()) ?? null;
+        const records = state?.records || {};
+        const count = (id) => (Array.isArray(records[id]) ? records[id].length : 0);
+        const mine = (id) => (Array.isArray(records[id]) ? records[id].filter((r) => String(r?.id || '').startsWith('sw2_')).length : 0);
+        // ★leg30：**语义自检**——"位置列里装的是人名吗？"（用户实机截图一眼看出的那件事）。
+        //   为什么放进自检而不是只做单测：这个病**在单测里结构上不可能红**（旧判据只锁列名形状与条数，
+        //   列名对、条数对 ⇒ 538/538 全绿照样乱）。把判据接进投递路径，下一棒不用再靠肉眼发现。
+        //   口径：①表是插件内置表、可能同时装着别人的记录 ⇒ **只看我方 `sw2_` 的记录**；
+        //   ②位置可能是一**串**（旧代码把波及名单整串写进去）⇒ 逐个片段对，不做整串相等比较
+        //   （整串比较会漏掉 `薛铁衣、大虞` 这种真病——本条判据的第一版就是这么假绿的）。
+        const splitNames = (v) => String(v || '').split(/[、,，]/).map((s) => s.trim()).filter(Boolean);
+        const semanticIssues = (() => {
+            const out = [];
+            const evRows = (Array.isArray(records[PLUGIN_TABLE_EVENTS]) ? records[PLUGIN_TABLE_EVENTS] : [])
+                .filter((r) => String(r?.id || '').startsWith(SW2_RECORD_PREFIX));
+            // 插件自己的角色档案里那一列叫「姓名」（见 ui/memory-window.js 的角色表列定义）；
+            //   另外两个名字是我们自己可能用过的写法，一并认（认不出就退化成空集 ⇒ 自检不出声，不假报）。
+            const names = new Set((state?.records?.character_profile || []).flatMap((r) => {
+                const v = r?.values?.['姓名'] ?? r?.values?.['角色名'] ?? r?.values?.['名字'];
+                return splitNames(typeof v === 'string' ? v : '');
+            }));
+            for (const r of evRows) {
+                const where = String(r?.values?.['物品位置'] || '').trim();
+                if (!where) continue;
+                const hit = splitNames(where).find((part) => names.has(part));
+                if (hit) out.push(`「${r?.values?.['物品名称'] || '?'}」的位置列写着人名「${hit}」`);
+            }
+            const ids = evRows.map((r) => r?.id);
+            if (new Set(ids).size !== ids.length) out.push('发生表有重复 id（插件按 id 合并，重复即覆盖）');
+            return out;
+        })();
+        return {
+            我方两张表的记录在不在: {
+                [`${PLUGIN_TABLE_STATE}(世界状态)`]: `${mine(PLUGIN_TABLE_STATE)} 条（共 ${count(PLUGIN_TABLE_STATE)}）`,
+                [`${PLUGIN_TABLE_EVENTS}(世界大事)`]: `${mine(PLUGIN_TABLE_EVENTS)} 条（共 ${count(PLUGIN_TABLE_EVENTS)}）`,
+            },
+            语义自检: semanticIssues.length ? semanticIssues : '无异常（位置列没混进人名、记录 id 不重复）',
+            旧的自定义表: LEGACY_TABLE_IDS.map((id) => `${id}: 表定义=${(state?.tables || []).some((t) => t.id === id) ? '在' : '已删'}，记录 ${count(id)} 条`),
+            表清单: (state?.tables || []).map((t) => `${t.id}(${t.name})`),
+            状态记录的值: (records[PLUGIN_TABLE_STATE] || []).find((r) => r?.id === 'sw2_state')?.values ?? '(没有 sw2_state 这条)',
+            事件记录首条: (records[PLUGIN_TABLE_EVENTS] || []).find((r) => String(r?.id || '').startsWith('sw2_ev_'))?.values ?? '(没有 sw2_ev_ 记录)',
+            saveOrigin: state?.saveOrigin,
+            updatedAt: state?.updatedAt,
+        };
+    } catch (err) {
+        return { 报错: String(err?.message || err) };
+    }
+}
+
+// ★leg29：**投完当场自检的一行**（接在推送路径上，随每次投递打出）。
+//   为什么做成一行：实机排查时"手抄控制台多行对象"反复丢失输出——一行纯文本，好抄也好贴。
+//   只报事实：我方命名空间的记录在不在、旧表删没删；**不做任何写入**。
+// ★leg30：**可注入**（`YM` 形参）——理由与 `memoryStore` 当初改注入形参一样：判据要能**真跑**。
+//   这条自检的语义判据（"位置列里有人名吗"）若不能真跑，就等于又把它交回给肉眼。
+export function memoryStoreCheckLine(YM = (typeof window !== 'undefined' ? window.YuzukiMemory : null)) {
+    const r = memoryStoreReport(YM);
+    if (r?.报错) return `[story-world-v2] 记忆自检失败：${r.报错}`;
+    const mine = r.我方两张表的记录在不在 || {};
+    const legacyOn = (r.旧的自定义表 || []).filter((x) => x.includes('表定义=在'));
+    // ★leg29：**表名也要报**。为什么：插件是从**它自己的内存缓存**渲染侧栏的，而它自己的定时/落盘会把
+    //   那份缓存写回存储 ⇒ 我们写的表名可能被覆盖回去（真存储代码复演证明"我们写的那份是对的"，
+    //   所以一旦盘上名字不对，就是被它盖回去了）。把名字打进自检，一眼可见。
+    const names = (r.表清单 || []).filter((x) => x.startsWith('world_setting') || x.startsWith('item_tracking')).join(' ');
+    // ★leg30：**语义异常也进这一行**（位置列混进人名之类）——它此前只能靠用户肉眼发现。
+    const sem = r.语义自检;
+    const semBit = Array.isArray(sem) && sem.length ? ` ｜ ⚠ 语义：${sem.join('；')}` : '';
+    return `[story-world-v2] 记忆自检：world_setting=${mine['world_setting(世界状态)'] ?? '?'} ｜ item_tracking=${mine['item_tracking(世界大事)'] ?? '?'} ｜ 表名 ${names} ｜ 旧表残留 ${legacyOn.length} 张 ｜ saveOrigin=${r.saveOrigin ?? '?'}${semBit}`;
+}
+
+// ★leg27 h：记忆投递**自证面**（用户两次靠肉眼发现它没生效 ⇒ 这功能此前没有可查的痕迹）。
+//   口径：只报**事实**（投了第几轮 / 几条 / 或失败原因），不确定的一律不显示。
+//   `null` = 本轮没投（开关关着，或还没推过）——**不显示"已投"**，免得变成假绿。
+let sw2MemoryPush = null;
+export const memoryPushStatus = () => sw2MemoryPush;
+export function markMemoryPush(result, tick) {
+    sw2MemoryPush = result?.ok
+        ? { ok: true, tick: result.tick || (Number.isFinite(tick) ? `第 ${tick} 轮` : ''), counts: result.counts || {}, at: Date.now() }
+        : { ok: false, reason: result?.reason || '未知原因', at: Date.now() };
+    return sw2MemoryPush;
+}
+/** 一行事实（给状态栏/面板用）；没投过就不出声 */
+export function memoryPushLine() {
+    const m = sw2MemoryPush;
+    if (!m) return '';
+    return m.ok ? `记忆已投 · ${m.tick} · 大事 ${m.counts[EVENTS_TABLE_NAME] ?? 0} 条` : `⚠ 记忆投递未成：${m.reason}`;
 }
 
 // ---------- K35：真实动作总线（阅卷/导出/导入；其余按钮随 K36 接调度） ----------
 if (typeof window !== 'undefined') {
     window.__sw2Actions = window.__sw2Actions || {};
     const bus = window.__sw2Actions;
+
+    // ---------- leg26：世界参数 · 档位（参数页）----------
+    // 口径（用户令「参数独开页签」+「让用户自己调挡位」）：
+    //   · 这些是**玩家对世界的输入**，不是引擎算出来的判断、也不是书里的原稿 ⇒ 独立一页。
+    //   · 引擎**只照抄**：值必须是 params.js 的档位原话（白名单），落 `setting.dynamic.env`。
+    //   · 落账后**立刻落盘**（否则 Ctrl+F5 一次就丢），再重绘面板。
+    bus['set-param'] = async (payload) => {
+        const key = String(payload?.param || '').trim();
+        const value = String(payload?.value ?? '').trim();
+        if (!isParamKey(key)) { setStatus('⚠ 未知参数键'); return; }
+        const norm = value ? normalizeParam(key, value) : null;
+        if (value && !norm) { setStatus(`⚠ 「${value}」不是「${LABELS.env[key] || SWITCH_PARAMS[key]?.label || key}」的可选档位`); return; }
+        const meta = readHotMeta();
+        const world = meta ? loadHotAccount(meta) : null;
+        if (!world?.context?.setting?.dynamic) { setStatus('⚠ 还没有世界可设参数（先初始化）'); return; }
+        const cur = { ...(world.context.setting.dynamic.env || {}) };
+        // ★leg27 c：`<select>` 滚轮滑过就改选中项 ⇒ 把"什么都没改"当修改。**值没变即忽略**。
+        const before = Object.prototype.hasOwnProperty.call(cur, key) ? cur[key] : null;
+        const after = norm || null;
+        if (before === after) {
+            console.info(`[story-world-v2] set-param 无变化已忽略：${key} = ${after ?? '未定'}（多半是滚轮/重复事件，不是你的操作）`);
+            return;
+        }
+        if (norm) cur[key] = norm; else delete cur[key];              // 清成「未定」= 删键（空着就是空着）
+        world.context.setting = { ...world.context.setting, dynamic: { ...world.context.setting.dynamic, env: cur } };
+        sw2LastWorld = world;
+        writeHotMeta(hotAccountShape(world));
+        const flushed = await flushHotMeta();
+        // 开关刚打开 ⇒ 立刻投一次（不等下一轮）。leg27 h：同样如实上报（自证面）
+        let memResult = null;
+        if (key === 'memoryEnabled') {
+            if (norm === '1') memResult = await pushMemoryNow(world).catch(() => ({ ok: false, reason: '抛错（见控制台）' }));
+            markMemoryPush(norm === '1' ? memResult : { ok: false, reason: '开关刚被关掉' }, world?.meta?.tick);
+            if (norm !== '1') sw2MemoryPush = null;   // 关掉 ⇒ 自证面归零（不留上一次的"已投"）
+        }
+        // ★leg27 后：**不许整页重绘**（那会把用户正在操作的 `<select>` 销毁重建 ⇒ 列表自己关掉）。
+        //   只重绘受影响的两页：参数页（旋钮状态真源）+ 观棋页（信息带也呈现档位）。
+        refreshSections(['params', 'board']);
+        const memLine = key === 'memoryEnabled' ? memoryPushLine() : '';
+        setStatus(`${LABELS.env[key] || SWITCH_PARAMS[key]?.label || key} → ${norm === '1' ? '开' : norm === '0' ? '关' : (norm || '未定')}${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${memLine ? ` · ${memLine}` : ''}`);
+    };
 
     // ---------- leg25 d：查书补全的两个入口（面板行内「查/重查」+ 批量补全）----------
     // 单实体：即时查一次（不必等下一轮世界推进），查完立即落盘 + 重绘
@@ -1123,38 +1653,69 @@ if (typeof window !== 'undefined') {
         }
     };
 
-    // 批量补全：借轮次分批跑，不阻塞世界推进；再点一次 = 停
-    bus['lookup-batch-all'] = async (payload) => {
+    bus['lookup-batch'] = async (payload) => {
         if (sw2BatchTask) {
             const s = batchTaskStatus();
             stopBatchTask();
-            setStatus(`已停：补全到 ${s.cursor}/${s.total}（成功 ${s.success}）——已查到的都留账`);
+            setStatus(`已停止批量补全：第 ${s.cursor}/${s.total} 批（成功 ${s.success}）——世界照常推进`);
             return;
         }
         const forceFields = payload?.force === 'all' ? 'all' : 'absent';
         const started = startBatchTask({ forceFields });
         if (!started.ok) { setStatus(`⚠ ${started.error}`); return; }
-        setStatus(batchStatusText() || `补全排队中（共 ${started.total} 个实体）——随世界推进分批跑，再点一次可停`);
+        setStatus(batchStatusText() || `批量补全已排队（共 ${started.total} 个）——每轮搭车跑一批，想停再点一次`);
+    };
+    // 面板上的名字叫 `lookup-batch-all`（render.js 的按钮就这么写的）——同一个动作，两个别名都接上，
+    //   防"按钮画了没人接"（本仓判据：**面板产物里每个 data-action 都必须有真实处理器**）。
+    bus['lookup-batch-all'] = (payload, event) => bus['lookup-batch'](payload, event);
+
+    // ---------- leg27 后：快照容错（第八页签的两个动作）----------
+    bus['snapshot-restore'] = async (payload) => {
+        const id = payload?.snap;
+        if (!id) return;
+        const tick = payload?.tick === '' || payload?.tick == null ? null : Number(payload.tick);
+        const cur = loadHotAccount(readHotMeta()) || sw2LastWorld;
+        const curTick = cur?.meta?.tick;
+        const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+            ? window.confirm(`确定回到快照 ${id}${tick == null ? '' : `（第 ${tick} 轮）`}？\n\n· 世界账回到第 ${curTick ?? '?'} 轮 → 第 ${tick ?? '?'} 轮\n· 只回世界账，**对话记录不动**，也不会重写你聊过的内容\n· 恢复前会**自动给当前状态拍一份**（回不来可以再退回去）\n\n确认后立即生效。`)
+            : true;
+        if (!ok) { setStatus('已取消（世界原样）'); return; }
+        setStatus(`正在回到快照 ${id}…`);
+        const r = await restoreSnapshot(id);
+        if (!r.ok) { setStatus(`⚠ 回不去（链不完整）——${r.error}`); return; }
+        await refreshSnapshots();
+        setStatus(`已回到 ${id}（第 ${r.tick ?? '?'} 轮 · ${r.plan === 'full' ? '整份' : '锚点+增量'}）${r.flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}——对话记录未动`);
     };
 
+    bus['snapshot-clear'] = async () => {
+        const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+            ? window.confirm('重置快照？\n\n· 会清空**当前聊天**的全部快照（别的聊天不受影响）\n· 然后立刻给**现在这份世界**拍一份新链头（第 1 份）\n· 世界账本身**不动**，只动快照库\n\n适用场景：盘上混着旧代码/丢账时拍下的脏数据。')
+            : true;
+        if (!ok) { setStatus('已取消（世界原样）'); return; }
+        const r = await resetSnapshots();
+        if (!r.ok) { setStatus(`⚠ 重置失败：${r.error}`); return; }
+        await refreshSnapshots();
+        setStatus(`快照已重置（清掉 ${r.removed} 份 · 已拍新链头 s1）——世界账未动，窗口保留 15 步`);
+    };
+
+    // ---------- K35：阅卷 / 编年五筛 / 链视图 / 导出导入 ----------
     bus['read-volume'] = async (payload) => {
         const volId = payload?.vol;
         if (!volId) return;
         try {
             const volume = await volumeStore().get(volId);
-            if (!volume) { setStatus(`⚠ 卷「${volId}」不存在`); return; }
+            if (!volume) { setStatus(`⚠ 卷「${volId}」不在库中`); return; }
             const rows = volumeToChronicleRows(volume);
             const html = renderVolumeReadHtml(volId, rows);
             const chronicle = document.getElementById('sw2_view_chronicle');
             if (!chronicle) return;
             chronicle.insertAdjacentHTML('afterbegin', html);
-            setStatus(`已展开旧卷「${volId}」（${rows.length} 条 · 只读还原）`);
+            setStatus(`已展开旧卷「${volId}」（${rows.length} 行 · 只读）`);
         } catch (err) {
             setStatus(`⚠ 阅卷失败：${err?.message || err}`);
         }
     };
 
-    // K41：编年五筛（多选=并集；清零回全选；重绘后 chips 由 render 按视图态重画）
     bus['set-filter'] = (payload) => {
         const t = payload?.filter;
         if (t === 'all' || t == null) {
@@ -1166,23 +1727,22 @@ if (typeof window !== 'undefined') {
             if (!sw2ChronicleFilter.size) sw2ChronicleFilter = null;
         }
         if (sw2LastWorld) refreshWorld(sw2LastWorld);
-        else setStatus('筛选取愿已记（尚无世界）');
+        else setStatus('还没有世界（编年筛无处可用）');
     };
 
-    // K41：因果链视图（展开器产物 afterbegin 进编年视图容器，复用阅卷模式；只读）
     bus['open-chain'] = (payload) => {
         try {
             const id = payload?.chain;
             const world = sw2LastWorld;
-            if (!world || !id) { setStatus('⚠ 无世界可展开链路'); return; }
+            if (!world || !id) { setStatus('⚠ 没有可展开的链'); return; }
             const chain = expandChain(world, id);
             const html = renderChainViewHtml(chain, { world, volumes: LISTED_VOLUMES });
             const chronicle = document.getElementById('sw2_view_chronicle');
             if (!chronicle) return;
             chronicle.insertAdjacentHTML('afterbegin', html);
-            setStatus(chain.ok ? '已展开事件链（一手事实拼句 · 只读 · 可收起）' : '⚠ 无此事件的链路');
+            setStatus(chain.ok ? `链已展开（上承 ${chain.up?.length ?? 0} · 下沿 ${chain.down?.length ?? 0} · 只读）` : '⚠ 链视图不可用');
         } catch (err) {
-            setStatus(`⚠ 链路展开失败：${err?.message || err}`);
+            setStatus(`⚠ 链视图失败：${err?.message || err}`);
         }
     };
 
@@ -1193,7 +1753,7 @@ if (typeof window !== 'undefined') {
     bus['export-world'] = async () => {
         const meta = readHotMeta();
         const world = meta ? loadHotAccount(meta) : null;
-        if (!world) { setStatus('⚠ 暂无世界可导出'); return; }
+        if (!world) { setStatus('⚠ 还没有世界可导出'); return; }
         try {
             const volumes = await volumeStore().list();
             const full = await Promise.all(volumes.map((v) => volumeStore().get(v.id)));
@@ -1204,7 +1764,7 @@ if (typeof window !== 'undefined') {
             a.download = EXPORT_FILENAME;
             a.click();
             URL.revokeObjectURL(a.href);
-            setStatus('已导出整聊天备份（含旧卷）');
+            setStatus(`已导出整聊天（世界账 + ${full.filter(Boolean).length} 卷）`);
         } catch (err) {
             setStatus(`⚠ 导出失败：${err?.message || err}`);
         }
@@ -1225,8 +1785,8 @@ if (typeof window !== 'undefined') {
                 const store = volumeStore();
                 for (const v of res.volumes) await store.put(v);
                 await loadWorld();
-                const flushed = await flushHotMeta();   // leg20 落盘修复：导入完成显式落盘再报成功
-                setStatus(`已导入：世界与旧卷恢复完成${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
+                const flushed = await flushHotMeta();   // leg20 语义：关键路径显式落盘后再报成功
+                setStatus(`已导入：世界与 ${res.volumes.length} 卷${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
             } catch (err) {
                 setStatus(`⚠ 导入失败：${err?.message || err}`);
             }
@@ -1234,34 +1794,46 @@ if (typeof window !== 'undefined') {
         input.click();
     };
 
-    // ---------- 初始化接线（编排层） ----------
-    // 换源/worldBook 机制已于第十八棒整体废除——设定源只有自动两条路
-    //（世界信息/卡内置书 + 角色卡四件套，见 autoComposeSource）；无任何外部文本槽可言。
-
-    // init-world：新世界初始化——设定源自动合订 →
-    // 小调用抽取（抽象管线）→ 种子世界（书名录入席 + position 集）。零原生弹窗。
+    // ---------- K38：初始化（抽取五件套 + 名册）----------
     bus['init-world'] = async () => {
         try {
             const settings = modelSettings() || {};
-            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS }); // 抽取独立预算（16384 提案，Diagnostic 实证 finish=length@4096）
-            if (!resolved) { setStatus('⚠ 先填模型通道（设置页 服务地址/密钥/模型）——设定期望初始化需要它'); return; }
+            // leg27：抽取走**独立超时档**（extraction: true = EXTRACTION_TIMEOUT_MS），不再蹭主调用的 120s
+            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+            if (!resolved) { setStatus('⚠ 模型通道未配置（设置页填写服务地址/密钥/模型）'); return; }
+            setStatus('正在合订设定源（角色卡 + 世界信息）…');
             const src = await autoComposeSource();
-            if (!src.ok) { setStatus(`⚠ 当前没有可用设定：${src.reason}——把设定写进 ST 世界信息或角色卡描述，再点一次`); return; }
-            setStatus(`正在抽取世界设定（源：${src.label} · ${src.usedChars} 字符${src.truncated ? ' · 超出防御上限截余' : ''}）…`);
+            if (!src.ok) { setStatus(`⚠ 设定源不可用：${src.reason}——请检查 ST 是否已载入角色卡/世界书`); return; }
+            setStatus(`设定源就绪（${src.label} · ${src.usedChars} 字符${src.truncated ? ' · 已截断' : ''}），开始抽取…`);
+            // leg27 F1/F1b：抽取**全程可见**——进度事件 + 1 秒心跳读秒（用户「看不到日志」那一刀）
+            const progressEvents = [];
+            const progress = extractionProgressHandler(progressEvents);
             const r = await extractWorldSetting({
                 sourceText: src.text,
-                extract: diagExtract(resolved), // 第十八棒：空/非JSON 响应现场上控制台
+                extract: diagExtract(resolved), // 双形取法：字符串/JSON 都吃
                 force: false,
+                onProgress: progress.onEvent,
             });
-            logInitDiagnostics(getCtx(), src, r); // 第十九棒：悬案实证——取数/抽取实况常驻上控制台
-            if (!r.ok) { setStatus(`⚠ 设定抽取失败：${(r.errors || []).join('; ')}${/空|已重试/.test((r.errors || []).join(';')) ? '——可再点一次重试；反复出现请检查模型通道或换小源' : ''}`); return; }
+            progress.stop();
+            // 抽取耗时与逐段读数（成功也要出声——"慢"必须有据可查）
+            console.info('[story-world-v2] 抽取耗时实测', {
+                ok: r.ok, cached: r.cached, timing: r.timing, steps: describeProgress(progressEvents),
+            });
+            logInitDiagnostics(getCtx(), src, r); // 控制台诊断（现场唯一证据面）
+            if (!r.ok) {
+                const tk0 = r.timing || {};
+                const secs0 = tk0.ms == null ? null : Math.round(tk0.ms / 1000);
+                console.warn('[story-world-v2] 抽取失败实测', {
+                    timing: tk0, steps: describeProgress(progressEvents), errors: r.errors || [],
+                });
+                setStatus(`⚠ 抽取失败${secs0 == null ? '' : `（${tk0.calls || 0} 次调用 / ${secs0} 秒）`}：${(r.errors || []).join('; ')}${/超时|timeout/.test((r.errors || []).join(';')) ? '——建议提高抽取超时或换更快的模型；每段成败见控制台' : ''}——世界未动`);
+                return;
+            }
             let seed = {
                 version: 1,
                 context: { world: src.worldName || '未名世界', tension: 0.5, positions: derivePositions(r.setting), setting: r.setting },
                 entities: [], weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
                 meta: { tick: 0, simLog: [] },
-                // D 组修复（leg25）：位置集 = 书里现成的地名（kind='location' 条目 + 各条目明述的所在）
-                // + 兜底词「未明」永远在集内。旧法写死 ['未明'] → 全员同位置、移动不可能。
             };
             // 第二十五棒 e：初始化创建世界时就把真书正文交给名册落账（零 token 兜底要用正文）；
             //   随后 `loadWorld()` 还会再跑一次（幂等）——两处同一条路径，谁先跑都不重不漏。
@@ -1279,34 +1851,36 @@ if (typeof window !== 'undefined') {
             const had = Boolean(readHotMeta());
             writeHotMeta(hotAccountShape(seed));
             await loadWorld();
-            const flushed = await flushHotMeta();   // leg20 落盘修复：初始化完成显式落盘再报成功
-            setStatus(`✨ 新世界「${src.worldName || '未名世界'}」已立（${(seed.entities || []).length} 实体入席 · 位置集 ${seed.context.positions.length} 处 · 玩家棋子=${playerFinal?.name || piece.name} · 设定源=${src.label}${src.truncated ? ' · 超出防御上限截余' : ''}${(r.errors || []).length ? ` · 抽取警告 ${r.errors.length} 条` : ''}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${had ? '——旧世界已被覆盖（可重新导入备份恢复）' : ''}`);
+            const flushed = await flushHotMeta();   // leg20 语义：落盘后才报成功
+            void had; void playerFinal;
+            const tk = r.timing || {};
+            const tsec = tk.ms == null ? null : Math.round(tk.ms / 1000);
+            setStatus(`新世界已就绪「${src.worldName || '未名世界'}」（${(seed.entities || []).length} 个名号 · ${seed.context.positions.length} 个地点 · 你=${piece.name} · 源=${src.label}${src.truncated ? ' · 源已截断' : ''}${tsec == null ? '' : ` · 抽取 ${tk.calls || 0} 次调用 ${tsec} 秒`}）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
         } catch (err) {
             setStatus(`⚠ 初始化失败：${err?.message || err}`);
         }
     };
 
-    // ---------- leg21 增量抽象（docs/incremental-refine-spec.md） ----------
+    // 面板按钮写的是 `clear-evolution`（render.js §参数/设置页那个"清除演化层"按钮）——
+    //   与 `reset-dynamic` 同一动作，两个名字都接上（同上：防"按钮画了没人接"）。
+    bus['clear-evolution'] = (payload, event) => bus['reset-dynamic'](payload, event);
 
-    // 清除演化层：dynamic 回基线（张力强度/env/浪尖），设定与极性方向不动；不触发抽取调用
-    bus['clear-evolution'] = async () => {
-        try {
+    bus['reset-dynamic'] = async () => {        try {
             const meta = readHotMeta();
             const world = meta ? loadHotAccount(meta) : null;
-            if (!world?.context?.setting?.dynamic) { setStatus('⚠ 还没有演化层可清除（先初始化世界）'); return; }
+            if (!world?.context?.setting?.dynamic) { setStatus('⚠ 还没有世界（无演化层可清）'); return; }
             world.context.setting = resetDynamicLayer(world.context.setting);
             const rot = await ensureChronicleRotated(world);
             LISTED_VOLUMES = await listOldVolumes();
             refreshWorld(rot.hot, { oldVolumes: LISTED_VOLUMES });
             if (!rot.ok) {
-                // E2：轮转失败=热账未写（内存里清了演化层但盘上没写）——如实报，不做「已落盘」确认位
-                setStatus(`⚠ 冷档轮转失败：${rot.error}——演化层只在内存生效、未落盘（可重试）`);
+                setStatus(`⚠ ${rot.error}——演化层已在内存清掉、盘上没写（可重试）`);
                 return;
             }
             const flushed = await flushHotMeta();
-            setStatus(`演化层已清除（张力强度/环境量回基线 · 极性方向保留 · 设定不动）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
+            setStatus(`演化层已清（参数档位保留 · 张力重算 · 卷库不动）${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`);
         } catch (err) {
-            setStatus(`⚠ 清除失败：${err?.message || err}`);
+            setStatus(`⚠ 清演化层失败：${err?.message || err}`);
         }
     };
 }
@@ -1323,7 +1897,7 @@ function bindActions() {
             return;
         }
         const action = el.getAttribute('data-action');
-        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity') };
+        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity'), name: el.getAttribute('data-name'), force: el.getAttribute('data-force'), snap: el.getAttribute('data-snap'), tick: el.getAttribute('data-tick'), param: el.getAttribute('data-param'), value: el.getAttribute('data-value') };
         dispatchAction(action, payload, e);
     });
 }
@@ -1357,26 +1931,25 @@ function initPanel(ctx) {
     ensureWindow(ctx).then(() => {
         bindTabs();
         bindActions();
-        bindSettingsForm(); // K36：设置页表单 ↔ extension_settings
-        // 不自弹窗（2026-09-08 用户实机反馈「刷新即弹出」）：v1 范式=仅入口点击（魔杖/扩展菜单）。
-        // 加载照跑：热账轮转 + 卷清单预取，首次点击打开时已有内容。
-        loadWorld(); // K35：面板打开即载入热账（含幂等轮转）
+        bindSettingsForm(); // K36：设置表单写通道（extension_settings）
+        loadWorld().catch(() => {});   // 首次打开即载入热账（缺世界则空态提示）
         setupAsyncTicks(ctx); // K36：回合钩子（MESSAGE_RECEIVED 推进 / CHAT_CHANGED 重载）
     });
     ensureWandEntry();
 }
 
-// 自举：ST 就绪即挂载；未就绪则等事件（APP_READY 双保险，v1 同款保守策略）
-if (typeof window !== 'undefined') {
-    const boot = () => {
+// 启动：ctx 就绪即挂（DOMContentLoaded / ST 就绪事件双保险）
+(function boot() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const start = () => {
         const ctx = getCtx();
         if (ctx) initPanel(ctx);
     };
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+        document.addEventListener('DOMContentLoaded', start);
     } else {
-        boot();
-        if (!window[NAMESPACE]) window.addEventListener('SillyTavernReady', boot, { once: true });
-        if (!window[NAMESPACE]) window.addEventListener('APP_READY', boot, { once: true });
+        start();
+        if (!window[NAMESPACE]) window.addEventListener('SillyTavernReady', start, { once: true });
+        if (!window[NAMESPACE]) window.addEventListener('APP_READY', start, { once: true });
     }
-}
+})();
