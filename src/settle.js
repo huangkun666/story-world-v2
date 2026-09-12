@@ -294,6 +294,11 @@ export function spawnAgendas(world, gstep, tick, warnings, chronicle) {
             progress: 0,
             memory: { promises: [], done: [], blocked: [], turnsAlive: 0 },
         };
+        // ★leg29（N3）：**出生理由落账**——与 `parentId` 分开写、两者并存（parent 源两个字段都有）。
+        //   此前只有 `parentId` 一条边，event/state 两种源在出生那一刻被丢掉 ⇒ 引擎事后说不清一条盘算怎么来的
+        //   （细案 `docs/spec-novelist-clause.md` §5.2 实测：真账四条盘算 parentId 全 null、source 不存在）。
+        //   `ref` 只在该源型需要引用时才写（state 源不带 ref）。
+        agenda.source = na.source.ref ? { type: na.source.type, ref: na.source.ref } : { type: na.source.type };
         if (na.source.type === 'parent') agenda.parentId = na.source.ref;
         world.agendas.push(agenda);
         // 环检测（§3.3）：每次创建时沿父链上溯，触到自己即环（确定性）；成环不拒绝整件事——自动拆

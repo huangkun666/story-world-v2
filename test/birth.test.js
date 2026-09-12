@@ -50,8 +50,38 @@ test('K14/A-2（片3）：被点名应答方（lifted）可以提议——gate �
     assert.equal(r.ssot.agendas.find((a) => a.goal === '夺旗')?.id, 'a_1_1', '应答方提议落账');
 });
 
-test('K14/A-3：每 tick 新生 ≤2——第三条拒建 + 警告，前两条照常', () => {
+// ★leg29（N3）：**盘算的出生理由必须落账**（细案 `docs/spec-novelist-clause.md` §5.2 的实测缺口）。
+//   此前 `spawnAgendas` 只落 `parentId`（`if (source.type === 'parent') agenda.parentId = source.ref`），
+//   **event 源与 state 源在出生那一刻被丢掉** ⇒ 真账四条盘算 `parentId` 全 null、`source` 根本不存在
+//   ⇒ 引擎事后说不清一条盘算怎么来的（而盘算是本项目的重心），细案候选 A 的"理由落在账上"也就无从核。
+//   判据分两层：①函数返回值里有理由 ②**落进 ssot 的盘算上还能看见**（否则等于没落账）。
+test('leg29/N3：新盘算的**出生理由落账**（event 源带 ref / state 源不带 ref / parent 源两个字段并存）', () => {
+    // ① state 源（无 ref）与 ② parent 源：各落一条，看账上留下什么
     const step = emptyStep([
+        na('e_lead', '由处境起事', { type: 'state' }),
+        na('e_court', '奉父命行事', { type: 'parent', ref: 'a_root' }),
+    ]);
+    const r = settleTick({ ssot: TREE, step });
+    assert.equal(r.ok, true, r.stage.warnings.join('; '));
+    const byGoal = new Map(r.ssot.agendas.map((a) => [a.goal, a]));
+
+    const st = byGoal.get('由处境起事');
+    assert.ok(st, 'state 源的提议要落账');
+    assert.deepEqual(st.source, { type: 'state' }, '★state 源的出生理由要落账（不带 ref）');
+    assert.equal(st.parentId, undefined, 'state 源不是子盘算（没有 parentId）');
+
+    const pa = byGoal.get('奉父命行事');
+    assert.ok(pa, 'parent 源的提议要落账');
+    assert.deepEqual(pa.source, { type: 'parent', ref: 'a_root' }, '★parent 源的出生理由要落账（带 ref）');
+    assert.equal(pa.parentId, 'a_root', 'parent 源**照旧**写 parentId（父子链不能因新增 source 而断）');
+
+    // ③ 旧盘算不许被"补写"理由：没有出生理由的就该是空的（不猜、不回填）
+    for (const a of r.ssot.agendas.filter((x) => !x.id.startsWith('a_1_'))) {
+        assert.equal(a.source, undefined, `旧盘算 ${a.id} 不该凭空多出 source（宁缺勿造）`);
+    }
+});
+
+test('K14/A-3：每 tick 新生 ≤2——第三条拒建 + 警告，前两条照常', () => {    const step = emptyStep([
         na('e_lead', '整军', { type: 'state' }),
         na('e_court', '运粮', { type: 'state' }),
         na('e_lead', '募新兵', { type: 'state' }),

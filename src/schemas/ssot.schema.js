@@ -96,7 +96,7 @@ export const ssotSchema = {
                                         intensity: { kind: 'number', min: 0, max: 1 },   // 强度 0..1（引擎确定性计算，模型不拍）
                                     },
                                 },
-                                env: { kind: 'numRecord' },   // 环境量键值（引擎推演域；越阈值→状态驱动事件，K27 熵泵）
+                                env: { kind: 'strRecord' },   // leg26：世界参数**档位原话**（民生度/动乱度/天时/张力推手 → 档位词）；玩家可选、引擎照抄、不读不做判断。旧账里的数值由载入净化丢弃
                                 derivedFrom: { kind: 'array', items: { kind: 'string' } },   // 派生源引用（书条目/事件 id/浪尖盘算 id）
                             },
                         },
@@ -172,6 +172,18 @@ export const ssotSchema = {
                     stage: { kind: 'string', minLength: 1 },
                     visibility: { kind: 'string', enum: ['known', 'concealed'] },  // 暗处可以有人（§3④）
                     parentId: { kind: 'string', minLength: 1 },   // K13/盘算树：父盘算 id（可选——顶层盘算无父；深链合法）
+                    // ★leg29（N3 落地）：**出生理由落账**。此前 `newAgendas[].source` 只在出生时被校验，
+                    //   落账时只留 `parentId`（event/state 两种源当场丢弃）⇒ 引擎事后说不清一条盘算怎么来的。
+                    //   形状与**事件源同构**（三型 plot/state/ripple 的亲戚：event/parent/state），可选=旧世界零扰动。
+                    source: {
+                        kind: 'object',
+                        additional: false,
+                        required: ['type'],
+                        props: {
+                            type: { kind: 'string', enum: ['event', 'parent', 'state'] },   // 与 world-step 的 newAgendas[].source.type 同枚举
+                            ref: { kind: 'string', minLength: 1 },     // event=未决事件 id；parent=盘算 id；state 不带
+                        },
+                    },
                     branch: { kind: 'string', minLength: 1 },   // 第十九棒/C8：分支身份链（子势力名；owner 仍是父实体；可选=旧世界零扰动）
                     maxSteps: { kind: 'number', int: true, min: 1 },                // 必须能在世界时间里结算（§4.5）
                     progress: { kind: 'number', int: true, min: 0 },
