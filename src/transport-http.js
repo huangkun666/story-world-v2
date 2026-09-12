@@ -28,6 +28,33 @@ export const PROPOSED_CALL_LIMITS = Object.freeze({
 // 同输入 @16384 → finish=stop 完整。v1「80k 段连续空回复」同源（预算饿死，非网关）——两侧统一提额。
 export const EXTRACTION_MAX_TOKENS = PROPOSED_CALL_LIMITS.maxTokens;
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27（用户令「二十多分钟很慢，你做吧」）：**抽取侧独立超时** + **超时如实标记**。
+//   病（用户实机 2026-09-11 原始症状）：初始化抽取跑了 20+ 分钟、状态栏一行不动、不知抽到哪。
+//   根因（读真码 + 实测真书，见 leg27 交接）：
+//     ①抽取每次调用的输入是**贴满上限的块**——真账**实测** 大荒-姬元真.json = 235 条 / 265,866 字符
+//       ⇒ 60,000 字符/块 ⇒ 5 块，实到块大小 [59215, 58673, 59892, 58902, 30344]（全贴 97% 上限）；
+//     ②输出预算 16,384 tokens **且 reasoning 与输出共享该预算**（上方断实证），模型是推理型
+//       （用户现场 gemini-3.1-pro-preview）⇒ 单次调用是**分钟级**，不是秒级；
+//     ③旧法把"超时"与"网关偶发空回复"**当成同一种可重试的瞬时错**：超时 → `tryRosterChunk` 对半拆
+//       （每半再各 2 分钟）→ 拆 4 层 → 保底重试 → 全失败才降级 ⇒ 单块最坏 31 次调用 × 120 秒 = **62 分钟**。
+//       ★对半拆治不了超时：拆小的是**输入**，而超时主因是**生成时间**（输出预算仍 16,384/次）。
+//   ⇒ 两处改：①抽取侧超时独立给足（不再蹭主调用的 120 s）；②超时**如实标记** `sw2Timeout`，
+//            让编排层能把它与瞬时错分开（`abstract.js` 对超时不再拆半、不再重试）。
+//   数字（**提案态**，铁律 2，随长跑曲线定案）：300,000 ms = 5 分钟/次。
+//     依据：单块 ≈ 59k 字符输入 + ≤16,384 tokens 输出（reasoning 占盘）⇒ 分钟级，给 2.5 倍余量；
+//     同时它**不是无上限**——天花板 = 300 s（旧法最坏 62 分钟/块 ⇒ 现在最坏 5 分钟/块即止损跳过）。
+export const EXTRACTION_TIMEOUT_MS = 300_000;
+
+// 超时标记：给调用方一个**可判**的形态（不是靠猜错误文案）。
+//   ⚠ leg27 澄清我此前一个**误判**（留档防复发）：我一度怀疑 `abort(reason)` 传 non-cloneable 会抛
+//   ⇒ 超时根本没生效。**实测证伪**（本机真跑）：`abort(new Error('…'))` 正常返回、
+//   `signal.aborted=true`、挂住的 fetch 在 528 ms 被中断 ⇒ **超时是生效的**，别再修这一处。
+function markTimeout(err) {
+    try { err.sw2Timeout = true; } catch (_) {}
+    return err;
+}
+
 export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = fetch, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
     return async (prompt) => {
@@ -58,6 +85,11 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
             }
             const data = await res.json();
             return data?.choices?.[0]?.message?.content ?? '';
+        } catch (err) {
+            // leg27：超时**如实标识**（判据 = 本控制器自己发出过中止 ⇒ fetch 因我们超时而拒）
+            //   ⇒ 编排层据此把它与"网关偶发空回复"分开：**超时不重试、不拆半**（拆了也白拆，见文件头）。
+            if (controller.signal.aborted) throw markTimeout(err);
+            throw err;
         } finally {
             clearTimeout(timer);
         }

@@ -33,11 +33,11 @@
 //     seed 入账 schema PASS；「渡虚帝.Organs=界渊长城/须弥界域」照旧出名。
 // ============================================================================================
 import { bookFingerprint } from './fingerprint.js';
-import { ENV_KEYS } from './entropy.js';
+import { PARAM_GEARS, PARAM_KEYS, normalizeParam } from './params.js';
 // leg24 片2：不再从 settle 借 ENTITY_ATTR_DEFAULT（该常量已删）——名册入账不预填数值
 import { computeWeight } from './weight.js';
 
-export const ENV_INIT_BASELINE = 0.5;      // 提案：抽取缺省环境量初值（patchDynamic 新键基线口径）
+// leg26：`ENV_INIT_BASELINE`（0.5 基线）**已删除**——档位没有"基线值"，未定就是未定（空着就是空着）。
 export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时的强度初值（随长跑校准批）
 
 // 第十八棒（v1 拍板值同款 · 提案态，随报批）：
@@ -63,7 +63,7 @@ export function buildAbstractPrompt(sourceText) {
                                                                                                                           // leg24 片1：**停抄书**——上级/所在/种族/四维属性都不再抽（书随时可查；引擎不裁胜负，数值没有使用者）
                                                                                                                           //             身份（名号+类别）是账本主键，照旧；书用标签声明的结构走照书办（零模型调用）
                 tension: { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' },
-                env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.5, 张力推手: 0.5 },
+                env: { 民生度: '崩溃|艰难|尚可|富足（四选一，原文能判才填）', 动乱度: '太平|小乱|动荡|大乱', 天时: '大灾|失调|平常|风调雨顺', 张力推手: '沉寂|平缓|暗涌|紧绷' },
             },
             null,
             2,
@@ -347,15 +347,19 @@ export function sanitizeCanon(raw) {
     };
     if (raw?.tension?.intensity !== undefined) errors.push('tension.intensity 由引擎计算，模型输出已丢弃');
 
-    // 环境量初值（leg24 片5 口径修正）：**书里给了才落账**——键表白名单 + [0,1] 钳制；
-    //   书没给的键**不入 env**（空着就是空着）；熵泵/掩码按基线 0.5 使用（不落账面），界面显示「（书未明述）」。
-    //   旧法把缺失键一律写成 0.5 落账 → "四键 0.50"看起来像书的原值（用户实机反馈过），正是默认值冒充客观。
+    // 世界参数档位（leg26 改口径：**数值 → 档位原话**）。
+    //   为什么改（用户令「删掉没用的功能，改个定义就好了」）：原来抽的是四个 0~1 的数（`dynamic.env`），
+    //     而引擎没有任何判据读它们（片3 后门控/镜头/裁定/退休/波及全换结构判据）——**那四个数没有消费者**，
+    //     却是引擎自己按锯齿推出来的"世界气压"，还驱动越阈落写死的事件台词 ⇒ 违反"引擎不发明事实"。
+    //   现在：值只能是 `PARAM_GEARS` 里的**档位词**（白名单验伪）；**书里给了才落账**（空着就是空着）；
+    //     玩家可在「参数」页自行改档（引擎照抄，不换算、不进公式）。
     const env = {};
-    for (const key of ENV_KEYS) {
+    for (const key of PARAM_KEYS) {
         const v = raw?.env?.[key];
-        if (typeof v === 'number' && Number.isFinite(v)) env[key] = Math.min(1, Math.max(0, v));
-        else if (v !== undefined) errors.push(`env.${key} 非有限数（已弃该键，账面留空）`);
-        // v === undefined：书未明述 → 不写键（旧法落基线 0.5）
+        if (v === undefined) continue;                       // 书未明述 → 不写键（绝不落占位值）
+        const norm = normalizeParam(key, v);                 // 只认本表档位词
+        if (norm) env[key] = norm;
+        else errors.push(`env.${key} 不是本书档位词（已弃该键，账面留空；合法档位：${PARAM_GEARS[key].join('/')}）`);
     }
     // leg24 片5（留痕收口）：净化层的坏项（非法 env/坏 bookEntities 项等）**上报到调用方的 errors**——
     // 旧法只在 callOnce 内部消化，`ok` 时静默丢弃：账面上少了东西却没有任何提示（"每条变更留痕"的反面）。
@@ -392,7 +396,12 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt) {
     try {
         rawText = await extract(buildPrompt(text));
     } catch (err) {
-        return { callError: `抽取调用失败: ${err?.message || err}` };
+        // leg27：**超时与瞬时错必须分开**（旧法一律并成一句"抽取调用失败"⇒ 白烧 62 分钟/块，见 transport-http 文件头）
+        //   `timeout: true` 是给 `tryRosterChunk` 的判据：超时不许对半拆、不许重试。
+        return {
+            callError: `抽取调用失败: ${err?.message || err}`,
+            timeout: err?.sw2Timeout === true,
+        };
     }
     if (typeof rawText !== 'string' || !rawText.trim()) return { callError: '抽取输出为空' };
     let raw;
@@ -407,8 +416,7 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt) {
 }
 
 // 行级分块：按累计字符 ≤ maxChar 切块（保行完整；超长单行自成一块）
-export function chunkRows(rows, maxChar) {
-    const chunks = [];
+export function chunkRows(rows, maxChar) {    const chunks = [];
     let cur = [];
     let curLen = 0;
     for (const r of rows) {
@@ -423,6 +431,54 @@ export function chunkRows(rows, maxChar) {
     }
     if (cur.length) chunks.push(cur.join('\n'));
     return chunks;
+}
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27（用户令「二十多分钟很慢，**我也看不到日志不知道抽得怎么样**，你做吧」）：**抽取过程可见**。
+// 病（读真码确认，不是感觉）：抽取期间**一行进度都没有**——`web/index.js` 只在开头写一句状态栏，
+//   `diagExtract` 只在调用**返回之后**才出声，`logInitDiagnostics` 只在**整件事结束**才出声
+//   ⇒ 6 次调用是个黑盒，"正在跑"与"已经卡死"在界面上**完全同形**（用户实机等 20+ 分钟无从判断）。
+// 治法（分层纪律）：编排层**只上报事实**，不碰显示——显示端由调用方注入（浏览器传 DOM/console，
+//   测试传数组），与 `autoComposeSource` 提成导出函数同一条治法（"接线必须有测试"）。
+// 上报契约（`onProgress(event)`，事件是**事实**不是文案）：
+//   { step:'canon'|'chunk', phase:'start'|'finish', index, count, chars, ms, ok, error? }
+//   - `chars` = 该步真实输入字符数（回答"这块到底多大"）
+//   - `ms`    = 该步真实耗时（回答"慢在哪块"，是本次改动的核心证据）
+//   - `ok=false` 必带 `error`（回答"失败的是哪块、为什么"）
+// 纪律：上报函数**抛错不许影响抽取**（观测面绝不能成为故障点）；返回串里附 `timing` 供诊断复述。
+function makeProgressLog(onProgress) {
+    const events = [];
+    let last = null;
+    const report = (ev) => {
+        events.push(ev);   // ★本地留档（返回值里的 timing.steps 就是它——诊断/界面都能复述"这次多少段"）
+        try { if (typeof onProgress === 'function') onProgress(ev); } catch (_) {}
+        return ev;
+    };
+    return {
+        events,
+        start(step, index, count, chars) {
+            last = Date.now();
+            return report({ step, phase: 'start', index, count, chars: Number(chars) || 0 });
+        },
+        finish(step, index, count, chars, ok, error) {
+            const ev = {
+                step, phase: 'finish', index, count, chars: Number(chars) || 0,
+                ms: last == null ? null : Date.now() - last, ok: ok !== false,
+            };
+            if (error) ev.error = String(error);
+            last = null;
+            return report(ev);
+        },
+    };
+}
+
+// 诊断/ UI 用的一行摘要（纯函数 · 零副作用）：把 progress 事件串成人看的实施清单。
+export function describeProgress(events) {
+    return (Array.isArray(events) ? events : []).filter((e) => e && e.phase === 'finish').map((e) => {
+        const label = e.step === 'canon' ? '设定五件套' : `名册第 ${e.index}/${e.count} 块`;
+        if (!e.ok) return `${label}：失败（${e.chars} 字符，${Math.round((e.ms || 0) / 1000)}s）——${e.error || '未知原因'}`;
+        return `${label}：${e.chars} 字符，${((e.ms || 0) / 1000).toFixed(1)}s`;
+    });
 }
 
 // ★leg25 g：书名录的**去重键 = 名字 ∪ 别名**（唯一一份实现，两个调用点共用——别复制，本仓吃过"两份复制品漂移"的亏）。
@@ -533,6 +589,12 @@ export function dedupeRoster(entities = []) {
 
 // 拆半递归（v1 tryChunk 同款精神）：块首试无效 → 对半拆（保内容，不空等重试）→ 拆不动保底重试一次 → 仍无效跳过降级。
 // 返回 cleaned | null；两半合并只取 bookEntities 并集（块级只收书名录，v1 同款）。
+// leg27 改（用户令「二十多分钟很慢，你做吧」）：**超时不再走拆半/重试，直接止损跳过**。
+//   为什么必须有这条分支（实测真书算出来的，不是修辞）：拆半拆小的是**输入**，而超时主因是**生成时间**
+//     （每次输出预算 16,384 tokens 固定，reasoning 还占盘）⇒ 对半拆等于"用两倍时间再赌一次"：
+//     旧法单块最坏 1(原) + 2 + 4 + 8 + 16(拆到 depth=4) + 1(保底重试) = **31 次调用 × 120 秒 ≈ 62 分钟**，
+//     而这 62 分钟之后**结果还是跳过**——纯烧时间不长数据。现在：一次 300 秒超时即跳过，把时间还给其余块。
+//   "拆半"的原始理由（v1）仍然成立、仍然保留：那是治**输出被截断/网关空回复**（瞬时错，重试有救）。
 function mergeCleaned(a, b) {
     if (!a) return b;
     if (!b) return a;
@@ -544,18 +606,25 @@ function mergeCleaned(a, b) {
 // 它守的是"从书里抄出来的字段别抄错"，而这些字段已不再抄。名号级的全书出处判定仍在 extractWorldSetting
 // （纯编造的名号照旧丢：那守的是"账本不发明事实"，与抄不抄书无关）。
 
-async function tryRosterChunk(extract, text, depth, probeState, declared = []) {
+// onProgress（leg27 新增）：注入式进度上报——编排层不许 console 硬编码（测试注入"fake ctx 真跑"同治法）。
+//   上报时机：**每块开始**（"正在抽第 x/N 块"）+ **每块结束**（耗时/结果/错误）。失败细节进 `progressLog`。
+async function tryRosterChunk(extract, text, depth, probeState, { declared = [], onProgress = null, progressLog = null } = {}) {
     const rosterPrompt = (t) => buildRosterPrompt(t, declared);   // leg23：本块内按书声明给召回清单
     const r = await callOnce(extract, text, rosterPrompt);        // leg21：名册轮专用瘦身 prompt
     if (!r.callError) return { cleaned: r.cleaned };
     probeState.failures += 1;
+    // ★leg27：**超时 = 止损**（不拆半、不重试）——理由见上方注释；失败如实进 progressLog，供界面显形。
+    if (r.timeout) {
+        if (progressLog) progressLog.push({ step: `chunk@depth${depth}`, kind: 'timeout', chars: Array.from(text).length, error: r.callError });
+        return { cleaned: null };
+    }
     if (depth < ROSTER_CHUNK_DEPTH) {
         const lines = text.split('\n').filter(Boolean);
         if (lines.length > 1) {
             const mid = Math.ceil(lines.length / 2);
-            const halfA = await tryRosterChunk(extract, lines.slice(0, mid).join('\n'), depth + 1, probeState, declared);
+            const halfA = await tryRosterChunk(extract, lines.slice(0, mid).join('\n'), depth + 1, probeState, { declared, onProgress, progressLog });
             if (halfA.aborted) return halfA;
-            const halfB = await tryRosterChunk(extract, lines.slice(mid).join('\n'), depth + 1, probeState, declared);
+            const halfB = await tryRosterChunk(extract, lines.slice(mid).join('\n'), depth + 1, probeState, { declared, onProgress, progressLog });
             if (halfB.aborted) return halfB;
             return { cleaned: mergeCleaned(halfA.cleaned, halfB.cleaned) };
         }
@@ -564,6 +633,12 @@ async function tryRosterChunk(extract, text, depth, probeState, declared = []) {
     const retry = await callOnce(extract, text, rosterPrompt);
     if (!retry.callError) return { cleaned: retry.cleaned };
     probeState.failures += 1;
+    if (progressLog) {
+        progressLog.push({
+            step: `chunk@depth${depth}`, kind: retry.timeout ? 'timeout' : 'error',
+            chars: Array.from(text).length, error: retry.callError,
+        });
+    }
     return { cleaned: null };
 }
 
@@ -577,10 +652,14 @@ async function tryRosterChunk(extract, text, depth, probeState, declared = []) {
 // 执行器：{sourceText, extract, cache?, force?, extractedAt?, legacyTension?} → {ok, setting, cached, fingerprint, errors}
 // 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量（与历史行为零差异）；大书分段多调用——
 // 五件套=头 CANON_SRC_CHAR 单发；书名录=全条目分块多调用（拆半自适应 + 降级 + 全书级出处校验）。
-export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension }) {
+export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null }) {
     const src = String(sourceText ?? '');
     const fp = bookFingerprint(src);
     const stamp = extractedAt || new Date().toISOString();
+    const progress = makeProgressLog(onProgress);   // leg27：进度/耗时上报（编排层只报事实，显示端注入）
+    const t0 = Date.now();
+    // leg27：把"这次到底干了多久/几次调用/每步多大"打包进返回值（诊断面可复述，不靠猜）
+    const timingOf = (mode, calls, srcChars) => ({ mode, srcChars, calls, ms: Date.now() - t0, steps: progress.events });
 
     if (!force && cache) {
         const hit = cache.get(fp);
@@ -604,9 +683,18 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         // leg23 照书办：小书同过声明扫描（同书同口径——不因书短就换规矩）
         const { declares: smallDeclared, usesLabelTerms: smallTerms } = scanBookDeclarations(src);
         if (smallTerms.length) errors.push('照书办: 检测到词表判据参与声明扫描（应为形态判据，请核查）');
+        progress.start('canon', 1, 1, srcLen);
         const r = await callOnceWithDeclared(extract, src, smallDeclared)
             .then((first) => (first.callError ? callOnceWithDeclared(extract, src, smallDeclared) : first));   // 空/失败重试一次（v1 瞬时网关教训）
-        if (r.callError) return { ok: false, errors: [`抽取失败（已重试一次）：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`] };
+        progress.finish('canon', 1, 1, srcLen, !r.callError, r.callError);
+        if (r.callError) {
+            return {
+                ok: false,
+                errors: [`抽取失败（已重试一次）：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`],
+                timing: { mode: 'small', srcChars: srcLen, ms: null, steps: progress.events },
+                progress: progress.events,
+            };
+        }
         errors.push(...(r.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
         const applied = applyDeclaredToRoster(r.cleaned.canon.bookEntities, smallDeclared);
         if (smallDeclared.length) {
@@ -614,13 +702,18 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         }
         const setting = assembleSetting({ canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp });
         if (cache) cache.set(fp, { canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env }, stamp);
-        return { ok: true, cached: false, fingerprint: fp, setting, errors };
+        return {
+            ok: true, cached: false, fingerprint: fp, setting, errors,
+            timing: timingOf('small', progress.events.filter((e) => e.phase === 'finish').length, srcLen),
+        };
     }
 
     // 大书：五件套=头 CANON_SRC_CHAR 单发（失败降级=空 canon，不阻塞书名录）；空/失败自动重试一次
     const canonSrc = Array.from(src).slice(0, CANON_SRC_CHAR).join('');
+    progress.start('canon', 1, 1, Array.from(canonSrc).length);
     let canonR = await callOnce(extract, canonSrc);
     if (canonR.callError) canonR = await callOnce(extract, canonSrc);
+    progress.finish('canon', 1, 1, Array.from(canonSrc).length, !canonR.callError, canonR.callError);
     if (canonR.callError) {
         errors.push(`设定五件套抽取失败（已降级空 canon）：${canonR.callError}`);
     }
@@ -639,13 +732,23 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const rawBookNames = [...canonBase.canon.bookEntities];
     const probeState = { failures: 0 };
     let okChunks = 0;
-    for (const chunk of chunks) {
-        const { cleaned } = await tryRosterChunk(extract, chunk, 0, probeState, declared);
+    const failLog = [];                     // leg27：失败明细（给界面显形用，不是只报一个数字）
+    for (const [ci, chunk] of chunks.entries()) {
+        const chunkChars = Array.from(chunk).length;
+        progress.start('chunk', ci + 1, chunks.length, chunkChars);   // ★"正在抽第 x/N 块"——进入即出声
+        const { cleaned } = await tryRosterChunk(extract, chunk, 0, probeState, { declared, onProgress, progressLog: failLog });
         if (!cleaned) {
-            errors.push('书名录块抽取失败（已跳过降级，其余块照常；网络恢复后「重新抽取」可补回）');
+            // ★leg27（F3 失败显形）：旧法只说"块抽取失败"——**丢了多少、丢的是哪块、为什么**全不说，
+            //   而块级失败是**静默丢数据**（真账实测「大虞」横跨第 1/2/3/5 块，丢一块就缺一批实体）。
+            //   现在：块号 + 字符数 + 原因一并上报，errors 里也带块号（界面/诊断都能指认）。
+            const last = failLog[failLog.length - 1];
+            const why = last?.kind === 'timeout' ? '调用超时（已止损跳过，不再拆半/重试）' : (last?.error || '未知原因');
+            progress.finish('chunk', ci + 1, chunks.length, chunkChars, false, why);
+            errors.push(`书名录第 ${ci + 1}/${chunks.length} 块抽取失败（${chunkChars} 字符，已跳过降级，其余块照常）：${why}——该块名号本次缺失，网络/模型恢复后「重新抽取」可补回`);
             continue;
         }
         okChunks += 1;
+        progress.finish('chunk', ci + 1, chunks.length, chunkChars, true);
         for (const b of cleaned.canon.bookEntities) rawBookNames.push(b);
     }
     // ★leg25 g：块收齐后**一次性**按「名字 ∪ 别名」去重。
@@ -674,11 +777,18 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     // leg24 片1（停抄书）：关系轮/属性轮/出处细节校验三处调用点一并删除——名册定稿即为交付态。
     const canon = { ...canonBase.canon, bookEntities: finalNames };
     if (canonR.callError && okChunks === 0 && !finalNames.length) {
-        return { ok: false, errors: ['设定与书名录抽取全部失败（世界未动，可重试）'] };
+        return {
+            ok: false,
+            errors: ['设定与书名录抽取全部失败（世界未动，可重试）'],
+            timing: timingOf('big', progress.events.filter((e) => e.phase === 'finish').length, srcLen),
+        };
     }
     const setting = assembleSetting({ canon, tension: canonBase.tension, env: canonBase.env, legacyTension, fingerprint: fp, extractedAt: stamp });
     if (cache) cache.set(fp, { canon, tension: canonBase.tension, env: canonBase.env }, stamp);
-    return { ok: true, cached: false, fingerprint: fp, setting, errors };
+    return {
+        ok: true, cached: false, fingerprint: fp, setting, errors,
+        timing: timingOf('big', progress.events.filter((e) => e.phase === 'finish').length, srcLen),
+    };
 }
 
 // 落账到世界（不可变）：context.setting 整体替换；旧 context.tension 保留（兼容口径 K24 §3.7）
@@ -1269,8 +1379,9 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
 
 // ============ leg21 增量抽象（docs/incremental-refine-spec.md）：清除演化层 / 名册→实体补缺 / 单实体补抽 ============
 
-// 清除演化层（纯函数，不可变）：intensity/env 回基线、derivedFrom 清空；polarity/direction 保留
+// 清除演化层（纯函数，不可变）：intensity 回基线、参数档位清空、derivedFrom 清空；polarity/direction 保留
 //（它们是书抽的设定面，不属演化）；frozen 一概不动。不触发任何抽取调用。
+// leg26：`env` 不再回"四键 0.5 基线"——**清空**（玩家可在参数页重定；空着就是空着）。
 export function resetDynamicLayer(setting) {
     const dyn = setting?.dynamic || {};
     const t = dyn.tension || {};
@@ -1282,7 +1393,7 @@ export function resetDynamicLayer(setting) {
                 direction: String(t.direction || '').trim(),
                 intensity: TENSION_INIT_BASELINE,
             },
-            env: Object.fromEntries(ENV_KEYS.map((k) => [k, ENV_INIT_BASELINE])),
+            env: {},
             derivedFrom: [],
         },
     };

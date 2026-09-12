@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import { bookFingerprint, createCache } from '../src/fingerprint.js';
-import { ENV_KEYS } from '../src/entropy.js';
+import { PARAM_GEARS } from '../src/params.js';
 import {
     buildAbstractPrompt,
     sanitizeCanon,
@@ -16,7 +16,6 @@ import {
     resetDynamicLayer,
     normalizeParentName,
     applyDeclaredToRoster,
-    ENV_INIT_BASELINE,
     TENSION_INIT_BASELINE,
 } from '../src/abstract.js';
 // leg24 片1（停抄书）：applyRosterAttrs / refineEntityAttrs 随抄书流水线删除，不再导入——
@@ -35,7 +34,7 @@ const FULL_RAW = {
     techOrMagic: '灵脉与煞气相生相克',
     historyNotes: ['太岁陨落北山', '洗煞阵立'],
     tension: { polarity: '宗门/朝廷', direction: '宗门压朝廷', intensity: 0.99 },
-    env: { 民生度: 0.7, 动乱度: -0.2, 天时: 1.5, 张力推手: 0.44 },
+    env: { 民生度: '艰难', 动乱度: '大乱', 天时: '风调雨顺', 张力推手: '暗涌' },
 };
 
 const fakeExtract = (value) => async () => (typeof value === 'string' ? value : JSON.stringify(value));
@@ -88,12 +87,12 @@ test('K31 抽取全链：净化 + 落账 + 无数量约束取全 + env 钳制 + 
     assert.equal(s.dynamic.tension.intensity, 0.6);
     assert.equal(s.dynamic.tension.polarity, '宗门/朝廷');
     assert.equal(s.dynamic.tension.direction, '宗门压朝廷');
-    // env：钳制 + 基线
-    assert.equal(s.dynamic.env['民生度'], 0.7);
-    assert.equal(s.dynamic.env['动乱度'], 0);
-    assert.equal(s.dynamic.env['天时'], 1);
-    assert.equal(s.dynamic.env['张力推手'], 0.44);
-    assert.deepEqual(Object.keys(s.dynamic.env).sort(), [...ENV_KEYS].sort());
+    // env（leg26 改口径）：**档位原话**（人话），不再是四个数；只收本表档位词
+    assert.equal(s.dynamic.env['民生度'], '艰难');
+    assert.equal(s.dynamic.env['动乱度'], '大乱');
+    assert.equal(s.dynamic.env['天时'], '风调雨顺');
+    assert.equal(s.dynamic.env['张力推手'], '暗涌');
+    assert.deepEqual(Object.keys(s.dynamic.env).sort(), ['动乱度', '天时', '民生度', '张力推手'].sort());
     assert.deepEqual(s.dynamic.derivedFrom, []);
     assert.equal(calls, 1);
 });
@@ -103,20 +102,20 @@ test('K31 无 legacy tension：强度初值 = 基线 0.5（引擎算的前置，
     assert.equal(r.setting.dynamic.tension.intensity, TENSION_INIT_BASELINE);
 });
 
-test('K31 env 缺省/非法键（leg24 片5 口径）：书没给的键**不入账**（空着就是空着）；表外键不入 env', async () => {
+test('K31 env 缺省/非法键（leg26 档位口径）：不是档位词就弃键、书没给的键**不入账**（空着就是空着）', async () => {
     const r = await extractWorldSetting({
         sourceText: BOOK,
-        extract: fakeExtract({ rules: ['只有一条法则'], env: { 民生度: 0.5, '异想天开键': 0.9, 动乱度: '乱' } }),
+        extract: fakeExtract({ rules: ['只有一条法则'], env: { 民生度: '艰难', '异想天开键': '很高', 动乱度: 0.9 } }),
     });
-    assert.equal(r.setting.dynamic.env['民生度'], 0.5, '书给了 → 照收');
-    assert.equal(r.setting.dynamic.env['动乱度'], undefined, '非法值 → 弃键（旧法落基线 0.5，那是默认值冒充客观）');
-    assert.equal(r.setting.dynamic.env['天时'], undefined, '书未明述 → 键不存在（不是 0.5）');
+    assert.equal(r.setting.dynamic.env['民生度'], '艰难', '书给了合法档位 → 照收原话');
+    assert.equal(r.setting.dynamic.env['动乱度'], undefined, '数值不是档位词 → 弃键（引擎不认"算出来的数"）');
+    assert.equal(r.setting.dynamic.env['天时'], undefined, '书未明述 → 键不存在（不落任何默认档）');
     assert.equal(r.setting.dynamic.env['张力推手'], undefined, '同上');
-    assert.ok(!('异想天开键' in r.setting.dynamic.env)); // 键表白名单（定案 #3）
+    assert.ok(!('异想天开键' in r.setting.dynamic.env)); // 键表白名单
     assert.ok(r.errors.some((e) => /动乱度/.test(e) || e.includes('env.')), `非法值留痕：${r.errors.join('; ')}`);
-    // 空 env 合法（schema 允许空记录）：熵泵按基线 0.5 使用，界面显示「书未明述」
+    // 空 env 合法（schema 允许空记录）：面板显示「未定」（不填占位档）
     const emptyEnv = await extractWorldSetting({ sourceText: BOOK, extract: fakeExtract({ rules: ['一'] }) });
-    assert.deepEqual(emptyEnv.setting.dynamic.env, {}, '整本没给环境量 → 空对象（不伪造四键）');
+    assert.deepEqual(emptyEnv.setting.dynamic.env, {}, '整本没给 → 空对象（不伪造四键）');
 });
 
 test('K31 指纹命中零调用：同文本二次抽取不发调用，命中值深拷贝互不污染', async () => {
@@ -311,14 +310,14 @@ test('第二十五棒修正：照书办落上级时同口径净化（标签声�
 test('leg21 resetDynamicLayer：强度/env 回基线、derivedFrom 清空、极性方向保留、frozen 不动', () => {
     const setting = {
         frozen: { fingerprint: 'f', extractedAt: 't', canon: {} },
-        dynamic: { tension: { polarity: '正邪', direction: '邪压正', intensity: 0.82 }, env: { 民生度: 0.2, 动乱度: 0.9, 天时: 0.1, 张力推手: 0.7 }, derivedFrom: ['浪尖:a_1@3'] },
+        dynamic: { tension: { polarity: '正邪', direction: '邪压正', intensity: 0.82 }, env: { 民生度: '崩溃', 动乱度: '大乱' }, derivedFrom: ['浪尖:a_1@3'] },
     };
     const next = resetDynamicLayer(setting);
     assert.equal(next.frozen, setting.frozen, 'frozen 引用不动');
     assert.equal(next.dynamic.tension.polarity, '正邪');
     assert.equal(next.dynamic.tension.direction, '邪压正');
     assert.equal(next.dynamic.tension.intensity, TENSION_INIT_BASELINE);
-    assert.deepEqual(next.dynamic.env, { 民生度: ENV_INIT_BASELINE, 动乱度: ENV_INIT_BASELINE, 天时: ENV_INIT_BASELINE, 张力推手: ENV_INIT_BASELINE });
+    assert.deepEqual(next.dynamic.env, {}, 'leg26：参数档位**清空**（不回"四键基线"——档位没有基线值，空着就是空着）');
     assert.deepEqual(next.dynamic.derivedFrom, []);
     assert.equal(next.dynamic.tension.intensity, 0.5, '基线=0.5');
 });

@@ -2,7 +2,7 @@
 // HTTP 传输单测（注入假 fetch，不联网）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHttpTransport, createEnvTransport, PROPOSED_CALL_LIMITS, EXTRACTION_MAX_TOKENS } from '../src/transport-http.js';
+import { createHttpTransport, createEnvTransport, PROPOSED_CALL_LIMITS, EXTRACTION_MAX_TOKENS, EXTRACTION_TIMEOUT_MS } from '../src/transport-http.js';
 
 test('HTTP 传输：请求形状正确（URL/鉴权/payload）且透传内容', async () => {
     let captured;
@@ -84,4 +84,36 @@ test('HTTP 传输：env 齐备时可用，缺配置返回 null', () => {
     const full = createEnvTransport({ ST_OPENAI_BASE: 'https://x/v1', ST_OPENAI_KEY: 'k', ST_WORLD_MODEL: 'm' });
     assert.equal(typeof full, 'function');
     assert.equal(createEnvTransport({}), null);
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27（用户令「二十多分钟很慢，你做吧」）：**超时必须如实标记** + **抽取侧独立超时**。
+// 为什么要这条锁：编排层要靠 `err.sw2Timeout` 才能把"超时"与"网关偶发空回复"分开——
+//   分不开的代价是实测算出来的 **62 分钟/块**（超时→对半拆 4 层→保底重试→仍跳过）。
+//   所以"标记有没有真的贴上"是 F2 的地基，必须锁死；同时**非超时的错不许被误标**（否则瞬时错也会被跳过不重试）。
+test('★leg27：超时错误被如实标记 sw2Timeout（编排层分治的地基）', async () => {
+    const hang = (url, opts) => new Promise((_resolve, reject) => {
+        opts.signal?.addEventListener('abort', () => reject(opts.signal.reason || new Error('aborted')));
+    });
+    const t = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: hang, timeoutMs: 20 });
+    let caught = null;
+    try { await t('x'); } catch (err) { caught = err; }
+    assert.ok(caught, '超时必须抛错（不静默）');
+    assert.equal(caught.sw2Timeout, true, '★超时被标记（没有这个标记，编排层就只能一律重试 ⇒ 62 分钟/块归来）');
+    assert.match(String(caught.message), /超时/, '人读也看得出是超时');
+});
+
+test('★leg27：非超时的错**不许**被误标（HTTP 错仍走瞬时错重试路）', async () => {
+    const httpErr = async () => ({ ok: false, status: 502, text: async () => 'bad gateway', json: async () => ({}) });
+    const t = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: httpErr, timeoutMs: 1000 });
+    let caught = null;
+    try { await t('x'); } catch (err) { caught = err; }
+    assert.equal(caught.status, 502, 'HTTP 状态如实带出');
+    assert.notEqual(caught.sw2Timeout, true, '★HTTP 错不许标成超时（否则瞬时错会被"止损跳过"，白丢数据）');
+});
+
+test('★leg27：抽取侧超时 = 独立提案值 300_000 ms（主调用仍 120_000，两侧不互相带偏）', () => {
+    assert.equal(EXTRACTION_TIMEOUT_MS, 300_000, '抽取超时 5 分钟（提案态，随长跑曲线定案）');
+    assert.equal(PROPOSED_CALL_LIMITS.timeoutMs, 120_000, '主调用超时未被动过（仍是 120 s 提案）');
+    assert.ok(EXTRACTION_TIMEOUT_MS > PROPOSED_CALL_LIMITS.timeoutMs, '抽取侧必须更宽：单块 ~59k 字符 + ≤16,384 tokens 输出（reasoning 占盘）是分钟级');
 });

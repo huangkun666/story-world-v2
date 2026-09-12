@@ -277,3 +277,115 @@ test('分块抽取确定性：同输入同 mock 两次产物逐字节一致', as
     assert.deepEqual(a.setting, b.setting);
     assert.deepEqual(a.errors, b.errors);
 });
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27（用户令「二十多分钟很慢，你做吧」）：**超时 ≠ 瞬时错**——超时**止损跳过**，不许对半拆/重试。
+// 病（读真码 + 实测真书算出来的）：旧法把超时并进"抽取调用失败"，于是走 v1 的拆半自适应路：
+//   超时 → 对半拆（每半再各超时）→ 拆到 depth=4 → 保底重试 → 全败才降级
+//   ⇒ 单块最坏 31 次调用 × 120 秒 ≈ **62 分钟**，而这 62 分钟之后**结果仍是跳过**（纯烧时间不长数据）。
+//   ★关键：拆小的是**输入**，而超时主因是**生成时间**（输出预算 16,384 tokens/次固定，reasoning 还占盘）
+//     ⇒ "对半拆"这条药对超时**无效**，必须分治。
+// 真账实测规模（`demo/match-source-fingerprint.js` + `demo/diag-leg25g-chunks.js`）：
+//   大荒-姬元真.json = 235 条 / 265,866 字符 / 213 行 / **5 块**，块大小 [59215, 58673, 59892, 58902, 30344]。
+// 造超时（形态与真 transport 一致：`sw2Timeout=true`，见 `transport-http.js` 的 markTimeout）
+const timeoutErr = () => Object.assign(new Error('主调用超时（300000ms，提案）'), { sw2Timeout: true });
+
+test('★leg27：某块**超时** ⇒ 只调一次即止损跳过（不对半拆、不保底重试），且块号/原因如实进 errors', async () => {
+    const src = makeBook(2000);   // 大书 → 头 1 次 + N 块
+    const calls = [];
+    let timedOutInput = null;
+    const extract = async (prompt) => {
+        calls.push(prompt);
+        // 只让**第 2 次调用**（第一块）超时——其余块的输入与那次**逐字节相同**却会成功，
+        // 所以"后续有没有再调"完全由**引擎的重试策略**决定，与输入内容无关（这才是这条锁要的对照）。
+        if (calls.length === 2) {
+            timedOutInput = prompt;
+            throw timeoutErr();
+        }
+        const header = '———— 设定原文如下 ————';
+        const part = prompt.slice(prompt.indexOf(header) + header.length);
+        return JSON.stringify({ bookEntities: parseNames(part) });
+    };
+    const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
+    assert.equal(r.ok, true, '一块超时不该拖垮全局（其余块照常）');
+    const fails = r.timing.steps.filter((e) => e.phase === 'finish' && e.ok === false);
+    // ★"先证红"的判据：旧法（超时并进瞬时错）走对半拆 → 该块那一次超时会引发 2/4/8… 次后续失败
+    assert.equal(fails.length, 1, `★恰好 1 次失败事件（对半拆会让它变成 2/4/8… 次，实际 ${fails.length}）`);
+    // ★结构性最强的一条：超时之后，**同一份输入再也没被送出去过**（拆半/保底重试都会重发或改发）
+    assert.ok(timedOutInput, '夹具前提：确实有一次超时调用');
+    const resent = calls.filter((p) => p === timedOutInput).length;
+    assert.equal(resent, 1, `★超时那一刻的输入**只发出过 1 次**（旧法会拆半/重发 ⇒ >1，实际 ${resent}）`);
+    assert.ok(fails[0].error.includes('超时'), `失败原因写明"超时"（实际：${fails[0].error}）`);
+    assert.ok(r.errors.some((e) => /第 \d+\/\d+ 块抽取失败/.test(e)), '★errors 必须写明**是哪一块**（旧法只说"块抽取失败"，丢了多少数据不说）');
+});
+
+test('★leg27 对照：瞬时错（空响应）**仍然**拆半自适应（v1 语义不许被超时分治误伤）', async () => {
+    const src = makeBook(3000);   // ≈ 63 万字符：首层约 11 块，多数 >50k
+    const r = await extractWorldSetting({ sourceText: src, extract: makeExtract({ maxOk: 50000 }), cache: null });
+    assert.equal(r.ok, true, '拆半后整体成功');
+    const names = r.setting.frozen.canon.bookEntities.map((b) => b.name);
+    assert.ok(names.includes('名号2999'), '尾部名号在拆半后仍全量覆盖');
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27：**抽取过程可见**（用户原话「**我也看不到日志不知道抽得怎么样**」）。
+// 病（真码确认）：抽取期间一行进度都没有——状态栏只在开头写一句、之后不动；控制台只在**全部结束**才出声
+//   ⇒ 6 次调用是黑盒，"正在跑"与"已经卡死"在界面上完全同形（用户实机等 20+ 分钟无从判断）。
+// 判据按**结构**写（本仓 leg26 的教训：按字面写会"全绿状态下不红"）：
+//   ①每段必须**成对**出现 start/finish（配对数量，不是文案）
+//   ②finish 必须带 start 时同样的 chars、真实的 ms、成败布尔
+//   ③上报函数抛错**不许影响抽取**（观测面不能成为故障点）
+test('★leg27：进度上报按"段"成对出现（start/finish 配对）+ 带真实字符数与耗时', async () => {
+    const src = makeBook(600);   // ≈ 12.6 万字符 → 分块
+    const events = [];
+    const r = await extractWorldSetting({
+        sourceText: src, extract: makeExtract(), cache: null,
+        onProgress: (ev) => events.push({ ...ev }),
+    });
+    assert.equal(r.ok, true);
+    const starts = events.filter((e) => e.phase === 'start');
+    const finishes = events.filter((e) => e.phase === 'finish');
+    assert.ok(starts.length >= 2, `多段上报（实际 start ${starts.length} / finish ${finishes.length}）`);
+    assert.equal(starts.length, finishes.length, '★start/finish 必须**一一配对**（少一个 = 某段静默，正是这次的病）');
+    // 配对键 = step + index；且每对 chars 一致（同一个段的输入不该被改写）
+    for (const s of starts) {
+        const f = finishes.find((x) => x.step === s.step && x.index === s.index);
+        assert.ok(f, `${s.step}#${s.index} 必须有 finish（不许只报开始不报结束）`);
+        assert.equal(f.chars, s.chars, `${s.step}#${s.index} 的 chars 前后一致`);
+        assert.equal(typeof f.ms, 'number', `${s.step}#${s.index} 必须带真实耗时 ms`);
+        assert.ok(f.ms >= 0, 'ms 非负');
+        assert.equal(typeof f.ok, 'boolean', '成败是布尔事实，不是文案');
+    }
+    // 五件套那一段的 chars = 头 CANON_SRC_CHAR（读数可复核）
+    const canon = finishes.find((e) => e.step === 'canon');
+    assert.equal(canon.chars, CANON_SRC_CHAR, '五件套段 = 头 3 万字符（可复核）');
+    // 各块的 chars 之和 ≈ 全书去掉头 3 万后的量级（块是行级分块 ⇒ 只验"覆盖了剩余全部"这个量级）
+    const chunkChars = finishes.filter((e) => e.step === 'chunk').reduce((n, e) => n + e.chars, 0);
+    const allChars = Array.from(src).length;
+    assert.ok(chunkChars > allChars - CANON_SRC_CHAR - 100, `块覆盖剩余全书（块 ${chunkChars} vs 全书 ${allChars}）`);
+    // 返回值里带得走（界面/诊断要能复述"这次多少段、多少耗时"）
+    assert.equal(r.timing.mode, 'big');
+    assert.equal(r.timing.calls, finishes.length, 'timing.calls = 实际完成段数');
+    assert.ok(r.timing.ms >= 0, 'timing.ms 真实总耗时');
+});
+
+test('★leg27：上报函数自身抛错**不许影响抽取**（观测面绝不能成为故障点）', async () => {
+    const src = makeBook(600);
+    const r = await extractWorldSetting({
+        sourceText: src, extract: makeExtract(), cache: null,
+        onProgress: () => { throw new Error('界面层炸了'); },
+    });
+    assert.equal(r.ok, true, '★上报抛错时抽取照常完成（旧法没有上报面，这条锁防的是"加了上报反而更脆"）');
+    assert.ok(r.setting.frozen.canon.bookEntities.length > 0);
+});
+
+test('★leg27：小书路径同样上报（1 段：五件套）+ timing.mode=small', async () => {
+    const src = makeBook(100);   // ≈ 2.1 万字符 → 单发
+    const events = [];
+    const r = await extractWorldSetting({ sourceText: src, extract: makeExtract(), cache: null, onProgress: (e) => events.push({ ...e }) });
+    assert.equal(r.ok, true);
+    assert.equal(events.filter((e) => e.phase === 'start').length, 1, '小书 = 1 段');
+    assert.equal(events.filter((e) => e.phase === 'finish').length, 1);
+    assert.equal(r.timing.mode, 'small');
+    assert.equal(r.timing.calls, 1);
+});
