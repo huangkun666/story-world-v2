@@ -9,11 +9,172 @@ import path from 'node:path';
 import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
-    renderChainViewHtml, renderInfoBandHtml, escapeHtml, BLACKLIST,
+    renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
 } from '../src/render.js';
 import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// leg26 c 对抗式锁（用户实拍截图逼出，两个错各自钉一条）：
+//   ①**UI 重复**：参数页第一版把当前值渲染了两遍（`当前档位 未定` + 行尾又一个小「未定」chip），
+//     信息面板那边同理（值 `未定` + 同义 chip「未定」）⇒ 用户截图一眼看出"未定未定"。
+//     判据写成**结构性**的：任何参数行里，同一个词不许连出现两次。
+//   ②**因变量不许有旋钮**：民生/乱象是结果，面板给它下拉 = 假装"拧一下结果就变了"（引擎既没那个函数、
+//     也没那个资格）。判据：因变量那几行里**不许出现 <select>**，而自变量那几行**必须有**。
+test('leg26 c：参数页——值不重复、因变量不给旋钮、自变量给旋钮（用户实拍截图逼出的两条锁）', () => {
+    const w = world();
+    const html = renderParamsHtml(w);
+    // ① **同一个值在行内不许出现两次**（用户实拍「未定未定」的形态）。
+    //    判据必须按**结构**写：字面连着（`未定未定`）不算——重复出现在两个标签之间。
+    //    口径 = 把 `<select>` 整块剥掉后（下拉里的选项文本是控件本身，不算"呈现"），
+    //    该值的出现次数必须恰好 = 1（那一行只该显示一次）。
+    const withoutSelects = (s) => String(s).replace(/<select[\s\S]*?<\/select>/g, '');
+    const count = (hay, needle) => hay.split(needle).length - 1;
+    const bare = structuredClone(w);
+    bare.context.setting.dynamic.env = {};            // 全未定 —— 正是用户截图那个状态
+    const bareHtml = withoutSelects(renderParamsHtml(bare));
+    assert.equal(count(bareHtml, '未定'), 4, `★参数页未定值重复渲染（4 个参数各一次，实际 ${count(bareHtml, '未定')} 次）`);
+
+    // ② 因变量（民生/乱象）只读：所在行不得有 <select>
+    for (const key of ['民生度', '动乱度']) {
+        const seg = html.split(`data-param="${key}"`)[1] || '';
+        const row = seg.slice(0, 500);
+        assert.ok(!row.includes('<select'), `★因变量「${key}」被做成了旋钮（它只该呈现）`);
+        assert.ok(row.includes('因变量'), `因变量「${key}」要标明性质`);
+    }
+    // ③ 自变量（天时/外压）给旋钮
+    for (const key of ['天时', '张力推手']) {
+        const seg = html.split(`data-param="${key}"`)[1] || '';
+        assert.ok(seg.includes('<select'), `自变量「${key}」必须有旋钮`);
+        assert.ok(seg.includes('自变量'), `自变量「${key}」要标明性质`);
+    }
+
+    // ④ 信息面板同款：未定值也**只许出现一次**（旧法 值「未定」+ 同义 chip「未定」= 两次）
+    const band = withoutSelects(renderInfoBandHtml(bare));
+    assert.equal(count(band, '未定'), 4, `★信息带未定值重复渲染（4 个参数各一次，实际 ${count(band, '未定')} 次）`);
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+// leg27 后：用户实机「参数的ui页太丑了，**说明文字太大**，**下拉表刚拉开没多久自己就关了**」
+//   ①版式：病的准确名字是"**`.sw2-row` 全仓没有基础规则**"——`renderParamsHtml` 一直在吐
+//     `<div class="sw2-row">`（标签/值/说明三段），却只有两个**局部**变体（cold-mgmt 与快照页）
+//     ⇒ 参数页上那些行排成裸文本，说明文字还继承面板正文 14px。
+//   ②下拉自己关：**这是个真 bug，不是观感**——`set-param` 处理完调 `refreshWorld()`，
+//     而它把**每个**页签的 innerHTML 整体换掉 ⇒ 那个 `<select>`（连浏览器已展开的列表）被销毁重建。
+//   判据（结构性，不写字面）：**生产代码里改参数后不许整页重绘**（只许 `refreshSections([...])`）。
+test('★leg27 后：参数页版式——行有基础规则（flex 三栏）、说明文字比正文小、卡片有行距', () => {
+    const css = readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8');
+    // ① `.sw2-row` 必须有**基础规则**（不是只有局部变体）
+    assert.match(css, /(^|\n)\.sw2-row\s*\{[^}]*display\s*:\s*flex/, '★`.sw2-row` 必须有基础 flex 规则（旧版只有局部变体 ⇒ 参数页裸文本）');
+    // ② 说明文字（.sw2-row > em）必须有**自己的字号**，且小于面板正文（14px）
+    const em = /\.sw2-row\s*>\s*em\s*\{([^}]*)\}/.exec(css);
+    assert.ok(em, '★`.sw2-row > em` 必须有自己的字号规则（旧版没有任何声明 ⇒ 继承 14px 正文 ⇒「说明文字太大」）');
+    const size = Number((/font-size\s*:\s*([\d.]+)px/.exec(em[1]) || [])[1]);
+    assert.ok(size > 0 && size < 13, `★说明文字必须明显小于正文（实测 ${size}px，正文 14px）`);
+    // ③ 下拉控件字号 ≤ 13px 且声明字体族（否则会掉回浏览器默认字体）
+    const sel = /\.sw2-param-select\s*\{([^}]*)\}/.exec(css);
+    assert.ok(sel, '下拉规则在位');
+    assert.ok(Number((/font-size\s*:\s*([\d.]+)px/.exec(sel[1]) || [])[1]) <= 13, '下拉字号不许大过正文');
+    assert.match(sel[1], /font-family/, '下拉要声明字体族（否则掉回浏览器默认字体，与面板不一致）');
+});
+
+test('★leg27 后：改参数**不许整页重绘**（用户实拍「下拉表刚拉开没多久自己就关了」的真因）', () => {
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const seg = web.slice(web.indexOf("bus['set-param']"), web.indexOf("bus['set-param']") + 3000);
+    assert.ok(seg.length > 200, '前置：找得到 set-param 动作');
+    assert.ok(!/refreshWorld\(/.test(seg), '★set-param 里不许出现 refreshWorld()——它会重建每个页签的 DOM，把正在展开的 <select> 一起销毁（下拉"自己关"的真因）');
+    assert.match(seg, /refreshSections\(\[/, '★必须走 refreshSections([...]) 局部重绘（只碰受影响页签）');
+    assert.match(seg, /refreshSections\(\[[^\]]*'params'/, '至少要重绘参数页（旋钮状态的唯一来源）');
+    // refreshSections 自身纪律：缺 DOM / 缺世界时静默返回（浏览器可载性与 Node 动态导入都不许炸）
+    const fn = web.slice(web.indexOf('function refreshSections('), web.indexOf('function refreshSections(') + 900);
+    assert.match(fn, /typeof document === 'undefined'/, 'refreshSections 必须有 DOM 守卫');
+    assert.match(fn, /catch\s*\(/, 'refreshSections 必须吞错（局部重绘失败不该打断落账）');
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+// leg27 c：用户实机两句「**读秒没变**」「**段也不变**」——两条都要有锁。
+// 病的准确名字（我上一版的实现缺陷，如实留档）：
+//   进度指示器是**纯事件驱动**的——只在某一段开始/结束时才写状态栏。而一段网络调用是**分钟级**
+//   （真账实测单块 59k 字符输入 + ≤16,384 tokens 输出）⇒ 两次事件之间：**秒数不动**（因为"已完成段之和"
+//   里没有正在跑的那一段），**段号也不动**（因为下一段的 start 要等这一段 return）。
+//   ⇒ 用户看到的"不动的 1/5"与"卡死了"完全同形。治法：①**1 秒心跳**按真实已花时间重写状态栏
+//   ②每 30 秒打一行"仍在跑"（让"它活着"有据可查）。
+// 判据：注入假计时器**真跑**——心跳必须真的起来、每次都喂**真实已花时间**、stop() 必须真的停。
+test('★leg27 c：进度心跳——1 秒一跳喂真实已花时间；stop() 真的停；心跳抛错不许影响抽取', async () => {
+    const { extractionProgressHandler } = await import('../web/index.js?progress');
+    let clock = 1_000_000;
+    const now = () => clock;
+    const fakeTimers = [];
+    const cleared = [];
+    const setTimer = (fn, ms) => { const t = { fn, ms, unref() {} }; fakeTimers.push(t); return t; };
+    const clearTimer = (t) => { cleared.push(t); };
+    const texts = [];
+    const logs = [];
+    const events = [];            // ★与真实用法同构：外层累积事件数组，handler 读它算"当前段/已成功段数"
+    const h = extractionProgressHandler(events, {
+        setText: (t) => texts.push(t), now, setTimer, clearTimer,
+        log: (m) => logs.push(String(m)), heartbeatMs: 30000,
+    });
+    const emit = (ev) => { events.push(ev); h.onEvent(ev); };   // 真实路径：先入账再上报
+
+    // ① 第一段开始 ⇒ 心跳立刻起来（且**立刻出声一次**，不必等 1 秒）
+    emit({ step: 'canon', phase: 'start', index: 1, count: 1, chars: 30000 });
+    assert.equal(fakeTimers.length, 1, '★第一段开始就必须起心跳（纯事件驱动正是"读秒没变"的病根）');
+    assert.equal(fakeTimers[0].ms, 1000, '心跳间隔 = 1 秒');
+    assert.equal(texts.length, 1, '开始那一刻就要出声（别让用户干等 1 秒才见字）');
+    assert.match(texts[0], /已花 0 秒/, '初始读秒 0 秒');
+
+    // ② 走到 65 秒（这一段还没返回）⇒ 心跳把**真实已花**写出来（旧法这里恒为"已完成段之和 = 0 秒"）
+    clock += 65_000;
+    fakeTimers[0].fn();
+    assert.match(texts[texts.length - 1], /已花 1 分 05 秒/, '★心跳必须喂"真实已花时间"（不是"已完成段之和"）');
+    assert.ok(logs.some((m) => m.includes('抽取仍在跑')), '★超过 30 秒必须打一行"仍在跑"（证明"它活着"而非"卡死"）');
+
+    // ③ 第二段开始 ⇒ 不重复起心跳（一个流程一条心跳）；段号随之更新
+    emit({ step: 'chunk', phase: 'start', index: 2, count: 5, chars: 60000 });
+    assert.equal(fakeTimers.length, 1, '★只许有一条心跳（重复起会攒计时器）');
+    assert.match(texts[texts.length - 1], /名册第 2\/5 块/, '段号随事件更新');
+
+    // ④ stop() 必须真的清掉计时器
+    h.stop();
+    assert.equal(cleared.length, 1, '★stop() 必须真的 clearInterval（否则流程结束后心跳还在改状态栏）');
+    assert.equal(h._state().running, false, '停后状态为未运行');
+    h.stop();
+    assert.equal(cleared.length, 1, '重复 stop 幂等');
+
+    // ⑤ 心跳/上报自身抛错**不许影响抽取**（观测面不能成为故障点）
+    const h2 = extractionProgressHandler([], {
+        setText: () => { throw new Error('状态栏炸了'); }, now, setTimer, clearTimer, log: () => { throw new Error('控制台炸了'); },
+    });
+    assert.doesNotThrow(() => h2.onEvent({ step: 'canon', phase: 'start', index: 1, count: 1, chars: 1 }), '★setText 抛错不许冒泡');
+    assert.doesNotThrow(() => fakeTimers[fakeTimers.length - 1].fn(), '★心跳 tick 抛错不许冒泡');
+    h2.stop();
+});
+
+test('★leg27 c：set-param **无变化即忽略**（用户实拍「每次打开会弹出这个」+ 内容是「天时 → 未定」= 值没变）', () => {
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const seg = web.slice(web.indexOf("bus['set-param']"), web.indexOf("bus['set-param']") + 2600);
+    assert.ok(seg.length > 200, '前置：找得到 set-param 动作');
+    // 根因闸：比较"当前值"与"目标值"，相同则**直接返回**（位置必须在落盘之前）
+    assert.match(seg, /const before = Object\.prototype\.hasOwnProperty\.call\(cur, key\)/, '★必须取出"当前值"再比');
+    assert.match(seg, /if \(before === after\)\s*\{[\s\S]*?return;/, '★值没变必须直接 return（否则"打开下拉"就会落一次盘 + 弹一条状态栏）');
+    const guardAt = seg.indexOf('if (before === after)');
+    const writeAt = seg.indexOf('writeHotMeta(');
+    assert.ok(guardAt > 0 && writeAt > guardAt, '★这一闸必须在 writeHotMeta **之前**（放在后面等于没拦）');
+    // 不能把"用户真的改了"也拦掉：值不同时必须走下云
+    assert.match(seg, /if \(norm\) cur\[key\] = norm; else delete cur\[key\];/, '值不同时照旧落账（不许把真改动也拦掉）');
+});
+
+test('★leg27 c：滚轮不许改档位（`<select>` 滚过就改值是老坑，正是"打开就弹"的来路之一）', () => {
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const seg = web.slice(web.indexOf('function bindSettingsForm('), web.indexOf('function bindSettingsForm(') + 3000);
+    assert.match(seg, /addEventListener\('wheel'/, '★必须挂 wheel 拦截');
+    assert.match(seg, /preventDefault\(\)/, '★必须真的 preventDefault（否则等于没拦）');
+    assert.match(seg, /passive:\s*false/, '★必须 passive:false（被动监听里 preventDefault 无效）');
+    assert.match(seg, /tagName === 'SELECT'/, '只拦下拉，别把面板滚动一起拦掉');
+    // 键盘/点击不受影响（那才是"玩家的手"）：不许拦 keydown/click
+    assert.ok(!/addEventListener\('(keydown|click)',[\s\S]{0,120}preventDefault/.test(seg), '★不许顺手拦掉键盘/点击（键盘改档是正当操作）');
+});
 
 // leg25 f：实体页的 markup 是**模板字符串折行拼出来的**，标签之间可能有换行/缩进 ⇒
 //   断言如果直接写死相邻标签，会因为源码折行的位置变化而假红（实测踩过两次）。
@@ -41,7 +202,7 @@ function world() {
         },
         dynamic: {
             tension: { polarity: '大虞/万法阁', direction: '大虞偏将压万法阁', intensity: 0.72 },
-            env: { 民生度: 0.44, 动乱度: 0.62, 天时: 0.15, 张力推手: 0.8 },
+            env: { 民生度: '艰难', 动乱度: '动荡', 天时: '大灾', 张力推手: '紧绷' },
             derivedFrom: ['浪尖:a_xie@31', '浪尖:a_dayu@44'],
         },
     };
@@ -83,16 +244,17 @@ test('K33/A-3：六页签玩家可见文本零引擎术语（黑名单；标签/
     assert.ok(text.includes('盘算')); // 玩家通词放行（共识样例 v3）
 });
 
-test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世情=未聚，不混张力）；张力归张力行；世情四键危险带判态', () => {
+test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世情=未聚，不混张力）；张力归张力行；参数档位如实列出', () => {
     const { digest, infoband } = renderBoardHtml(world());
     assert.match(digest, /大势未聚，各方各走各的路/);   // leg21：本世界无 situation → 时局句不再拼张力
     assert.ok(!digest.includes('大虞/万法阁'), '张力极不入时局句');
     assert.ok(!digest.includes('强度'), '强度数字不入时局句');
-    assert.match(digest, /天时·天时不作美、时局·大势紧绷。/);
+    // leg26：参数是**玩家/书定的档位原话**，引擎零表态——时局句如实列出来，不再说"越界的处境"
+    assert.match(digest, /参数：民生艰难、乱象动荡、天时大灾、时局紧绷。/);
     assert.match(digest, /各方正谋划 3 件事，其中 1 件在暗处。/);
     assert.match(infoband, /sw2-env-name">民生</);
-    assert.match(infoband, /sw2-env-val">0\.44</);
-    assert.match(infoband, /sw2-env-row sw2-danger/);              // 天时 0.15 与时局 0.8 危险带
+    assert.match(infoband, /sw2-env-val">艰难</, '档位原话上板（不是 0.44 这种数）');
+    assert.ok(!/sw2-danger/.test(infoband), 'leg26 撤销「危险带」判态——档位没有好坏，引擎不评价');
     assert.match(infoband, /大虞\/万法阁/);                       // 张力极在张力行（三件套不丢）
     // leg25 b（A1b）：张力行由「强度百分比」改说「近 N 轮事件数」（那个 % 实测只反映事件密度）
     assert.match(infoband, /近10轮事件 0 件/);                    // 本夹具 events 为空 → 0 件
@@ -348,17 +510,17 @@ test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客�
     assert.ok(html.includes('title="位置：还没轮到查它'), '位置空态 → 行内标「未查」（与位置列同一事实）');
     assert.ok(!html.includes('实力/位置未查（轮到时会按需去世界书取原话）'), '旧的一整句占位文案已撤（改逐栏标记）');
     assert.ok(!/0\.15|0\.25/.test(html), '不出现任何默认值冒充的数据');
-    // 环境四键：书没给的显示「书未明述（无据）」，不给 0.5
+    // 参数档位（leg26）：没定的显示「未定」——不填占位档、不冒充"书里给过值"
     const bare = structuredClone(w);
-    bare.context.setting.dynamic.env = {};             // 书整本没给环境量（新世界常态）
+    bare.context.setting.dynamic.env = {};             // 玩家没定、书里也没给（新世界常态）
     const band = renderInfoBandHtml(bare);
-    assert.match(band, /书未明述/);
-    assert.match(band, /sw2-env-unknown/, '未知环境量用空心条');
+    assert.match(band, /未定/);
+    assert.match(band, /sw2-nodata/, '未定档走无据样式（虚线/灰）');
     assert.ok(!/0\.50/.test(band), '不再出现"四键 0.50"这种看起来像原值的数');
-    // 书给了值的那一键照常显示数值（本夹具四键都有值）
+    // 定了档的那几项照常显示**原话**（本夹具四键都已定）
     const band2 = renderInfoBandHtml(w);
-    assert.match(band2, /0\.62/);
-    assert.ok(!/书未明述/.test(band2), '有值就不标未明述');
+    assert.match(band2, /动荡/);
+    assert.ok(!/未定/.test(band2), '四档都已定 → 不显示未定');
     // 分数（影响力条）在实体页彻底消失
     assert.ok(!html.includes('sw2-wval') && !html.includes('sw2-eweight'), '片5：分量条不再渲染');
 });
@@ -448,7 +610,7 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
     const mk = () => ({
         version: 1, context: {
             world: 'x', tension: 0.5, positions: ['x'],
-            setting: { dynamic: { tension: { polarity: '正邪相争', direction: '魔涨道消', intensity: 0.82 }, env: { 民生度: 0.5, 动乱度: 0.5, 天时: 0.15, 张力推手: 0.8 }, derivedFrom: ['浪尖:a_1@3'] } },
+            setting: { dynamic: { tension: { polarity: '正邪相争', direction: '魔涨道消', intensity: 0.82 }, env: { 民生度: '艰难', 动乱度: '动荡', 天时: '大灾', 张力推手: '紧绷' }, derivedFrom: ['浪尖:a_1@3'] } },
         },
         entities: [{ id: 'e_a', kind: 'faction', name: '甲宗', location: 'x' }], weights: { e_a: 0.9 },
         agendas: [{ id: 'a_1', owner: 'e_a', goal: '血洗洛城', stage: '用兵', visibility: 'known', maxSteps: 3, progress: 2, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
@@ -467,7 +629,7 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
     assert.ok(!infoband.includes('>82<'), '推导出的百分比不再上面板（它只反映事件密度）');
     assert.ok(infoband.includes('魔涨道消（原文方向）'), '方向在张力行（原文措辞）');
     assert.ok(infoband.includes('正邪相争'), '张力极在张力行');
-    assert.match(digest, /天时不作美/, '环境危险带经时局句副句（世情面，不属张力）');
+    assert.match(digest, /参数：民生艰难、乱象动荡、天时大灾、时局紧绷。/, 'leg26：参数档位在时局句副句如实列出（引擎零表态）');
 });
 
 test('leg25 f：实体页版式——「一栏一义」+ 空态退成虚线 chip（用户实拍"能不能美化一下"逼出的重做）', () => {

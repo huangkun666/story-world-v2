@@ -5,7 +5,7 @@
 //   全边界 escapeHtml（XSS 防线）。
 // 玩家语言词典（A-3 黑名单以共识样例 v3 为准——"盘算/谋划"为玩家通词放行）：
 //   禁：分量/熵泵/里程碑/上溯/波及/指纹/派生源/强度参数名/hardPower…/tick/裸 id。
-import { BANDS, ENV_KEYS } from './entropy.js';
+import { PARAM_GEARS, PARAM_KEYS, PARAM_UNSET, SWITCH_PARAMS, paramsOf, paramsRows, switchOn } from './params.js';   // leg26：环境量数值 → 世界参数档位（玩家可选）
 import { lensList, membersOf } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
 import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张力行改说可验证事实（近 N 轮事件数），与公式共用同一口径
 
@@ -22,7 +22,42 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   之前那句"接线断了而测试全绿"让真账 563 实体真位置恒 0、位置列整列「未载」；现首开面板即推 173。
 //   同棒另删两处死机制：盘算满步的「败露」支（判据输入早随四维消失）+ 可见性掩码（两取值都过阈值=恒真）。
 //   同棒收尾：观棋侧栏与 `📍` 行由"平铺一切"改为**按处聚合**（位置当分组键；"位置未载"单列一筐）。
-export const PANEL_BUILD = 'leg25g-map';
+//   ★leg26 追加（用户令「参数独开页签」+「熵泵删掉没用的功能，改个定义就好了」）：
+//   ① 新增**参数页**（第七页签）：世界参数档位由玩家选，引擎照抄（`src/params.js` 是唯一真源）；
+//   ② 环境量从"四个引擎推的数"改为**档位原话**，撤掉"危险带"判态与空心条百分比（引擎对档位零表态）；
+//   ③ 熵泵改定义：只在**账本自己能证明的事实**（连续 N 轮无真实事件）时出声，世界一动就收声。
+//   ← 看到 `leg26-params` 即已载入这三条。
+//   ★leg27 追加（用户实机「二十多分钟很慢」+「**我也看不到日志不知道抽得怎么样**」）：
+//   抽取过程**可见**——编排层注入式上报每段的开始/结束/字符数/耗时（`src/abstract.js` 的 onProgress），
+//   `web/index.js` 转成状态栏进度 + 控制台每段一行；超时改为**止损跳过**（不再对半拆/重试、不再烧 62 分钟/块）。
+//   ★leg27 后追加（用户令「再做一个快照容错系统，用户和 llm 每一步的修改都会生成快照」）：
+//   **第八页签「快照」**（`renderSnapshotsHtml`）——每步可回退；存插件本地库（IDB，不占聊天文件）、保留 15 步、
+//   **只回世界账**（对话不动）。判据与真实体积见 `docs/spec-snapshot-fault-tolerance.md` §7。
+//   ★leg27 g（用户实机「记忆插件也没有记录事件，还把插件原来的**角色档案**清空了」）：
+//   记忆投递读现状那一行原写 `Storage.loadState(null, null)`——**显式传 null 使插件 sessionId 默认值失效**
+//   ⇒ 读回非对象 ⇒ 退回空态并被 `force` 覆盖写回 ⇒ **用户档案被逐条抹掉**。现改为传插件自己的默认态，
+//   并有判据锁死（`test/snapshot.test.js` 的 leg27 g 两条：结构层禁止 null 占位 + 行为层 fake 插件真跑保档案）。
+//   ← 看到 `leg27h-mem-selfevidence` 即已载入上面**全部**八条（进度+读秒心跳 / 超时分治 / 快照 / 参数页版式与误触防护 / 落账作用域 / 快照链对齐 / 记忆读取不覆盖用户档案 / 记忆投递自证面 + 大事表「未结」档）。
+//   ★leg27 h（用户实机「**记忆插件也没有记录事件**」+ 口径「事件要落地才成事件」+「**但不会出现其他盘算了啊**」）：
+//   ①记忆投递**自证面**——参数页开关卡挂「上次投递」的实测事实（第几轮 / 大事几条 / 或失败原因），
+//     没投过则明确显示"还没投过"（**绝不显示"已投"**——这一棒吃的就是假绿的亏）。
+//   ②大事表**分档如实**：已落地无标记、在飞带「未结 ·」（旧口径"在飞一律不进"让这张表前 8 轮恒空）。
+//   ③世界变宽的诊断与候选 → `docs/spec-world-widening.md`（★真账实测：618 实体里 **614 静默**、可动 4 个、
+//     能提新盘算的来源 2 个；根因＝**静默门是单向门**：没出手过 ⇒ 永远没有 lastActiveTick ⇒ 永远静默）。
+//   ★leg29（用户令「事件波及也改成 15 个」+「写进提示词」）：`RIPPLE_TARGET_CAP` 3 → 15，并把上限写进
+//   提示词铁律 8（此前四处一字未提 ⇒ 模型写超限只撞"拒整步"、白烧一整轮）。**引擎/校验面行为不变**，
+//   故无界面改动——但构建号仍要往前走一格，否则"页面还是旧的 vs 代码已更新"无法用构建号判定。
+//   ★实测注意：15 不是最先咬人的天花板（`AGENDA_INVOLVED_CAP` 同为 15，集合含属主 + 本步动作方
+//   ⇒ 属主自行动时单事件最多波及 14）；该咬合已由 `test/worldstep.test.js` 的 leg29 用例钉死。
+//   ★leg30（用户 2026-09-12 两张记忆插件截图 + 一句「很乱，这信息插入的，怎么解决？我需要有条理」）：
+//   记忆投递**收成两种形状**（当下=覆盖一条 / 发生=追加一列，前史是同一列里成段的行），
+//   并立"一字段一义"：位置列只装地点、波及名单进人名列、`状态` 只装"了结没"、`备注` 我方一个字不写。
+//   ★这一棒**真的动了界面**（记忆插件的表名/列名/卡内容都变了），所以构建号必须往前走。
+//   ★leg31（实体段表达法收改，细案 `docs/spec-entity-section-encoding.md`）：**界面零变化**（面板读的是内部
+//   分段对象，不是 pack 文本），但**模型看到的东西变了**（entities 段从对象数组改成行式表格，
+//   `MAIN_PROMPT_V` v2-agenda-t1-6 → v2-agenda-t1-7）⇒ 构建号照旧往前走一格：
+//   否则"页面还是旧的"与"新表达法已生效"无法用构建号区分（leg29 立此规矩）。
+export const PANEL_BUILD = 'leg31-entity-table';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -48,6 +83,9 @@ export const CHRONICLE_FILTERS = Object.freeze([
 // 渲染产物黑名单（引擎术语不得出现在玩家视线）
 export const BLACKLIST = [
     '分量', '熵泵', '里程碑', '上溯', '波及',
+    // leg26：参数键本身（民生度/动乱度…）是**账本口径**，不是玩家词——面板一律走 LABELS.env
+    //   （民生/乱象/天时/时局）。带上它们才能锁住"引擎键名不许漏进玩家视线"。
+    '民生度', '动乱度', '张力推手', '异想天开键',
     'fingerprint', 'derivedFrom', 'intensity', 'polarity', 'direction', 'tension',
     'hardPower', 'office', 'network', 'intel', 'visibility', 'concealed',
     'schema', 'ssot', 'worldstep', 'agenda', 'chronicle', 'milestone', 'tick',
@@ -73,13 +111,10 @@ export function kindLabel(entity, world) {
     return LABELS.kind[entity.kind] || '实体';
 }
 
-// 环境键带态：danger（越阈）/ recover（回缓）/ normal——用引擎定案带值（BANDS/报批 #4-7）
-export function envBand(key, value) {
-    const b = BANDS[key];
-    if (!b) return { state: 'normal', word: '' };
-    if (b.dir < 0 ? value <= b.at : value >= b.at) return { state: 'danger', word: b.kind };
-    if (b.dir < 0 ? value <= b.rec : value >= b.rec) return { state: 'recover', word: '' };
-    return { state: 'normal', word: '' };
+// 参数档位态（leg26）：未定 / 已定（档位原话）。**没有"危险/回缓"这种引擎判断**了——
+//   档位是玩家/书定的世界设定，引擎只照抄摆放，不评价它好不好。
+export function paramBand(value) {
+    return { state: value && value !== PARAM_UNSET ? 'set' : 'unset', word: value || PARAM_UNSET };
 }
 
 function msIdTick(id) {
@@ -105,10 +140,11 @@ const dotSteps = (progress, maxSteps) => {
 // ============ 观棋页 ============
 
 export function renderDigestHtml(world) {
-    const dyn = world.context?.setting?.dynamic;
-    const env = dyn?.env || {};
-    const envs = ENV_KEYS.map((k) => ({ k, ...envBand(k, env[k] ?? 0.5) }));
-    const dangerList = envs.filter((x) => x.state === 'danger').map((x) => `${LABELS.env[x.k]}·${x.word}`);
+    // leg26：参数档位是**世界输入**，不是引擎判出的"危险处境"——所以时局句不再由它拼"越界的处境"。
+    //   档位只如实列出来（人话原话），引擎对它们**零表态**（不裁好壞、不排序、不换算）。
+    const rows = paramsRows(world);
+    const setList = rows.filter((r) => r.value !== PARAM_UNSET).map((r) => `${LABELS.env[r.key]}${r.value}`);
+    const unsetCount = rows.length - setList.length;
 
     const active = (world.agendas || []).filter((a) => !a.closed);
     const hidden = active.filter((a) => a.visibility === 'concealed').length;
@@ -119,35 +155,100 @@ export function renderDigestHtml(world) {
     const main = sit
         ? escapeHtml(sit)
         : '大势未聚，各方各走各的路';
-    const sub = dangerList.length || active.length
-        ? `${dangerList.length ? escapeHtml(dangerList.join('、')) + '。' : ''}各方正谋划 ${active.length} 件事${hidden ? `，其中 ${hidden} 件在暗处` : ''}。`
+    const sub = setList.length || active.length
+        ? `${setList.length ? `参数：${escapeHtml(setList.join('、'))}${unsetCount ? `（另 ${unsetCount} 项未定）` : ''}。` : ''}各方正谋划 ${active.length} 件事${hidden ? `，其中 ${hidden} 件在暗处` : ''}。`
         : '眼下没有在办的谋划，也没有越界的处境。';
     return `<div class="sw2-digest"><div class="sw2-digest-line">${main}</div><div class="sw2-digest-sub">${sub}</div></div>`;
 }
 
-// 环境量一行（信息带/设定页共用；leg24 片5）：**书里没给的键不冒充数字**——显示「书未明述」+ 空心条。
-// 熵泵照旧按基线推进（引擎内部值，不落账面），所以读数仍可读，只是标明来源。
-export function envRowHtml(k, env) {
-    const raw = env?.[k];
-    if (typeof raw !== 'number') {
-        return `<div class="sw2-env-row sw2-nodata"><span class="sw2-env-name">${LABELS.env[k]}</span>`
-            + `<span class="sw2-env-bar sw2-env-unknown"></span>`
-            + `<span class="sw2-env-val">书未明述<small class="sw2-nodata-tag">无据</small></span></div>`;
-    }
-    const band = envBand(k, raw);
-    return `<div class="sw2-env-row${band.state === 'danger' ? ' sw2-danger' : ''}">`
-        + `<span class="sw2-env-name">${LABELS.env[k]}</span>`
-        + `<span class="sw2-env-bar"><i style="width:${Math.round(raw * 100)}%;background:${band.state === 'danger' ? 'var(--sw2-red)' : band.state === 'recover' ? 'var(--sw2-green)' : 'var(--sw2-amber)'}"></i></span>`
-        + `<span class="sw2-env-val">${raw.toFixed(2)}</span></div>`;
+// 参数档位一行（信息带/设定页共用；leg26）：**档位是人话原话**，不是数——所以没有条、没有百分比。
+//   未定就写「未定」+ 空心点（**不填占位值**；与"空着就是空着"同源）。
+export function envRowHtml(key, value) {
+    const v = typeof value === 'string' && value.trim() ? value.trim() : PARAM_UNSET;
+    const unset = v === PARAM_UNSET;
+    return `<div class="sw2-env-row${unset ? ' sw2-nodata' : ''}">`
+        + `<span class="sw2-env-name">${LABELS.env[key] || escapeHtml(key)}</span>`
+        + `<span class="sw2-env-bar"><i style="width:${unset ? 0 : 100}%;background:var(--sw2-amber)"></i></span>`
+        + `<span class="sw2-env-val">${escapeHtml(v)}${unset ? '<small class="sw2-nodata-tag">无据</small>' : ''}</span></div>`;
+}
+
+// ============ 参数页（leg26）============
+// 世界参数 · 档位：**玩家在这里选**，引擎只摆出来（不读、不判断、不进任何机制）。
+// 为什么独立一页（用户令「参数独开页签」）：它既不是"书里的设定"（设定页=只读原稿），
+//   也不是"插件设置"（设置页=通道/存储）——它是**玩家对世界的输入**，性质不同，故独立。
+export function renderParamsHtml(world, { config = {} } = {}) {
+    const cfg = config || {};   // leg27 h：开关卡要挂"上次投递"的实测事实（渲染层不持状态，一律由调用方注入）
+    const rows = paramsRows(world);
+    const indep = rows.filter((r) => r.nature === 'independent');
+    const dep = rows.filter((r) => r.nature !== 'independent');
+    const setCount = rows.filter((r) => r.value !== PARAM_UNSET).length;
+
+    // 自变量卡：**给旋钮**（玩家定，引擎照抄）
+    // leg27 后：行 **按"值/控件"与"说明"分栏**——旧版把「当前 值」和「设定为 下拉」各占一行、
+    //   每行还带一句说明 ⇒ 说明文字（14px 继承）把卡片撑得很丑（用户实机「说明文字太大」）。
+    //   现在：当前值做成一行只读 facts 行（`sw2-row` 基础规则给三栏对齐），设定行只留 标签 + 控件 + 一句短语。
+    const knob = (r) => {
+        const opts = [`<option value="">未定</option>`]
+            .concat(r.options.map((g) => `<option value="${escapeHtml(g)}"${g === r.value ? ' selected' : ''}>${escapeHtml(g)}</option>`));
+        return `<div class="sw2-set-card" data-param="${escapeHtml(r.key)}">`
+            + `<h4>${LABELS.env[r.key] || escapeHtml(r.key)} <span class="sw2-param-kind">自变量</span></h4>`
+            + `<div class="sw2-row"><span>当前</span><b class="sw2-param-val">${escapeHtml(r.value)}</b>`
+            + `<em>可选：${r.options.map((g) => escapeHtml(g)).join(' / ')}</em></div>`
+            + `<div class="sw2-row"><span>设定为</span>`
+            + `<select class="sw2-param-select" data-action="set-param" data-param="${escapeHtml(r.key)}">${opts.join('')}</select>`
+            + `<em>引擎只照抄</em></div></div>`;
+    };
+    // 因变量行：**不给旋钮**——只呈现（书里写的原话，或空着写「未定」）
+    const readout = (r) => `<div class="sw2-row" data-param="${escapeHtml(r.key)}">`
+        + `<span>${LABELS.env[r.key] || escapeHtml(r.key)} <span class="sw2-param-kind sw2-param-kind-dep">因变量</span></span>`
+        + `<b class="sw2-param-val">${escapeHtml(r.value)}</b>`
+        + `<em>${r.value === PARAM_UNSET ? '书里没写 ⇒ 空着' : '书里原话'}</em></div>`;
+
+    // 开关类参数（写记忆 / 记编年史书）——同一页、同一条写通道，渲染成开关而不是下拉
+    // leg27 h：开关卡下面挂**上次投递的实测事实**（用户两次靠肉眼发现记忆没生效 ⇒ 必须有自证面）。
+    //   口径：只报事实、不报"应该没问题"；没投过（null）只显示"还没投过"，绝不显示"已投"。
+    const memPush = cfg.memoryPush || null;
+    const pushLine = (key) => {
+        if (key !== 'memoryEnabled') return '';
+        if (!memPush) return '<em>还没投过（推一轮后这里会显示「记忆已投 · 第 N 轮」）</em>';
+        return memPush.ok
+            // ★leg30：删掉「史卷 N 段」——那张表已不存在（前史成了「世界大事」里成段的行），
+            //   留着它只会恒显示"史卷 0 段"，那是**假的自证面**（本仓对假绿的态度：宁可少报一行）。
+            ? `<em>上次投递：记忆已投 · ${escapeHtml(String(memPush.tick || '?'))} · 大事 ${Number(memPush.counts?.['世界大事'] ?? 0)} 条</em>`
+            : `<em style="color:#e0a0a0">上次投递失败：${escapeHtml(String(memPush.reason || '未知原因'))}</em>`;
+    };
+    const switches = Object.entries(SWITCH_PARAMS).map(([key, conf]) => {
+        const on = switchOn(world, key);
+        return `<div class="sw2-set-card sw2-actions-inline" data-param="${escapeHtml(key)}">`
+            + `<h4 style="flex:1;margin:0">${escapeHtml(conf.label)}</h4>`
+            + `<b class="sw2-param-val">${on ? '开' : '关'}</b>`
+            + `<span class="sw2-actions">`
+            + `<button class="sw2-btn${on ? ' sw2-primary' : ''}" data-action="set-param" data-param="${escapeHtml(key)}" data-value="1">开</button>`
+            + `<button class="sw2-btn${on ? '' : ' sw2-primary'}" data-action="set-param" data-param="${escapeHtml(key)}" data-value="0">关</button>`
+            + `</span>${pushLine(key)}</div>`;
+    }).join('');
+
+    return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界参数 · 档位</div>`
+        + `<div class="sw2-sv-sub">分两类：<b>自变量</b>（给定的条件，你定）与 <b>因变量</b>（结果，只读）。引擎只照抄，<b>不读</b>它们做任何判断。</div></div>`
+        + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ${setCount ? 'ok' : 'stale'}">${setCount}/${rows.length} 已定</span></div></div>`
+        + `<div class="sw2-sv-grid">`
+        + indep.map(knob).join('')
+        + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>因变量（结果 · 只读）</h4>`
+        + `<div class="sw2-hint" style="margin-bottom:8px">这些是<b>被别的量决定的东西</b>，不是旋钮——拧它等于假装"拧一下结果就变了"。引擎既没有那个函数、也没有那个资格（它不发明事实）。</div>`
+        + dep.map(readout).join('')
+        + `</div>`
+        + switches
+        + `</div>`
+        + `<div class="sw2-sv-sub" style="margin-top:10px">口径：<b>能拧的只有自变量</b>（给定的条件：天时、外压），引擎照抄原话；<b>因变量（民生、乱象）只呈现</b>——书里写了就照书里的词显示，没写就空着，<b>绝不由引擎算一个数出来冒充它</b>。</div>`;
 }
 
 export function renderInfoBandHtml(world) {
     const dyn = world.context?.setting?.dynamic;
-    const env = dyn?.env || {};
+    const env = paramsOf(world);
     const pre = !world.meta || world.meta.tick === 0;   // leg21：未演化态诚实标注（基线值非事实值）
     const baselineHint = pre ? ' <span class="sw2-baseline-hint">基线值 · 首轮后随世界演化</span>' : '';
-    // leg24 片5：环境四键**只在书里给过值时才落账面**；没给的显示「书未明述（无据）」
-    const envRows = ENV_KEYS.map((k) => envRowHtml(k, env));
+    // leg26：参数四键 = 玩家/书定的**档位原话**；没定的显示「未定」（不填占位值）
+    const envRows = PARAM_KEYS.map((k) => envRowHtml(k, env[k]));
     const t = dyn?.tension || {};
     const tides = (dyn?.derivedFrom || []).slice(-3).reverse().map((x) => tideLabel(world, x));
     const counts = {
@@ -530,14 +631,14 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
 export function renderSettingHtml(world) {
     const dyn = world.context?.setting?.dynamic;
     const frozen = world.context?.setting?.frozen;
-    const env = dyn?.env || {};
+    const env = paramsOf(world);
     const t = dyn?.tension || {};
     if (!frozen) {
         return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界设定</div>`
             + `<div class="sw2-sv-sub">尚未抽取——设定池未就绪。</div></div>`
             + `<div class="sw2-sv-cards"><span class="sw2-sv-chip stale">未抽取</span></div></div>`;
     }
-    const envRows = ENV_KEYS.map((k) => envRowHtml(k, env)).join('');
+    const envRows = PARAM_KEYS.map((k) => envRowHtml(k, env[k])).join('');
     const tides = (dyn?.derivedFrom || []).slice(-5).reverse().map((x) => tideLabel(world, x)).join('<br>');
     const canon = frozen.canon || {};
     const scaleRows = (canon.powerScale || []).map((p) => `<div class="sw2-sv-row"><b>${escapeHtml(p.level)}</b><span>${escapeHtml(p.note)}</span></div>`).join('');
@@ -746,6 +847,52 @@ export function renderChainViewHtml(chain, { world, volumes = [] } = {}) {
 
 // ============ 六页签全集入口（K34 接线用；同输入逐字节一致 A-2 锁） ============
 
+// leg27 后 · 快照容错（细案 docs/spec-snapshot-fault-tolerance.md；用户拍板：IDB 独立库 / 15 步 / 只回世界账）
+// 渲染纪律（同批量补全的先例）：**渲染层不持任务状态**——快照清单由 config 注入（web/index.js 读 IDB 后传入）。
+//   面板零第二份状态：这里只把事实画出来，一份都不缓存。
+export function renderSnapshotsHtml(world, { config = {} } = {}) {
+    const snap = config?.snapshots || null;
+    const rows = Array.isArray(snap?.list) ? snap.list : [];
+    const seqOf = (s) => { const m = /^s(\d+)$/.exec(String(s?.id ?? '')); return m ? Number(m[1]) : -1; };
+    const sorted = [...rows].sort((a, b) => seqOf(b) - seqOf(a));   // 最新在前（面板按"最近能退到哪"读）
+    const kb = (n) => ((Number(n) || 0) / 1024 >= 1024 ? `${((Number(n) || 0) / 1024 / 1024).toFixed(2)}MB` : `${Math.round((Number(n) || 0) / 1024)}KB`);
+    const line = (s) => {
+        const kindWord = s.kind === 'full' ? '完整' : '增量';
+        const when = String(s.at || '').slice(11, 19);
+        // ★leg27 d（用户实拍「怎么一下子多了这么多」时那一屏）：旧行同时打「第 N 轮」**和** `reason`，
+        //   而 reason 默认就是"落账" ⇒ 每行都重复一遍"落账"，信息量为零还占宽。现在只打**触发词**，
+        //   轮次由 `· 第 N 轮` 承担（两者一个事实，不打两遍）。
+        const trigger = String(s.reason || '').replace(/（.*?）$/, '').trim() || '落账';
+        return `<div class="sw2-row" data-snap="${escapeHtml(s.id)}">`
+            + `<span class="sw2-snap-id">${escapeHtml(s.id)}</span>`
+            + `<span class="sw2-snap-tick">${escapeHtml(trigger)} · 第 ${s.tick == null ? '?' : s.tick} 轮</span>`
+            + `<span class="sw2-snap-kind">${kindWord} ${kb(s.bytes)}</span>`
+            + `<span class="sw2-snap-at">${escapeHtml(when)}</span>`
+            + `<button class="sw2-btn" data-action="snapshot-restore" data-snap="${escapeHtml(s.id)}" data-tick="${s.tick == null ? '' : s.tick}">回到此步</button>`
+            + `</div>`;
+    };
+    const head = `<div class="sw2-sv-head"><div><div class="sw2-sv-title">快照 · 每一步都能退回去</div>`
+        + `<div class="sw2-sv-sub">每一次落账（演化 / 查书 / 批量补全 / 初始化）都会拍一份。存<b>插件本地库</b>（不占聊天文件），保留最近 <b>15 步</b>。`
+        + `<b>回到某一步 = 只回世界账</b>，对话记录不动。</div></div>`
+        + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ${rows.length ? 'ok' : 'stale'}">${escapeHtml(snap?.text || '快照 —')}</span></div></div>`;
+    if (!snap) {
+        return head + `<div class="sw2-hint">快照清单还没读到（首次落账后出现；若一直为空请 Ctrl+F5 并看控制台）。</div>`;
+    }
+    if (!rows.length) {
+        return head + `<div class="sw2-hint">还没有快照——世界每落一次账就会拍一份（当前 0 份）。</div>`;
+    }
+    return head
+        + `<div class="sw2-sv-grid"><div class="sw2-set-card" style="grid-column:1/-1">`
+        + `<h4>可回退的步（最新在前 · ${rows.length} 份）</h4>`
+        + `<div class="sw2-hint" style="margin-bottom:8px">「完整」= 整份世界（锚点，每 5 步一份）；「增量」= 相对锚点的差异。`
+        + `恢复用「锚点 + 增量」两步，所以点任意一份都是**一步到位**，不需要重放整条链。</div>`
+        + sorted.map(line).join('')
+        + `</div></div>`
+        + `<div class="sw2-row"><span class="sw2-actions">`
+        + `<button class="sw2-btn sw2-danger" data-action="snapshot-clear">重置快照（清空并重拍链头）</button>`
+        + `</span><em>用于清掉旧代码/丢账时拍下的那批不可信快照；清完从当前世界重新起链</em></div>`;
+}
+
 export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {}) {
     return {
         board: renderBoardHtml(world),
@@ -753,6 +900,8 @@ export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {
         archive: renderArchiveHtml(world, { oldVolumes }),
         entities: renderEntitiesHtml(world, { config }),
         setting: renderSettingHtml(world),
+        params: renderParamsHtml(world, { config }),   // leg26：参数独立页签（玩家定档位）；leg27 h：+ 记忆投递自证
+        snapshots: renderSnapshotsHtml(world, { config }),   // leg27 后：快照容错（每步可回退）
         settings: renderSettingsHtml(world, { config, oldVolumes }),
         header: {
             world: world.context?.world ?? '',
