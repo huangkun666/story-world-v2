@@ -7,6 +7,11 @@ import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
 import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.js';   // K29：张力强度更新 + 浪尖派生（A-5 两来源）；bornTickOf 共用契约解析器
+// ★leg33：位置归一的**唯一真源**在 `position.js`（叶子模块，避开 settle↔check-step 的循环依赖）。
+//   ⚠必须是 `import` + `export` 两句——`export { X } from './y.js'` **不建立本地绑定**（本棒实测：
+//   只写 re-export 时模块内 `normalizePosition is not defined`，被新用例当场抓红）。
+import { normalizePosition } from './position.js';
+export { normalizePosition };
 
 // ★leg31 拍板：`topLevel` 5 → 10（用户令「先走保守的」）。
 //   依据（真账副本 tick 17 / 618 实体 / 20 轮；门控放宽到 P2-(c) 后实测，细案 `spec-world-widening.md` §5.5 表六～表八）：
@@ -621,9 +626,14 @@ function spawnEntities(world, gstep, tick, warnings, chronicle) {
         //   为什么归一：位置线已定案"不可靠、不参与机制、包里'有就给'"，拿它当硬闸会把"这个人该不该存在"
         //   和"他站在哪"混为一谈。座标编错，人还是该入场的（空着就是空着）。
         let location = ne.location;
-        if (!new Set(world.context?.positions || []).has(location)) {
+        // ★leg33：同一趟归一——模型可能把实体表格子里的「（推）」注解一起抄进 location
+        //   （`normalizePosition` 与 check-step 的位置闸读同一份真源；剥完仍在集外才归一到「未明」）。
+        const locNorm = normalizePosition(location);
+        if (!new Set(world.context?.positions || []).has(locNorm)) {
             warnings.push(`提议丢弃: 「${ne.name}」位置不在集内（「${location}」）——归一到「未明」（空着就是空着）`);
             location = '未明';
+        } else {
+            location = locNorm;
         }
         // leg25 c：入局**不再落任何数值**——四维已不存在（书里的说法走 `实力` 文本态）。
         const ent = {

@@ -6,6 +6,7 @@ import { worldStepSchema } from './schemas/world-step.schema.js';
 import { isSettingRef } from './setting.js';   // K25：设定池保留键空间判词
 import { RIPPLE_TARGET_CAP } from './weight.js';   // leg25：波及上限唯一真源（此前该上限生产 0 强制点=纸面机制）
 import { checkAgendaInvolvement } from './entity-lookup.js';   // 细案 §6 R2：单盘算一轮涉及实体 ≤15（唯一真源）
+import { normalizePosition } from './position.js';   // leg33：剥掉引擎自己打在 location 列上的「（推）」注解（叶子模块，无环）
 // leg25 c：属性白名单（INBORN_ATTR_KEYS）随 `stateChanges` 整条删除——四维浮点已不存在，没有键可白名单。
 
 // ids 索引
@@ -167,6 +168,12 @@ export function checkWorldStep(step, ssot) {
     }
 
     // ④ 位置：事件/动作位置 ⊆ 世界状态位置集（§3.2：不得为贴近玩家而移动）
+    //   ★leg33：先把「（推）」注解剥掉——那是**引擎自己**打在实体表 location 列上的标记（leg31），
+    //     模型把格子原样抄回来（`北俱荒洲（推）`）不是编地名。**就地归一**（同一趟校验里，
+    //     下游 settle 落账读到的是剥过的值；该步本来就是重建对象，不是改调用方的输入）。
+    //     剥掉之后仍不在集内的 ⇒ 真·编地名，照旧拒整步（不改判据强度，只去掉引擎注解的假阳性）。
+    for (const ev of step.newEvents) ev.position = normalizePosition(ev.position);
+    for (const a of step.actions) if (a.position != null) a.position = normalizePosition(a.position);
     for (const [i, ev] of step.newEvents.entries()) {
         if (!positions.has(ev.position)) {
             errors.push(`$.newEvents[${i}].position: " ${ev.position}" 不在世界位置集（${[...positions].join('/')}）`);

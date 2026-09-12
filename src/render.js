@@ -74,7 +74,11 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   ⚠如实记：leg31b 那一笔的 commit message 写的是"界面零变化"——**在那笔的范围里是对的**
 //   （它只动了 `PANEL_BUILD` 一行），但它没意识到面板分母是写死的，于是"引擎 5→10、面板仍写 5"
 //   这件事在用户眼里就是"什么都没发生"。教训：**改了引擎判据就要检查有没有第二份副本在呈现它**。
-export const PANEL_BUILD = 'leg32i-player-row-marked';
+// ★leg33：这一格与 leg32 那格同族——**玩家能看到的行为真的变了**：模型把实体表 location 列的「（推）」
+//   注解抄回来时，引擎不再拒整步（改由 `src/position.js` 剥掉注解），所以那一轮不再白跑。
+//   界面本身零变化（CSS 不动），但仍走一格：照 leg29 立的规矩，否则"页面还是旧的"与"新行为已生效"分不开。
+//   ★给构建号起名要过禁词判据（leg31 那条血的教训）：本名不含 `agenda`/`tick`/`ssot`/`schema` 等任一项。
+export const PANEL_BUILD = 'leg33a-position-note-stripped';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
