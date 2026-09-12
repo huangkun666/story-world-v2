@@ -14,7 +14,19 @@
 // v2-agenda-t1-5（leg24 检察官审计处置 H 组·文案去失真）：①铁律 5 删"分量"——那个数已随片3 退场，
 //   且不随行入包（P3：模型看不到它）；"谁值得动"改结构事实（手上有在办的事/刚出过手/被点名），名单内由模型定。
 //   ②attrs 说明删"省略=引擎给默认值"——片2 已删预填，省略=这一维空着（没有据）。
-export const MAIN_PROMPT_V = 'v2-agenda-t1-5';
+// v2-agenda-t1-6（leg29·★告知面补齐）：一次事件波及上限 3 → 15（用户令「事件波及也改成 15 个」），
+//   ★此前 prompts/pack/tick/entity-lookup 四处**一字未提这条上限** ⇒ 模型写出超限条数只会撞"拒整步"、
+//   白烧一整轮。本版把上限写进铁律 8 + 字段说明，并**带上那道更早咬人的闸**：
+//   「涉及的实体」（盘算属主 + 本步所有动作的 entity/target + 波及名单）也 ≤15 —— 因此**波及名单至多 14 人**，
+//   这才是"至多 15 个"在真引擎里的落点（实测：属主自行动 → 14；属主 + 1 个行动方 → 13；+3 个 → 12）。
+//   为什么两句都写：只写 15 会诱导模型写出必被拒的条数（正是本次要防的白烧）；只写 14 则丢了对上限的如实交代。
+// v2-agenda-t1-7（leg31·实体段表达法收改）：**只改表达法、不改语义**——`entities` 段从"对象数组"改为
+//   **行式表格**（首行列名 TAB 分隔，其后每行一个实体；空列=该列没有值）。
+//   为什么必须升版本：模型看到的东西变了（同一份数据的承载形状变了），虽然字段义一一对应，
+//   但"模型凭什么理解输入"这件事变了 ⇒ 按本文件规矩（改动须走细案）显式记版。
+//   数字：真账 tick 17 / 618 实体，整包 est 19,306 → 9,789（−49.3%），行数与字段一个不少。
+//   细案：`docs/spec-entity-section-encoding.md`。列义说明见下方 `ENTITY_TABLE_LEGEND`。
+export const MAIN_PROMPT_V = 'v2-agenda-t1-7';
 
 export const OUTPUT_TEMPLATE = `{
   "actions": [
@@ -50,16 +62,26 @@ export const MAIN_PROMPT = `你是世界模拟器。你的输入是世界自身�
 5. 玩家棋子只是输入中的一枚棋子，不是主角；谁值得动由你在名单内决定——手上有在办的事、刚出过手、被点名的那几位优先；引擎只做门控与拦矛盾。
 6. 没有任何新动作/新事件/变更就输出空数组，不要编造。
 7. 可以提议新盘算（newAgendas），必须带来源：event=由某未决事件而生（ref=该事件 id）/ parent=由某在飞盘算委派而生（ref=该盘算 id）/ state=由世界处境而生（不带 ref）。无源之物不存在。盘算的出生、上限与结算全归引擎裁决，你只有提议与推进权。也可以提议放弃盘算（agendaCancels，agendaId 必填 + 理由）——放弃同样是提议，终结与否全归引擎裁决，你只有提议权。可以提议新实体入局（newEntities，name/kind/location + 源：book=书名录条目（ref=条目名）/ event=某未决事件（ref=事件 id）/ dialogueFact=对话依据册中反复被点名的对象（ref=对象名））——出生、单轮上限与从属校验全归引擎裁决（可带 parent=所属势力名，引擎校验目标在册且为势力）。可以提议实体覆灭（entityFates，entity + verdict=dead + 源：event/agenda + ref + 理由）——覆灭与否全归引擎复核（引用必须真实落账、目标无在飞盘算、玩家不可灭），你只有提议权；打崩不是灭，覆灭由引擎裁定。
-8. newEvents[].ripples 只收被波及的**实体 id**（照抄输入中的实体 id，如 "e_xie"）；绝对不是事件引用——绝不填事件 id（如 "ev_0"）或盘算 id。想表达「此事由已有事件引发」，用 source.type="ripple" + 该事件的 ref。
+8. newEvents[].ripples 只收被波及的**实体 id**（照抄输入中的实体 id，如 "e_xie"）；绝对不是事件引用——绝不填事件 id（如 "ev_0"）或盘算 id。想表达「此事由已有事件引发」，用 source.type="ripple" + 该事件的 ref。★**一次事件的波及名单至多 1..15 人；但更早咬人的是另一条上限**——单个盘算一轮内「涉及的实体」（该盘算属主 + 本步所有动作的 entity/target + 波及名单，同一实体只算一次）也不得超过 15，**故一次事件的波及名单实际最多 14 人**（属主与各行动方还要占名额：属主自行动时 14、另有 1 个行动方时 13）。超过任一条**整步会被拒**（世界如实不动）——所以宁可少波及、不要写满。
 
 输出形状（字段名必须与下面模板逐字一致，不得自行改名；"verb"不要写成"action"，"attr"不要写成"field/value"，"step"必填必写，"delta"是数值增量）：
 
 ${OUTPUT_TEMPLATE}
 
-字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；newEvents[].ripples=被波及的**实体 id 列表**（照抄输入实体；绝不填事件/盘算 id——事件引用走 source.type="ripple" + ref）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；stage=起始阶段（可省）；visibility=明暗（known/concealed）；maxSteps=步数上限（1..8，可省，引擎钳制）；source.type=来源（event/parent/state）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（来自输入位置集）；entity=提议者实体 id（可省——dialogueFact 源可省略）；数值限定 0..1，省略=这一维空着（没有据）——只有你提议才会落账）；parent=所属势力名（可省——书/对话中已知的门派或势力，未明述不填；引擎校验目标在册且为势力，不满足则弃关系）；source.type=来源（book/event/dialogueFact）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
+字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；newEvents[].ripples=被波及的**实体 id 列表**（照抄输入实体；绝不填事件/盘算 id——事件引用走 source.type="ripple" + ref；★**上限 15 人，且计入"单盘算一轮涉及 ≤15"⇒ 实际最多 14 人**，超限整步被拒）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；stage=起始阶段（可省）；visibility=明暗（known/concealed）；maxSteps=步数上限（1..8，可省，引擎钳制）；source.type=来源（event/parent/state）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（来自输入位置集）；entity=提议者实体 id（可省——dialogueFact 源可省略）；数值限定 0..1，省略=这一维空着（没有据）——只有你提议才会落账）；parent=所属势力名（可省——书/对话中已知的门派或势力，未明述不填；引擎校验目标在册且为势力，不满足则弃关系）；source.type=来源（book/event/dialogueFact）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
 
 只输出 JSON 本体，不要解释。`;
 
+// ★leg31（细案 `docs/spec-entity-section-encoding.md`）：`entities` 段是**行式表格**，不是对象数组。
+//   形状：第一行是表头（列名以 TAB 分隔），其后每行一个实体、列序与表头一致；**空列 = 这一列没有值**
+//   （不是"未明"也不是 0），行尾空列直接省略。`location` 值后带「（推）」= 该位置是引擎按结构推断的、
+//   不是书里明述——判断"谁跟谁碰得上"时要把它当弱凭据。
+//   为什么改：真账实测实体段吃整包 96.8%，其中 56% 的字符是 618 行各写一遍的键名与 JSON 标点；
+//   ⇒ 表头只写一次后整包 est 19,306 → 9,789（−49.3%），**行数与字段一个不少**（视野不缩，只是表达更省）。
+//   纪律：本次**只改表达法**，不改任何语义；列义与旧对象键一一对应，不得新增/合并/换算。
+export const ENTITY_TABLE_LEGEND = '（读法：entities 是**行式表格**——第一行是列名（TAB 分隔），其后每行一个实体、列序同表头；'
+    + '**空列 = 该列没有值**（不是"未明"、不是 0），行尾空列省略；location 值尾部的「（推）」表示该位置是引擎按结构推断、并非书里明述。）';
+
 export function assembleMainPrompt(pack) {
-    return `${MAIN_PROMPT}\n\n【世界状态与落子事实】\n${pack.text}`;
+    return `${MAIN_PROMPT}\n\n${ENTITY_TABLE_LEGEND}\n\n【世界状态与落子事实】\n${pack.text}`;
 }
