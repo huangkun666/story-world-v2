@@ -7,7 +7,7 @@ import { runSmoke } from '../src/smoke.js';
 import { buildEvolutionPack } from '../src/pack.js';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
-import { ENV_KEYS } from '../src/entropy.js';
+import { PARAM_GEARS, PARAM_KEYS } from '../src/params.js';
 
 const world = () => ({
     version: 1,
@@ -19,7 +19,7 @@ const world = () => ({
             frozen: { fingerprint: 'f1', extractedAt: 't', canon: { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [] } },
             dynamic: {
                 tension: { polarity: '宗门/朝廷', direction: '宗门压朝廷', intensity: 0.5 },
-                env: { '民生度': 0.5, '动乱度': 0.5, '天时': 0.5, '张力推手': 0.5 },
+                env: { '民生度': '艰难', '动乱度': '动荡', '天时': '平常', '张力推手': '暗涌' },   // leg26：参数档位原话
             },
         },
     },
@@ -55,7 +55,7 @@ test('K29/A-8：pack 大势块——有 setting 取演化层强度 + 张力三�
     const withSet = world();
     const p1 = buildEvolutionPack(withSet, null);
     assert.equal(p1.pack.tension, 0.5, '未结算前取初值 0.5（与 context.tension 同值）');
-    assert.deepEqual(p1.pack.setting, { tension: { polarity: '宗门/朝廷', direction: '宗门压朝廷', intensity: 0.5 }, env: { '民生度': 0.5, '动乱度': 0.5, '天时': 0.5, '张力推手': 0.5 } });
+    assert.deepEqual(p1.pack.setting, { tension: { polarity: '宗门/朝廷', direction: '宗门压朝廷', intensity: 0.5 }, env: { '民生度': '艰难', '动乱度': '动荡', '天时': '平常', '张力推手': '暗涌' } });
     assert.equal(JSON.stringify(p1.pack.setting).length < 1000, true, '大势块固定小结（≤1k 字符，A-8）');
 
     const noSet = world();
@@ -66,7 +66,7 @@ test('K29/A-8：pack 大势块——有 setting 取演化层强度 + 张力三�
     assert.equal(JSON.stringify(p2.pack).includes('setting'), false, '文本中无 setting 键');
 });
 
-test('K29/A-5/A-6/A-8：冒烟 100t 张力/环境量曲线——强度域 [0,1] 且会动、熵泵种子 ≥5、挂因闭环 ≥2、预算内、零警告、确定性', async () => {
+test('K29/A-5/A-6/A-8：冒烟 100t 张力/参数曲线——强度域 [0,1] 且会动、熵泵出声、挂因、预算内、零警告、确定性', async () => {
     const run = () => runSmoke({ ssot: world(), extractCtx: { positions: ['临渊城'] }, ticks: 100, stepGen });
     const a = await run();
     const b = await run();
@@ -80,11 +80,15 @@ test('K29/A-5/A-6/A-8：冒烟 100t 张力/环境量曲线——强度域 [0,1] 
     assert.ok(new Set(series.map((v) => v.toFixed(4))).size >= 3, '强度不是死常数（大势会动）');
     assert.equal(Object.values(series).at(-1) < 0.9, true, '冷档衰减存在（惯性系数 <1）');
 
-    // 熵泵种子（A-6 冒烟面：非模型生成的状态源事件存在；热池 + 归档承接）
-    assert.ok(m.pumpSeedTotal >= 5, `熵泵事件累计 ${m.pumpSeedTotal} ≥ 5`);
-    // 挂因闭环（A-6 闭环：摩擦事件 → 新盘算挂因）
-    const born = a.world.chronicle.filter((c) => c.text.includes('因事而生') && c.text.includes('熵泵'));
-    assert.ok(born.length >= 2, `熵泵挂因盘算 ${born.length} ≥ 2`);
+    // 熵泵（leg26 改定义后的读数）：**只看账本自己能证明的事实**——连续 QUIET_WINDOW 轮无真实事件 ⇒ 报一次。
+    //   本冒烟的世界步只在开局头几轮产事件，之后一直空转 ⇒ 全程只有**一段静默** ⇒ 泵只出声一次、
+    //   且因世界再没动过而始终未闭（这正是 Q3 要保护的语义：它不许自己把自己哄睡去刷屏）。
+    //   所以这里锁"出声过一次"，**不再锁"累计 ≥5"**（旧值来自"四个数每 10 轮越阈齐发"的假节奏）。
+    assert.ok(m.pumpSeedTotal >= 1, `熵泵至少出声一次（当前 ${m.pumpSeedTotal}）`);
+    // 挂因（A-6 语义面）：熵泵事件在飞时，stepGen 会提议"应对它"的盘算（source.event=熵泵 id）。
+    //   leg26 改定义后，本冒烟里泵只出声一次（世界步产事件只集中在开局）⇒ 期望值从"≥2"改为"≥1"。
+    const born = a.world.chronicle.filter((c) => c.text.includes('因事而生'));
+    assert.ok(born.length >= 1, `熵泵事件当挂因的盘算 ${born.length} ≥ 1`);
 
     // K39/A-16①：settle 落账编年行 100% 带 kind 章（漏章回归锁——未来新增编年写点漏章即红）
     assert.ok(a.world.chronicle.every((c) => ['scheme', 'major', 'ripple', 'shade', 'state'].includes(c.kind)), '冒烟 100t 落账编年行全带 kind（A-16①）');
@@ -97,14 +101,14 @@ test('K29/A-5/A-6/A-8：冒烟 100t 张力/环境量曲线——强度域 [0,1] 
         && Object.values(a.world.weights).every((w) => w >= 0 && w <= 1);
     assert.equal(weightsOk, true, '分量域 [0,1] 全覆盖');
 
-    // 无第三来源（A-5 断言面）：env 键 ⊆ 键表；setting 形状合法
+    // 无第三来源（A-5 断言面）：参数档位键 ⊆ 键表；setting 形状合法
+    // leg26：env 从"四个引擎推的数"改为"档位原话"——所以"四键常驻"这条判据**故意取消**
+    //   （空着就是空着：书没给、玩家没定 ⇒ 键不存在），只锁"键不越表 + 值必须是本书档位词"。
     const env = a.world.context.setting.dynamic.env;
-    assert.ok(Object.keys(env).every((k) => ENV_KEYS.includes(k)), `env 键越表: ${Object.keys(env)}`);
+    assert.ok(Object.keys(env).every((k) => PARAM_KEYS.includes(k)), `参数键越表: ${Object.keys(env)}`);
+    assert.ok(Object.entries(env).every(([k, v]) => (PARAM_GEARS[k] || []).includes(v)), `档位越表: ${JSON.stringify(env)}`);
     const r = validate(a.world, ssotSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
-    // （原变量名 attrsLen 是历史误名——它数的是环境量键，与已删的实体四维属性无关；一并正名）
-    const envKeysAllPresent = Object.keys(env).length === ENV_KEYS.length;
-    assert.equal(envKeysAllPresent, true, '四键常驻');
 
     // A-5 两来源之二：盘算浪尖派生——顶层盘算终结（达成）后 derivedFrom 有浪尖项
     const derived = a.world.context.setting.dynamic.derivedFrom || [];

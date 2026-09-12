@@ -1,6 +1,6 @@
 // story-world-v2/src/schema.js
 // 迷你 schema 校验器（零依赖）：真 schema 强制的地基（S2，还 D-C3 债）。
-// 支持 kind: object / array / string / number / boolean / numRecord / any
+// 支持 kind: object / array / string / number / boolean / numRecord / strRecord / any
 // 语义约束（如 progress ≤ maxSteps、事件位置 ∈ 世界状态）归引擎校验，schema 只管形状。
 
 export function validate(doc, schema) {
@@ -77,6 +77,16 @@ function walk(value, schema, path, errors) {
             }
             for (const [k, v] of Object.entries(value)) {
                 if (typeof v !== 'number' || Number.isNaN(v)) errors.push(`${path}.${k}: 期望数字`);
+            }
+            break;
+        }
+        case 'strRecord': {   // leg26：字符串值映射（世界参数档位：键 → 档位原话）
+            if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+                errors.push(`${path}: 期望对象`);
+                return;
+            }
+            for (const [k, v] of Object.entries(value)) {
+                if (typeof v !== 'string' || !v.trim()) errors.push(`${path}.${k}: 期望非空字符串`);
             }
             break;
         }

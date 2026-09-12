@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkWorldStep } from '../src/check-step.js';
-import { isSettingRef, patchDynamic } from '../src/setting.js';
+import { isSettingRef } from '../src/setting.js';
 
 const world = () => ({
     version: 1,
@@ -82,30 +82,19 @@ test('K25/A-4：命名空间恒定保留——无设定池的世界同样拒绝 
     assert.ok(r.errors.some((e) => e.includes('设定池保留键')));
 });
 
-test('K25 写通道：patchDynamic 引擎独占写——增量落账、[0,1] 钳制、不可变', () => {
-    const w = world();
-    const s1 = patchDynamic(w.context.setting, { key: '民生度', delta: -0.2 });
-    approx(s1.dynamic.env['民生度'], 0.5);
-    assert.equal(w.context.setting.dynamic.env['民生度'], 0.7, '原 setting 不可变');
-
-    const s2 = patchDynamic(s1, { key: '民生度', delta: -10 });
-    assert.equal(s2.dynamic.env['民生度'], 0);
-    const s3 = patchDynamic(s2, { key: '民生度', delta: 10 });
-    assert.equal(s3.dynamic.env['民生度'], 1);
-});
-
-test('K25 写通道：新键基线 0.5（提案态）；env 缺省时创建；无 dynamic/非对象防御返回原值', () => {
-    const w = world();
-    const s4 = patchDynamic(w.context.setting, { key: '动乱度', delta: 0.1 });
-    approx(s4.dynamic.env['动乱度'], 0.6);
-
-    const w2 = world();
-    delete w2.context.setting.dynamic.env;
-    const s5 = patchDynamic(w2.context.setting, { key: '天时', delta: 0.3 });
-    approx(s5.dynamic.env['天时'], 0.8);
-
-    const noDynamic = world();
-    delete noDynamic.context.setting.dynamic;
-    assert.equal(patchDynamic(noDynamic.context.setting, { key: 'x', delta: 0.1 }), noDynamic.context.setting);
-    assert.equal(patchDynamic(null, { key: 'x', delta: 0.1 }), null);
+test('leg26 参数档位：写通道**已删除**（引擎不再推演任何数值）——patchDynamic 不得复活', async () => {
+    // 对抗式锁（不问"我以为对的地方"，问"哪里会退回去"）：
+    //   熵泵改定义时把"四个数 + 锯齿推演 + 危险带"整条撤了，patchDynamic 也随之删除。
+    //   这条锁防的是**无声复活**：谁再把"引擎按小步推一个 0~1 的数"加回来，这里就红。
+    const mod = await import('../src/setting.js');
+    assert.equal(mod.patchDynamic, undefined, '★patchDynamic 必须不存在（引擎不发明数值）');
+    // 参数现在是"玩家定的档位原话"，落账走编排层（参数页 set-param），不经过任何"数值写通道"
+    const { PARAM_KEYS, PARAM_GEARS, isParamGear } = await import('../src/params.js');
+    assert.deepEqual(PARAM_KEYS, ['民生度', '动乱度', '天时', '张力推手'], '键表沿用（账本已有先例）');
+    for (const k of PARAM_KEYS) {
+        assert.ok(PARAM_GEARS[k].length >= 2, `${k} 至少两档`);
+        assert.equal(isParamGear(k, PARAM_GEARS[k][0]), true);
+        assert.equal(isParamGear(k, 0.5), false, '数值不是档位词');
+        assert.equal(isParamGear(k, '异想天开'), false, '表外词不入账');
+    }
 });

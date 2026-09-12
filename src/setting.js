@@ -3,26 +3,19 @@
 // 对模型不可写——本模块给引擎两件工具：
 //   1) isSettingRef(s)：保留键空间判词——'setting' 与 'setting.*' 恒为引擎领地，
 //      任何世界步实体引用字段命中即拒绝（check-step 集成；红线 1 同机制：校验拒绝、世界如实不动）；
-//   2) patchDynamic(setting, patch)：演化层引擎独占写通道——纯函数、不可变、[0,1] 钳制。
-//      调用方 = 引擎自身（K27 环境推演器/熵泵、K29 浪尖派生器）；模型无直写路径
-//      （world-step schema 无设定池写面）。
+//   2) 世界参数档位（leg26）：**玩家可选、引擎照抄**——写通道在编排层（参数页 data-action="set-param"），
+//      引擎不推演任何数值；模型侧仍无直写路径（world-step schema 无设定池写面）。
 // "事件可改（联动状态源事件）"的规则落地在 K27 环境推演器 tick 段——那里才有事件落地上下文。
 
 export function isSettingRef(s) {
     return typeof s === 'string' && (s === 'setting' || s.startsWith('setting.'));
 }
 
-export function patchDynamic(setting, patch) {
-    // patch: { key, delta } —— env 键小步增量；新键基线 0.5（提案态——不在报批二批清单，保持提案待后续批）
-    if (!setting || typeof setting !== 'object' || !setting.dynamic) return setting;
-    const env = setting.dynamic.env ?? {};
-    const cur = typeof env[patch.key] === 'number' ? env[patch.key] : 0.5;
-    const next = Math.min(1, Math.max(0, cur + patch.delta));
-    return {
-        ...setting,
-        dynamic: { ...setting.dynamic, env: { ...env, [patch.key]: next } },
-    };
-}
+// leg26：`patchDynamic(setting,{key,delta})`（环境量数值的引擎独占写通道）**已删除**——
+//   它的唯一调用者是熵泵的锯齿推演，而那套（四个 0~1 的数 + 危险带/回缓带 + 四句写死台词）已随
+//   "引擎不发明事实"整条撤掉（见 entropy.js 头部说明）。世界参数现在是**档位原话、玩家可选、
+//   引擎照抄**（src/params.js），没有任何"引擎推演数值"的写通道存在。
+//   模型侧的禁区不变：`isSettingRef` 仍把 setting/setting.* 判为引擎领地（world-step schema 无写面）。
 
 // ---- 事件 id 契约共享解析器（ev_<tick>_<n> / ev_pump_<tick>_<n> / m_<n>——取首个数字段）----
 // 单一契约点：settle 的 bornTickOf 与本处同源（防两处各自演化）。

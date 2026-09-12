@@ -39,7 +39,7 @@ test('K24/A-1：setting 全形状合法（frozen 五件套 + dynamic 张力三�
         },
         dynamic: {
             tension: { polarity: '宗门/朝廷', direction: '宗门压朝廷', intensity: 0.6 },
-            env: { '民生度': 0.7, '动乱度': 0.2, '天时': 0.5 },
+            env: { '民生度': '艰难', '动乱度': '小乱', '天时': '平常' },   // leg26：档位原话（玩家可选），不再是四个数
             derivedFrom: ['book#3', 'ev_1_2'],
         },
     };
@@ -105,10 +105,18 @@ test('K24：canon 五件套形状——powerScale 项缺 note 拒；空五件合
     assert.equal(validate(emptyCanon, ssotSchema).ok, true);
 });
 
-test('K24：env 键值必须为数字（越阈值语义域）', () => {
-    const doc = baseWorld();
-    doc.context.setting = { dynamic: { tension: { polarity: 'P', intensity: 0.5 }, env: { '天时': '雨' } } };
-    const r = validate(doc, ssotSchema);
-    assert.ok(!r.ok);
-    assert.ok(r.errors.some(e => e.includes('期望数字')), r.errors.join('; '));
+test('leg26：env 键值必须是非空字符串（世界参数档位域）——数值/空串一律拒', () => {
+    const asNumber = baseWorld();
+    asNumber.context.setting = { dynamic: { tension: { polarity: 'P', intensity: 0.5 }, env: { '天时': 0.5 } } };
+    const r1 = validate(asNumber, ssotSchema);
+    assert.ok(!r1.ok, '★数值不再合法（"引擎推演数值"那条通道已删）');
+    assert.ok(r1.errors.some((e) => e.includes('期望非空字符串')), r1.errors.join('; '));
+
+    const asEmpty = baseWorld();
+    asEmpty.context.setting = { dynamic: { tension: { polarity: 'P', intensity: 0.5 }, env: { '天时': '  ' } } };
+    assert.ok(!validate(asEmpty, ssotSchema).ok, '空串也不是档位（空着就该删键，而不是写空串）');
+
+    const asGear = baseWorld();
+    asGear.context.setting = { dynamic: { tension: { polarity: 'P', intensity: 0.5 }, env: { '天时': '平常' } } };
+    assert.equal(validate(asGear, ssotSchema).ok, true, '档位原话合法');
 });

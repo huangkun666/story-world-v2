@@ -23,7 +23,9 @@ const advanceStep = (n) => ({
 const idleStep = () => ({ actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] });
 
 // stepGen(tick, world) → 世界步提案（K6：门控冒烟自定义生成器）；dialogueGen(tick, world) → 对话（K11：玩家落子段冒烟）
-export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGen, dialogueGen } = {}) {
+// onTick(tick, world) → void（可选观测钩子，零行为变化）：给"逐 tick 取数"的测量脚本用
+//   （leg27 后量快照增量体积就靠它——纯观测，不参与任何判据、不落任何账）。
+export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGen, dialogueGen, onTick = null } = {}) {
     let world = structuredClone(ssot);
     const metrics = {
         ticks: 0, maxPackTokens: 0, closedAtTick: null,
@@ -67,6 +69,10 @@ export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGe
             if (world.context?.setting?.dynamic?.tension) metrics.intensitySeries[t] = world.context.setting.dynamic.tension.intensity;
             metrics.pumpSeedTotal = world.events.filter((e) => e.id.startsWith('ev_pump_')).length
                 + (world.milestones || []).reduce((a, m) => a + m.ids.filter((id) => id.startsWith('ev_pump_')).length, 0);
+        }
+        // leg27 后：逐 tick 观测（纯读，零行为变化；异常不许影响冒烟本体）
+        if (typeof onTick === 'function') {
+            try { onTick(t, world); } catch (_) {}
         }
     }
     return { world, metrics };
