@@ -44,7 +44,7 @@ const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'param
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260912-leg32h';
+const CSS_VERSION = '20260913-leg33d';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -258,6 +258,54 @@ function freshCtx() {
 function readHotMeta() {
     const ctx = freshCtx();
     return ctx?.chatMetadata?.[HOT_META_KEY] ?? null;
+}
+
+// ---------- ★leg33d：插件总闸（用户令「加一个启动和关闭插件的入口，要不然这个插件会直接自动生效」）----------
+// 设计口径三条，都要能机械核：
+//   ① **总闸只管"自动"**：关掉之后——发消息不自动推进、切聊天不自动载入世界。**手动永不被闸**：
+//      观棋窗口照常打开、面板照常渲染、「推进一轮」照常能按（那是你明确要求的动作）。
+//   ② **缺省关**（`params.js` 的 `SWITCH_PARAMS.autoAdvance.def = '0'`）——照本仓开关惯例（`memoryEnabled` 也是 def='0'）
+//      ⇒ "装上/载入即静默"，正对用户原话。
+//   ③ ★**但存量世界要给一次性迁移**：真账实测用户现存世界 `memoryEnabled='1'`＝**正在用它**；
+//      若升级后因为"缺键=关"就悄悄停掉，等于把正在跑的世界按停——那是事故，不是功能。
+//      故：**该世界已有推进史（`meta.simLog` 非空）且开关键从未写过** ⇒ 迁成 '1'（= 维持"升级前后一字不变"）；
+//      **全新世界（无史）一律 '0'** ⇒ 新世界要你按一下「开始」才动。
+//      ★幂等：迁移只写"键不存在"的世界；你手动关掉会把 '0' 写进账，此后**永不再迁移**（尊重显式选择）。
+const AUTO_ADVANCE_KEY = 'autoAdvance';
+export function ensureAutoAdvanceKey(world) {
+    const dyn = world?.context?.setting?.dynamic;
+    if (!dyn) return false;
+    const env = { ...(dyn.env || {}) };
+    if (Object.prototype.hasOwnProperty.call(env, AUTO_ADVANCE_KEY)) return false;   // 已显式写过（含你手动关）⇒ 不碰
+    const hasHistory = Array.isArray(world?.meta?.simLog) && world.meta.simLog.length > 0;
+    env[AUTO_ADVANCE_KEY] = hasHistory ? '1' : '0';
+    world.context.setting = { ...world.context.setting, dynamic: { ...dyn, env } };
+    return true;
+}
+// 闸的读法：**只有显式 '1' 算开**（缺键=关，与 `switchOn` 同口径；这里多传一个"世界"以免调用点自己 guard）
+function autoAdvanceOn(world) {
+    return String(world?.context?.setting?.dynamic?.env?.[AUTO_ADVANCE_KEY] ?? '') === '1';
+}
+// 供测试注入（`node --test` 里用假 world 直接验闸，不必起浏览器）
+export const sw2AutoAdvanceOn = (world) => autoAdvanceOn(world);
+
+/**
+ * ★leg33d：**每收到一条消息**时的总闸判据（从 `setupAsyncTicks` 里提出来，为的是能真跑测试）。
+ * 口径（三条，都能机械核）：
+ *   · 开（显式 '1'）⇒ 调 `advance()` —— 这就是"插件自动生效"的那一下。
+ *   · 关（缺键/'0'/空）⇒ **一次都不推进**，只 `setStatus` **明说**（否则"世界怎么不动了"会被当成 bug）。
+ *   · 手动路径**不经过这里**（面板「推进一轮」走 `dispatchAction('advance-world')`）⇒ **永不被闸**。
+ * @returns {{advanced:boolean, reason?:string}} 便于测试与调用方留痕（不靠副作用判断）
+ */
+export function sw2OnMessageReceived(hotWorld, { advance, setStatus: status } = {}) {
+    if (!autoAdvanceOn(hotWorld)) {
+        if (typeof status === 'function') {
+            status('⏸ 插件已关（发消息不自动推进）· 参数页「插件总闸」可开 · 或按「推进一轮」手动推');
+        }
+        return { advanced: false, reason: 'autoAdvance=off' };
+    }
+    if (typeof advance === 'function') advance();
+    return { advanced: true };
 }
 
 // 落盘修复（leg20）：ST 1.15 的 ctx.updateChatMetadata() 只改内存、不触发任何保存（public/script.js 实测），
@@ -1210,7 +1258,15 @@ export function setupAsyncTicks(ctx) {
         refresh: (hot) => { refreshWorld(hot, { oldVolumes: LISTED_VOLUMES }); },
         onStatus: setStatus,
     });
-    es?.on?.(et.MESSAGE_RECEIVED, () => { sw2TickQueue.advance().catch(() => {}); });
+    es?.on?.(et.MESSAGE_RECEIVED, () => {
+        // ★leg33d 总闸：关掉时**不自动推进**（但说一句，别让用户以为插件坏了或以为推过了）。
+        //   闸的判据提成导出的纯函数 `sw2OnMessageReceived` —— 为的是**能真测**（本仓铁律：
+        //   "要真 ctx 的接线，要么提成可导出函数真跑，要么写注入 fake ctx 的测试"）。
+        sw2OnMessageReceived(loadHotAccount(readHotMeta()), {
+            advance: () => sw2TickQueue.advance().catch(() => {}),
+            setStatus,
+        });
+    });
     es?.on?.(et.CHAT_CHANGED, () => { loadWorld().catch(() => {}); });
 }
 
@@ -1329,20 +1385,28 @@ export async function loadWorld() {
     //   （`namePlayerPiece` 的两个分支），没有则只给棋子改名。★拿不到名字就什么都不做（不猜）。
     const personaNow = (() => { try { return String(getCtx()?.name1 || '').trim(); } catch (_) { return ''; } })();
     const pieceSync = personaNow ? namePlayerPiece(world2, personaNow) : { renamed: false };
-    if (changed || loc.inherited > 0 || migrated !== hot || pieceSync.renamed) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
+    // ★leg33d：插件总闸的一次性迁移（幂等；只对"该键从未写过"的世界动手，见 ensureAutoAdvanceKey 注释）。
+    //   有推进史的存量世界 ⇒ 迁成 '1'（升级前后行为一字不变）；全新世界 ⇒ '0'（要你按一下「开始」）。
+    const autoKeyAdded = ensureAutoAdvanceKey(world2);
+    if (changed || loc.inherited > 0 || migrated !== hot || pieceSync.renamed || autoKeyAdded) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(world2));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
         if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited, 棋子校准: pieceSync });
-        else if (backfilled > 0 || loc.inherited > 0 || pieceSync.renamed) {
+        else if (backfilled > 0 || loc.inherited > 0 || pieceSync.renamed || autoKeyAdded) {
             console.info('[story-world-v2] 名册落账可重入：本次补齐', {
                 归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0, 位置: loc.inherited,
                 棋子校准: pieceSync,   // ★leg32h：认领/改名/并掉空棋子都要留痕（用户能看见"主角认领了没有"）
+                插件总闸: autoKeyAdded ? `${AUTO_ADVANCE_KEY}=${world2.context.setting.dynamic.env[AUTO_ADVANCE_KEY]}（首次写入）` : '已写过，不碰',
             });
         }
     }
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(world2, { oldVolumes: LISTED_VOLUMES });
     refreshSnapshots();   // leg27 后：快照清单随世界加载刷新（异步，回来再重绘一次）
+    // ★leg33d：关着的时候**明说**（否则"世界怎么不动了"会被当成 bug；面板照常可用）
+    if (!autoAdvanceOn(world2)) {
+        setStatus('⏸ 插件已关 · 自动推进不生效（发消息/切聊天都不动世界）· 参数页「插件总闸」可开 · 也可按「推进一轮」手动推');
+    }
 }
 
 // ---------- leg26 b：记忆投递（引擎事实 → 记忆插件）----------
@@ -1659,6 +1723,17 @@ if (typeof window !== 'undefined') {
         //   只重绘受影响的两页：参数页（旋钮状态真源）+ 观棋页（信息带也呈现档位）。
         refreshSections(['params', 'board']);
         const memLine = key === 'memoryEnabled' ? memoryPushLine() : '';
+        // ★leg33d：总闸被打开 ⇒ 立刻把它"接上"（不必等下一轮）。关掉**不做任何拆除**——
+        //   世界原样留在盘上、面板照常渲染，只是不再自动推进（手动「推进一轮」永不被闸）。
+        if (key === AUTO_ADVANCE_KEY) {
+            if (norm === '1') {
+                const hotNow = loadHotAccount(readHotMeta());
+                setStatus('▶ 插件已开 · 发消息会自动推进世界（要停请回参数页按「关」）'
+                    + (hotNow ? '' : ' · ⚠ 但还没有世界：先「✨ 开始新世界」'));
+            } else {
+                setStatus('⏸ 插件已关 · 世界原样留在盘上（没有清账、没有拆线）· 要看按观棋窗口、要推按「推进一轮」');
+            }
+        }
         setStatus(`${LABELS.env[key] || SWITCH_PARAMS[key]?.label || key} → ${norm === '1' ? '开' : norm === '0' ? '关' : (norm || '未定')}${flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}${memLine ? ` · ${memLine}` : ''}`);
     };
 

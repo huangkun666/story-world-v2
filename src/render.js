@@ -74,11 +74,11 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   ⚠如实记：leg31b 那一笔的 commit message 写的是"界面零变化"——**在那笔的范围里是对的**
 //   （它只动了 `PANEL_BUILD` 一行），但它没意识到面板分母是写死的，于是"引擎 5→10、面板仍写 5"
 //   这件事在用户眼里就是"什么都没发生"。教训：**改了引擎判据就要检查有没有第二份副本在呈现它**。
-// ★leg33c：**位置从硬闸降级为自由文本**（用户拍板「要么就直接将位置变成自由文本就好了，位置集干脆删了」）。
-//   玩家能看到的行为真的变了：模型写书里真有的地名（`太清境`/`万魔殿`…）不再整轮白跑；
-//   位置集也不再被截断（60 → 书的全部地点条目）。界面本身零变化（CSS 不动），仍走一格。
+// ★leg33d：这一格**界面真的变了**——参数页最前面多了一张「插件总闸 · 自动推进」卡（用户令
+//   「加一个启动和关闭插件的入口，要不然这个插件会直接自动生效」）。它管"插件自己"，不是"插件对外
+//   的动作"；关掉之后发消息不推进、切聊天不自动载入，手动「推进一轮」永不被闸。
 //   ★给构建号起名要过禁词判据（leg31 那条血的教训）：本名不含 `agenda`/`tick`/`ssot`/`schema` 等任一项。
-export const PANEL_BUILD = 'leg33c-free-text-position';
+export const PANEL_BUILD = 'leg33d-plugin-master-switch';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -238,15 +238,26 @@ export function renderParamsHtml(world, { config = {} } = {}) {
             ? `<em>上次投递：记忆已投 · ${escapeHtml(String(memPush.tick || '?'))} · 大事 ${Number(memPush.counts?.['世界大事'] ?? 0)} 条</em>`
             : `<em style="color:#e0a0a0">上次投递失败：${escapeHtml(String(memPush.reason || '未知原因'))}</em>`;
     };
-    const switches = Object.entries(SWITCH_PARAMS).map(([key, conf]) => {
+    // ★leg33d（用户令「加一个启动和关闭插件的入口，要不然这个插件会直接自动生效」）：
+    //   `master: true` 的那个开关（插件总闸）**排在最前、单独一张卡**——其余开关管"插件对外的动作"，
+    //   它管"插件自己"，混在两张开关卡中间会让用户找不到。
+    //   ★并且它带一句**当前后果**（不是"应该没问题"，是"关掉之后会发生什么"）——照 leg27 h 的自证面口径。
+    const switchEntries = Object.entries(SWITCH_PARAMS)
+        .sort((a, b) => Number(Boolean(b[1].master)) - Number(Boolean(a[1].master)));
+    const switches = switchEntries.map(([key, conf]) => {
         const on = switchOn(world, key);
-        return `<div class="sw2-set-card sw2-actions-inline" data-param="${escapeHtml(key)}">`
-            + `<h4 style="flex:1;margin:0">${escapeHtml(conf.label)}</h4>`
+        const stateLine = key === 'autoAdvance'
+            ? (on
+                ? '<em>现在：发消息会自动推进世界（每收到一条消息推进一轮）</em>'
+                : '<em style="color:#e0a0a0">现在：插件静默 —— 发消息不推进、切聊天不自动载入；要推请按观棋窗口的「推进一轮」</em>')
+            : pushLine(key);
+        return `<div class="sw2-set-card sw2-actions-inline${conf.master ? ' sw2-master-switch' : ''}" data-param="${escapeHtml(key)}">`
+            + `<h4 style="flex:1;margin:0">${escapeHtml(conf.label)}${conf.master ? ' <span class="sw2-param-kind">总闸</span>' : ''}</h4>`
             + `<b class="sw2-param-val">${on ? '开' : '关'}</b>`
             + `<span class="sw2-actions">`
             + `<button class="sw2-btn${on ? ' sw2-primary' : ''}" data-action="set-param" data-param="${escapeHtml(key)}" data-value="1">开</button>`
             + `<button class="sw2-btn${on ? '' : ' sw2-primary'}" data-action="set-param" data-param="${escapeHtml(key)}" data-value="0">关</button>`
-            + `</span>${pushLine(key)}</div>`;
+            + `</span>${stateLine}</div>`;
     }).join('');
 
     // ★leg32：世界尺度 · 引擎尺度三道上限（**只读**）

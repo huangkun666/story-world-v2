@@ -147,6 +147,11 @@
 /* leg26 c：参数的性质标签（自变量/因变量）——因变量只是呈现，没有旋钮 */
 .sw2-param-kind{margin-left:6px;font-size:10px;padding:1px 6px;border-radius:7px;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}
 .sw2-param-kind-dep{border-style:dashed;}
+/* ★leg33d（用户令「加一个启动和关闭插件的入口，要不然这个插件会直接自动生效」）：
+   「插件总闸」那一张卡要说得出"它是总闸"——它管插件自己，其余开关管插件对外的动作。
+   只用一条左边框 + 极浅底色，不动既有卡片规则（参数页版式是 leg27 修过的，别在这里重排）。 */
+.sw2-master-switch{border-left:3px solid var(--sw2-amber);background:rgba(255,190,90,.05);}
+.sw2-master-switch h4{font-weight:600;}
 
 /* ---------- leg27 后：修参数页版式（用户实机：「参数的ui页太丑了，说明文字太大，下拉表刚拉开没多久自己就关了」）----------
    病的准确名字（读真码 + 数真 CSS 行确认，不是感觉）：
