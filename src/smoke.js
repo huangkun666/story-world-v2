@@ -4,11 +4,17 @@
 // K6 起：门控统计（静默/应答/滤除累计）、分量曲线采样。纯确定性。
 import { runTick } from './tick.js';
 import { EVOLUTION_BUDGET_TOKENS } from './pack.js';
+// ★leg32：这三道上限的**唯一真源**是引擎的 `AGENDA_CAPS`（`src/settle.js:24`）。
+//   旧版在这里**另抄了一份**（15/2/5），而 leg31b 只改了引擎那份（topLevel → 10）
+//   ⇒ 冒烟断言用的还是旧数，且面板也曾把 5 写死 ⇒ 同一个数字三个真源。
+//   "数字只允许一个真源"是本仓的既有惯例（leg29 波及上限用例、leg31 b 出生用例都按此改过）。
+//   依赖方向：smoke → tick → settle（settle 不反向依赖）——无环，已在 import 图上核过。
+import { AGENDA_CAPS } from './settle.js';
 
 export const DEFAULT_TICKS = 50;
-export const SLICE_AGENDA_CAP = 15;    // §4.3 在飞全局 ≤15（提案，暂定生效）
-export const SLICE_NEWBORN_CAP = 2;    // §4.3 每 tick 新生 ≤2（提案，暂定生效）
-export const SLICE_TOP_CAP = 5;        // §4.3 顶层（无父）在飞 ≤5（提案，暂定生效）
+export const SLICE_AGENDA_CAP = AGENDA_CAPS.open;        // §4.3 在飞全局（真源 AGENDA_CAPS.open）
+export const SLICE_NEWBORN_CAP = AGENDA_CAPS.perTick;    // §4.3 每 tick 新生（真源 AGENDA_CAPS.perTick）
+export const SLICE_TOP_CAP = AGENDA_CAPS.topLevel;       // §4.3 顶层（无父）在飞（真源 AGENDA_CAPS.topLevel）
 
 const BEGIN = 3;   // a_1（0/4 起打？黄金样本 progress=1，maxSteps=4）：
                    // 黄金样本 a_1 progress=1 → 3 次推进到 4 → tick 3 强制结算，其后空转

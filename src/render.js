@@ -6,6 +6,11 @@
 // 玩家语言词典（A-3 黑名单以共识样例 v3 为准——"盘算/谋划"为玩家通词放行）：
 //   禁：分量/熵泵/里程碑/上溯/波及/指纹/派生源/强度参数名/hardPower…/tick/裸 id。
 import { PARAM_GEARS, PARAM_KEYS, PARAM_UNSET, SWITCH_PARAMS, paramsOf, paramsRows, switchOn } from './params.js';   // leg26：环境量数值 → 世界参数档位（玩家可选）
+// ★leg32：引擎尺度（盘算三道上限）的**唯一真源**。此前面板把分母写死成 `/15` `/5`
+//   ⇒ leg31b 把 `topLevel` 5 → 10 之后，世界真的变宽了而面板还写着 5，
+//   玩家无法从面板判断任何变宽实验是否奏效（用户实机「一点变化都没有」追出来的真缺陷）。
+//   依赖方向：render → settle（settle 不反向依赖 render）——无环，已在 import 图上核过。
+import { AGENDA_CAPS } from './settle.js';
 import { lensList, membersOf } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
 import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张力行改说可验证事实（近 N 轮事件数），与公式共用同一口径
 
@@ -63,7 +68,13 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   但**世界行为变了** ⇒ 构建号照旧走一格（同 leg29 立的规矩）。
 //   ⚠**构建号里不许出现引擎术语**：本棒第一版起名 `leg31b-agenda-top10` ⇒ 当场被 K33/A-3 那三条
 //   "玩家可见文本零引擎术语"的用例抓红（**构建号渲染在实体表表头 = 玩家视线内**）⇒ 改为不含禁词的写法。
-export const PANEL_BUILD = 'leg31b-top10-wider-world';
+//   ★leg32（**这一格与前两格性质不同：这次界面真的变了**，起因是用户实机「盘算并没有变多
+//   甚至一点变化都没有」）：leg31b 只改了引擎那个数，而**面板把分母写死成 `/5`** ⇒ 玩家无法从
+//   面板判断变宽是否生效。本棒把分母改成读引擎真源，并在参数页摆出三道上限（只读）。
+//   ⚠如实记：leg31b 那一笔的 commit message 写的是"界面零变化"——**在那笔的范围里是对的**
+//   （它只动了 `PANEL_BUILD` 一行），但它没意识到面板分母是写死的，于是"引擎 5→10、面板仍写 5"
+//   这件事在用户眼里就是"什么都没发生"。教训：**改了引擎判据就要检查有没有第二份副本在呈现它**。
+export const PANEL_BUILD = 'leg32i-player-row-marked';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
@@ -234,6 +245,28 @@ export function renderParamsHtml(world, { config = {} } = {}) {
             + `</span>${pushLine(key)}</div>`;
     }).join('');
 
+    // ★leg32：世界尺度 · 引擎尺度三道上限（**只读**）
+    //   为什么摆在这页（用户令「能不能把这些数塞进参数页签」）：这一页本来就是"世界的参数"，
+    //     而世界能同时跑多宽**是引擎的设定、不是世界的处境**。
+    //   为什么**不给旋钮**（三条硬约束，一条都没破）：
+    //     ①`PARAM_KEYS` 的白名单只认**档位词**，这三个是裸整数 ⇒ 进不了 `dynamic.env`；
+    //     ②`dynamic.env` 是"这个世界现在什么天时"的描述层，而它们是"这个世界尺度多大"的引擎参数；
+    //     ③`params.js:13` 明写"引擎**不读**这些档位做任何判断"——而这三个数**恰恰就是引擎判据**
+    //       ⇒ 做成可拧的旋钮＝让面板声称能改它，那正是 leg26 要治的病。
+    //   呈现口径：如实报引擎现在的数（与 `AGENDA_CAPS` 同一真源，改到哪跟到哪），并说清它们的单位是人话。
+    const capCard = `<div class="sw2-set-card sw2-cap-card" style="grid-column:1/-1">`
+        + `<h4>世界尺度 · 引擎尺度</h4>`
+        + `<div class="sw2-hint" style="margin-bottom:8px">这一栏<b>只报引擎现在的设定</b>，不给旋钮——它不属于你选的档位，而是引擎自己的尺度。</div>`
+        + `<div class="sw2-row"><span>同时最多几件大计</span>`
+        + `<b class="sw2-param-val">${AGENDA_CAPS.topLevel}</b>`
+        + `<em>大计自己分出来的小事不占这个名额</em></div>`
+        + `<div class="sw2-row"><span>总数上限</span>`
+        + `<b class="sw2-param-val">${AGENDA_CAPS.open}</b>`
+        + `<em>大计与小事加起来，同时在办的最多这么多</em></div>`
+        + `<div class="sw2-row"><span>每轮新生上限</span>`
+        + `<b class="sw2-param-val">${AGENDA_CAPS.perTick}</b>`
+        + `<em>一轮里最多新起这么多件，其余顺延</em></div></div>`;
+
     return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界参数 · 档位</div>`
         + `<div class="sw2-sv-sub">分两类：<b>自变量</b>（给定的条件，你定）与 <b>因变量</b>（结果，只读）。引擎只照抄，<b>不读</b>它们做任何判断。</div></div>`
         + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ${setCount ? 'ok' : 'stale'}">${setCount}/${rows.length} 已定</span></div></div>`
@@ -244,6 +277,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         + dep.map(readout).join('')
         + `</div>`
         + switches
+        + capCard
         + `</div>`
         + `<div class="sw2-sv-sub" style="margin-top:10px">口径：<b>能拧的只有自变量</b>（给定的条件：天时、外压），引擎照抄原话；<b>因变量（民生、乱象）只呈现</b>——书里写了就照书里的词显示，没写就空着，<b>绝不由引擎算一个数出来冒充它</b>。</div>`;
 }
@@ -281,8 +315,9 @@ export function renderInfoBandHtml(world) {
         + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">浪尖 · 刚收尾的大动作</div><div class="sw2-tides">${tides.map((x) => `<div class="sw2-tide">${x}</div>`).join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">盘算</div>`
-        + `<div class="sw2-big-num">${counts.active}<small>/15</small></div>`
-        + `<div class="sw2-num-sub">${counts.hidden ? `${counts.hidden} 件在暗处 · ` : ''}顶层 ${counts.top}/5</div></div>`
+        // ★leg32：两个分母一律读引擎真源（旧版写死 `/15` `/5` ⇒ 引擎改了面板不变，见文件头 import 注释）
+        + `<div class="sw2-big-num">${counts.active}<small>/${AGENDA_CAPS.open}</small></div>`
+        + `<div class="sw2-num-sub">${counts.hidden ? `${counts.hidden} 件在暗处 · ` : ''}顶层 ${counts.top}/${AGENDA_CAPS.topLevel}</div></div>`
         + `</div>`;
 }
 

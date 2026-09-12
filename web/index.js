@@ -44,7 +44,7 @@ const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'param
 // K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
 const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
-const CSS_VERSION = '20260912-leg31b-top10-wider-world';
+const CSS_VERSION = '20260912-leg32h';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -204,7 +204,13 @@ export function refreshWorld(world, { config, oldVolumes = [] } = {}) {
         sw2PrevChronicle = chronicleLen;
         // leg27 h：记忆投递自证面随同一句状态栏出声（**它才是最后写状态栏的那一处**）
         const memLine = memoryPushLine();
-        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`}${memLine ? ` · ${memLine}` : ''} · 窗口只读，不参与剧情`);
+        // ★leg32f：本轮的**丢弃/裁定**也要出声（用户为了「演算失败：必填缺失 / 同名实体」吃过整步被拒的苦）——
+        //   口径：只报**计数**（细节看观棋·动态流的「本轮裁定 N 条」），没丢就不出声（不留恒显示的噪声）。
+        const lastLog = Array.isArray(world?.meta?.simLog) ? world.meta.simLog[world.meta.simLog.length - 1] : null;
+        const lastWarns = Array.isArray(lastLog?.warnings) ? lastLog.warnings : [];
+        const droppedNow = lastWarns.filter((x) => typeof x === 'string' && (x.startsWith('提议丢弃') || x.startsWith('裁定:') || x.startsWith('校验拒绝:'))).length;
+        const dropLine = droppedNow ? ` · ⚖ 本轮丢/拒 ${droppedNow} 条提议（细节见动态流）` : '';
+        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`}${dropLine}${memLine ? ` · ${memLine}` : ''} · 窗口只读，不参与剧情`);
     } catch (err) {
         setStatus(`⚠ 渲染失败：${err?.message || err}`);
         console.warn('[story-world-v2] render failed:', err);
@@ -1302,13 +1308,22 @@ export async function loadWorld() {
     //   不必等玩家推一轮或点「查」。与名册落账共用同一份条目，一次落盘。
     const loc = inheritLocations(hotWorld, { entries: bookEntriesForSeed });
     const world2 = loc.ssot;
-    if (changed || loc.inherited > 0 || migrated !== hot) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
+    // ★★leg32h：**玩家棋子身份每轮校准一次**（幂等、零 token、先于落盘）。
+    //   为什么需要：棋子建得太早（初始化那一刻），而"主角名"可能**后来才进世界**——
+    //   真实案例：主角「黄坤」在第 42 轮被模型当新实体入局，而棋子从第 1 轮就叫「你」
+    //   ⇒ 世界账里两个平行的人，模型于是**一直演黄坤**（用户：「又把主角演了」）。
+    //   这里在每次载入时用 ST 的人设名（`name1`）校准：**同名实体已存在 ⇒ 认领它、把空棋子并掉**
+    //   （`namePlayerPiece` 的两个分支），没有则只给棋子改名。★拿不到名字就什么都不做（不猜）。
+    const personaNow = (() => { try { return String(getCtx()?.name1 || '').trim(); } catch (_) { return ''; } })();
+    const pieceSync = personaNow ? namePlayerPiece(world2, personaNow) : { renamed: false };
+    if (changed || loc.inherited > 0 || migrated !== hot || pieceSync.renamed) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(world2));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
-        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited });
-        else if (backfilled > 0 || loc.inherited > 0) {
+        if (!flushed) console.warn('[story-world-v2] 账本写回未落盘', { seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited, 棋子校准: pieceSync });
+        else if (backfilled > 0 || loc.inherited > 0 || pieceSync.renamed) {
             console.info('[story-world-v2] 名册落账可重入：本次补齐', {
                 归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0, 位置: loc.inherited,
+                棋子校准: pieceSync,   // ★leg32h：认领/改名/并掉空棋子都要留痕（用户能看见"主角认领了没有"）
             });
         }
     }
@@ -1842,7 +1857,15 @@ if (typeof window !== 'undefined') {
             // leg25 c：开档描述的**四维解析整段删除**（那个小调用连同 player-setup/player-inject 两个模块一起没了）
             //   ——四维浮点已不存在（没法精确表示；手拍值让"编的"看起来像"算的"）。
             //   玩家棋子现在只有身份与位置（结构性事实），和别的实体同尺；开档描述本身仍留在 meta 里可查。
-            const piece = attachPlayerPiece(seed);
+            //   ★★leg32h（用户：「又把主角演了」）：**这里必须把玩家的真名传进去**。
+            //   旧法 `attachPlayerPiece(seed)` 空参 ⇒ 棋子永远叫「你」⇒ 模型在第 42 轮把主角「黄坤」
+            //   当**新实体**入局（`e_42_1`）⇒ 世界账里两个平行的人 ⇒ 模型一直很尽责地演黄坤
+            //   （替他开盘算、推进、写"以雷法锁定薛铁衣气机，展开殊死搏杀"这类**玩家自己的选择**）。
+            //   传名字后：`attachPlayerPiece` 会**复用同名实体**（名册里就有 → 直接认领），否则建一枚真名棋子；
+            //   此后每轮载入还有 `namePlayerPiece` 兜底，把"后来才出现的主角实体"并进来。
+            //   名字读 ST 的 `name1`（用户人设名）。★拿不到就退回旧口径（空串 ⇒ 「你」），**不猜**。
+            const personaName = (() => { try { return String(getCtx()?.name1 || '').trim(); } catch (_) { return ''; } })();
+            const piece = attachPlayerPiece(seed, personaName);
             const playerDesc = String(settings.playerDesc || '').trim();
             if (playerDesc) {
                 seed.meta = { ...(seed.meta || {}), playerDesc };

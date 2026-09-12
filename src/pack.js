@@ -1,6 +1,9 @@
 // story-world-v2/src/pack.js
 // 演化上下文打包（S4/S5 共用）：世界自身状态 + 玩家落子事实 → 主调用输入。
 // 长跑防线细案 §2.1：预算常量（原提案 4k tokens 已废；第十九棒 K44 拍板 30k，见下方 EVOLUTION_BUDGET_TOKENS）+ 固定打包序 + 超限剪枝。
+// ★leg32g：门控的"久未出手"阈值**直接读门控真源**（`gate.js` 的 `QUIET_TICKS`），不在这里另抄一个数
+//   ——"待启用名单"的筛选口径必须与门控的静默判据**同一把尺子**，否则会出现"引擎说他不静默、名单里却当他冷门"。
+import { QUIET_TICKS } from './gate.js';
 // K44/第十九棒（full-roster-lens-spec C2/C7 拍板）：实体段=**镜头选择器**——
 //   全量棋盘上按「四段确定性序：①例外保送（被点名/在飞盘算属主/近 2 tick 活跃）②手上有在办盘算 ③近 5 轮出手 ④实体 id 序」排序、30k 内取前缀；
 //   势力实体附「麾下成员」简表（parent 派生反查，含分支成员）；分量数字仍不入包（P3 不变）。
@@ -18,6 +21,63 @@ export const DIALOGUE_BOOK_TOP = 5;          // 提案：K38 补差包——依�
 // 段内同值时一律取 id 序兜底 —— **全程零分数**（旧法：第④段按分量降序，那个数已随 leg24 片3 退场）
 // 分量只用于排序，不随行输出（P3：模型看不到分量数字）。
 export const LENS_RECENT_TICKS = 5;   // 提案（片3）：镜头第③段"近期出手"的轮数窗（原按分量降序，无窗可言）
+// ★leg32c（长跑接得上）：往"过去"看的两条尾巴。凭据 = 真账 tick 27 实测：
+//   预算占用只 33%（余量 20,003 token），而模型**看不到 11 条已了结盘算中的任何一条**、
+//   28 条已关闭事件只带最近 2 条 ⇒ **接不上不是预算问题，是没往下传**。
+//   加满这三样实测只要 ~430 token（余量的 2%）。数字是提案态（铁律 2），先按"够用且不堆"取。
+export const EVENT_LEDGER_TAIL = 8;    // 已闭环事件带回包里几条（旧值是写死的 2，且只有 id+title）
+export const AGENDA_LEDGER_TAIL = 12;  // 已了结盘算带回包里几条（旧值：一条都不带）
+// ★★leg32g（用户：「还是不行啊，永远围绕那几个势力是为什么」——本棒把这个闭环量穿了）：
+//   **待启用名单**（`idleFaces`）：引擎每轮机械算出一小撮"从没出手、也没人点名"的在册实体，放进包里。
+//   为什么必须有这个面（真账 tick 38 实测的**自锁闭环**）：
+//     那几家出手 ⇒ `lastActiveTick` 常新 ⇒ **镜头次序永远把他们排最前** ⇒ 模型总在写他们 ⇒ 他们继续出手；
+//     而 **613 人从没出过手、也没人点过名** ⇒ 永远排在镜头最后（第④段按 id 序）⇒ 模型**根本想不起来**还有谁。
+//     实测：56 条事件的波及面**只有 5 个实体**（万法阁×38 / 大虞×24 / 东海龙宫×25 / 你×3 / 白小娥×2）。
+//   ⇒ ★光在提示词里喊"换镜头"没用（模型手上没有"该轮到谁"的名单）——**得把名单递到它眼前**。
+//   口径（零语义、零判断、纯机械）：筛选=active ∧ 手上有在办盘算的排除 ∧ `lastActiveTick` 距今 ≥ QUIET ∧
+//     不在未决事件波及里 ∧ 不是玩家 ∧ 不是 top-1 保送；排序=**按 tick 轮转的确定性切片**
+//     ⇒ 每轮换一批人露头，一轮之内完全确定（同一 world 两次出包逐字节一致）。
+export const IDLE_FACES_TOP = 12;      // 每轮递几张脸（提案态，铁律 2；实测成本：12 个名字 ≈ 60 token）
+// ★leg32h（用户：「都是围绕一件事展开的，没有并行的效果」）：**陈旧死链头过滤**。
+//   实测（真账 tick 50）：58 条事件里**独立链头只有 1 条**——`ev_1_1`「万法阁商队集结」，
+//   **挂了 49 轮还开着**（`state` 源按设计**永不自动闭环**：见 `entropy.js` 的头注释）。
+//   它已无人牵动（ripples 只有 1 人）、也没人推进，却**每轮都占着模型眼前的未决池**
+//   ⇒ 模型永远只看到"一个当下焦点"（那场死煞乱局），新势力只能挤进这同一条线里当配角
+//   ⇒ 读起来就是"都围绕一件事"，**没有并行**。
+//   ⇒ 口径：`state` 源的老事件，**挂了 ≥ STALE_CHAIN_HEAD_AGE 轮且牵动 < 2 人** ⇒ 不进包
+//   （**账上保留、不闭环**——那是世界的事实；只是别再让它占模型眼前的位子）。
+export const STALE_CHAIN_HEAD_AGE = 12;   // 提案态（铁律 2）
+export const STALE_CHAIN_HEAD_MIN_RIPPLES = 2;   // 牵动人数低于此数才算"死链头"
+
+/**
+ * 待启用名单（leg32g）——**唯一真源**：包（递给模型看）与门控（给"起头"资格）读的是同一份。
+ * 口径全机械、零判断：
+ *   ① active ②手上没有在办盘算 ③`lastActiveTick` 距今 ≥ QUIET_TICKS（或从没出过手）
+ *   ④不在未决事件波及里（他已有正当出场路径）⑤不是玩家 ⑥不是 top-1 保送（他本来就永远可动）
+ * 排序 = id 序 → 按 tick **轮转**切片 ⇒ 每轮换一批人露头；同一 world 两次调用逐字节一致（无随机）。
+ * @returns {{id:string,name:string,kind:string}[]}
+ */
+export function computeIdleFaces(ssot) {
+    if (!IDLE_FACES_TOP || IDLE_FACES_TOP <= 0) return [];
+    const tickNow = ssot.meta?.tick ?? 0;
+    const playerId = ssot.context?.playerId;
+    const topId = (ssot.entities || [])[0]?.id;                       // gate.js 的保送口径：首个 active 实体
+    const openOwners = new Set((ssot.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    const namedNow = new Set();
+    for (const ev of ssot.events || []) if (!ev.closed) for (const r of ev.ripples || []) namedNow.add(r);
+    const pool = (ssot.entities || []).filter((e) => {
+        if ((e.status || 'active') !== 'active') return false;
+        if (e.id === playerId || e.id === topId) return false;
+        if (openOwners.has(e.id) || namedNow.has(e.id)) return false;
+        return !(typeof e.lastActiveTick === 'number' && (tickNow - e.lastActiveTick) < QUIET_TICKS);
+    }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    if (!pool.length) return [];
+    const off = (tickNow * IDLE_FACES_TOP) % pool.length;             // 轮转（确定性）
+    // ★带 name/kind（不只是 id）：模型要"从名单里挑人"，光给一串 id 它无从判断谁是谁、是势力还是角色。
+    //   成本实测：12 条 id+name+kind ≈ 180 token（预算余量两万，仍是为"看得见"花的小钱）。
+    return Array.from({ length: Math.min(IDLE_FACES_TOP, pool.length) },
+        (_, k) => { const e = pool[(off + k) % pool.length]; return { id: e.id, name: e.name, kind: e.kind }; });
+}
 // 体积估计（leg25：**模块级唯一一份**）——1 token ≈ 3 字符（中文），向上取整。
 // 为什么提到模块级：此前 `lensList` 与 `trimPack` 各自持有一份同名局部 `est`/`estBudget`，
 //   trimPack 被接进生产路径后，任何一次"只改一处"的编辑都可能让裁剪路径上的调用点悬空
@@ -39,7 +99,7 @@ const estTokensOf = (value) => Math.ceil(packTextOf(value).length / TOKEN_RATIO)
 //   因为它是"结构推断"标记、不是独立事实，并进去信息零损失（实测 3,231 个非空格逐格还原一致）。
 // 分隔符实测：真账 618 行全部值（含 members 逐元素）对 TAB/竖线/换行**命中 0**；
 //   但那是**单本读数**（泛用性铁律 §2 第 3 条）⇒ 下方 `entityTableAnomalies` 把它变成**出包期机械自检**，不靠"我看过没问题"。
-export const ENTITY_TABLE_HEADER = ['id', 'kind', 'name', 'location', 'parent', '实力', 'members'].join('\t');
+export const ENTITY_TABLE_HEADER = ['id', 'kind', 'name', 'location', 'parent', '实力', 'members', 'player'].join('\t');
 const ENTITY_TABLE_COLS = ENTITY_TABLE_HEADER.split('\t');
 
 // 一行的取值（缺列返回 ''）
@@ -172,6 +232,13 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
     const entityRow = (e, mode) => {
         if (mode === 'idOnly') return { id: e.id, name: e.name };   // 最坏情况的兜底形态（视野仍在：还有名字）
         const row = { id: e.id, kind: e.kind, name: e.name, location: e.location };
+        // ★★leg32i（用户：「你是怎么保证不演用户的？」）：**玩家棋子必须在表里一眼认出来**。
+        //   代价（实测）：认领主角之后（`e_p1` → `e_42_1`「黄坤」），模型**不知道那一行就是玩家**，
+        //   于是继续很自然地写 `actions[0].entity = e_42_1`（让主角出手）、推进主角的盘算、
+        //   还以主角为提议者往世界里塞人 ⇒ 三条红线同时被踩 ⇒ **整步被拒、世界原样不动**
+        //   （用户贴回来的那两条报错就是这个）。⇒ 光有"不许写玩家"的守卫不够，**得让模型看得见哪一行是玩家**。
+        //   口径：只在**玩家那一行**写 `player=★你`（其余行空着，不占字节）。
+        if (ssot.context?.playerId && e.id === ssot.context.playerId) row.player = '★你';
         // leg25 d：**位置是"结构推出"还是"书里明述"必须让模型看出来**——不标的话它就当书里的
         //   事实用（用户质疑"推错会不会帮倒忙"）。来源落账在 meta.entityFields[id].位置来源。
         const locSrc = ssot.meta?.entityFields?.[e.id]?.位置来源;
@@ -193,12 +260,28 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
         id: a.id, owner: a.owner, goal: a.goal, stage: a.stage,
         visibility: a.visibility, progress: `${a.progress}/${a.maxSteps}`, memory: a.memory,
         parentId: a.parentId,   // K14（K13 施工补差，细案 §3.5）：树形是"谋划的结构"，可见；分量数字不可见原则 P3 不动
+        // ★leg32c（长跑接得上）：**出生理由**进包。leg29 已把理由落账（`agenda.source`），但**从没进过包**
+        //   ⇒ 模型每轮看得见"万法阁在办什么"，**看不见"他为什么起这件事"** ⇒ 三十轮后接不上因果。
+        //   成本实测：真账在飞 1 条 = 15 token（余量两万，这不是预算问题，是"没往下传"）。
+        source: a.source,
     }));
-    const pendingEvents = (ssot.events || []).filter((e) => !e.closed).map((e) => ({
+    const pendingEvents = (ssot.events || []).filter((e) => !e.closed).filter((e) => {
+        // ★leg32h：陈旧死链头不进包（见常量处注释）——它们让世界看起来"只有一个焦点"
+        if (e.source?.type !== 'state') return true;                       // 只有 state 源会永不闭环
+        const age = (ssot.meta?.tick ?? 0) - (Number(String(e.id).split('_')[1]) || 0);
+        return !(age >= STALE_CHAIN_HEAD_AGE && (e.ripples || []).length < STALE_CHAIN_HEAD_MIN_RIPPLES);
+    }).map((e) => ({
         id: e.id, title: e.title, source: e.source, position: e.position,
     }));
-    const closedEvents = (ssot.events || []).filter((e) => e.closed).slice(-2).map((e) => ({
-        id: e.id, title: e.title,
+    // ★leg32c：已了结的**故事线台账**（长跑接得上的核心面）。
+    //   病因（真账 tick 27 实测）：**11 条已了结盘算，包里 0 条**；28 条已关闭事件只带最近 2 条（且只有 id+title）。
+    //   ⇒ 模型每轮都在"不知道哪些事已经办完、谁办完的、因何而起"的状态下开口，
+    //   于是同一个人三十轮里能反复起同一件事，而读起来像失忆。
+    //   口径三条：①**只报账上真有的**（不生成结局判断——引擎没有"办成了没有"的输入，leg25 f 已把"达成"收回为"结清"）
+    //            ②**近 EVENT_LEDGER_TAIL 条**（老了靠既有里程碑归档，不在这里堆）
+    //            ③**信息最少化**：id + 谁 + 目标 + 起因型（+ 起因 ref）——详情用 id 回查，不抄全文。
+    const closedEvents = (ssot.events || []).filter((e) => e.closed).slice(-EVENT_LEDGER_TAIL).map((e) => ({
+        id: e.id, title: e.title, source: e.source,
     }));
     const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
     // K38 补差包（敲定稿 C 条）：对话依据册摘要进包——"谁反复被点名"模型看得见（dialogueFact 源/镜头依据；
@@ -210,6 +293,20 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
             .sort((a, b) => b.count - a.count || b.lastTick - a.lastTick)
             .slice(0, DIALOGUE_BOOK_TOP)
         : [];
+    // ★leg32c：已了结的盘算台账（近 AGENDA_LEDGER_TAIL 条，倒序=最近的在前）。
+    //   ★**只报账上真有的三样**：谁（owner）/ 办的是什么事（goal）/ 因何而起（source）。
+    //   ⚠**不报结局**——账上没有结局字段：`settle.js` 把"结清/变形/取消"写进了**编年文本**，
+    //   盘算上不存。本棒**不新造**这个字段（那要动 ssot schema + 旧账迁移，属另一笔）；
+    //   模型要追结局可以看 `chronicle` 的行，或按 id 回查——**宁可少报，不编一个字段出来**。
+    const closedAgendas = (ssot.agendas || []).filter((a) => a.closed).slice(-AGENDA_LEDGER_TAIL).reverse().map((a) => ({
+        id: a.id, owner: a.owner, goal: a.goal, source: a.source,
+    }));
+    // ★★leg32g：**待启用名单**——把"该轮到却没露过面的人"递到模型眼前（治"永远围绕那几个势力"）。
+    //   闭环（真账实测）：那几家出手 ⇒ 镜头永远排最前 ⇒ 模型总写他们；613 人没出手过 ⇒ 永远排最后 ⇒ 模型想不起他们。
+    //   ★这份名单**不是纯展示**：`settle.js` 会把它**同时**交给门控（`gateWorldStep` 的第 4 个参数），
+    //   让名单上的人获得"起头"资格——否则"模型照名单给他开线、引擎照样丢掉"，名单就是空转。
+    //   ⇒ 口径实现在下面那个**导出的纯函数**里（一处真源：包与门控读同一份）。
+    const idleFaces = computeIdleFaces(ssot);
     const pack = {
         world: ssot.context?.world,
         // 张力：有 setting 取演化层强度（引擎算），无则回退 context.tension 数字（细案 §3.1 兼容口径）
@@ -222,6 +319,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
         recentClosedEvents: closedEvents,
         playerMove: moveFact || null,
         dialogueBook,
+        // ★leg32c：已了结的故事线台账（长跑接得上——见上方 `closedAgendas` 注释）
+        closedAgendas,
+        // ★leg32g：待启用名单——"该轮到却没露过面的人"（见上方 `idleFaces` 注释）
+        idleFaces,
     };
     // leg25（死代码接线）：**总预算在这里强制**。此前 `trimPack` 全仓生产 0 调用——
     //   lensList 只按 lensMaxTokens 截**实体段**，agendas/pendingEvents/setting/positions **不参与任何裁剪**，
@@ -287,6 +388,13 @@ export function trimPack(pack, budgetTokens = EVOLUTION_BUDGET_TOKENS) {
     stage('agendas.detail', () => {
         if (pack.agendas?.length) pack.agendas = pack.agendas.map((a) => ({ id: a.id, goal: a.goal, progress: a.progress }));
     });
+    // ⑥ ★leg32c 新增：已了结盘算台账最先被裁（它是最"可牺牲"的一段——往事不如在办的事要紧）。
+    //   顺序放在最后 = 只有在实体段与其余各段都压过之后才动它；裁时留 id+goal（"谁办过什么"仍可回查）。
+    stage('closedAgendas', () => {
+        if (pack.closedAgendas?.length) pack.closedAgendas = pack.closedAgendas.map((a) => ({ id: a.id, goal: a.goal }));
+    });
+    // ⑦ ★leg32g：待启用名单**整段丢弃**（不是截短——名单靠"轮转"保证公平，截短会让排在后面的永远露不了头）。
+    stage('idleFaces', () => { pack.idleFaces = []; });
     // 兜底痕迹：固定剪枝序全部用尽仍越界 → 如实记在包里（不许"预算已强制"变成一句空话）
     if (estTokensOf(pack) > budgetTokens) cut.push('budgetOverrun');
     if (cut.length) pack.trimmed = cut;
