@@ -606,7 +606,7 @@ Run: `node --test test/render.test.js` → Expected: PASS
 
 - [ ] **Step 5: 跑全量与冒烟**
 
-Run: `node --test` → Expected: **742 pass / 0 fail**
+Run: `node --test` → Expected: **743 pass / 0 fail**（739 + **4** —— Step 1 的代码块是 4 条用例；原写"742/+3"是笔误，已改正）
 Run: `node demo/smoke-demo.js` → Expected: **PASS，8231 字节未变**
 
 - [ ] **Step 6: 提交**
@@ -620,8 +620,15 @@ git commit -m "细案实体页 3/5：工具条——搜索/筛选/排序/分页�
 
 ## Task 4: 接线层（一份视图状态 + 重绘后恢复焦点）
 
+> ★★ **本任务在 Task 3 里已被"提前完成"**（如实记，不是越界）：`web/index.js` 的接线**必须**与工具条同批落地——
+> 既有审计 `test/lookup-batch.test.js:403`「画了 `data-action` 就必须有人接」会在工具条出现的**那一瞬间**把它咬红，
+> 不接线则全量判据必红。故 Task 3 已写进：`sw2EntsView` + `sw2EntsViewReset()`（`:1090/1093/171`）·
+> 四个动作（`:2965/2975/2983/2988`）· 两处 `entsView` 透传（`:249/1885`）· 搜索框 input 接线 + 焦点/光标恢复（`:3245-3254`）。
+> ⇒ **本任务的剩余工作只有：核对 + 补判据**（逐条对照下面的 Step 1/Step 3 是否都已成立），
+> 若发现缺口才动手；**不许为了"把任务做完"而重写已成立的接线**。
+
 **Files:**
-- Modify: `web/index.js`（新增 `sw2EntsView` · 4 个动作 · 搜索框 input 接线）
+- Modify: `web/index.js`（仅在核对发现缺口时）
 - Test: `test/lookup-batch.test.js`（既有「每个 data-action 都必须有真实处理器」审计会自动咬住新动作——**这是本任务的主要判据**）
 
 **Interfaces:**
@@ -630,17 +637,20 @@ git commit -m "细案实体页 3/5：工具条——搜索/筛选/排序/分页�
 
 - [ ] **Step 1: 写失败用例（接线审计：新动作必须有处理器）**
 
-在 `test/lookup-batch.test.js` 那条审计用例**内部**（`:403` 那条，它在 `dispatchAction` 区里断言）追加一行，覆盖新动作：
+在 `test/lookup-batch.test.js` 那条审计用例**内部**（`:403` 那条，它在断言区里断言）追加一行，覆盖新动作：
 
 ```js
         // ★细案实体页：四个新动作必须都有真处理器（画了按钮没人接 = 本仓老病，这条审计就是治它的）
         for (const act of ['ents-filter', 'ents-sort', 'ents-group', 'ents-page']) {
-            assert.ok(typeof actions[act] === 'function' || typeof actions.get?.(act) === 'function',
-                `★${act} 必须有真实处理器`);
+            assert.ok(actions.includes(act), `★${act} 必须有真实处理器`);
         }
 ```
 
-★ 先读那条用例现有代码，把变量名对齐（它用一个 `actions` 之类的容器做断言——**照它已有的写法加**，不要自造第二套）。
+★ **变量名要对齐那条用例的既有写法**：改之前先读 `test/lookup-batch.test.js:403-440`，
+看它到底是用 `actions`（产物里的 action 名数组）还是别的容器做断言——**照它已有的写法加，不要自造第二套**。
+★ **RED 的形态会与计划原稿不同**：`ents-filter` / `ents-sort` / `ents-page` 在 Task 3 已接线（会直接绿），
+唯一还可能红的是 **`ents-group`**（它的控件要到 Task 5 才出现）。所以本步的 RED 证据是
+`★ents-group 必须有真实处理器`，**先确认它真红**（若它也不红 ⇒ 说明该断言对 `ents-group` 无效，要改断言方式）。
 
 - [ ] **Step 2: 跑用例确认失败**
 
@@ -694,6 +704,10 @@ function sw2EntsViewReset() { sw2EntsView = { q: '', kind: 'all', filters: [], g
     bus['ents-group'] = (payload) => {
         const v = String(payload?.value || 'none');
         if (['none', 'parent', 'loc', 'kind'].includes(v)) sw2EntsView.grp = v;
+        // ★Task 3 评审的 Minor：本动作漏了与三个兄弟一致的"回第一页"复位——
+        //   它 Task 3 时还没被点亮（控件在 Task 5），现在点亮了，必须补上：
+        //   换分组会改变页数与成员，不回第一页就会出现"页码夹紧"造成的空页错觉。
+        sw2EntsView.page = 1;
         refreshSections(['entities']);
     };
     bus['ents-page'] = (payload) => {
@@ -829,6 +843,22 @@ Expected: FAIL —— `sw2-ents-grp-block` 不存在；`PANEL_BUILD` 仍是 `leg
 
 - [ ] **Step 4: 改样式**
 
+★ **本步还要收 Task 3 评审的 4 条 Minor**（逐条给了修法，只有第 1 条需要动一行逻辑）：
+1. **同一事实印两遍**（本仓自己的规矩："同一事实不说两遍"）：表头那句 `<small class="sw2-quiet-note">命中 N</small>`
+   与分页器的 `命中 <b>N</b>` 同屏都在说命中数 ⇒ 把表头那句**改成只说"筛掉了多少"、且只在筛选态出现**：
+   ```js
+   const dropped = page.total - page.hit;
+   // ...
+   + (page.hit !== page.total ? `<small class="sw2-quiet-note">筛掉 ${dropped}</small>` : '')
+   ```
+   ⇒ 分页器说"命中多少"、表头说"筛掉多少"，**两个数各说一件事**，不再重复。
+2. **搜索框缺无障碍名**：`src/render.js` 的 `<input id="sw2_ents_q" ...>` 加
+   `aria-label="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质"`（本仓其它控件用 `title` 通道，`aria-label` 与之一致）。
+3. **`test/render.test.js` 里一条过时注释**（写着「leg49 暂留原位（Task 3 把它收进工具条的「？」里…）」）⇒ 更新成现状。
+4. **`src/render.js` 结尾缺换行** ⇒ 补一个（顺便消掉 git 的 `\ No newline at end of file`）。
+   ★留档不做的两条：**分组动作 `ents-group` 缺 `page = 1` 复位**（Task 5 点亮它时再加，属 Task 5 范围）·
+   **排序钮在面板夹具下 `active` 与 `recent` 同序**（数据层已有专门判据覆盖，属覆盖度 polish）。
+
 `web/style.css` 第 251 行那条 `.sw2-entity-row{display:grid;grid-template-columns:160px 104px ...}` 换成三列：
 
 ```css
@@ -947,4 +977,4 @@ git commit -m "细案实体页 6/6：留档换档 + 实施记录（用户验收�
 | **★ Task 1 评审的 Minor 定夺（已写回计划）** | ① **排序期望值我写错了**：`sort:'name'` 的正确期望是 `['丙','甲','乙']`（丙 bǐng < 甲 jiǎ < 乙 yǐ），初稿写的 `['丙','乙','甲']` 既非拼音序也非笔画序 ⇒ 已改正并留档**产品面已知限制**：ICU 78.3 无拼音排序数据（`collation` 解析为 `default`），真账实测走**部首/笔画序**（末尾「祝无双·转轮鬼圣·转轮鬼使·转轮王·追风·坐忘大罗」被拆散）；本笔选"接受默认序"（零依赖 + 确定性；真正的入口是搜索，不是排序）。② 空结果 `from/to` **按意图都是 0**，分页器不印「显示第 0–0 条」。③ `entsSearchTextOf` 不再收「未明」（占位词不是内容，否则搜「未明」命中 475 人）。④ `recent/named/orphan` 两个调用点各写一遍谓词——评审说现在**过早**（只有两处），**留到 Task 3 接 chip 时若出现第三处消费者再提成一张表**。 |
 | **★ 一个会直接弄坏功能的陷阱（已查清并写进 Task 4）** | `refreshSections` 里那条"控件正被操作 ⇒ 押后重绘"的闸只认 `#sw2_view_params / #sw2_view_settings / .sw2-tabs`（`playerIsTouchingParams`，`:203-211`）——**实体页不在闸内** ⇒ 用 `refreshSections(['entities'])` 时打字会照常重绘。若当初照我第一版自己拼 `innerHTML`，就绕过了 `sw2SectionRefreshRunning` 防重入标志，会重新引爆 leg27 那次的"重绘自己咬自己"。 |
 | **承重墙** | 六个任务没有一处碰 `settle.js`/`pack.js`/`gate.js`/`check-step.js`/schemas；`MAIN_PROMPT_V` 全程未升 |
-| **判据数推演** | 基线 731 ⇒ T1 +4（735）⇒ T2 +4（739）⇒ T3 +3（742）⇒ T4 +0（审计用例内加断言，743）⇒ T5 +2（745）⇒ T6 +0（745）。**每个任务末尾的数字都对得上这条推演。** |
+| **判据数推演** | 基线 731 ⇒ T1 +4（735）⇒ T2 +4（739）⇒ **T3 +4（743，不是 742）** ⇒ T4 +0（审计用例内加断言）⇒ T5 +2（745）⇒ T6 +0（745）。★**T3 那一格我原推演写 +3 是错的**：Step 1 的代码块里**本来就是 4 个 `test(...)`**（标题与 Step 5 写的"3 条"是我笔误）——实现者按代码块逐字落地、报了 743，**以代码块为准**。 |
