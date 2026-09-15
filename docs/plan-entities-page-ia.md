@@ -925,8 +925,17 @@ Expected: FAIL —— `sw2-ents-grp-block` 不存在；`PANEL_BUILD` 仍是 `leg
 
 - [ ] **Step 5: 升位（构建号与 CSS 版本）**
 
-- `src/render.js`：`export const PANEL_BUILD = 'leg49-entities-three-cols';`（原 `leg48b-params-page-clean`）
-- `web/index.js`：`const CSS_VERSION = '20260916-leg49-entities-three-cols';`（原 `20260916-leg48b-params-page-clean`）
+★★ **构建号：用户拍板改名（Task 5 执行时先按计划原名落地，评审期发现与既有禁词锁对撞，已由用户裁决 ⇒ 本步改用新名）**
+- 原计划名 `leg49-entities-three-cols` 含 `entities`，与 `test/render.test.js` 的共享禁词锁
+  （K33/A-3「玩家可见文本零引擎术语」，禁词表含 `entity`/`ENTITIES`）**在同一字符串上对撞**——
+  而构建号**恰好印在玩家看得见的实体表表头**上。`test/render.test.js` 里本就有一条
+  `assert.ok(!PANEL_BUILD.includes(bad))` 的自锁，leg31 当年遇同类冲突的做法也是**改名**。
+- ⇒ **定稿新名：`leg49-three-column-roster`**（不含 `agenda`/`tick`/`ssot`/`schema`/`entity` 任一项；
+  `roster`＝名册，是玩家通词不是引擎术语）。
+- ⇒ 同时**撤掉**"把构建号从扫描里抠掉"的临时处置（`text.replace(new RegExp(\`构建\\s*${PANEL_BUILD}\`,'g'), '构建号')`），
+  让禁词扫描**恢复全量**；反向锁（"构建号必须在玩家视线内"）保留。
+- `src/render.js`：`export const PANEL_BUILD = 'leg49-three-column-roster';`
+- `web/index.js`：`const CSS_VERSION = '20260916-leg49-three-column-roster';`
 
 - [ ] **Step 6: 跑用例确认通过**
 
@@ -950,9 +959,15 @@ Run: `node --input-type=module -e "await import('./src/render.js'); console.log(
 - [ ] **Step 9: 提交**
 
 ```bash
-git add src/render.js web/index.js web/style.css test/render.test.js
-git commit -m "细案实体页 5/5：样式三列 + 分组落地 + 版位升 leg49-entities-three-cols"
+git add src/render.js web/index.js web/style.css test/render.test.js test/lookup-batch.test.js
+git commit -m "细案实体页 5/5：样式三列 + 分组落地 + 版位升 leg49-three-column-roster"
 ```
+
+★ **本步还要补一笔 `docs/START-HERE.md`（用户拍板：单独补一笔，不并进 Task 6）**——
+计划 Files 列了它但 11 个步骤没写它，属计划自相矛盾；现明确要求：**单独一笔**提交，照 leg48 换档的写法
+（接手第一眼看到的必须是真的）：本笔做了什么 · 一句话真因 · 判据 **745/745** · 冒烟 8231 字节未变 ·
+构建号 `leg49-three-column-roster` · **用户验收三步**（① Ctrl+F5 看构建号；② 位置列与"最近活跃"列消失、
+在办为空的行没有占位句；③ 搜索框打「东海浮空岛」应命中 **11** 位）。
 
 ---
 
