@@ -7,7 +7,7 @@
 // K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll, renderVolumeReadHtml, renderChainViewHtml, LABELS, PANEL_BUILD } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml, renderChainViewHtml, LABELS, PANEL_BUILD, makeEntsView } from '../src/render.js';
 import { expandChain } from '../src/chain.js';
 import { migrateLegacyAttrs } from '../src/settle.js';   // leg24 片4：旧账一次性清理（读到热账后、渲染前）
 import {
@@ -72,7 +72,11 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 //   （"页面是新代码、样式是旧的"正是这一串要治的病）。与 `PANEL_BUILD` 同批。
 //   ★名字随 `PANEL_BUILD` 一起被评审修正过（原名 `…-leg49-entities-three-cols` 含 `entity`，
 //   与"玩家可见文本零引擎术语"那条锁对撞 ⇒ 用户拍板改名 `leg49-three-column-roster`）。
-const CSS_VERSION = '20260916-leg49-three-column-roster';
+// ★终审修正（`-f1`）：`web/style.css` 又动了（删 10 条零生产者旧版式规则 + 补工具条那三处声明）
+//   ⇒ 照本文件顶上那条纪律（"CSS 动了就必须升位，否则浏览器吃旧样式"）往前走一格。
+//   ★`PANEL_BUILD` **不动**：它是用户验收第①步的判据（印在参数页最下面那行上），本笔的修正不该改它；
+//     这两个版本号本来的关系是"同批升位"，不是"必须同一串"。
+const CSS_VERSION = '20260916-leg49-three-column-roster-f1';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -1092,10 +1096,15 @@ let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单�
 //   （数据逻辑全在 `src/render.js` 的纯函数里：`selectEntityPage` / `entsHitCounts`；这里只存状态，
 //    一行数据逻辑都不写——本仓"零第二份状态"纪律，与上面的 `sw2ChronicleFilter` 完全同款：
 //    纯视图态、不落 SSOT、不落盘、重绘保留、关面板重置）
-let sw2EntsView = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', page: 1 };
+//   ★终审 M10：默认值**只有一份真源**（渲染层的 `makeEntsView()`）——原先这里与 `src/render.js` 的
+//     `ENTS_DEFAULT_VIEW` 各写一份字面量、靠人同步（本笔加 `scope` 字段时正是两处都要改）。
+let sw2EntsView = makeEntsView();
 const SW2_ENTS_KINDS = new Set(['all', 'faction', 'character']);
 const SW2_ENTS_FILTERS = new Set(['busy', 'recent', 'named', 'orphan']);
-function sw2EntsViewReset() { sw2EntsView = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', page: 1 }; }
+function sw2EntsViewReset() { sw2EntsView = makeEntsView(); }
+// ★终审 C1：中文输入法**组合期**标志（模块级：`compositionstart`/`compositionend`/`input` 三支监听共享）。
+//   组合期一律不写状态、不重绘（`refreshSections` 换掉搜索框节点 = 组合被中途打断 = 玩家打不出字）。
+let sw2EntsComposing = false;
 
 function modelSettings() {
     const ctx = freshCtx();
@@ -2998,6 +3007,17 @@ if (typeof window !== 'undefined') {
         sw2EntsView.page += (String(payload?.value) === 'prev' ? -1 : 1);
         refreshSections(['entities']);
     };
+    // ★终审 I1：chip 计数的**口径开关**（全册 ⇄ 当前结果）。走的还是既有那条 `refreshSections(['entities'])`
+    //   通道（与四个兄弟动作同形：改状态一行 + 只重绘本页）。
+    //   ★**不动 `page`**（与三个兄弟动作不同，理由必须说清）：换筛选/换搜索词会**改变命中集合**
+    //     ⇒ 停在第三页会落在另一批行上（那种情况回第一页是对的）；而换计数口径**一个行都不动**——
+    //     `rows`/`hit`/`pages` 全不变，只是那几枚钮上的数换了把尺子。此时回第一页反而是**无理由的位移**
+    //     （玩家正翻到第 7 页看着，点一下口径就被踢回第 1 页 = 本仓最忌的"面板抢玩家的手"）。
+    bus['ents-scope'] = (payload) => {
+        const v = String(payload?.value || 'all');
+        if (v === 'all' || v === 'hit') sw2EntsView.scope = v;
+        refreshSections(['entities']);
+    };
 
     bus['open-chain'] = (payload) => {
         try {
@@ -3250,7 +3270,34 @@ function bindActions() {
     });
     // ★细案实体页：搜索框（`#sw2_ents_q`）走 input 通道——`refreshSections` 换掉 innerHTML 会**夺焦点**，
     //   ⇒ 重绘后必须把焦点与光标还回去（不还，用户打到第二个字就掉焦点——这是"面板抢玩家的手"的另一种形态）。
+    // ★★终审 C1：**中文输入法（IME）组合期一律不许抢 DOM**。
+    //   事件真相：组合期间浏览器照旧对 `<input>` 派发 `input`（`e.isComposing === true`），而上面那句
+    //   重绘会把**搜索框那一个节点整个换掉** ⇒ 组合会话被当场打断：玩家用拼音打「东海浮空岛」，
+    //   打到第二个字就没了（这正好打在用户验收第③步上）。
+    //   ⇒ 处置（照本仓既有的"别抢玩家的手"口径，最小改动）：①组合期 `input` 进门**先早退**
+    //     （不写状态、不重绘）；②`compositionend` 才把**整串**落成 `sw2EntsView.q` 并**补一次重绘**。
+    //   ★**不用防抖/定时器绕**：那会把"打字时列表滞后"引进来（新的、更难解释的病），且与本笔"最小改动"不符。
+    //   ★标志是**模块级** `let`（下面两支监听要共享它；挂在函数里等于没有）。
+    //   ★判据走源码锁（`test/render.test.js` 的"终审 C1"那条，自带反向自证）——IME 组合序列在 Node 里
+    //     造不出真序列，而这段护栏的可观察效果"不发生一次重绘"要真 DOM + 真世界对象才看得见。
+    win.addEventListener('compositionstart', (e) => {
+        if (e.target?.closest?.('#sw2_ents_q')) sw2EntsComposing = true;
+    });
+    win.addEventListener('compositionend', (e) => {
+        const q = e.target?.closest?.('#sw2_ents_q');
+        if (!q) return;
+        sw2EntsComposing = false;
+        // 组合结束 = 补一次**正常的提交**（组合期一次都没提交过）；四步与下面 input 那支同形。
+        const caret = q.selectionStart;
+        sw2EntsView.q = String(q.value || '');
+        sw2EntsView.page = 1;                 // 换搜索词必回第一页（同筛选）
+        refreshSections(['entities']);
+        const again = win.querySelector('#sw2_ents_q');
+        if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
+    });
     win.addEventListener('input', (e) => {
+        // ★C1 护栏：组合期**在改状态与重绘之前**早退（这两样都会把组合打断）
+        if (e.isComposing || sw2EntsComposing) return;
         const q = e.target?.closest?.('#sw2_ents_q');
         if (!q) return;
         const caret = q.selectionStart;

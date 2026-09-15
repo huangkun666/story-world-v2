@@ -448,6 +448,10 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         //     `page = 1` 复位一起，见 Task 5 报告）。
         assert.ok(handlers.has('ents-group'), '★分组动作的处理器在位（控件已点亮，见下一条）');
         assert.ok(actions.includes('ents-group'), '★分组控件已点亮（Task 5 与分组渲染同批）');
+        // ★终审 I1：计数**口径开关**（全册 / 当前结果）也是"画了按钮"的那一类 ⇒ 同一条审计 + 正向点名。
+        //   （上面 `:433` 那条差异检查已经会在缺处理器时咬红；这一段是**正向点名**，两组分工不同。）
+        assert.ok(handlers.has('ents-scope'), '★口径开关的处理器在位（`bus[ents-scope]`）');
+        assert.ok(actions.includes('ents-scope'), '★口径钮真的在产物里（否则上面那条是空锁）');
     } finally {
         if (savedW === undefined) delete globalThis.window; else globalThis.window = savedW;
         if (savedD === undefined) delete globalThis.document; else globalThis.document = savedD;

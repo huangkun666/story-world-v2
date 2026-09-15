@@ -43,8 +43,9 @@
 .sw2-subtitle{font-size:11.5px;color:var(--sw2-text-faint);}
 /* ★leg49：基础规则补上"可点"的三条（cursor/底色/字体）——实体页工具条把它当按钮用
    （`renderEntsToolbar` 里 chip 就是 `<button class="sw2-chip">`）。
-   为什么不照细案再写一条 `.sw2-chip{...}`：那会**重复选择器**（先例：`.sw2-ecert` 在本文件里
-   已经被写了两遍，第 180 与 275 行）——同一套规则说两遍正是本仓"同一事实不说两遍"要治的东西。
+   为什么不照细案再写一条 `.sw2-chip{...}`：那会**重复选择器**——同一套规则说两遍正是本仓
+   "同一事实不说两遍"要治的东西（★终审留档：本条原先举 `.sw2-ecert` 当先例，而那个类**零生产者**
+   且在本文件里被写了两遍；那两条规则已在终审 M7 一并删掉，行号也不再引用——它当年指的还是 `:275`）。
    故把细案那条里**新增**的三条并进这里，`.on` / `-n` 两条态规则归实体页那一段。 */
 .sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;cursor:pointer;background:var(--sw2-card);font-family:inherit;}
 .sw2-chip.sw2-tick{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-family:"Cascadia Mono",Consolas,monospace;}
@@ -177,7 +178,6 @@
 .sw2-set-card .sw2-actions{display:flex;gap:8px;flex:none;}
 .sw2-set-card .sw2-btn{padding:4px 12px;font-size:12.5px;}
 .sw2-set-card.sw2-actions-inline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.sw2-ecert{display:flex;flex-wrap:wrap;gap:5px;}
 .sw2-agenda{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);margin-bottom:6px;}
 .sw2-agenda b{color:var(--sw2-text);font-weight:600;}
 .sw2-stage{display:flex;align-items:center;gap:6px;}
@@ -253,7 +253,15 @@
    最没信息的词占最显眼的位置；而规模/上级/麾下/麾下实力全挤在同一个 div 里连成长段 ⇒ 糊成一团。
    新版：**每格一义**（身份 / 位置 / 关系属性 / 在办盘算 / 活跃 / 操作），实值加重、空态一律退成
    虚线小 chip；关系属性改成「标签 + 值」的竖排行（带左侧细脊线），长名单（麾下）才换行。
-   ★leg49 再改：六列 → **三列**（**就在下面那条 `.sw2-entity-row`**），位置/活跃两列至此整条退场。 */
+   ★leg49 再改：六列 → **三列**（**就在下面那条 `.sw2-entity-row`**），位置/活跃两列至此整条退场。
+   ★终审 M7：这一批旧版式规则在三列改版后**零生产者**（删前逐条 grep 过：全仓只在 style.css 里出现）⇒ 整批删：
+   `.sw2-relations` / `.sw2-relrow`(+` i`) / `.sw2-relval`（旧"关系与属性"竖排行）· `.sw2-crew`(+` i`) /
+   `.sw2-crew-pow`（旧"麾下"那一行）· `.sw2-agline`（旧在办主句）· `.sw2-eattrs`（旧属性 chip 容器）·
+   `.sw2-eagenda`(+` b`)（旧在办格）· 另加 `.sw2-ecert`（**零生产者 + 在本文件里被写了两遍**——同一选择器
+   两处声明正是本文件第 40 行那条纪律要治的东西）。
+   ★其余零生产者规则（画册旧支 `.sw2-entity-head/-kind/-loc/-name`、`.sw2-tick`、`.sw2-stage*`、`.sw2-footer` …）
+     **本笔不动**：不在三列改版的射程里，且有的被留档/判据显式引用（如 `.sw2-entity.sw2-player` 正是
+     "画册那支仍在"的对照锁）⇒ 已登记在 `.superpowers/sdd/final-fix-report.md`，交下一次体检。 */
 
 /* ★leg49（细案 spec-entities-page-ia §3.1「行（三列）」）：三列版式。
    病根：621 张**等价卡平铺**（真账实测 170319px 高、626 枚按钮、0 个搜索）⇒ 面板没法用。
@@ -291,27 +299,14 @@
    它是内容（谁在麾下），而"麾下实力"那种注脚才走 `-dim`——本条与已有观感**逐像素一致**，
    作用是把"这条被剪"在样式表里显式登记（原先全仓只有生产者、零声明）。 */
 .sw2-relone-crew{color:var(--sw2-text-dim);}
-/* 关系与属性：竖排「标签 + 值」，标签定宽对齐 ⇒ 一眼扫下来能比 */
-.sw2-relations{display:flex;flex-direction:column;gap:3px;}
-.sw2-relrow{display:flex;align-items:baseline;gap:6px;font-size:12.5px;line-height:1.5;}
-.sw2-relrow i{font-style:normal;flex:none;width:42px;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
-.sw2-relval{color:var(--sw2-text);min-width:0;overflow-wrap:anywhere;}
-.sw2-crew{margin-top:4px;font-size:12px;line-height:1.6;color:var(--sw2-text-dim);overflow-wrap:anywhere;}
-.sw2-crew i{font-style:normal;color:var(--sw2-text-faint);font-size:10.5px;letter-spacing:1px;margin-right:6px;}
-.sw2-crew-pow{color:var(--sw2-text-faint);}
 /* 在办盘算：这一行的主句 */
-.sw2-agline{font-size:13px;line-height:1.5;}
 .sw2-aggoal{color:var(--sw2-text);font-weight:600;}
 .sw2-agstage{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;}
-.sw2-ecert{display:flex;flex-wrap:wrap;gap:5px;}
-.sw2-eattrs{display:flex;gap:5px;flex-wrap:wrap;}
 .sw2-eattr{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
 .sw2-eattr b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;margin-left:3px;}
 /* 空态 chip（未载/未查/未加载到/书未明述）：虚线 + 淡色 —— 让"没有数据"看起来就是没有数据。 */
 .sw2-eattr.nodata{background:transparent;border:1px dashed var(--sw2-line-soft);color:var(--sw2-text-faint);}
 .sw2-eattr.nodata b{color:var(--sw2-text-faint);}
-.sw2-eagenda{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.5;}
-.sw2-eagenda b{color:var(--sw2-text);font-weight:600;}
 
 /* ★leg49（细案 spec-entities-page-ia §3.2）：工具条 + 分组 + 分页。
    ★三列版式与关系格的规则**不在这里**——它们已搬回各自版位（约 :250 那段 · 关系格那段）；
@@ -335,6 +330,18 @@
 .sw2-ents-grp-block>summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-radius:7px;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);}
 .sw2-ents-grp-t{font-weight:600;}
 .sw2-ents-grp-c{color:var(--sw2-text-faint);font-size:12px;}
+/* ★终审 M6：工具条里那两处落点的**自带声明**（此前有生产者、零声明；同一把尺子还漏了 `.sw2-ents-asks` 自己）。
+   取值都是**落点专属**的，不重复 `.sw2-hint` / `.sw2-ents-grp-block` 已说过的话：
+   · `-batch-note` 是工具条里那句**整句指路**（同一行还有一段"在跑进度"，两者同为 `.sw2-hint`）⇒ 占满一整行，
+     不再挤在排序钮与批量钮之间；
+   · `-asks` 是「？」那枚可展开容器：**收起时**与其它钮并排（`flex:0 0 auto` 是它本就该有的），
+     **展开时**独占一行（`[open]` 那支）——否则那三行释义会被挤进钮与钮之间的窄格里；
+   · `-asks-body` 是释义正文：按 `.sw2-ents-grp-block>summary` 那套卡片语言给一块底（同 `--sw2-card` /
+     `--sw2-line-soft` / 7px 圆角），并限宽到 72ch（一行别拉过 900px，读起来才不折返）。 */
+.sw2-ents-batch-note{flex:1 1 100%;}
+.sw2-ents-asks{flex:0 0 auto;}
+.sw2-ents-asks[open]{flex:1 1 100%;}
+.sw2-ents-asks-body{margin-top:6px;padding:8px 10px;border-radius:7px;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);font-size:12px;line-height:1.7;color:var(--sw2-text-dim);max-width:72ch;}
 
 /* ---------- 设定档案页 ---------- */
 .sw2-sv-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap;}

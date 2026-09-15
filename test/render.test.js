@@ -11,7 +11,7 @@ import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
     renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
-    ENTS_PAGE_SIZE, ENTS_DEFAULT_VIEW, entsSearchTextOf, selectEntityPage, entsHitCounts,
+    ENTS_PAGE_SIZE, ENTS_DEFAULT_VIEW, makeEntsView, entsSearchTextOf, selectEntityPage, entsHitCounts,
     PANEL_BUILD,
 } from '../src/render.js';
 import { AGENDA_CAPS } from '../src/settle.js';
@@ -895,7 +895,16 @@ test('★细案实体页：三列版式（旧六格版式已按细案重做）',
     assert.ok(html.includes('昆仑道宫') && html.includes('T9渡劫巅峰'), '归属与实力原话同串入面');
     // ④ 空态不占版面：没有来历的角色那一格**留白**（不再印「未载归属」这类词）
     assert.ok(!html.includes('未载归属') && !html.includes('sw2-orphan'), '★空态词不进版面（细案：一律留白）');
-    assert.ok(!html.includes('<span class="sw2-relval">未明</span>'), '★占位词「未明」绝不作为"值"渲染出来');
+    // ★终审 M7 顺带：这条原先锚在 `<span class="sw2-relval">未明</span>` 上——而 `.sw2-relval` 是本笔删掉的
+    //   **零生产者死规则**（旧六列版式的"关系值"）⇒ 那条断言当时已经变成**恒真**（那个串永远不可能出现）。
+    //   ⇒ 改锚到**真产物**：**列表体**里不许出现占位词「未明」（谁把位置列搬回来必红）。
+    //   ★范围与例外（都是实测逼出来的）：整页扫不行——工具条那句三态释义与**行内「查」钮的悬停**里都写着
+    //     「书未明述」（"书里确实没写"的既有术语，不是占位词）。故：切**列表体** + 只把「书未明述」这一处
+    //     合法术语抹掉（抹掉的是**另一个词**，不是把要审的占位词从扫描里抠出去）。
+    const body = bodyOf(html);
+    assert.ok(body.includes('昆仑道宫'), '前置对照：列表体真的切出来了（否则下面那条是空串上的恒真断言）');
+    assert.equal(w.entities.filter((e) => e.location === '未明').length, 2, '前置：夹具里真有两行 `location: "未明"`（否则这条锁是空的）');
+    assert.ok(!body.replace(/书未明述/g, '').includes('未明'), '★占位词「未明」绝不作为"值"渲染出来（列表体里零出现）');
 });
 
 test('K46 实体页·全册/镜头徽/分支/隶属/麾下（C7/C8 渲染面）', () => {
@@ -1196,15 +1205,23 @@ test('★细案实体页 J1/J2：位置列与活跃列**不得出现**；位置�
     const rowDecls = [...css.matchAll(/(^|\n)\.sw2-entity-row(\s*\{)/g)];
     assert.equal(rowDecls.length, 1, `★\`.sw2-entity-row\` 只许声明一次（实际 ${rowDecls.length} 处：重复声明=一条静默盖另一条）`);
     const rowAt = rowDecls[0].index;
-    const reloneAt = css.search(/(^|\n)\.sw2-relone\s*\{/);
+    // ★终审 M4：加锚点——`\.sw2-relone` 后面**必须直接是 `{`**（原写法 `\.sw2-relone\s*\{` 留了 `\s*` 这个口子）。
+    //   ★诚实边界：评审说"它也会匹配 `.sw2-relone-crew{`"——**实测不成立**（`-crew` 卡在类名与 `{` 之间，
+    //     `\s*\{` 匹配不上；`css.search` 实测两种写法命中同一处、恰一处）。仍按 M4 收紧并补一条"只许一条裸声明"的
+    //     结构断言：判据不该依赖"兄弟规则恰好排在它后面"这种排序巧合。
+    const reloneDecls = [...css.matchAll(/(^|\n)\.sw2-relone\{/g)];
+    assert.equal(reloneDecls.length, 1, `★\`.sw2-relone\` 基规则只许一条裸声明（实际 ${reloneDecls.length} 处）`);
+    const reloneAt = reloneDecls[0].index;
     assert.ok(reloneAt > rowAt, '★行规则的版位须在它自己的版式散文之后、关系格之前（「搬到原位」而非"别处再写一条"）');
     const rowBody = /(^|\n)\.sw2-entity-row\s*\{([^}]*)\}/.exec(css)[2];
     assert.match(rowBody, /grid-template-columns\s*:\s*212px/, '★三列栅格必须写在唯一那条声明上（第一列 212px）');
     //   ④ 行内的热行标记（`.sw2-hot`）也不许两处声明；它的 `background` 是"就地交代"的（见该处注释）
     assert.equal(count(css, '.sw2-entity-row.sw2-hot{'), 1, '★`.sw2-hot` 的行规则同样只许一条');
-    //   ⑤ 评审判定「基规则不设 background ⇒ `.sw2-hot` 的 background 是覆盖空气」的处置**照注释为准**：
-    //      取值留在原地、并写明它不假称压着谁（两条路各自的代价都写在那段注释里）。
-    assert.match(css, /覆盖空气/, '★「覆盖空气」的处置必须留在注释里（否则下一个人会当成笔误删掉）');
+    //   ⑤ ★终审 M8：原先是 `assert.match(css, /覆盖空气/)`——**锁的是一句注释文案**（不是行为/结构）：
+    //      它咬不住任何东西（把注释改成同义的另一句话就红，而真正的约定"基规则不设 background、淡底写在
+    //      `.sw2-hot` 自己那条上"改坏了它照样绿）⇒ 换成**结构锁**（那两件事各自可验、都是产物事实）：
+    assert.ok(!/background/.test(rowBody), '★基规则不设 `background`（⇒ `.sw2-hot` 那条淡底不是"压着谁"，是它自己那一支的取值）');
+    assert.match(css, /(^|\n)\.sw2-entity-row\.sw2-hot\{[^}]*background/, '★热行的淡底只许写在 `.sw2-hot` 自己那条上（唯一落点）');
     //   ⑥ 评审第二轮 #3：`.sw2-relone-crew`（由 `src/render.js` 产出的最长那串）必须有规则——不能再"只有生产者没有声明"
     assert.match(css, /(^|\n)\.sw2-relone-crew\s*\{[^}]*color/, '★`.sw2-relone-crew` 必须有自带颜色的规则（`-who`/`-pow`/`-dim` 同级）');
     //   "真有生产者"这条得自己造：`world()` 那份夹具里**没有一个角色的 `parent` 指向一家势力**
@@ -1255,6 +1272,9 @@ test('★细案实体页 J5：搜索控件与分页控件**必须存在**（旧�
     const html = renderEntitiesHtml(w);
     assert.ok(html.includes('id="sw2_ents_q"'), '★搜索框在位（旧版：0 个）');
     assert.match(html, /<input[^>]*type="search"/, '搜索框是真 input[type=search]');
+    // ★终审 M12：`enterkeyhint="search"` 与既有 `aria-label` 同批的无障碍细节——
+    //   手机/平板的软键盘据此把回车键显示成「搜索」（不是「换行」）。判据锁在**真产物**上。
+    assert.match(html, /<input[^>]*enterkeyhint="search"/, '★搜索框必须带 enterkeyhint="search"（软键盘显示「搜索」）');
     assert.ok(html.includes('data-action="ents-page"'), '★分页控件在位');
     assert.ok(html.includes('data-action="ents-filter"'), '筛选 chip 在位');
     assert.ok(html.includes('data-action="ents-sort"'), '排序控件在位');
@@ -1305,6 +1325,13 @@ test('★细案实体页：命中计数与页码如实印出（不是估计值�
     // 筛选态下计数跟着变
     const html2 = renderEntitiesHtml(w, { view: { q: '名00' } });
     assert.ok(html2.includes('命中 <b>10</b>'), '筛完计数跟着变');
+    // ★终审 M11：单页时那两枚翻页钮**仍在位、但都 `disabled`**（如实处置 = 保留 + 明说"现在没有可翻的页"）。
+    //   不隐藏的理由：细案 J5 要的是"控件**必须存在**"（旧版 0 个正是"621 行全摊平"的病根），
+    //   而控件随命中数忽隐忽现，玩家只会以为"这功能没了"。`disabled` 本身就是诚实的说法。
+    const onePage = renderEntitiesHtml(world());
+    assert.match(onePage, /data-action="ents-page" data-value="prev" disabled/, '★单页时「上一页」在位且 disabled');
+    assert.match(onePage, /data-action="ents-page" data-value="next" disabled/, '★单页时「下一页」在位且 disabled');
+    assert.ok(!onePage.includes('第 1 / 1 页'), '单页时不印"第 1 / 1 页"（没页可翻就不摆页码）');
 });
 
 test('★细案实体页：工具栏与列表头**零引擎术语**（构建号也在玩家视线内）', () => {
@@ -1396,5 +1423,196 @@ test('★细案实体页：版位升位且不含引擎术语（构建号在玩�
     assert.equal(PANEL_BUILD, 'leg49-three-column-roster');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
+    }
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// 终审（全分支评审 2 Critical + 3 Important + 12 Minor）修正：逐条落成判据
+//   ★本段一律**追加在文件末尾**：上面 §11.3 引用的那些 `test(...)` 行号不因本笔漂移
+//     （细案 §11.3 的表按"截至某笔"标了行号，追加在末尾是最不容易让它失准的加法）。
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
+
+test('★★终审 C2：搜「未明」必须 0 命中（占位词不是内容，别让 475 行的占位词变成"线索"）', () => {
+    // 判据出处：细案 Task 1 评审定夺③ + 计划 `:167`——「`entsSearchTextOf` 不再收「未明」」
+    //   （原话：占位词不是内容，否则搜「未明」会命中 475 人）。实现当时**没跟上**，判据也没咬住。
+    // ★为什么这条要在乎：位置列已撤（J1）⇒ 玩家再没有"这一格印的只是占位词"的唯一线索；
+    //   而真账 475/621 实体的 `location === '未明'` ⇒ 搜「未明」会端出 475 个"位置未知"的人。
+    const w = {
+        version: 1, context: { world: 'x' }, entities: [
+            { id: 'e_a', kind: 'character', name: '常驻修士', location: '未明' },
+            { id: 'e_b', kind: 'character', name: '昆仑道祖', location: '西极昆仑山' },
+        ],
+        weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 },
+    };
+    assert.equal(selectEntityPage(w, { ...ENTS_DEFAULT_VIEW, q: '未明' }).hit, 0,
+        '★占位词「未明」不许进搜索面（修正前真账实测 475/621；这条断言在修正前是红的）');
+    // 对照（防"一刀把 location 从搜索面砍掉"这种过度修正）：真地名照旧查得到（细案 §3.3 是硬口径）
+    assert.equal(selectEntityPage(w, { ...ENTS_DEFAULT_VIEW, q: '西极昆仑山' }).hit, 1,
+        '对照：真地名照旧查得到——撤的只是占位词，不是把 location 整个撤出搜索面');
+    assert.equal(entsSearchTextOf(w.entities[0]).includes('未明'), false,
+        '★搜索面**本身**里就不该有这个词（不是靠命中侧再过滤一遍——那会变成第二份口径）');
+    assert.ok(entsSearchTextOf(w.entities[1]).includes('西极昆仑山'), '对照：真地名仍在搜索面里');
+});
+
+test('★★终审 I1：chip 计数两个口径（全册 / 当前结果）——一份真源、两把尺子', () => {
+    const w = {
+        version: 1, context: { world: 'x' }, entities: [
+            { id: 'e_1', kind: 'faction', name: '万法阁', location: '东海浮空岛' },
+            { id: 'e_2', kind: 'character', name: '天工真人', location: '东海浮空岛', parent: '万法阁', lastActiveTick: 3 },
+            { id: 'e_3', kind: 'character', name: '无名散人' },
+        ],
+        weights: {}, agendas: [{ id: 'a_1', owner: 'e_2', goal: 'g', closed: false }],
+        events: [], chronicle: [], milestones: [], meta: { tick: 3 },
+    };
+    // ① 缺省 = 全册（既有调用点零扰动：`entsHitCounts(w)` 仍是老口径）
+    const all = entsHitCounts(w);
+    assert.deepEqual(all, { all: 3, faction: 1, character: 2, busy: 1, recent: 1, named: 1, orphan: 2 });
+    assert.deepEqual(entsHitCounts(w, ENTS_DEFAULT_VIEW, 'all'), all, '★显式「全册」与缺省必须同一口径');
+    assert.equal(ENTS_DEFAULT_VIEW.scope, 'all', '★默认口径 = 全册（不改既有观感）');
+    // ②「当前结果」口径：每枚钮显示"在当前条件下点它会得到多少"——
+    //    类别钮 = 把类别那一维换成它的值（其余当前条件不动）；筛选钮 = 在当前条件上加上这一条。
+    const view = { ...ENTS_DEFAULT_VIEW, q: '东海浮空岛' };
+    const hit = entsHitCounts(w, view, 'hit');
+    assert.deepEqual(hit, { all: 2, faction: 1, character: 1, busy: 1, recent: 1, named: 1, orphan: 1 },
+        '★「当前结果」口径的数（q 收窄到 2 之后各钮各是多少）');
+    // ★"不许另写第二份计数逻辑"的行为锁：逐格与 `selectEntityPage` 的真值对齐（分歧必红）
+    assert.equal(hit.all, selectEntityPage(w, { ...view, kind: 'all' }).hit, '全部 = 不换类别');
+    assert.equal(hit.faction, selectEntityPage(w, { ...view, kind: 'faction' }).hit);
+    assert.equal(hit.character, selectEntityPage(w, { ...view, kind: 'character' }).hit);
+    assert.equal(hit.busy, selectEntityPage(w, { ...view, filters: ['busy'] }).hit);
+    assert.equal(hit.recent, selectEntityPage(w, { ...view, filters: ['recent'] }).hit);
+    assert.equal(hit.named, selectEntityPage(w, { ...view, filters: ['named'] }).hit);
+    assert.equal(hit.orphan, selectEntityPage(w, { ...view, filters: ['orphan'] }).hit);
+    // ★两个口径必须**真的不同**（否则上面那些断言是恒真的：两把尺子量出同一个数）
+    assert.notDeepEqual(hit, all, '★筛选态下两个口径必须量出不同的数（否则这条判据咬不住任何东西）');
+    // ③ 结构锁：计数只有一条筛选管线（`selectEntityPage` / `entsHitCounts` 共用 `entsRows`）
+    const src = readFileSync(path.join(ROOT, 'src', 'render.js'), 'utf8');
+    const fn = src.slice(src.indexOf('export function entsHitCounts('), src.indexOf('export function selectEntityPage('));
+    assert.ok(fn.length > 100, '前置：找得到 `entsHitCounts` 的实现段');
+    assert.match(fn, /entsRows\(/, '★「当前结果」口径必须复用 `selectEntityPage` 那条筛选管线（不许另写第二份计数实现）');
+    // ④ 产物：两态钮在位，标签**如实**写当前口径（不是"全册/当前结果"两个词并排糊在一起）
+    const asHit = renderEntitiesHtml(w, { view: { ...view, scope: 'hit' } });
+    const asAll = renderEntitiesHtml(w, { view: { ...view, scope: 'all' } });
+    assert.match(asHit, /data-action="ents-scope"/, '计数口径钮在位');
+    assert.ok(asHit.includes('计数：当前结果'), '★当前口径一旦是「当前结果」，钮上就如实写它');
+    assert.ok(asAll.includes('计数：全册') && !asAll.includes('计数：当前结果'), '★另一态如实写「全册」');
+    assert.match(asHit, /data-action="ents-scope" data-value="all"/, '点它 = 切到另一个口径（`data-value` 是"点下去会变成什么"）');
+    assert.match(asAll, /data-action="ents-scope" data-value="hit"/);
+    // ⑤ 口径钮给的是**同一枚数**的两种读法：`全册` 那一态下 chip 上的数仍是老口径的真数
+    assert.ok(asAll.includes(`>${all.all}<`), '「全部」格在全册口径下印全册真数');
+    // ⑥ ★产物侧"口径真的传下去了"锁（**反向实验逼出来的**：把 `entsHitCounts(world, v, v.scope)` 改回
+    //    `entsHitCounts(world)`，上面那几条照样绿 ⇒ 等于没锁）。两个口径下**同一枚钮的数必须不同**，
+    //    而这两个数各自都是真值（命中 2 / 全册 3）⇒ 口径有没有从工具条传到计数处，这一条钉死。
+    assert.match(asHit, /data-value="all">全部<span class="sw2-chip-n">2<\/span>/,
+        '★「当前结果」口径下「全部」那枚印命中数（2）——不是全册的 3');
+    assert.match(asAll, /data-value="all">全部<span class="sw2-chip-n">3<\/span>/,
+        '★「全册」口径下同一枚印全册数（3）');
+    assert.match(asHit, /data-value="orphan">无归属的<span class="sw2-chip-n">1<\/span>/,
+        '★筛选钮也跟着口径走（当前结果里无归属的只有 1）');
+    assert.match(asAll, /data-value="orphan">无归属的<span class="sw2-chip-n">2<\/span>/,
+        '★全册口径下同一枚是 2');
+});
+
+test('★★终审 C1：中文输入法组合期不许抢 DOM（源码护栏 + 自带反向自证）', () => {
+    // 病：搜索框的 input 处理**每次按键**都 `refreshSections(['entities'])`，而它会换掉搜索框的 DOM
+    //   ⇒ **IME 组合中途被重置**（玩家打「东海浮空岛」打不出来）——正好打在用户验收第③步上。
+    // ★★为什么这条**锁源码**而不锁行为（三句，都不许省）：
+    //   ① IME 组合序列在 Node 里造不出来——`compositionstart/update/end` 是浏览器**输入法栈**派发的真事件，
+    //      不是 `dispatchEvent` 能"模拟输入"出来的东西；本用例若自造假事件，验的恰好是假事件的时序假设
+    //      （用假设证假设 = 本仓最贵的"假绿"）。
+    //   ② 这段护栏的可观察效果是"**不**发生一次重绘"，而重绘要真 DOM **且**真世界对象
+    //      （`refreshSections` 先取 `sw2LastWorld`、再取 `#sw2_view_entities` 节点，两者都拿不到就直接 return）
+    //      ⇒ Node 侧的行为差异**不可观测**，锁行为只会得到一条永远为真的断言。
+    //   ③ 本仓对这类接线判据的既有做法就是读真源码（`lookup-batch.test.js:441` 那组"画了按钮就必须有人接"、
+    //      `render.test.js:122` 那条"set-param 不许整页重绘"同款）。
+    //   ⇒ 为了**不是恒真断言**，本用例自带一次**反向自证**：把护栏那一行删掉，同一个判据必须变假。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const seg = inputHandlerSrc(web);
+    assert.ok(seg.length > 100, '前置：找得到搜索框那条 input 处理（结构切片，不靠固定字节数）');
+    assert.equal(hasCompositionGuard(seg), true,
+        '★input 处理必须先判组合期（`e.isComposing || sw2EntsComposing`）并早退，**且在改状态与重绘之前**');
+    const stripped = seg.replace(/[^\n]*isComposing[^\n]*\n/g, '');
+    assert.notEqual(stripped, seg, '前置：反向自证真的删掉了东西（否则下面那条等于没测）');
+    assert.equal(hasCompositionGuard(stripped), false,
+        '★反向自证：把护栏那一行删掉，同一条判据必须变假——证明它不是恒真的假绿');
+    // 组合起止的接线：走**事件委托**（与既有 click / input 委托并列，不是给节点挂监听——重绘会换掉节点）
+    assert.match(web, /addEventListener\('compositionstart',[\s\S]{0,200}?closest\?\.\('#sw2_ents_q'\)/,
+        '★`compositionstart` 委托到搜索框（只认 `#sw2_ents_q`，别把整面板的输入都拦下）');
+    assert.match(web, /addEventListener\('compositionend',[\s\S]{0,400}?refreshSections\(\['entities'\]\)/,
+        '★`compositionend` 必须把整串落账**并补一次重绘**（组合期一次都没重绘）');
+    assert.match(web, /^let sw2EntsComposing = false;$/m,
+        '★组合态标志是模块级 `let`（不是函数内临时变量：两个监听要共享它）');
+});
+
+function inputHandlerSrc(web) {
+    // ★按**内容**挑，不按"第一次出现"挑：本文件另有一处 `win.addEventListener('input', onField)`（设置表单），
+    //   取第一处会切到别人身上（本用例自己踩过：切到设置表单那段 ⇒ 判据假红）。
+    const marker = "addEventListener('input'";
+    let from = 0;
+    while (from < web.length) {
+        const start = web.indexOf(marker, from);
+        if (start < 0) return '';
+        const braceStart = web.indexOf('{', start);
+        let depth = 0;
+        let seg = '';
+        for (let i = braceStart; i < web.length; i += 1) {
+            if (web[i] === '{') depth += 1;
+            else if (web[i] === '}') {
+                depth -= 1;
+                if (depth === 0) { seg = web.slice(start, i + 1); break; }
+            }
+        }
+        if (seg.includes('#sw2_ents_q')) return seg;   // 认准搜索框那一支
+        from = start + marker.length;
+    }
+    return '';
+}
+
+function hasCompositionGuard(seg) {
+    // 判据 = ① 有一条以 `isComposing` **与** `sw2EntsComposing` 为条件的早退；② 它排在改状态与重绘之前
+    const re = /if\s*\(([^)]*)\)\s*\{?\s*return\b/g;
+    let m;
+    while ((m = re.exec(seg))) {
+        const cond = m[1];
+        if (!cond.includes('isComposing') || !cond.includes('sw2EntsComposing')) continue;
+        const stateAt = seg.indexOf('sw2EntsView.q');
+        const redrawAt = seg.indexOf("refreshSections(['entities'])");
+        return stateAt > m.index && redrawAt > m.index;
+    }
+    return false;
+}
+
+test('★终审 M10：视图态默认值**只有一份真源**（`ENTS_DEFAULT_VIEW` + `makeEntsView()`）', () => {
+    // 病：`src/render.js` 的 `ENTS_DEFAULT_VIEW` 与 `web/index.js` 的 `sw2EntsView` 是**两份字面量**，
+    //   靠人同步 ⇒ 本笔加 `scope` 字段时正是两处都要改（下一任漏一处就分叉）。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    // 计数前先按本仓既有做法**把注释行抹成空白**（`:110` 同款）：说明文字里也会写到这个函数名
+    const code = web.split('\n').map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? ' '.repeat(l.length) : l)).join('\n');
+    assert.match(code, /import[^;]*makeEntsView[^;]*from '\.\.\/src\/render\.js'/, '★接线层从渲染层导入默认值（不许自己再写一份）');
+    assert.equal((code.match(/makeEntsView\(\)/g) || []).length, 2,
+        '★初始值与关面板复位两处都用同一个工厂（不是两处字面量）');
+    assert.ok(!/let sw2EntsView = \{/.test(web) && !/sw2EntsView = \{ q:/.test(web),
+        '★接线层里不许再有第二份视图态字面量');
+    // 行为锁：工厂与默认值同形，且 `filters` 是**新数组**（就地 push 不许污染默认值）
+    const v = makeEntsView();
+    assert.deepEqual(v, ENTS_DEFAULT_VIEW, '工厂产出的形状 = 默认值');
+    assert.notEqual(v.filters, ENTS_DEFAULT_VIEW.filters, '★`filters` 必须是拷贝：接线层是**就地 push**，共用一个数组会把默认值改脏');
+    v.filters.push('busy');
+    assert.deepEqual(ENTS_DEFAULT_VIEW.filters, [], '★改一份不许动到默认值');
+    assert.deepEqual(makeEntsView().filters, [], '★复位重取也必须是干净的');
+    assert.equal(v.scope, 'all', '默认口径随工厂一起出去');
+});
+
+test('★终审 M6：工具条那几个类——生产者与声明对齐（补声明，不删生产者）', () => {
+    // 病：本轮刚立"生产者与声明对齐"的规矩（同一批还删了同级死规则），而这三个类**有生产者零声明**。
+    // ★选"补声明"而不是"删生产者"的理由（与 `.sw2-relone-crew` 同一先例）：它们各自承担一个**落点语义**——
+    //   `-batch-note` 是工具条里那句整句**指路**（同一行还有一段"在跑进度"，两者同为 `.sw2-hint`，靠它分得开）；
+    //   `-asks` / `-asks-body` 是「？」那枚可展开的**三态释义**容器与其正文。
+    //   ★审计顺带发现漏了一条：`.sw2-ents-asks` 自己（工具条同批）也零声明 ⇒ 一起补（同一把尺子）。
+    const css = readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8');
+    const html = renderEntitiesHtml(world());
+    for (const cls of ['sw2-ents-batch-note', 'sw2-ents-asks', 'sw2-ents-asks-body']) {
+        assert.ok(html.includes(cls), `前置：${cls} 真有生产者（否则这条锁是空的）`);
+        assert.match(css, new RegExp(`(^|\\n)\\.${cls}(?![\\w-])[^{\\n]*\\{`), `★${cls} 必须有自带声明`);
     }
 });

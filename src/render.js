@@ -673,17 +673,70 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 // 分工（照 renderChronicleHtml 的 view.chronicleFilter 同款）：**选数据住渲染层、存状态住接线层**。
 //   ⇒ 接线层只持一份视图状态对象，一行数据逻辑都不写（本仓"零第二份状态"纪律）。
 export const ENTS_PAGE_SIZE = 60;
-export const ENTS_DEFAULT_VIEW = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', page: 1 };
+// ★终审 I1：`scope` = chip 计数读**哪个口径**（`'all'` 全册 / `'hit'` 当前结果；缺省 `'all'` = 既有观感不变）。
+//   病：chip 上的数一直是**全册**口径（真账 621/103/518），而与它同屏的页脚印的是「命中 4」
+//   ⇒ 两个数说的不是同一件事，玩家会以为筛选坏了。
+export const ENTS_DEFAULT_VIEW = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', scope: 'all', page: 1 };
+
+// ★终审 M10：视图态的默认值**只有这一份真源**——接线层（`web/index.js` 的 `sw2EntsView` 与 `sw2EntsViewReset`）
+//   从本工厂取，不许再各写一份字面量（两份靠人同步 = 迟早分叉；本笔加 `scope` 时正是两处都要改）。
+//   ★`filters` 必须**拷一份新数组**：接线层对它是**就地 `push`/`splice`**，若与默认值共用同一个数组，
+//     一次筛选就会把默认值改脏（下一个玩家开局带着上一个的筛选项）。
+export function makeEntsView() { return { ...ENTS_DEFAULT_VIEW, filters: [...ENTS_DEFAULT_VIEW.filters] }; }
 
 // 搜索面：★位置**在**这里（位置不占版面 ≠ 查不到——细案 §3.3 是硬口径）
+//   ★终审 C2：占位词「未明」**不进搜索面**（细案 Task 1 评审定夺③的原话：「占位词不是内容，否则搜「未明」
+//     会命中 475 人」——实现当时没跟上、判据也没咬住）。真账实测（副本）：`location === '未明'` 有 475/621，
+//     而位置列已撤（J1）⇒ 玩家再没有"这一格印的只是占位词"的唯一线索，一搜「未明」就是 475 个人。
+//     ⇒ 只撤**这一个占位词**，真地名照旧在搜索面里（细案 §3.3 的覆盖口径一个字不改）。
 export function entsSearchTextOf(e) {
-    return [e?.name, e?.parent, e?.location, e?.['实力'], e?.['规模'], e?.['性质'], e?.['倾向'],
+    const loc = typeof e?.location === 'string' && e.location !== '未明' ? e.location : '';
+    return [e?.name, e?.parent, loc, e?.['实力'], e?.['规模'], e?.['性质'], e?.['倾向'],
         ...(Array.isArray(e?.organs) ? e.organs : []), ...(Array.isArray(e?.branches) ? e.branches : [])]
         .filter((x) => typeof x === 'string' && x).join(' ').toLowerCase();
 }
 
-export function entsHitCounts(world) {
+// ★终审 I1：**行集合只有这一处算**（`selectEntityPage` 的分页切片与 `entsHitCounts` 的「当前结果」口径
+//   都吃它）——"一份真源、两个口径"：口径只决定"对哪个集合点数 / 按哪条谓词点数"，筛选管线不许出现第二份。
+//   不导出：它是这两个纯函数的内部实现（接线层一行都不碰）。
+function entsRows(world, view = {}) {
+    const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
+    const busy = new Set((world?.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    const filters = new Set(Array.isArray(v.filters) ? v.filters : []);
+    const q = String(v.q || '').trim().toLowerCase();
+    let rows = (world?.entities || []).filter((e) => v.kind === 'all' || e.kind === v.kind);
+    if (filters.has('busy')) rows = rows.filter((e) => busy.has(e.id));
+    if (filters.has('recent')) rows = rows.filter((e) => typeof e.lastActiveTick === 'number');
+    if (filters.has('named')) rows = rows.filter((e) => e.parent);
+    if (filters.has('orphan')) rows = rows.filter((e) => !e.parent);
+    if (q) rows = rows.filter((e) => entsSearchTextOf(e).includes(q));
+    return { rows, busy };
+}
+
+// ★终审 I1：`scope` 是**可选**第三参（缺省 `'all'` ⇒ 既有调用点零扰动）。
+//   `'all'`  = 全册口径（本函数原本的唯一口径：始终对 `world.entities` 点数）。
+//   `'hit'`  = 「当前结果」口径，恰好就是**页脚「命中 N」那一套数**长在每枚钮上：
+//             · 类别钮（全部/势力/角色）= 把"类别"那一维换成它的值，其余当前条件不动
+//               ⇒ 数 = 「点它会得到多少」；
+//             · 筛选钮 = 在当前条件上**加上**这条 ⇒ 数 = 「当前结果里满足这条的有几个」
+//               （已经生效的那一枚，它的数就是当前命中数本身——不会一点就从 N 跳到 0）。
+//   ★两个口径共用 `entsRows` 那一条管线（`assert` 在 `test/render.test.js` 里逐格与 `selectEntityPage` 对齐）。
+export function entsHitCounts(world, view = {}, scope = 'all') {
     const es = world?.entities || [];
+    if (scope === 'hit') {
+        const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
+        const on = new Set(Array.isArray(v.filters) ? v.filters : []);
+        const n = (patch) => entsRows(world, { ...v, ...patch }).rows.length;
+        return {
+            all: n({ kind: 'all' }),
+            faction: n({ kind: 'faction' }),
+            character: n({ kind: 'character' }),
+            busy: n({ filters: [...on, 'busy'] }),
+            recent: n({ filters: [...on, 'recent'] }),
+            named: n({ filters: [...on, 'named'] }),
+            orphan: n({ filters: [...on, 'orphan'] }),
+        };
+    }
     const busy = new Set((world?.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
     return {
         all: es.length,
@@ -698,15 +751,8 @@ export function entsHitCounts(world) {
 
 export function selectEntityPage(world, view = {}) {
     const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
-    const busy = new Set((world?.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
-    const filters = new Set(Array.isArray(v.filters) ? v.filters : []);
-    const q = String(v.q || '').trim().toLowerCase();
-    let rows = (world?.entities || []).filter((e) => v.kind === 'all' || e.kind === v.kind);
-    if (filters.has('busy')) rows = rows.filter((e) => busy.has(e.id));
-    if (filters.has('recent')) rows = rows.filter((e) => typeof e.lastActiveTick === 'number');
-    if (filters.has('named')) rows = rows.filter((e) => e.parent);
-    if (filters.has('orphan')) rows = rows.filter((e) => !e.parent);
-    if (q) rows = rows.filter((e) => entsSearchTextOf(e).includes(q));
+    const { rows: matched, busy } = entsRows(world, v);
+    let rows = matched;
     const cmp = {
         // 在办优先 → 最近活跃次之 → 名号（确定性三重键：同输入必得同序）
         active: (a, b) => (busy.has(b.id) ? 1 : 0) - (busy.has(a.id) ? 1 : 0)
@@ -729,7 +775,8 @@ export function selectEntityPage(world, view = {}) {
 //   （本仓纪律：渲染层不持任务状态；真路是 `config.lookupTask`，见 `web/index.js` 的 `renderCfg()`）
 export function renderEntsToolbar(world, view, config = null) {
     const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
-    const c = entsHitCounts(world);
+    // ★终审 I1：chip 上的数按**当前口径**量（缺省 `'all'` = 全册，与既有观感逐字节一致）
+    const c = entsHitCounts(world, v, v.scope);
     const filters = new Set(v.filters || []);
     // ★评审第二轮 #6：chip 是真 `<button>`，选中态原先**只靠 `.on` 类**（纯视觉）⇒ 读屏用户听不出
     //   自己选了哪档（筛选/排序/分组三类钮全是这个形状）。`aria-pressed` 是这种"可切换钮"的标准说法，
@@ -762,14 +809,26 @@ export function renderEntsToolbar(world, view, config = null) {
         + `<div class="sw2-ents-asks-body">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；`
         + `<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。`
         + `每行的<b>查</b>=只补没定的栏（已查到的原话不动）。</div></details>`;
+    // ★终审 I1：**计数口径钮**（一枚钮 + `data-value` 两态）。病是"chip 数全册、页脚数当前结果，同屏并列
+    //   ⇒ 玩家以为筛选坏了"；治法是把口径做成**玩家自己看得见、能切**的一件事，而不是替他猜。
+    //   ★标签**如实写当前口径**（`计数：全册` / `计数：当前结果`），`data-value` 是"点下去会变成什么"
+    //   （与同排其它钮同一语义：那枚钮一律"点它就把状态设成 data-value"）。
+    //   ★`aria-pressed` 仍照 chip 的契约印（按下 = 「当前结果」口径生效），与上面三类钮同一说法。
+    const scopeLabel = v.scope === 'hit' ? '当前结果' : '全册';
+    const scopeTip = v.scope === 'hit'
+        ? '当前：每枚钮显示"在当前条件下点它会得到多少"（与页脚「命中」同一套数）。点一下切回全册。'
+        : '当前：每枚钮显示整个名册的数（不随筛选变）。点一下切到"当前结果"口径。';
+    const scopeChip = `<button class="sw2-chip${v.scope === 'hit' ? ' on' : ''}" aria-pressed="${v.scope === 'hit' ? 'true' : 'false'}"`
+        + ` data-action="ents-scope" data-value="${v.scope === 'hit' ? 'all' : 'hit'}" title="${attrText(scopeTip)}">计数：${scopeLabel}</button>`;
     return `<div class="sw2-ents-tools">`
         + `<div class="sw2-ents-tools-row">`
-        + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" aria-label="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
+        + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" aria-label="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质" enterkeyhint="search" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
         + kinds.map(([k, label, n]) => chip('ents-filter', k, label, v.kind === k, n)).join('')
         + chip('ents-filter', 'busy', '只看在办', filters.has('busy'), c.busy)
         + chip('ents-filter', 'recent', '最近动过的', filters.has('recent'), c.recent)
         + chip('ents-filter', 'named', '有归属的', filters.has('named'), c.named)
         + chip('ents-filter', 'orphan', '无归属的', filters.has('orphan'), c.orphan)
+        + scopeChip
         + `<span class="sw2-ents-grp">分组</span>`
         + [['none', '不分组'], ['parent', '按归属'], ['loc', '按位置'], ['kind', '按类别']]
             .map(([g, label]) => chip('ents-group', g, label, v.grp === g)).join('')
@@ -795,6 +854,10 @@ export function renderEntsToolbar(world, view, config = null) {
 //   ★空结果时只印「命中 0」——**不印「显示第 0–0 条」**（Task 1 评审定夺：空态不占版面）
 //   ★一页装得下的时候**控件照旧在位**（只是两枚都 `disabled`）：细案 J5 要的是"控件必须存在"
 //     （旧版 0 个是把 621 行全摊平的病根），控件随命中数忽隐忽现反倒让玩家以为没这功能。
+//   ★终审 M11（如实处置这一格）：**保留**那两枚 `disabled` 钮，不隐藏、也不假装它们能点。理由同上
+//     （J5"控件必须存在" + 忽隐忽现更像坏了）；`disabled` 本身就是诚实说法——"现在没有可翻的页"。
+//     同一批：单页时不印"第 1 / 1 页"（没页可翻就不摆页码），只留「命中 N」。判据在 `test/render.test.js`
+//     的"命中计数与页码如实印出"那条里（两枚钮在位且都 `disabled`）。
 export function renderEntsPager(info) {
     const hit = info?.hit ?? 0;
     const multi = info && info.pages > 1;
@@ -910,7 +973,8 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
     const empty = page.hit === 0
         ? '<div class="sw2-ents-empty">没有命中的名号——清掉筛选项或换个词试试。</div>' : '';
     // 分组（细案 §3.2）：把同一批行按归属/位置/类别切开，组头带真数（details 折叠）
-    //   ★只有**本页那 60 行**参与分组（`page.rows` 与 `rows` 同序同长 ⇒ 按下标配对），
+    //   ★**先切页、再分组**（终审 M9 确认留档在位：这条口径不改，但把说法写死成可 grep 的一句）：
+    //     只有**本页那 60 行**参与分组（`page.rows` 与 `rows` 同序同长 ⇒ 按下标配对），
     //     不是全册分组——全册分组要么把组切碎（每组跨页），要么得改分页语义（超出本笔范围）。
     //   ★★评审修正 #2（组头计数歧义）：正因为只切本页，组头**必须明说"本页"**——
     //     同屏还有两处册量级的数（分页器「命中 621」与表头「全册 621」），原写法「N 位」会被读成
