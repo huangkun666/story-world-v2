@@ -33,6 +33,9 @@ import { runMainCall } from '../src/worldstep.js';
 import { settleTick } from '../src/settle.js';
 import { extractMove } from '../src/extract.js';
 
+// ★探针必须走真源（leg32/leg33 立的现场纪律：`node --check` 给假绿、判语法必须真导入）。
+import { QUIET_TICKS } from '../src/gate.js';
+
 // ---------------- 参数 ----------------
 const args = process.argv.slice(2);
 const hasFlag = (n) => args.includes(n);
@@ -42,6 +45,12 @@ const WORLD_PATH = argVal('--world', DEFAULT_WORLD);
 const SLOTS = Math.max(0, parseInt(argVal('--slots', '5'), 10) || 0);
 const TICKS = Math.max(1, parseInt(argVal('--ticks', '8'), 10) || 8);
 const ARM_NAMES = argVal('--arms', 'base,ja,bing').split(',').map((s) => s.trim()).filter(Boolean);
+// ★候选乙（丁口径）两条报批数：每轮派生几条（P-2 提案 1–2）· 同一实体多少轮内不重复点名（P-3 提案 12＝与 STALE_CHAIN_HEAD_AGE 同档）
+export const ANCHOR_PER_TICK = Math.max(0, parseInt(argVal('--anchor-per-tick', '1'), 10) || 0);
+export const ANCHOR_GAP = Math.max(1, parseInt(argVal('--anchor-gap', '12'), 10) || 12);
+// ★可选：只派某一类实体（`--anchor-kind faction`）。用途＝**公平性对照**——第一轮实测派的 8 个全是冷门
+//   character（模型眼里的"布景"）且零采纳；要排除"是不是我给你派的都是无名小卒"这条辩解，就得单独试势力。
+export const ANCHOR_KIND = ['faction', 'character'].includes(argVal('--anchor-kind', '')) ? argVal('--anchor-kind', '') : '';
 const OUT_PATH = argVal('--out', '');
 const LIVE = hasFlag('--live');
 const STRUCT = hasFlag('--struct') || !LIVE;   // 缺省 = 只出结构（零成本）；要真模型必须显式 --live
@@ -281,6 +290,111 @@ function situationOf(world, entityId) {
     return { id: e.id, name: e.name, kind: e.kind, ...line };
 }
 
+// ================= 候选乙 = 「丁口径」：账上处境锚（leg34 · 用户令「上 P-甲′…先出数再拍」）=================
+// 机制（细案 `docs/spec-world-model-widening.md` §3 候选乙，本装置只**出数**、不改仓库真源）：
+//   引擎每轮从账上机械选出一个**带真处境的冷门实体**，按结构事实派生**一条独立的 `state` 源事件根**：
+//     {"id":"ev_<tick>_<100+n>","title":"〔昆仑道宫〕在西极昆仑山有所动作",
+//      "source":{"type":"state"},"position":"西极昆仑山","ripples":["e_bk_1"],"links":{"up":[],"down":[]},"closed":false}
+// ★**引擎不编故事**：标题三样（谁 / 在哪 / 有动作）**全部是账上真有的字段**——
+//   `entities[].name` / `entities[].location` / "`state` 源＝由世界处境而生"这个既有语义（entropy.js 同款）。
+//   不含新事实、不含数值、不含胜负。★这条是本候选**唯一**的合法性来源，故写成硬闸（见下）。
+// ★先例不是我发明的：`entropy.js:71-80` 的熵泵事件就是这个形状（`{source:{type:'state'}, ripples:[], links:{up:[],down:[]}}`
+//   直接 push 进 `world.events` + 编年一笔）⇒ 本候选走的是**引擎里已经存在的那条代码路**。
+//
+// ★为什么它可能有牙（三条都读在真源上，不是推测）：
+//   ① `gate.js:39-41` 的"点名"= **未决事件的 ripples** ⇒ 被点名者 `lifted` ⇒ 脱离静默（结构三条件第③条解除）；
+//   ② `gate.js:73` `canStart = active(id) || spotlight.has(id)` ⇒ 被点名者**获得"起头资格"**（可以提 newAgendas）；
+//   ③ `settle.js:232-250` 闭环只收 `plot`/`ripple` 源 ⇒ **`state` 源永不自动闭环**（entropy.js 头注释同款）
+//      ⇒ 这条锚会**稳定留在池里**（leg32 §5 唯一被实测到的变宽机制＝"事件点名新人 ⇒ 他立起自己的线"，真账 t24 东海龙宫）。
+//
+// ★硬闸（三条，缺一条就是引擎编故事 —— 细案 §3 候选乙"风险与闸门"原文）：
+//   1. **只用账上真有的 `location`**：值必须 ∈ `context.positions`；没有位置的实体**不许编一个**（空着就是空着）；
+//   2. **每轮上限 + 同一实体 N 轮内不重复点名**（`--anchor-gap`，缺省 12＝与 STALE_CHAIN_HEAD_AGE 同档）；
+//   3. **不与主线争位**：只 push 事件、**不改任何上限闸**（`AGENDA_CAPS` 一字节不动）。
+export const ANCHOR_TITLE = (name, loc) => `〔${name}〕在${loc}有所动作`;
+
+// 选出本轮被点名的实体（**纯函数、确定性、零状态**——轮转位来自 `meta.anchorDerived` 计数，写在世界副本上）。
+//   池口径与 `computeIdleFaces`（pack.js:68-73）**逐条同源**，外加两条本候选自己的闸：
+//     · 必须有真位置（值 ∈ context.positions，闸①）
+//     · 距上次被本机制点名 ≥ ANCHOR_GAP 轮（闸②，表在 `meta.anchorNamedTick`）
+export function pickAnchorEntity(world, gap = ANCHOR_GAP, kind = ANCHOR_KIND) {
+    const tickNow = world.meta?.tick ?? 0;
+    const posSet = new Set(world.context?.positions || []);
+    if (!posSet.size) return null;                       // 无位置集 ⇒ 本机制整体不启动（零扰动，照 entropy 的守卫惯例）
+    const playerId = world.context?.playerId;
+    const topId = (world.entities || [])[0]?.id;         // gate.js 保送口径
+    const openOwners = new Set((world.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    const namedNow = new Set();
+    for (const ev of world.events || []) if (!ev.closed) for (const r of ev.ripples || []) namedNow.add(r);
+    const lastNamed = world.meta?.anchorNamedTick || {};
+    const pool = (world.entities || []).filter((e) => {
+        if ((e.status || 'active') !== 'active') return false;
+        if (kind && e.kind !== kind) return false;                       // ★可选：只派某一类（`--anchor-kind faction`）
+        if (e.id === playerId || e.id === topId) return false;
+        if (openOwners.has(e.id) || namedNow.has(e.id)) return false;   // 手上有在办的事 / 已被点名 ⇒ 不是冷门
+        if (typeof e.lastActiveTick === 'number' && (tickNow - e.lastActiveTick) < QUIET_TICKS) return false;
+        if (!e.location || e.location === '未明' || !posSet.has(e.location)) return false;   // ★闸①
+        const prev = lastNamed[e.id];
+        if (typeof prev === 'number' && (tickNow - prev) < gap) return false;                // ★闸②
+        return true;
+    }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    if (!pool.length) return null;
+    // ★选择规则：**地点优先轮转**（本装置第五版定型）——细案 §2.2 明写"这 138 个**散得开**（特意验过——
+    //   怕『变宽』变成『换个地方挤』）"⇒ 分散**是这条候选的载荷**，不是锦上添花，故写成选择规则本身：
+    //   每轮取一个**新地点**（地点按名排序后轮转，相位落在 `meta.anchorPhaseLoc`），再在该地点取 id 最小者。
+    //   ★为什么不是"按 id 走一遍池子"：真账 id 序里 `e_bk_109..e_bk_120` **整段都在西极昆仑山**
+    //     ⇒ 按 id 轮转会连续 10+ 轮点名同一个地方（实测），那正是细案要防的"换个地方挤"。
+    const byLoc = new Map();
+    for (const e of pool) {
+        if (!byLoc.has(e.location)) byLoc.set(e.location, []);
+        byLoc.get(e.location).push(e);
+    }
+    const locs = [...byLoc.keys()].sort();
+    if (!locs.length) return null;
+    const prevLoc = world.meta?.anchorPhaseLoc;
+    let li = prevLoc ? locs.findIndex((l) => l > prevLoc) : -1;
+    if (li < 0) li = (world.meta?.anchorDerived ?? 0) % locs.length;
+    const loc = locs[li];
+    world.meta.anchorPhaseLoc = loc;                     // ★相位落账（按地点名，池缩水也不打乱）
+    const here = byLoc.get(loc).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return { entity: here[0], poolSize: pool.length, idx: li, locations: locs.length };
+}
+
+// 派生一批（引擎 tick 段：出包**之前**落账 ⇒ 模型当轮就看得见；与 entropy.js 挂在 settle 里同族）
+export function deriveAnchorEvents(world, perTick = ANCHOR_PER_TICK, gap = ANCHOR_GAP, kind = ANCHOR_KIND) {
+    const tick = world.meta?.tick ?? 0;
+    if (!(perTick > 0)) return [];
+    const born = [];
+    for (let k = 0; k < perTick; k += 1) {
+        const pick = pickAnchorEntity(world, gap, kind);
+        if (!pick) break;
+        const e = pick.entity;
+        const n = (world.meta?.anchorDerived ?? 0) + 1;
+        const ev = {
+            // ★id **必须**走引擎既有约定 `ev_<tick>_<n>`——这不是风格问题，是**硬约束**（本装置第四版实测抓出来的）：
+            //   `pack.js:271` 与 `settle.js` 的 bornTickOf 都按 `String(id).split('_')[1]` **取出生轮**。
+            //   我第一版用 `ev_anchor_59_1` ⇒ 解析得 `"anchor"` ⇒ `Number||0` 落地成 **0** ⇒ 年龄算成 `59 - 0 = 59`
+            //   ⇒ 一条**刚出生**的锚被 leg32h 的"陈旧死链头过滤"（age ≥ 12 且 ripples < 2）**当成挂了 59 轮的死链头丢掉**
+            //   ⇒ 模型根本看不见它（实测 `pendingEvents` 30 条里没有它）。**留档：锚要能被看见，id 约定必须合规。**
+            //   `n` 起算偏移 100：出包时该轮模型新事件占用 `ev_<tick>_1..k`（hangEvents: `ev_${tick}_${i+1}`）
+            //   ⇒ 偏移到 100 保证**任何可达的 k 都不相撞**（k 受 perTick 闸约束，远小于 100）。
+            id: `ev_${tick}_${100 + n}`,
+            title: ANCHOR_TITLE(e.name, e.location),                       // ★三样全是账上字段（谁/在哪/有动作）
+            source: { type: 'state' },
+            position: e.location,                                          // ★闸①：直接用账上的值，不归一、不截断、不编
+            ripples: [e.id],                                               // ★点名 ⇒ gate 的 lifted + 起头资格
+            links: { up: [], down: [] },
+            closed: false,
+        };
+        world.events.push(ev);
+        if (!world.meta.anchorNamedTick) world.meta.anchorNamedTick = {};
+        world.meta.anchorNamedTick[e.id] = tick;
+        world.meta.anchorDerived = n;
+        born.push({ ...ev, _name: e.name, _kind: e.kind, _poolSize: pick.poolSize });
+    }
+    return born;
+}
+
 // ★引擎出包返回的是**包装**：{ pack, text, estTokens }（buildEvolutionPack 末尾 return，见 pack.js:347）。
 //   且 trimPack 已**就地**裁过内层 pack ⇒ 读包内读数必须读 `.pack`，不是包装本身（本装置第一版栽在这里）。
 //   统一契约：每个臂的 make() 返回 { pack: 包装, base: 内层包 }，包装里的 text 已按变体重出。
@@ -369,11 +483,31 @@ function invariantOf(base, variant) {
     };
 }
 
+// 丁口径（候选乙）：**基线包逐字节不动**，改的是**账**——出包前先按结构事实派生一条 `state` 源事件根。
+//   ★为什么改账而不是只改包：细案 §3 候选乙的原文是"**引擎把一条事摆上桌**"（机械可核：事件真的在账上）。
+//     只塞进包里的事件**不在账上** ⇒ 模型若以它为 `source.ref` 提 newAgendas，`settle` 会按"event 源必须引
+//     已存在未决事件"**整条拒掉**（K13）⇒ 那就成了"给模型一个够不着的锚"，量出来的数是假的。
+function packArmDing(world, moveFact) {
+    return buildBase(world, moveFact);   // 包本身＝基线（零编排改动）；账的改动在 `derive` 钩子里
+}
+
 export const ARMS = {
     base: { name: '基线（现状：真包逐字节不动）', make: (w, m) => buildBase(w, m) },
     ja: { name: `甲口径（主线 / 各自的线，留 ${SLOTS} 位）`, make: packArmJia },
     yi: { name: '乙口径（不给主线框：各自的线排最前）', make: packArmYi },
     bing: { name: '丙口径（甲的两栏 + 名单每人一句自己的处境）', make: packArmBing },
+    ding: {
+        name: `丁口径 · 候选乙（账上处境锚：每轮 ${ANCHOR_PER_TICK} 条 state 源事件根，同名间隔 ${ANCHOR_GAP} 轮${ANCHOR_KIND ? `，只派 ${ANCHOR_KIND}` : ''}）`,
+        make: packArmDing,
+        derive: (world) => deriveAnchorEvents(world, ANCHOR_PER_TICK, ANCHOR_GAP, ANCHOR_KIND),   // ★改账（在出包之前）
+    },
+};
+// ★显式别名：`ding_char` = 丁口径但**只派角色**（`ding` 默认只派势力）。为的是**同一次跑里**把两条
+//   选择规则并排比（跨 run 比会混进"世界不同步/模型采样"两个变量）；臂名进日志，故必须真注册、不许写个不存在的名字。
+ARMS.ding_char = {
+    name: `丁口径（只派 character：每轮 ${ANCHOR_PER_TICK} 条，间隔 ${ANCHOR_GAP} 轮）`,
+    make: packArmDing,
+    derive: (world) => deriveAnchorEvents(world, ANCHOR_PER_TICK, ANCHOR_GAP, 'character'),
 };
 
 // ---------------- 结构出数（零模型成本） ----------------
@@ -437,6 +571,9 @@ async function liveArm(arnName, world0, transport) {
     let calls = 0; let rejected = 0;
     for (let t = 1; t <= TICKS; t += 1) {
         const before = world;
+        // ★候选乙（丁口径）：引擎 tick 段的派生——**出包之前**落账（entropy.js 同族：引擎自己 push 事件）。
+        //   挂在世界副本上 ⇒ 真账零接触；且派生出的锚**当轮就在池里**（settle 认得它的 id，K13 能过）。
+        const derived = arm.derive ? arm.derive(world) : [];
         // ★玩家不模拟：dialogue 传空串 ⇒ moveFact=null（用户令：模拟器不许模拟玩家的行动）
         const move = extractMove('', {});
         const { pack, base } = arm.make(world, null);
@@ -484,6 +621,11 @@ async function liveArm(arnName, world0, transport) {
                 newEntities: (main.step.newEntities || []).length,
             },
             warns: (s.stage.warnings || []).length,
+            // ★候选乙专属读数：本轮引擎派了谁（+ 它落在不在"大荒"，细案 §4 要求"变宽"与"换个地方挤"分开报）
+            derivedN: derived.length,
+            derivedWho: derived.map((d) => `${d._name}（${d._kind}）@ ${d.position}`),
+            derivedLocation: derived.map((d) => d.position),
+            derivedInDaHuang: derived.filter((d) => String(d.position).includes('大荒')).length,
         });
     }
     const okTicks = perTick.filter((p) => p.ok);
@@ -506,6 +648,10 @@ async function liveArm(arnName, world0, transport) {
         bornEventsTotal: okTicks.reduce((n, p) => n + p.bornEvents, 0),
         bornAgendasTotal: okTicks.reduce((n, p) => n + p.bornAgendas, 0),
         bornAgendaClasses, bornEventClasses,
+        // ★候选乙读数：引擎派生了几条锚、其中几条在"大荒"（那场大乱所在 ⇒ 可能是同一件事的角度）
+        derivedTotal: okTicks.reduce((n, p) => n + (p.derivedN || 0), 0),
+        derivedInDaHuang: okTicks.reduce((n, p) => n + (p.derivedInDaHuang || 0), 0),
+        derivedWho: perTick.flatMap((p) => p.derivedWho || []),
         content, contentStart,
         contentLine: `新生盘算 ${content.newGoals.length} 条，踩到"公共名词"的 **${content.newGoalsOnTheme}/${content.newGoals.length}**`,
         startLine: `起点那批 ${contentStart.openAgendaTotal} 条，踩到公共名词的 **${contentStart.openAgendaOnTheme}/${contentStart.openAgendaTotal}**（公共名词：${contentStart.topThemes.slice(0, 5).map((t) => `${t.word}×${t.n}`).join(' ')}）`,
@@ -544,6 +690,26 @@ if (hasFlag('--check-packs')) {
             console.log(`   ${col} = ${v.length > 700 ? v.slice(0, 700) + ' …（截断）' : v}`);
         }
         if (name === 'bing') console.log(`   idleFaces[0] = ${JSON.stringify((ip.idleFaces || [])[0])}`);
+        // ★候选乙自证面（机械可核，不靠"我看过没问题"）：派生的事件**真的进了包**、池有多少、派生几条、
+        //   模型当轮能不能看到它的 id（看不到 ⇒ 那是个够不着的锚，量出来的数就是假的）
+        if (name === 'ding') {
+            // ★自证必须**照跑真顺序**（derive → 出包）：`make()` 是纯包变体，丁口径改的是**账** ⇒ 只调 make 读不到派生。
+            //   （本装置第四版第一稿就栽在这里：拿没派生的世界出包，自证报 "0 条进包"——是探针错，不是机制错。留档。）
+            const probe = structuredClone(world0);
+            const born = ARMS[name].derive(probe);
+            const p2 = ARMS.ding.make(probe, null);
+            const ip2 = p2.pack.pack;
+            const inPack = born.filter((b) => (ip2.pendingEvents || []).some((p) => p.id === b.id));
+            console.log(`   ★派生自证：池 ${pickAnchorEntity(structuredClone(world0), ANCHOR_GAP, ANCHOR_KIND)?.poolSize ?? 0} 个候选 · 本轮派生 ${born.length} 条 · **其中 ${inPack.length} 条真的出现在 pendingEvents 里** · 包内未决事件：派生前 ${(ip.pendingEvents || []).length} → 派生后 ${(ip2.pendingEvents || []).length}`);
+            const est = (s) => Math.ceil(s.length / 3.35);
+            console.log(`   派生后出包体积：${est(packTextOf(ip2))} est（基线 ${est(packTextOf(ip))} ⇒ +${est(packTextOf(ip2)) - est(packTextOf(ip))}，细案报批数 28–56 est/轮）`);
+            console.log(`   ★闸①机械核验：派生的 position 是否逐字 ∈ context.positions ⇒ ${born.every((b) => (world0.context?.positions || []).includes(b.position)) ? '✔ 全部命中' : '✗ 有编造的'}`);
+            for (const b of born) {
+                const row = (ip2.pendingEvents || []).find((p) => p.id === b.id);
+                console.log(`      ${b.id} 「${b.title}」 source=${JSON.stringify(b.source)} position=${b.position} ripples=${JSON.stringify(b.ripples)}`);
+                console.log(`        → 包内那一行 = ${JSON.stringify(row)}`);
+            }
+        }
     }
 }
 

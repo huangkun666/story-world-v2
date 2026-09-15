@@ -72,5 +72,8 @@ test('K30 动态导入冒烟：web/index.js 顶层零 DOM，Node 可直接加载
     const mod = await import('../web/index.js');
     assert.equal(typeof mod.sw2Version, 'function');
     assert.equal(mod.sw2Version(), '0.1.0');
-    assert.deepEqual(mod.sw2TabState('board', true), { name: 'board', active: true });
+    // ★leg40b（体检 · 第二刀）：`sw2TabState(name, active)` 探针已删——它是 `{ name, active }` 的
+    //   恒等包装、生产零调用。这条用例的真实目的（模块能在 Node 里被加载）由上面两行承担；
+    //   这里改为锁**它不该再回来**（同一个"零引用的包装函数"是这次体检删掉的一类东西）。
+    assert.equal(mod.sw2TabState, undefined, '★sw2TabState 已删（零引用的恒等包装），不许回潮');
 });

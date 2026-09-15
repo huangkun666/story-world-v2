@@ -1,6 +1,7 @@
 // story-world-v2/test/render.test.js
 // K33/K34 双流 UI：渲染核心纯函数（HTML 面，细案 A-1/A-2/A-3/A-6）——逐字节确定性锁 +
-// 玩家语言黑名单（直扫产物字符串）+ 六页签内容断言 + A-6 档案页逐字段一致 + 编码安全 + 空态防御。
+// 玩家语言黑名单（直扫产物字符串）+ 八页签内容断言 + A-6 档案页逐字段一致 + 编码安全 + 空态防御。
+//   ★leg40b：此处旧写"六页签"——leg26 加参数页、leg27 后加快照页之后就没再对齐过（八页签）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import {
     renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
 } from '../src/render.js';
 import { AGENDA_CAPS } from '../src/settle.js';
+import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS } from '../src/limits.js';
 import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,17 +39,33 @@ test('leg26 c：参数页——值不重复、因变量不给旋钮、自变量�
     assert.equal(count(bareHtml, '未定'), 4, `★参数页未定值重复渲染（4 个参数各一次，实际 ${count(bareHtml, '未定')} 次）`);
 
     // ② 因变量（民生/乱象）只读：所在行不得有 <select>
+    // ★leg40c 续：原判据按 `data-param="<键>"` 定位——那张**卡片壳**上现在**刻意不再挂 data-param**
+    //   （壳上挂它，事件 target 落在壳里时 `closest` 会抓到壳这个 div、`.value` 读成 undefined
+    //   ⇒ 提交"未定"、玩家点的档位被丢掉——正是用户那条「点了还是改不了值」）。
+    //   故改按**性质标记**定位（`因变量`/`自变量` 标记只在对应那一处出现），判据内容不变。
     for (const key of ['民生度', '动乱度']) {
-        const seg = html.split(`data-param="${key}"`)[1] || '';
-        const row = seg.slice(0, 500);
+        const at = html.indexOf('因变量');
+        const row = html.slice(Math.max(0, at - 400), at + 200);
         assert.ok(!row.includes('<select'), `★因变量「${key}」被做成了旋钮（它只该呈现）`);
         assert.ok(row.includes('因变量'), `因变量「${key}」要标明性质`);
     }
     // ③ 自变量（天时/外压）给旋钮
+    //    定位口径：`data-param` 挂在 `<select>` 上，而"自变量"标记在**同一张卡的标题**里
+    //    （标题在 select **之前**）⇒ 往回取到卡片开头，再截到下一张卡。
     for (const key of ['天时', '张力推手']) {
-        const seg = html.split(`data-param="${key}"`)[1] || '';
+        const at = html.indexOf(`data-param="${key}"`);
+        assert.ok(at > 0, `自变量「${key}」应有一个带 data-param 的控件`);
+        const cardStart = html.lastIndexOf('<div class="sw2-set-card', at);
+        const seg = html.slice(cardStart, at + 900);
         assert.ok(seg.includes('<select'), `自变量「${key}」必须有旋钮`);
         assert.ok(seg.includes('自变量'), `自变量「${key}」要标明性质`);
+    }
+    // ④ ★leg40c 续：**控件之外的元素一律不许挂 `data-param`**
+    //   （挂了就会在事件委托里"抢答"，把 undefined 当值提交——这条病刚在用户实机上出过一次）
+    for (const m of html.matchAll(/<(\w+)([^>]*data-param="[^"]+"[^>]*)>/g)) {
+        const tag = m[1].toUpperCase();
+        assert.ok(tag === 'SELECT' || tag === 'BUTTON' || tag === 'INPUT',
+            `★<${tag.toLowerCase()}> 上挂了 data-param（只有控件才许挂——否则事件委托会抓到它、读出 undefined）`);
     }
 
     // ④ 信息面板同款：未定值也**只许出现一次**（旧法 值「未定」+ 同义 chip「未定」= 两次）
@@ -79,15 +97,44 @@ test('★leg27 后：参数页版式——行有基础规则（flex 三栏）、
     assert.match(sel[1], /font-family/, '下拉要声明字体族（否则掉回浏览器默认字体，与面板不一致）');
 });
 
+// ★leg40c 续：这套判据原先用**固定字节切片**（`+ 2600` / `+ 3000`）取 `set-param` 那一段——
+//   于是"改了文案/加了注释"就会把断言要看的行挤出窗口 ⇒ **判据假红**（实机踩过：leg40c 续加了
+//   一段根因注释，两条旧锁当场红，而代码其实是对的）。⇒ 改成**结构切片**：从动作名切到下一个动作名。
+//   判据要看的东西在函数里，不该受注释长短影响。
+function setParamSrc(web) {
+    // ★★★leg48 修（**判据自己的假红，留档**）：注释里也写着 `bus['set-param']` / `bus['param-undo']`
+    //   ⇒ 用 `indexOf` 会切到**注释里那句**上，切出来的片段自然找不到代码里的东西（连红两条）。
+    //   治法：先把注释**原地抹成空格**（长度不变 ⇒ 位置不变），再切。
+    const code = web.split('\n').map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? ' '.repeat(l.length) : l)).join('\n');
+    const start = code.indexOf("bus['set-param']");
+    assert.ok(start > 0, '前置：源码里有 set-param 动作');
+    // ★★★leg48：这一笔的**实体**（`sw2ApplyParam`）紧跟在 `bus['set-param']` 之后——
+    //   "接线判据"必须把两者一起看：动作壳只管"忙闩"，真正的接线在实体里。
+    const marker = code.indexOf('async function sw2ApplyParam(', start);
+    const next = code.indexOf("bus['", start + 10);
+    const end = Math.max(marker > start ? marker : start, next > start ? next : start);
+    return code.slice(start, end);
+}
+
 test('★leg27 后：改参数**不许整页重绘**（用户实拍「下拉表刚拉开没多久自己就关了」的真因）', () => {
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
-    const seg = web.slice(web.indexOf("bus['set-param']"), web.indexOf("bus['set-param']") + 3000);
+    const seg = setParamSrc(web);
     assert.ok(seg.length > 200, '前置：找得到 set-param 动作');
     assert.ok(!/refreshWorld\(/.test(seg), '★set-param 里不许出现 refreshWorld()——它会重建每个页签的 DOM，把正在展开的 <select> 一起销毁（下拉"自己关"的真因）');
     assert.match(seg, /refreshSections\(\[/, '★必须走 refreshSections([...]) 局部重绘（只碰受影响页签）');
-    assert.match(seg, /refreshSections\(\[[^\]]*'params'/, '至少要重绘参数页（旋钮状态的唯一来源）');
+    // ★★★leg48 改口径（**用户实机抓到的"第二笔把 9 覆盖回 3"**）：参数页**整块重画**就是那两个真凶之一
+    //   ——重画把玩家手底下的 `<select>` 销毁重建 ⇒ 浏览器对新节点补吐一笔带**旧值**的事件
+    //   ⇒ 同一格一次点击进两笔、第二笔把玩家的选择覆盖掉。故：**只许重画观棋页**（它没有可交互控件），
+    //   参数控件只按真源就地回写（`sw2SetParamControl`）+ 就地改格（`sw2SyncParamCells`）。
+    assert.match(seg, /refreshSections\(\['board'\]\)/, '★只许重画观棋页（参数页重画 = 控件被销毁重建 = 第二笔事件的来源）');
+    assert.ok(!/refreshSections\(\[[^\]]*'params'/.test(seg), '★★参数页**不许**被整块重画（这一条是"点一次写两次"的根治）');
+    assert.match(seg, /sw2SetParamControl\(key\)/, '★控件按真源就地回写（不重建节点）');
+    assert.match(seg, /sw2ParamBusy/, '★★同一格"一笔操作"未结束时不许受理重复事件（重画补吐的那一笔）');
     // refreshSections 自身纪律：缺 DOM / 缺世界时静默返回（浏览器可载性与 Node 动态导入都不许炸）
-    const fn = web.slice(web.indexOf('function refreshSections('), web.indexOf('function refreshSections(') + 900);
+    // ★leg40c 续：这里原来也是**固定字节切片**（+900，注释一长就假红）⇒ 改成结构切片。
+    const fnStart = web.indexOf('function refreshSections(');
+    const fnEnd = web.indexOf('\nfunction ', fnStart + 10);
+    const fn = web.slice(fnStart, fnEnd > fnStart ? fnEnd : fnStart + 4000);
     assert.match(fn, /typeof document === 'undefined'/, 'refreshSections 必须有 DOM 守卫');
     assert.match(fn, /catch\s*\(/, 'refreshSections 必须吞错（局部重绘失败不该打断落账）');
 });
@@ -152,18 +199,40 @@ test('★leg27 c：进度心跳——1 秒一跳喂真实已花时间；stop() �
     h2.stop();
 });
 
-test('★leg27 c：set-param **无变化即忽略**（用户实拍「每次打开会弹出这个」+ 内容是「天时 → 未定」= 值没变）', () => {
+test('★★leg46（口径升级）：set-param 只做接线——三态规则与写入全在 `param-hub`（一处实现、一处判据）', () => {
+    // ★本用例的口径沿革（三代，都记着，免得下一任照旧写法再锁一遍实现细节）：
+    //   leg40c：锁"无变化时若还有没落盘的写就补落一次盘"（真源住世界账时逼出来的）；
+    //   leg41：锁"按字符串比 + 闸在受控编辑之前 + 空值不当删除命令"——但它锁的是**本文件里的实现**；
+    //   leg46（重构后）：那三条的**判定**已经搬进 `src/param-hub.js`（一处实现）⇒ 本文件只该锁
+    //     "接线有没有把话带到"。★漏掉这一格的代价（本仓最贵的一课）：同一语义在两处各判一遍，
+    //     改动时两处一起漂——判据全绿而实机全败。
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
-    const seg = web.slice(web.indexOf("bus['set-param']"), web.indexOf("bus['set-param']") + 2600);
+    const seg = setParamSrc(web);
     assert.ok(seg.length > 200, '前置：找得到 set-param 动作');
-    // 根因闸：比较"当前值"与"目标值"，相同则**直接返回**（位置必须在落盘之前）
-    assert.match(seg, /const before = Object\.prototype\.hasOwnProperty\.call\(cur, key\)/, '★必须取出"当前值"再比');
-    assert.match(seg, /if \(before === after\)\s*\{[\s\S]*?return;/, '★值没变必须直接 return（否则"打开下拉"就会落一次盘 + 弹一条状态栏）');
-    const guardAt = seg.indexOf('if (before === after)');
-    const writeAt = seg.indexOf('writeHotMeta(');
-    assert.ok(guardAt > 0 && writeAt > guardAt, '★这一闸必须在 writeHotMeta **之前**（放在后面等于没拦）');
-    // 不能把"用户真的改了"也拦掉：值不同时必须走下云
-    assert.match(seg, /if \(norm\) cur\[key\] = norm; else delete cur\[key\];/, '值不同时照旧落账（不许把真改动也拦掉）');
+    // ① 判定与写入都交给 hub（唯一写入口）
+    //   ★★★leg48 升级：接线层交给 hub 的**不再是"世界对象"**，而是"世界（或世界名）+ 键 + 值"——
+    //     因为"世界对象拿不到"曾经等于"一个字都不写"（用户报了十二轮的那条症状）。
+    assert.match(seg, /paramHub\.(set|clear)\(key2, key(, value)?\)/, '★set-param 必须把"世界（或世界名）+ 键 + 值"整体交给 hub');
+    // ★★★leg48：**"手滑到空"与"明确清空"在接线层分开**（下拉里的空串 = 玩家明确选了「未定」）
+    assert.match(seg, /fromUnsetOption/, '★必须判"这一笔是不是明确选了未定"（不分 ⇒ 空值会被当成清空命令，删掉玩家的档位）');
+    assert.match(seg, /paramHub\.clear\(/, '★明确清空走 hub 的显式通道');
+    // ★★★leg48：**世界对象拿不到时要出声**（旧版这条路上一个字都不说 ⇒ 十二轮不可见）
+    assert.match(seg, /拿不到世界对象/, '★拿不到世界对象必须留痕（不许沉默）');
+    // ★★★leg48：一笔结束之后**控件按真源对齐**（"手滑到空"不许留在屏幕上冒充一次改动）
+    assert.match(seg, /sw2SetParamControl\(key\)/, '★控件必须按真源对齐（否则控件空着、格写「未定」、刷新回默认）');
+    // ② 状态条 = hub 的原话（接线层不许另写一套"说得比做的好听"的口径）
+    assert.match(seg, /setStatus\(`\$\{r\.humanLine\}/, '★状态条照抄 hub 的 humanLine（真实口径只有一处）');
+    assert.match(seg, /r\.kind === 'noop-empty'/, '★"本来就是未定"那一下要如实出声（滚轮病灶）');
+    assert.match(seg, /r\.kind === 'unchanged'/, '★"值没变"也要出声（"点了没反应"是原始抱怨）');
+    // ③ 镜像那份要落进聊天账（引擎读的是世界账里的镜像）
+    assert.match(seg, /r\.changed && r\.mirror\?\.world/, '★真值变了才落账（无变化不许白写一次世界）');
+    assert.match(seg, /writeHotMeta\(hotAccountShape\(r\.mirror\.world\)\)/, '★镜像是接线层落账的，hub 不碰聊天账');
+    // ④ 三态规则的**实现**不许再回到本文件里（判据在 param-hub.test.js ⑧ 逐条锁行为）
+    assert.ok(!/normalizeStoreValue\(/.test(seg), '★归一（合法/清空/非法三态）只许在 hub 里做');
+    // ★"碰存储"的判据要判**写**，不是判"出现过 localStorage 这个词"——
+    //   `set-param` 里那句是**读**（`loadHotAccount(readHotMeta())` 取当下的世界），不是写。
+    //   （判据自己踩过：第一版写 `/localStorage/` ⇒ 假红。本仓的老毛病：词面代替语义。）
+    assert.ok(!/(localStorage|extensionSettings)\s*\.\s*setItem|setItem\s*\(/.test(seg), '★本文件不许直接写真源（写入口只许一个）');
 });
 
 test('★leg27 c：滚轮不许改档位（`<select>` 滚过就改值是老坑，正是"打开就弹"的来路之一）', () => {
@@ -219,7 +288,13 @@ function world() {
     return w;
 }
 
-const CONFIG = { baseUrl: 'https://gcli.ggchan.dev/v1', apiKey: 'k', model: 'gemini-3.1-pro-preview', playerDesc: '我名黄坤，炼气九层。' };
+// ★leg40b（体检）：夹具的 `playerDesc` 原来是「我名黄坤，炼气九层。」——**它让一条锁失效了**：
+//   `settings` 那一格会把 `playerDesc` 原样渲染进设置页，而"玩家可见文本零禁词"的全量扫描
+//   扫的正是这份夹具 ⇒ **玩家真写一段描述时会被带出来的词，夹具里一个都没有**。
+//   实测抓到的病灶：设置页那句「世界从中摘你的底子（**兵力/权位/人脉/耳目**）」——
+//   那四个概念在 leg25 c 已按用户令整条删除，却因为夹具描述不含这四个词而**年年绿灯**。
+//   ⇒ 夹具改成含四维词的描述，让下面几条禁词扫描真的能咬住这一格。
+const CONFIG = { baseUrl: 'https://gcli.ggchan.dev/v1', apiKey: 'k', model: 'gemini-3.1-pro-preview', playerDesc: '我名黄坤，炼气九层。四维皆无：兵力、权位、人脉、耳目一概谈不上。' };
 const VOLUMES = [{ id: '卷一', info: '第 1–500 轮 · 512KB · 收在插件本地' }];
 
 test('K33/A-2：同输入两次 renderAll 逐字节一致（纯函数锁）；参数面（config/oldVolumes）也在锁内', () => {
@@ -259,21 +334,36 @@ test('★leg32：面板分母不再写死——/15 与顶层 /N 都读引擎真�
     assert.equal(Number(topCap), AGENDA_CAPS.topLevel, `顶层分母应 = AGENDA_CAPS.topLevel(${AGENDA_CAPS.topLevel})，实际 ${topCap}`);
 });
 
-test('★leg32：参数页摆出引擎尺度三个上限（只读；无旋钮、不落 dynamic.env）', () => {
+// ★★leg40b 续（**口径升级**·用户令「能不能直接把这些闸门参数直接放进参数页？」→ 拍板"甲+乙档全开"）：
+//   这条锁**原本锁的是"只读、无旋钮、不落 dynamic.env"**——那条口径**已被本次改动取代**，
+//   故照本仓规矩（口径变了就升级锁 + 加"旧措辞不得回潮"的守门），把判据换成**新契约四条**：
+//     ① 四个上限**都在页上**（还是与引擎真源同源，不钉死字面数）；② 每个都**真做成档位下拉**；
+//     ③ 下拉里的档位**逐项等于白名单**（面板造不出引擎不认的值——UI 与判据同源）；
+//     ④ **`pack`/`sweep` 那两个"引擎自己的账"**（每轮新生盘算、入局新人）**仍然只读**（不许顺手全开）。
+test('★leg40b 续：参数页把世界尺度做成**四个可调档位**（旧"只读无旋钮"口径已升级）', () => {
     const html = renderParamsHtml(world());
-    // 三个上限值如实上板（口径 = 与引擎真源逐项相符，不钉"10/15/2"这种会漂的字面）
-    assert.match(html, new RegExp(`同时最多几件大计[\\s\\S]{0,80}?>${AGENDA_CAPS.topLevel}</b>`), '大计上限');
-    assert.match(html, new RegExp(`总数上限[\\s\\S]{0,80}?>${AGENDA_CAPS.open}</b>`), '在办总数上限');
-    assert.match(html, new RegExp(`每轮新生上限[\\s\\S]{0,80}?>${AGENDA_CAPS.perTick}</b>`), '每轮新生上限');
-    // 只读：这块里不许有旋钮（旋钮 = 玩家以为能拧，而引擎参数不是白名单档位、也不该被当输入）
     const seg = html.slice(html.indexOf('sw2-cap-card'));
-    assert.ok(seg, '参数页应有引擎尺度块（sw2-cap-card）');
-    assert.ok(!seg.includes('<select'), '★引擎尺度的上限块里不许出现 <select>');
-    assert.ok(!seg.includes('data-action="set-param"'), '★引擎尺度的上限块不许挂写通道（它不可拧）');
-    // 不许把这个块误当成"参数"去写进 dynamic.env：那三个键不该出现在 env 里
-    for (const k of ['perTick', 'open', 'topLevel']) {
-        assert.ok(!html.includes(`data-param="${k}"`), `上限 ${k} 不许做成可写参数`);
+    assert.ok(seg, '参数页应有世界尺度块（sw2-cap-card）');
+    // ① 四个上限都在（键名 = limits.js 的真源，不是抄来的字面）
+    for (const k of LIMIT_KEYS) {
+        assert.ok(seg.includes(`data-param="${k}"`), `上限「${k}」应做成可写参数`);
+        assert.ok(seg.includes(String(LIMIT_DEFAULTS[k])), `上限「${k}」的当前值 ${LIMIT_DEFAULTS[k]} 应上板`);
     }
+    // ② 每个都是档位下拉（不是裸数字、也不是只读文本）
+    const selects = seg.match(/<select[^>]*data-action="set-param"[^>]*>/g) || [];
+    assert.equal(selects.length, LIMIT_KEYS.length, `应有 ${LIMIT_KEYS.length} 个上限下拉，实际 ${selects.length}`);
+    // ③ 下拉档位**逐项**等于白名单（面板不许多给一个引擎不认的值）
+    for (const k of LIMIT_KEYS) {
+        const i = seg.indexOf(`data-param="${k}"`);
+        const block = seg.slice(i, seg.indexOf('</select>', i));
+        for (const g of LIMIT_GEARS[k]) assert.ok(block.includes(`value="${g}"`), `「${k}」的档位 ${g} 应出现在下拉里`);
+        const opts = (block.match(/<option /g) || []).length;
+        assert.equal(opts, LIMIT_GEARS[k].length, `「${k}」的下拉档位数应 = 白名单条数（多一个就是 UI 造了引擎不认的值）`);
+    }
+    // ④ 仍然只读的那几个**不许**被顺手做成旋钮（它们是"引擎自己的账"，且一次调太多会互相掩盖）
+    assert.ok(!seg.includes('data-param="每轮新生"'), '每轮新生盘算仍是只读（丙档）');
+    assert.ok(!seg.includes('data-param="每轮入局"'), '每轮入局新人仍是只读（丙档）');
+    assert.match(seg, /仍然固定/, '页上必须写明"哪些仍然不给旋钮"，否则玩家以为全开了');
 });
 
 test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世情=未聚，不混张力）；张力归张力行；参数档位如实列出', () => {
@@ -457,6 +547,25 @@ test('leg25 c：属性区（实力/位置的查书标记）无障碍双通道—
     assert.ok(html.includes('账上只记查到的与玩出来的东西'), '注脚行在位（说清"有值/未加载到/书未明述"三态）');
 });
 
+// ★★leg40b（体检 · A1）：**一条永不会兑现的承诺**——位置查书这条腿在 leg25 f 就被摘掉了
+//   （`src/entity-lookup.js` 的 `ENTITY_LOOKUP_FIELDS = ['实力']`），而关系区那枚位置 chip 的悬停
+//   仍写着「轮到时会按需去世界书取原话」。真账实测 405 行挂着它，而 `meta.entityFields` 里
+//   `位置:*` **一条都没有** ⇒ 那是一条玩家会读到、系统永远不会做的事。
+//   判据分两面：①旧承诺**不得回潮**；②新的「未载」必须如实说清来路（不许换成另一句含糊话）。
+test('★leg40b：位置不承诺查书（旧「轮到时会按需去世界书取原话」不得回潮）', () => {
+    const w = world();
+    w.entities.forEach((e) => { e.location = '未明'; });
+    const html = renderEntitiesHtml(w);
+    assert.ok(!html.includes('位置：还没轮到查它'), '★关系区不再摆「位置：未查」的查书标记（位置不查书）');
+    assert.ok(!/title="位置：[^"]*取原话/.test(html), '★位置那一栏不得承诺"会去世界书取原话"（那个功能已不存在）');
+    assert.ok(!html.includes('位置：还没轮到查它'), '旧措辞不得回潮（第 1 条判据的口语版）');
+    // 实力那一栏**照旧**承诺查书（它是真的会查）——别把两栏一起收掉
+    assert.ok(html.includes('title="实力：还没轮到查它'), '实力栏的查书承诺必须留着（那才是真会发生的）');
+    // 未载的解释必须说清"位置是从账上结构推的"，而不是含糊的"没轮到查"
+    const locTitle = [...html.matchAll(/title="([^"]*未载[^"]*)"/g)].map((m) => m[1]);
+    assert.ok(locTitle.some((t) => t.includes('组织驻地结构')), `未载的悬停要说清来路，实际：${JSON.stringify(locTitle)}`);
+});
+
 test('leg25 d 回归：属性区 title 属性不得被内层裸双引号截断（悬停文案要完整）', () => {
     // 子代理报回、实测确认的 A9：`lookupChip` 的未查态 title 里写了裸双引号（`"未加载到"`），
     //   `escapeHtml` **不转义半角引号** ⇒ 属性值就地截断：悬停只显示前半句，残余文字还漏成游离文本。
@@ -503,7 +612,10 @@ test('细案 spec-entity-field-lookup：实力/位置查书标记在面板上是
     // leg25 f：未查态的标签在 chip 的 title 里（chip 文本只写「未查」，免得与关系区标签重复）
     //   ⇒ 判据：用 title 认"这是哪一栏"，用 <b>未查</b> 认"它是未查态"。
     assert.ok(html2.includes('title="实力：还没轮到查它'), '★没查过 → 实力行有标记（title 认栏）');
-    assert.ok(html2.includes('title="位置：还没轮到查它'), '★位置同理：没查过 → 位置行有标记');
+    // ★leg40b（体检 · A1）：位置那一栏**不再有查书标记**——位置查书这条腿在 leg25 f 已摘掉
+    //   （`ENTITY_LOOKUP_FIELDS = ['实力']`），真账 `meta.entityFields` 里 `位置:*` 一条都没有
+    //   ⇒ 旧断言锁的是一句**永不兑现的承诺**（真账 405 行挂着它）。现在锁反面。
+    assert.ok(!html2.includes('title="位置：还没轮到查它'), '★位置不再有查书标记（那条腿已摘）');
     assert.ok(html2.includes('<b>未查</b>'), '★未查态真的渲染出来了（不是空白）');
     assert.ok(html2.includes('账上只记查到的与玩出来的东西'), '注脚把查书标记讲清');
 });
@@ -539,7 +651,10 @@ test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客�
     // leg25 f：属性空态改成**逐栏三态标记**（实力行/位置行各说各的），不再是一整句占位文案。
     //   （未查态的标签在 title 里——chip 文本只写「未查」，避免与关系区的 <i>标签</i> 重复。）
     assert.ok(html.includes('title="实力：还没轮到查它') && html.includes('<b>未查</b>'), '实力空态 → 行内标「未查」（不是空白、不是假数）');
-    assert.ok(html.includes('title="位置：还没轮到查它'), '位置空态 → 行内标「未查」（与位置列同一事实）');
+    // ★leg40b（体检 · A1）：位置那一栏**不再有查书标记**——位置查书这条腿在 leg25 f 已摘掉，
+    //   它的查书标记在真账里恒为 none ⇒ 旧断言「位置空态 → 行内标『未查』」锁的是一条**永不兑现的承诺**。
+    //   现在锁反面：不摆那枚 chip（位置只有「有值」与「未载」两态，见下一条专门用例）。
+    assert.ok(!html.includes('title="位置：还没轮到查它'), '★位置不摆查书标记（位置不查书，别把死承诺锁回来）');
     assert.ok(!html.includes('实力/位置未查（轮到时会按需去世界书取原话）'), '旧的一整句占位文案已撤（改逐栏标记）');
     assert.ok(!/0\.15|0\.25/.test(html), '不出现任何默认值冒充的数据');
     // 参数档位（leg26）：没定的显示「未定」——不填占位档、不冒充"书里给过值"
@@ -581,7 +696,7 @@ test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指�
 test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表单值来自 config', () => {
     const html = renderSettingsHtml(world(), { config: CONFIG });
     assert.match(html, /来源：角色卡 \+ 世界信息（自动合订）/);
-    assert.match(html, /<textarea id="sw2_player_desc"[^>]*>我名黄坤，炼气九层.<\/textarea>/u);
+    assert.match(html, /<textarea id="sw2_player_desc"[^>]*>我名黄坤，炼气九层/u);
     assert.match(html, /id="sw2_base" value="https:\/\/gcli\.ggchan\.dev\/v1"/);
     assert.match(html, /id="sw2_key" value="••••••••••••••••••••"/);
     assert.match(html, /id="sw2_model" value="gemini-3\.1-pro-preview"/);
@@ -590,6 +705,33 @@ test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表�
     assert.match(html, /自动入卷阈值/);
     assert.match(html, /data-action="export-world"/);
     assert.match(html, /data-action="import-world"/);
+    // ★leg40b（体检 · A3/D1）：`data-action="player-desc"` 是历史残留——这个 textarea 由
+    //   `bindSettingsForm` 按 id 绑 input/change 写入，**不经动作总线**。留着它只会让点击时
+    //   走 `dispatchAction` 的兜底分支、在状态条闪一句"接线随后续步骤"。判据：不许回潮。
+    assert.ok(!html.includes('data-action="player-desc"'), '★textarea 不许挂 data-action（它不经动作总线）');
+    // ★leg40b（体检 · D1）：推进按钮的名字必须与状态栏/参数页同一口径
+    assert.ok(html.includes('▶ 推进一轮'), '推进按钮叫「推进一轮」（与状态栏、与参数页同一口径）');
+    assert.ok(!html.includes('手动推进一步'), '旧名「手动推进一步」不得回潮（状态栏从来不叫这个）');
+});
+
+// ★★leg40b（体检 · C4）：**四维残文**——设置页那句「世界从中摘你的底子（兵力/权位/人脉/耳目）」
+//   承诺的是 leg25 c 已按用户令整条删除的四个概念。它躲过禁词锁整整十五棒，原因是**夹具的问题**：
+//   旧夹具的 `playerDesc` 是「我名黄坤，炼气九层。」——不含那四个词，于是"玩家真写一段描述时会带出什么"
+//   从来没进过扫描面。这条用例把口径钉死：**设置页（含玩家描述原样回显）不得出现那四个词**，
+//   且夹具描述**必须**含它们——否则这条锁又会退化成空绿（"夹具不含 ⇒ 永远扫不到"正是它当年失灵的方式）。
+test('★leg40b：设置页零四维残文（且夹具描述含四维词，防这条锁退化成空绿）', () => {
+    for (const term of ['兵力', '权位', '人脉', '耳目']) {
+        assert.ok(CONFIG.playerDesc.includes(term), `★夹具 playerDesc 必须含「${term}」（否则这条锁是空绿）`);
+    }
+    // ① 界面自己的文案零四维：用**不含**四维词的描述渲染 ⇒ 产物里出现任何一个都是界面在说
+    const plain = renderSettingsHtml(world(), { config: { ...CONFIG, playerDesc: '一段不含旧属性词的描述。' } });
+    const visible = textOnly(plain);
+    for (const term of ['兵力', '权位', '人脉', '耳目']) {
+        assert.ok(!visible.includes(term), `设置页正文不得出现「${term}」（四维已整条删除）`);
+    }
+    // ② 玩家真写的那段字照旧原样回显（不许因为我们删词而把他的输入吃掉）
+    const withTerms = renderSettingsHtml(world(), { config: CONFIG });
+    assert.ok(withTerms.includes(CONFIG.playerDesc), '★玩家描述原样回显（不许删用户自己写的字）');
 });
 
 test('K35/A-9 设置页：旧卷清单（卷号/信息/阅卷动作）入面；无卷时"尚未入卷"', () => {
@@ -684,8 +826,14 @@ test('leg25 f：实体页版式——「一栏一义」+ 空态退成虚线 chip
         assert.ok(html.includes(`class="sw2-cell ${cls}"`), `格子 ${cls} 在位（一栏一义）`);
     }
     // ② 空态一律走虚线 chip：位置列的「未载」不再是与名号同权重的裸字
-    assert.ok(html.includes('<span class="sw2-eattr nodata" title="还没轮到查它'),
-        '★位置列的「未载」是虚线 chip + 自带解释 title（旧版是裸字）');
+    //   ★leg40b（体检 · A1）：那个 title 换了措辞——它原来写着「还没轮到查它」，
+    //   而那正是**永不兑现的承诺**（位置不查书）。新判据不锁字面、锁结构 + 事实：
+    //   「未载」仍是虚线 chip，且它的 title **说清来路**（书里没写 / 位置由组织驻地结构推断）。
+    const locEmpty = html.match(/<span class="sw2-eattr nodata" title="([^"]*)">未载<\/span>/);
+    assert.ok(locEmpty, '★位置列的「未载」是虚线 chip + 自带解释 title（旧版是裸字）');
+    assert.ok(locEmpty[1].includes('书里没写'), `未载的 title 要说清"书里没写"，实际：${locEmpty[1]}`);
+    assert.ok(locEmpty[1].includes('组织驻地结构'), `未载的 title 要说清位置从哪来（结构推断），实际：${locEmpty[1]}`);
+    assert.ok(!locEmpty[1].includes('查它'), '★不许再写"没轮到查它"（位置不查书）');
     // ③ 关系区是**竖排行**（标签 + 值），不再是连成长段的一大坨
     assert.ok(html.includes('class="sw2-relations"'), '关系区有独立容器');
     assert.ok(html.includes('<i>规模</i><span class="sw2-relval">正道仙门魁首</span>'), '规模单独成行（标签 + 值）');

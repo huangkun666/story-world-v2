@@ -424,11 +424,12 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         const actions = [...new Set([...html.matchAll(/data-action=\\?"([a-z0-9-]+)\\?"/g)].map((m) => m[1]))];
         assert.ok(actions.length > 0, '产物里确有 data-action');
         // 两类合法的"不由总线处理"的动作（白名单必须带出处，不许随手加）：
-        //   · advance-world：dispatchAction 里特判走 tick 队列（web/index.js:207）
-        //   · player-desc  ：**不是按钮而是 textarea**，由 bindSettingsForm 按 id（sw2_player_desc）
-        //                    绑 input/change 写入（web/index.js:597-612）——它身上的 data-action 是
-        //                    历史残留（无害：点一下只会在状态条闪一句占位提示）。登记为待清小项。
-        const NON_BUS = new Set(['advance-world', 'player-desc']);
+        //   · advance-world：dispatchAction 里特判走 tick 队列（web/index.js 的 dispatchAction）
+        //   ★leg40b（体检）：`player-desc` 已从白名单撤除——它原来登记为"历史残留（无害：点一下只会在
+        //     状态条闪一句占位提示）"，而那句占位提示本身就是个病（把英文动作名印给玩家看，违 A-3）。
+        //     现在两头都治了：textarea 上的 `data-action` 撤掉（render.js 设置页），
+        //     `dispatchAction` 的兜底也改成人话并把动作名收进控制台。⇒ 白名单收成一项。
+        const NON_BUS = new Set(['advance-world']);
         const dangling = actions.filter((a) => !handlers.has(a) && !NON_BUS.has(a));
         assert.deepEqual(dangling, [], `★这些动作画了按钮但没有处理器：${dangling.join('、')}`);
         assert.ok(actions.includes('lookup-entity'), '行内「查」在产物里');
