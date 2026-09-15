@@ -543,8 +543,21 @@ test('leg25 c/leg49：属性区无障碍双通道——有值走原话 + 悬停�
         '视障通道在位：sr 文本先释义、后原话（读屏用户拿得到同一信息）');
     // ② 未查态（没轮到查它）：细案口径——**行内只留查询钮**，查询钮才是"这一行还没定案"的外显；
     //   三态释义收进工具条（Task 3 的 `sw2-ents-asks`）。
-    assert.ok(html.includes('<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="e_player" title="只补还没定案的栏（已查到的原话不动；查过之后这里会写「未加载到」或「书未明述」）">查</button>'),
-        '★未定案的角色行给出「查」钮（悬停说清它只补没定案的栏）');
+    // ★评审修正 #4：这条原先连悬停文案**整句**一起锁死（90 字），而它的意图只是"**钮在不在**"。
+    //   ⇒ 改锁 `data-action` + `data-entity`（文案逐字由下面 `leg25 d 回归` 那条**截断专条**整句锁，只此一处）。
+    assert.ok(html.includes('<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="e_player"'),
+        '★未定案（none）的角色行给出「查」钮');
+    // ★评审修正 #2：**`pending` 态原先没有任何判据**（上面那条只查了 none 的 e_player）——
+    //   而本任务的硬口径是"**未定案的行都得看得见**"（看不见 = 玩家以为没这功能）。
+    //   夹具形状照本文件下方「细案 spec-entity-field-lookup/leg49」那条：`e_c2` = 查过书、这轮模型没抽出来。
+    const pendingW = {
+        ...w,
+        entities: [...w.entities, { id: 'e_c2', kind: 'character', name: '无名客', location: '未明' }],
+        meta: { ...w.meta, entityFields: { e_c2: { attempts: { 实力: { count: 1, state: 'pending' } }, fields: {}, sources: ['昆仑道宫'] } } },
+    };
+    const pendingRow = renderEntitiesHtml(pendingW).split('<div class="sw2-entity-row').find((seg) => seg.includes('无名客'));
+    assert.ok(pendingRow && pendingRow.includes('data-action="lookup-entity"') && pendingRow.includes('data-entity="e_c2"'),
+        `★pending 态（查过书但这轮没抽出来）的行也必须看得见「查」钮，实际：${String(pendingRow).slice(0, 200)}`);
     // ★leg49：位置列退场（细案 J1）——位置改由搜索承担，不再占格子
     assert.ok(!html.includes('sw2-c-loc'), '★位置列已退场（细案 J1）——位置改由搜索承担');
     // 势力行不摆实力栏（用户拍板）：势力行内不得出现实力原话
@@ -570,8 +583,21 @@ test('★leg40b/leg49：位置不承诺查书、**也不再占版面**（旧「�
     //   （"未载"的解释已收进 `entsSearchTextOf` 的搜索面：不占列 ≠ 查不到）。判据锁反面。
     assert.ok(!html.includes('sw2-c-loc') && !html.includes('sw2-locval'), '★位置不占列（细案 J1）');
     assert.ok(!html.includes('未载'), '★「未载」这类空态词不进版面（细案：空态一律不占版面）');
-    // 实力那一栏**照旧**承诺查书（它是真的会查，只是承诺改由「查」钮的悬停承担）——别把两栏一起收掉
-    assert.ok(html.includes('title="只补还没定案的栏（已查到的原话不动；查过之后这里会写「未加载到」或「书未明述」）"'), '实力栏的查书承诺必须留着（那才是真会发生的）');
+    // 实力那一栏**照旧**承诺查书（它是真的会查，只是承诺改由「查」钮的悬停承担）——别把两栏一起收掉。
+    //   ★评审修正 #4：这里原先也锁整句悬停文案；本条意图是"承诺还在" ⇒ 改锁**按钮本身**
+    //   （文案逐字由 `leg25 d 回归` 的截断专条整句锁，不在这里重复锁）。
+    assert.ok(html.includes('data-action="lookup-entity"'), '实力栏的查书承诺必须留着（那才是真会发生的）');
+    // ★评审修正 #1：页底原写着「每行的**查**=只补没定的栏，**重查**=连「书未明述」也推倒重查」——
+    //   而本任务只产出**一枚**「查」钮（`data-force="absent"` 全仓不再渲染）⇒ 那是在承诺一个**不存在的钮**
+    //   （正是 leg40b 这条用例治的那类病）。判据两面：①行内不许再承诺「重查」；
+    //   ②全册范围的"连书未明述也推倒重查"**仍在**，但它落在**批量入口**上，页底必须说对。
+    const askLine = html.slice(html.indexOf('每行的<b>查</b>'));
+    assert.ok(askLine.length > 0, '页底查书说明在位（前一条已锁三态词）');
+    const askFirstSentence = askLine.slice(0, askLine.indexOf('。') + 1);
+    assert.ok(!askFirstSentence.includes('重查'),
+        `★页底不许再承诺行内「重查」钮（本任务只产出单个「查」钮），实际：${askFirstSentence}`);
+    assert.ok(askLine.includes('补全全册实力'),
+        '★并如实说对：全册「连书未明述也推倒重查」仍在——入口是那枚批量按钮（`lookup-batch-all`）');
 });
 
 test('leg25 d 回归：属性区 title 属性不得被内层裸双引号截断（悬停文案要完整）', () => {
@@ -625,7 +651,8 @@ test('细案 spec-entity-field-lookup/leg49：实力原话入「归属与来历�
     const html2 = renderEntitiesHtml(w2);
     // ★leg49：外显形态由「未查」chip 收成一枚「查」钮（只补没定案的栏；悬停说清口径）
     assert.ok(html2.includes('data-entity="e_c3"') && html2.includes('>查</button>'), '★没查过 → 该行给「查」钮');
-    assert.ok(html2.includes('title="只补还没定案的栏（已查到的原话不动；查过之后这里会写「未加载到」或「书未明述」）"'), '★钮的悬停说清"只补没定案的栏"（旧 chip 的整句口径照旧在位）');
+    //   ★评审修正 #4：原锁整句悬停（90 字）⇒ 改锁**短前缀**（本条意图是"钮的悬停还在"，逐字由 leg25 d 整句锁）。
+    assert.ok(html2.includes('title="只补还没定案的栏'), '★钮的悬停说清"只补没定案的栏"（旧 chip 的口径照旧在位）');
     // ★leg49（J11 的另一半）：**已定案的行不留查询钮、不留 chip**——真账 621 行里只有 ~12 行待查
     w2.meta.entityFields = { e_c3: { attempts: { 实力: { count: 1, state: 'absent' } }, fields: {}, sources: [] } };
     const html3 = renderEntitiesHtml(w2);

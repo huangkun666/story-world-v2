@@ -186,6 +186,8 @@ export function entityLabel(world, id) {
 //   玩家那一行靠「归属与来历 + 在办的事」自证（细案 §3.1：玩家标记不许搬回来）。
 //   类别词只由 kind 决定（角色/势力），玩家与旁人同口径。
 //   ★承重改动，已核过调用面：全仓只有实体页一处消费（kindLabel 的玩家支无人依赖）。
+//   ★评审修正 #5：那唯一一处调用点仍按两参调用（`kindLabel(e, world)`）——签名早已只收 `entity`，
+//     多传的第二参是改签名时的残留。已核全仓（src/web/test/docs）确无别处按两参调用，去掉那个实参。
 export function kindLabel(entity) {
     return LABELS.kind[entity.kind] || '实体';
 }
@@ -703,7 +705,9 @@ export function selectEntityPage(world, view = {}) {
     const pages = Math.max(1, Math.ceil(hit / ENTS_PAGE_SIZE));
     const page = Math.min(Math.max(1, Number(v.page) || 1), pages);   // ★越界夹紧（不返回空页）
     const slice = rows.slice((page - 1) * ENTS_PAGE_SIZE, (page - 1) * ENTS_PAGE_SIZE + ENTS_PAGE_SIZE);
-    return { rows: slice, total: (world?.entities || []).length, hit, page, pages, from: (page - 1) * ENTS_PAGE_SIZE + (slice.length ? 1 : 0), to: (page - 1) * ENTS_PAGE_SIZE + slice.length };
+    // ★评审修正 #6：`busyOwners`（在办的主）随返回值一起出去——渲染层原来用**同一个表达式**又算了一遍
+    //   （同一口径写两处 = 改一处忘一处），现在行标记只认这一份（数据选择层是唯一权威）。
+    return { rows: slice, busyOwners: busy, total: (world?.entities || []).length, hit, page, pages, from: (page - 1) * ENTS_PAGE_SIZE + (slice.length ? 1 : 0), to: (page - 1) * ENTS_PAGE_SIZE + slice.length };
 }
 
 // ★leg49（细案 spec-entities-page-ia）：行渲染三列化——**位置列与活跃列退场**。
@@ -717,7 +721,9 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
     //   （真账 621 实体实测）⇒ 一列印 76% / 96% 的空，是把信号淹在噪声里。
     //   ★但位置仍在搜索面里（entsSearchTextOf）——不占列 ≠ 查不到。
     const page = selectEntityPage(world, view);
-    const busyOwners = new Set((world.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    // ★评审修正 #6：行标记的 `busyOwners` **不再在这里重算**——`selectEntityPage` 已把同一份 Set 带回来
+    //   （原先两处各写一遍同一个表达式，改一处必忘另一处）。
+    const busyOwners = page.busyOwners;
 
     const rows = page.rows.map((e) => {
         const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
@@ -740,17 +746,18 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
         const settled = ['ok', 'absent'].includes(lookupState('实力'));
         // ★近况/待查态**不收进静默**：行内 chip 退场（真账 621 行 ⇒ 626 枚控件的病根），
         //   但那句话必须还在玩家手上——落点是**查询钮自己的悬停**（同一枚控件既当入口又当说明）：
-        //   未定案 ⇒ 只说"只补没定案的栏"；定过案还悬着 ⇒ 那是真的没查到，再给「查」钮（会走 force 覆盖）。
+        //   只有两种态会出现这枚钮（未定案才渲染）：`none` = 从没查过；`pending` = 查过书、这轮模型没抽出来。
         const lookState = lookupState('实力');
         // ★这枚钮同时承担**三态说明**（旧版那枚「未查」chip 的整句口径照旧在位：
-        //   「查过之后这里会写『未加载到』或『书未明述』」——它被既有用例按整句锁着，不许悄悄缩短）：
-        //   未定案 ⇒ 只说"只补没定案的栏"；定过案还悬着（查过/书里没有）⇒ 再点一次走 force 重查。
+        //   「查过之后这里会写『未加载到』或『书未明述』」——它被既有用例按整句锁着，不许悄悄缩短）。
+        //   ★评审修正 #3：原 `absent` 那一支是**死文案**——钮只在未定案时渲染（`settled` 挡掉 absent/ok），
+        //   「再点一次可连『书未明述』也推倒重查」永远不会出得来，而它承诺的那个 force 行为也**不在行内**
+        //   （行内钮不带 `data-force`，见 `web/index.js` 的 `payload.force`）⇒ 那一支连同那句话一起删，
+        //   全册范围的重查能力由页底那段说明指向批量入口（`lookup-batch-all`）。
         const ASK_TIP = '只补还没定案的栏（已查到的原话不动；查过之后这里会写「未加载到」或「书未明述」）';
         const askTip = lookState === 'pending'
             ? `查过书但这轮模型没抽出来（下轮再补，不代表书里没有）——再点一次重查，${ASK_TIP}`
-            : lookState === 'absent'
-                ? `书里确实没写这一栏——再点一次可连「书未明述」也推倒重查，${ASK_TIP}`
-                : ASK_TIP;
+            : ASK_TIP;
         const lookupBtn = e.kind === 'character' && !settled
             ? `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" title="${attrText(askTip)}">查</button>`
             : '';
@@ -787,7 +794,7 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
         const hot = busyOwners.has(e.id) ? ' sw2-hot' : '';
         return `<div class="sw2-entity-row${hot}">`
             + `<div class="sw2-cell sw2-c-name">`
-            + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}${status}${lensBadge}</small>`
+            + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e)}${status}${lensBadge}</small>`
             + (derived ? `<span class="sw2-quiet-note" title="${attrText(derivedTip)}">（推）</span>` : '')
             + lookupBtn
             + `</div></div>`
@@ -809,7 +816,7 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
     return `<div class="sw2-list-head">全部角色与势力（全册 ${page.total} · 本轮镜头 ${lens.size}）<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
         + `<div class="sw2-list-tools" style="margin:6px 0 8px">${batchBtn}${batchHint}</div>`
         + `<div class="sw2-entity-list">${rows.join('')}</div>`
-        + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。每行的<b>查</b>=只补没定的栏，<b>重查</b>=连「书未明述」也推倒重查（旧版误标的假「书未明述」靠它清掉）。</div>`;
+        + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。每行的<b>查</b>=只补没定的栏（已查到的原话不动）。全册范围的「连书未明述也推倒重查」仍在——入口不在行内，而是页顶那枚<b>补全全册实力</b>（它按重查跑：被定为「书未明述」或查不动卡住的栏，一起推倒重来）。</div>`;
 }
 
 // ============ 设定档案页（A-6：展示与 setting.frozen 逐字段一致） ============
