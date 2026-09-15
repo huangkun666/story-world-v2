@@ -664,6 +664,59 @@ function lookupButtons(e, lookupState) {
     return `${ask}${again}`;
 }
 
+// ============ 细案 spec-entities-page-ia：实体页数据选择层（纯函数，可导出单测） ============
+// 分工（照 renderChronicleHtml 的 view.chronicleFilter 同款）：**选数据住渲染层、存状态住接线层**。
+//   ⇒ 接线层只持一份视图状态对象，一行数据逻辑都不写（本仓"零第二份状态"纪律）。
+export const ENTS_PAGE_SIZE = 60;
+export const ENTS_DEFAULT_VIEW = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', page: 1 };
+
+// 搜索面：★位置**在**这里（位置不占版面 ≠ 查不到——细案 §3.3 是硬口径）
+export function entsSearchTextOf(e) {
+    return [e?.name, e?.parent, e?.location, e?.['实力'], e?.['规模'], e?.['性质'], e?.['倾向'],
+        ...(Array.isArray(e?.organs) ? e.organs : []), ...(Array.isArray(e?.branches) ? e.branches : [])]
+        .filter((x) => typeof x === 'string' && x).join(' ').toLowerCase();
+}
+
+export function entsHitCounts(world) {
+    const es = world?.entities || [];
+    const busy = new Set((world?.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    return {
+        all: es.length,
+        faction: es.filter((e) => e.kind === 'faction').length,
+        character: es.filter((e) => e.kind === 'character').length,
+        busy: es.filter((e) => busy.has(e.id)).length,
+        recent: es.filter((e) => typeof e.lastActiveTick === 'number').length,
+        named: es.filter((e) => e.parent).length,
+        orphan: es.filter((e) => !e.parent).length,
+    };
+}
+
+export function selectEntityPage(world, view = {}) {
+    const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
+    const busy = new Set((world?.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+    const filters = new Set(Array.isArray(v.filters) ? v.filters : []);
+    const q = String(v.q || '').trim().toLowerCase();
+    let rows = (world?.entities || []).filter((e) => v.kind === 'all' || e.kind === v.kind);
+    if (filters.has('busy')) rows = rows.filter((e) => busy.has(e.id));
+    if (filters.has('recent')) rows = rows.filter((e) => typeof e.lastActiveTick === 'number');
+    if (filters.has('named')) rows = rows.filter((e) => e.parent);
+    if (filters.has('orphan')) rows = rows.filter((e) => !e.parent);
+    if (q) rows = rows.filter((e) => entsSearchTextOf(e).includes(q));
+    const cmp = {
+        // 在办优先 → 最近活跃次之 → 名号（确定性三重键：同输入必得同序）
+        active: (a, b) => (busy.has(b.id) ? 1 : 0) - (busy.has(a.id) ? 1 : 0)
+            || (b.lastActiveTick ?? -1) - (a.lastActiveTick ?? -1) || String(a.name).localeCompare(String(b.name), 'zh'),
+        recent: (a, b) => (b.lastActiveTick ?? -1) - (a.lastActiveTick ?? -1) || String(a.name).localeCompare(String(b.name), 'zh'),
+        name: (a, b) => String(a.name).localeCompare(String(b.name), 'zh'),
+    }[v.sort] || null;
+    if (cmp) rows = rows.slice().sort(cmp);
+    const hit = rows.length;
+    const pages = Math.max(1, Math.ceil(hit / ENTS_PAGE_SIZE));
+    const page = Math.min(Math.max(1, Number(v.page) || 1), pages);   // ★越界夹紧（不返回空页）
+    const slice = rows.slice((page - 1) * ENTS_PAGE_SIZE, (page - 1) * ENTS_PAGE_SIZE + ENTS_PAGE_SIZE);
+    return { rows: slice, total: (world?.entities || []).length, hit, page, pages, from: (page - 1) * ENTS_PAGE_SIZE + (slice.length ? 1 : 0), to: (page - 1) * ENTS_PAGE_SIZE + slice.length };
+}
+
 export function renderEntitiesHtml(world, { config = null } = {}) {
     // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、镜头徽、分支/隶属
     const lens = new Set(lensList(world).map((x) => x.e.id));

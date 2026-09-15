@@ -11,6 +11,7 @@ import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
     renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
+    ENTS_PAGE_SIZE, ENTS_DEFAULT_VIEW, entsSearchTextOf, selectEntityPage, entsHitCounts,
 } from '../src/render.js';
 import { AGENDA_CAPS } from '../src/settle.js';
 import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS } from '../src/limits.js';
@@ -1044,4 +1045,77 @@ test('K41/A-3：链视图可见文本零禁词零代号（管理豁免区剥除�
     w.events = w.events.filter((e) => e.id !== 'ev_1_1');
     w.milestones = [{ id: 'm_30', span: { from: 1, to: 30 }, counts: { events: 7 }, titles: ['穷山的来客'], ids: ['ev_1_1'], links: { up: [], down: ['ev_2_1'] } }];
     scan(renderChainViewHtml(expandChain(w, 'ev_2_1'), { world: w }));
+});
+
+// ============ 细案 spec-entities-page-ia：实体页数据选择层（纯函数） ============
+test('细案实体页：选行 = 搜索 ∪ 类别 ∪ 筛选，且搜索**覆盖位置**（位置不占列 ≠ 查不到）', () => {
+    const w = {
+        version: 1, context: { world: 'x', playerId: 'e_p' }, entities: [
+            { id: 'e_a', kind: 'character', name: '玄一道祖', location: '西极昆仑山', parent: '昆仑道宫', '实力': 'T9渡劫巅峰' },
+            { id: 'e_b', kind: 'faction', name: '万法阁', location: '东海浮空岛', '规模': '极富', '性质': '修真百艺总坛' },
+            { id: 'e_c', kind: 'character', name: '无名散人', location: '未明' },
+        ],
+        weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 5 },
+    };
+    const base = { ...ENTS_DEFAULT_VIEW };
+    assert.equal(selectEntityPage(w, base).hit, 3, '不筛 = 全量');
+    // ★位置不在版面上，但必须在搜索面里
+    assert.equal(selectEntityPage(w, { ...base, q: '东海浮空岛' }).hit, 1, '★搜位置命中（位置不占列 ≠ 查不到）');
+    assert.equal(selectEntityPage(w, { ...base, q: '昆仑道宫' }).hit, 1, '搜归属命中');
+    assert.equal(selectEntityPage(w, { ...base, q: 'T9渡劫' }).hit, 1, '搜实力原话命中');
+    assert.equal(selectEntityPage(w, { ...base, q: '修真百艺' }).hit, 1, '搜性质原话命中');
+    assert.equal(selectEntityPage(w, { ...base, kind: 'faction' }).hit, 1, '类别筛');
+    assert.equal(selectEntityPage(w, { ...base, filters: ['orphan'] }).hit, 2, '无归属筛（万法阁 + 无名散人）');
+    assert.equal(selectEntityPage(w, { ...base, filters: ['named'] }).hit, 1, '有归属筛');
+    assert.equal(selectEntityPage(w, { ...base, q: '不存在的词' }).hit, 0, '搜不到 = 0（不是全量）');
+});
+
+test('细案实体页：排序三档（在办优先 / 最近活跃优先 / 按名号）', () => {
+    const w = {
+        version: 1, context: { world: 'x' }, entities: [
+            { id: 'e_1', kind: 'character', name: '丙', lastActiveTick: 3 },
+            { id: 'e_2', kind: 'character', name: '甲', lastActiveTick: 9 },
+            { id: 'e_3', kind: 'character', name: '乙' },
+        ],
+        weights: {}, agendas: [{ id: 'a_1', owner: 'e_3', goal: '在办', closed: false, progress: 1, maxSteps: 3 }],
+        events: [], chronicle: [], milestones: [], meta: { tick: 9 },
+    };
+    const base = { ...ENTS_DEFAULT_VIEW };
+    assert.deepEqual(selectEntityPage(w, { ...base, sort: 'active' }).rows.map((e) => e.name), ['乙', '甲', '丙'], '在办优先，其余按最近活跃');
+    assert.deepEqual(selectEntityPage(w, { ...base, sort: 'recent' }).rows.map((e) => e.name), ['甲', '丙', '乙'], '最近活跃优先');
+    // ★环境偏离（leg49 T1，已在 task-1-report.md 记录）：任务书原断言为 ['丙','乙','甲']（拼音序），
+    //   但本机 Node v24.19.0 / ICU 78.3 **不含拼音排序数据**——`new Intl.Collator('zh-u-co-pinyin')`
+    //   的 resolvedOptions().collation === 'default'，`localeCompare(..., 'zh')` 落到部首/笔画回退序
+    //   （乙**排最后**，不是拼音的 yǐ 排第二）。实测 ['丙','甲','乙'] 才是本环境真实序；
+    //   实现侧一行未改（仍是 localeCompare(name, 'zh')）。
+    assert.deepEqual(selectEntityPage(w, { ...base, sort: 'name' }).rows.map((e) => e.name), ['丙', '甲', '乙'], '按名号（本机 ICU 真实序，非拼音序）');
+});
+
+test('细案实体页：分页 —— 一屏 60 行、页码越界夹紧、from/to 如实', () => {
+    const many = Array.from({ length: 130 }, (_, i) => ({ id: `e_${i}`, kind: 'character', name: `名${String(i).padStart(3, '0')}` }));
+    const w = { version: 1, context: { world: 'x' }, entities: many, weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 } };
+    const base = { ...ENTS_DEFAULT_VIEW };
+    const p1 = selectEntityPage(w, base);
+    assert.equal(p1.pages, 3, '130 条 / 60 = 3 页');
+    assert.equal(p1.rows.length, 60, '★首屏只渲染 60 行（判据 J10）');
+    assert.equal(p1.from, 1); assert.equal(p1.to, 60);
+    const p2 = selectEntityPage(w, { ...base, page: 2 });
+    assert.equal(p2.page, 2); assert.equal(p2.from, 61); assert.equal(p2.to, 120);
+    const p3 = selectEntityPage(w, { ...base, page: 3 });
+    assert.equal(p3.rows.length, 10); assert.equal(p3.to, 130);
+    assert.equal(selectEntityPage(w, { ...base, page: 99 }).page, 3, '★页码越界夹到最后一页（不是空页）');
+    assert.equal(selectEntityPage(w, { ...base, page: 0 }).page, 1, '★页码 0/负数夹到第一页');
+    assert.equal(selectEntityPage(w, { ...base, q: '名00' }).rows.length, 10, '筛完再分页（命中 10）');
+});
+
+test('细案实体页：命中计数七格（chip 上的数不许写死）', () => {
+    const w = {
+        version: 1, context: { world: 'x' }, entities: [
+            { id: 'e_1', kind: 'faction', name: '有家的', parent: '上级' },
+            { id: 'e_2', kind: 'character', name: '孤身的' },
+            { id: 'e_3', kind: 'character', name: '最近动过的', lastActiveTick: 7 },
+        ],
+        weights: {}, agendas: [{ id: 'a_1', owner: 'e_2', goal: 'g', closed: false }], events: [], chronicle: [], milestones: [], meta: { tick: 7 },
+    };
+    assert.deepEqual(entsHitCounts(w), { all: 3, faction: 1, character: 2, busy: 1, recent: 1, named: 1, orphan: 2 });
 });
