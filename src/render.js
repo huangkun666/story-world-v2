@@ -731,8 +731,13 @@ export function renderEntsToolbar(world, view, config = null) {
     const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
     const c = entsHitCounts(world);
     const filters = new Set(v.filters || []);
+    // ★评审第二轮 #6：chip 是真 `<button>`，选中态原先**只靠 `.on` 类**（纯视觉）⇒ 读屏用户听不出
+    //   自己选了哪档（筛选/排序/分组三类钮全是这个形状）。`aria-pressed` 是这种"可切换钮"的标准说法，
+    //   与搜索框上那条 `aria-label` 属同一契约（本仓在无障碍上花过功夫，这里补齐）。
+    //   注意：`on` 这一支会打印成 `aria-pressed="true"`，`false` 也**显式印出**（不留未设态——
+    //   "未设"会被读屏当成普通按钮，而不是"可按下但现在是关的"）。
     const chip = (action, value, label, on, n) =>
-        `<button class="sw2-chip${on ? ' on' : ''}" data-action="${action}" data-value="${value}">${label}`
+        `<button class="sw2-chip${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" data-action="${action}" data-value="${value}">${label}`
         + (n == null ? '' : `<span class="sw2-chip-n">${n}</span>`) + '</button>';
     const kinds = [['all', '全部', c.all], ['faction', '势力', c.faction], ['character', '角色', c.character]];
     // 既有「⬇ 补全全册实力 / ■ 停止补全」按钮（`lookup-batch.test.js:436-448` 锁它；原在页眉，改挂工具条）

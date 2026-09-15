@@ -789,7 +789,7 @@ git commit -m "细案实体页 4/5：接线——一份视图状态 + 只重画�
 
 **Interfaces:**
 - Consumes: Task 3 的工具条类名 · Task 4 的 `sw2EntsView.grp`
-- Produces: `PANEL_BUILD` = **`leg49-entities-three-cols`**（★不含禁词 `agenda`/`tick`/`ssot`/`schema`）· `CSS_VERSION` = `20260916-leg49-entities-three-cols`
+- Produces: `PANEL_BUILD` = **`leg49-three-column-roster`**（★不含禁词 `agenda`/`tick`/`ssot`/`schema`/`entity`）· `CSS_VERSION` = `20260916-leg49-three-column-roster`
 
 - [ ] **Step 1: 写失败用例（分组结构 + 构建号 + 禁词）**
 
@@ -814,7 +814,7 @@ test('★细案实体页：分组——按归属/位置/类别切成可展开的
 });
 
 test('★细案实体页：版位升位且不含引擎术语（构建号在玩家视线内）', () => {
-    assert.equal(PANEL_BUILD, 'leg49-entities-three-cols');
+    assert.equal(PANEL_BUILD, 'leg49-three-column-roster');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -926,7 +926,10 @@ Expected: FAIL —— `sw2-ents-grp-block` 不存在；`PANEL_BUILD` 仍是 `leg
 - [ ] **Step 5: 升位（构建号与 CSS 版本）**
 
 ★★ **构建号：用户拍板改名（Task 5 执行时先按计划原名落地，评审期发现与既有禁词锁对撞，已由用户裁决 ⇒ 本步改用新名）**
-- 原计划名 `leg49-entities-three-cols` 含 `entities`，与 `test/render.test.js` 的共享禁词锁
+  ★★ 同步改名：`docs/spec-entities-page-ia.md` 与 `web/style.css` 里凡写 "细案 §3.2" 而**指的是三列版式**的
+     注释，应改指 **§3.1「行（三列）」**（§3.2 是工具条）——本计划上一版就把这两节号写混过。
+- 原计划名 `leg49-entities-three-cols`（**已作废**——只是留档"为什么改名"，**不是可照抄的名字**）含 `entities`，
+  与 `test/render.test.js` 的共享禁词锁
   （K33/A-3「玩家可见文本零引擎术语」，禁词表含 `entity`/`ENTITIES`）**在同一字符串上对撞**——
   而构建号**恰好印在玩家看得见的实体表表头**上。`test/render.test.js` 里本就有一条
   `assert.ok(!PANEL_BUILD.includes(bad))` 的自锁，leg31 当年遇同类冲突的做法也是**改名**。
@@ -985,7 +988,7 @@ git commit -m "细案实体页 5/5：样式三列 + 分组落地 + 版位升 leg
 - [ ] **Step 2: 更新细案状态行**
 
 `docs/spec-entities-page-ia.md` 第 3 行 `> 状态：**设计已定稿，等用户过目后开工**（2026-09-16）`
-改成 `> 状态：**已实施**（leg49-entities-three-cols · 判据 745/745 · 冒烟 8231 字节未变）——实施记录见下方 §11`。
+改成 `> 状态：**已实施**（leg49-three-column-roster · 判据 745/745 · 冒烟 8231 字节未变）——实施记录见下方 §11`。
 
 - [ ] **Step 3: 追加实施记录（§11）**
 
@@ -1013,8 +1016,9 @@ git commit -m "细案实体页 6/6：留档换档 + 实施记录（用户验收�
 | **类型一致性** | `selectEntityPage` / `entsHitCounts` / `ENTS_DEFAULT_VIEW` / `ENTS_PAGE_SIZE` / `renderEntsToolbar` / `renderEntsPager` 在 Task 1/3 定义、Task 2/4/5 消费，名字与参数一致；`sw2EntsView` 字段名（`q`/`kind`/`filters`/`grp`/`sort`/`page`）与 `ENTS_DEFAULT_VIEW` 同形 |
 | **发现的缺口（已补）** | ① `kindLabel` 对玩家返回「你的棋子」会撞 J11 ⇒ Task 2 Step 3 明写要删那一支；② `（推）` 原来落在位置列 ⇒ Task 2 给了新落点（名号格）+ `lookup-batch.test.js:381` 的处理；③ 分组要动列表容器 ⇒ 单独放 Task 5 与 CSS 同批；④ `renderAll` 不透传实体页 view ⇒ Task 5 Step 8 明写要加 |
 | **★ 引用符号逐个核名（本计划初稿在这里错了 5 处，全部已改）** | ① `--sw2-bg` **不存在** ⇒ 真名 `--sw2-panel`；② `sw2PanelConfig` **不存在** ⇒ 真名 `renderCfg()`（`web/index.js:1852`）；③ 我写的 `redrawEntsView()` 会**另造一处重绘** ⇒ 改用本仓唯一通道 `refreshSections(['entities'])`（`:1868`）；④ 实体页查询钮的 action 真名是 **`lookup-entity`**（`src/render.js:660`，不是 `entity-lookup`），force 走 `data-force="absent"`、id 走 `data-entity`；⑤ `sw2-player` 这个类在实体页**根本没用**（真名是 `sw2-entity-row sw2-player`，而我在 Task 2 已把它删掉）⇒ J11 的断言改成"不出现 `sw2-player`"。 |
-| **★ 开工前用户拍板四处（已全部写回计划）** | ① 在分支 `leg49-entities-three-cols` 上做（不在 main 直接开工）；② **分组控件从 Task 3 移到 Task 5**（中途不许交付死控件）；③ 页底查书三态注脚改成可展开的「？」（文本必须连续出现，既有两条 `includes` 断言照旧能咬）；④ **「⬇ 补全全册实力」保留**，从页眉挪到工具条第一行。 |
+| **★ 开工前用户拍板四处（已全部写回计划）** | ① 在分支 `leg49-three-column-roster` 上做（不在 main 直接开工）；② **分组控件从 Task 3 移到 Task 5**（中途不许交付死控件）；③ 页底查书三态注脚改成可展开的「？」（文本必须连续出现，既有两条 `includes` 断言照旧能咬）；④ **「⬇ 补全全册实力」保留**，从页眉挪到工具条第一行。 |
 | **★ Task 1 评审的 Minor 定夺（已写回计划）** | ① **排序期望值我写错了**：`sort:'name'` 的正确期望是 `['丙','甲','乙']`（丙 bǐng < 甲 jiǎ < 乙 yǐ），初稿写的 `['丙','乙','甲']` 既非拼音序也非笔画序 ⇒ 已改正并留档**产品面已知限制**：ICU 78.3 无拼音排序数据（`collation` 解析为 `default`），真账实测走**部首/笔画序**（末尾「祝无双·转轮鬼圣·转轮鬼使·转轮王·追风·坐忘大罗」被拆散）；本笔选"接受默认序"（零依赖 + 确定性；真正的入口是搜索，不是排序）。② 空结果 `from/to` **按意图都是 0**，分页器不印「显示第 0–0 条」。③ `entsSearchTextOf` 不再收「未明」（占位词不是内容，否则搜「未明」命中 475 人）。④ `recent/named/orphan` 两个调用点各写一遍谓词——评审说现在**过早**（只有两处），**留到 Task 3 接 chip 时若出现第三处消费者再提成一张表**。 |
+| **★ Task 5 评审·第二轮的定夺（已写回计划；Task 6 照此读）** | ① **构建号定稿 = `leg49-three-column-roster`**（本文件上面那个"已作废"的旧名**不是**可照抄的名字，任何步骤/文档都别再写它）；② `docs/spec-entities-page-ia.md:99` 那句"`sw2-player` 是既有类、不许搬进新行"讲的是**六格旧版式**——三列版式已把玩家标记（`sw2-player`）整条撤掉（J11），写实施记录时口径统一成"**行内不出现玩家标记**"；③ 凡注释里"细案 §3.2"实际讲三列版式的，一律改指 **§3.1「行（三列）」**（§3.2 是工具条）；④ `web/style.css` 的 `.sw2-player` 只剩**画册旧类** `.sw2-entity.sw2-player`（实体页那支 `.sw2-entity-row.sw2-player` 已删——零生产者）。 |
 | **★ 一个会直接弄坏功能的陷阱（已查清并写进 Task 4）** | `refreshSections` 里那条"控件正被操作 ⇒ 押后重绘"的闸只认 `#sw2_view_params / #sw2_view_settings / .sw2-tabs`（`playerIsTouchingParams`，`:203-211`）——**实体页不在闸内** ⇒ 用 `refreshSections(['entities'])` 时打字会照常重绘。若当初照我第一版自己拼 `innerHTML`，就绕过了 `sw2SectionRefreshRunning` 防重入标志，会重新引爆 leg27 那次的"重绘自己咬自己"。 |
 | **承重墙** | 六个任务没有一处碰 `settle.js`/`pack.js`/`gate.js`/`check-step.js`/schemas；`MAIN_PROMPT_V` 全程未升 |
 | **判据数推演** | 基线 731 ⇒ T1 +4（735）⇒ T2 +4（739）⇒ **T3 +4（743，不是 742）** ⇒ T4 +0（审计用例内加断言）⇒ T5 +2（745）⇒ T6 +0（745）。★**T3 那一格我原推演写 +3 是错的**：Step 1 的代码块里**本来就是 4 个 `test(...)`**（标题与 Step 5 写的"3 条"是我笔误）——实现者按代码块逐字落地、报了 743，**以代码块为准**。 |

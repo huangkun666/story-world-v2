@@ -1178,6 +1178,8 @@ test('细案实体页：命中计数七格（chip 上的数不许写死）', () 
 test('★细案实体页 J1/J2：位置列与活跃列**不得出现**；位置在渲染结果里零出现（列已撤）', () => {
     const w = world();
     const html = renderEntitiesHtml(w);
+    // 本仓已有先例（`:87` 那条 leg27 版式锁）在用例内自读样式表：样式与版式必须对得上，读的是**真文件**
+    const css = readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8');
     for (const cls of ['sw2-c-loc', 'sw2-c-active', 'sw2-c-act']) {
         assert.ok(!html.includes(cls), `★格子 ${cls} 必须退场（细案 J1）`);
     }
@@ -1186,6 +1188,36 @@ test('★细案实体页 J1/J2：位置列与活跃列**不得出现**；位置�
     // ★但位置必须在**搜索面**里（J2 的另一半：不占列 ≠ 查不到）
     const hit = selectEntityPage(w, { ...ENTS_DEFAULT_VIEW, q: '黄府' });
     assert.ok(hit.hit >= 1, '★搜位置仍能命中（w.context.playerId 那位在「黄府」）');
+    // ★Task 5 评审·第二轮 #1（同一份"版式与样式必须对得上"的纪律，这里把它钉成断言）：
+    //   样式表里 `.sw2-entity-row` 只许**声明一次**——评审第一轮"就地删掉旧六列那条、在下面另写一条新的"
+    //   ⇒ 同一选择器两处声明（上一条静默被盖），且唯一解释六列版式的散文指向了不存在的位置。
+    //   下面这条咬三件事：① 恰好一条裸声明；② 它落的版位在 `.sw2-relone`（那一格）**之前**；
+    //   ③ 三列栅格真的写在它身上（不是被换回六列）。
+    const rowDecls = [...css.matchAll(/(^|\n)\.sw2-entity-row(\s*\{)/g)];
+    assert.equal(rowDecls.length, 1, `★\`.sw2-entity-row\` 只许声明一次（实际 ${rowDecls.length} 处：重复声明=一条静默盖另一条）`);
+    const rowAt = rowDecls[0].index;
+    const reloneAt = css.search(/(^|\n)\.sw2-relone\s*\{/);
+    assert.ok(reloneAt > rowAt, '★行规则的版位须在它自己的版式散文之后、关系格之前（「搬到原位」而非"别处再写一条"）');
+    const rowBody = /(^|\n)\.sw2-entity-row\s*\{([^}]*)\}/.exec(css)[2];
+    assert.match(rowBody, /grid-template-columns\s*:\s*212px/, '★三列栅格必须写在唯一那条声明上（第一列 212px）');
+    //   ④ 行内的热行标记（`.sw2-hot`）也不许两处声明；它的 `background` 是"就地交代"的（见该处注释）
+    assert.equal(count(css, '.sw2-entity-row.sw2-hot{'), 1, '★`.sw2-hot` 的行规则同样只许一条');
+    //   ⑤ 评审判定「基规则不设 background ⇒ `.sw2-hot` 的 background 是覆盖空气」的处置**照注释为准**：
+    //      取值留在原地、并写明它不假称压着谁（两条路各自的代价都写在那段注释里）。
+    assert.match(css, /覆盖空气/, '★「覆盖空气」的处置必须留在注释里（否则下一个人会当成笔误删掉）');
+    //   ⑥ 评审第二轮 #3：`.sw2-relone-crew`（由 `src/render.js` 产出的最长那串）必须有规则——不能再"只有生产者没有声明"
+    assert.match(css, /(^|\n)\.sw2-relone-crew\s*\{[^}]*color/, '★`.sw2-relone-crew` 必须有自带颜色的规则（`-who`/`-pow`/`-dim` 同级）');
+    //   "真有生产者"这条得自己造：`world()` 那份夹具里**没有一个角色的 `parent` 指向一家势力**
+    //   （`membersOf` 只认 `parent ∈ {势力名, 其分支}`），照它写就是**锁空气**——门不许是假的。
+    const wf = world();
+    const fac = wf.entities.find((e) => e.kind === 'faction');
+    assert.ok(fac, '前置：夹具里得有势力（否则麾下名单无从产出）');
+    wf.entities.push({ id: 'e_crew1', kind: 'character', name: '麾下一', parent: fac.name });
+    assert.ok(renderEntitiesHtml(wf).includes('sw2-relone-crew'), '★麾下名单确实由 `src/render.js` 产出（上面那条样式锁不是空的）');
+    assert.ok(!html.includes('sw2-relone-crew'), '对照：本夹具（无 parent 指向势力）里没有这一串');
+    //   ⑦ 评审第二轮 #5：`.sw2-entity-row.sw2-player` 零生产者 ⇒ 死 CSS 已删（画册旧类 `.sw2-entity.sw2-player` 是另一支，留着）
+    assert.ok(!css.includes('.sw2-entity-row.sw2-player'), '★实体行的玩家底纹是死 CSS（J11 撤了标记）⇒ 不许留在样式表里');
+    assert.ok(css.includes('.sw2-entity.sw2-player'), '对照：画册那支 `.sw2-entity.sw2-player` 仍在（删的是行那支）');
 });
 
 test('★细案实体页 J3：无在办时**不输出**占位句（空态不占版面）', () => {
@@ -1232,6 +1264,21 @@ test('★细案实体页 J5：搜索控件与分页控件**必须存在**（旧�
     // 计数不许写死：chip 上的数来自 entsHitCounts
     const c = entsHitCounts(w);
     assert.ok(html.includes(`>${c.all}<`), `「全部」格印真数 ${c.all}`);
+    // ★Task 5 评审·第二轮 #6：chip 是**真 `<button>`**，选中态原先**只有 `.on` 类**（纯视觉）⇒
+    //   读屏用户听不出自己选了哪档。`aria-pressed` 是"可切换钮"的标准说法，与搜索框那条 `aria-label`
+    //   属同一契约。断言按**产物形状**咬（不靠类名自证）：默认视图下「全部」是按下态、其余类别是未按下态。
+    assert.ok(html.includes('aria-pressed="true"'), '★至少有一枚 chip 印出按下态（默认：类别「全部」）');
+    assert.ok(html.includes('aria-pressed="false"'), '★未按下的 chip 也**显式**印 false（不留"未设态"）');
+    const allChip = /<button class="sw2-chip on[^"]*" aria-pressed="true" data-action="ents-filter" data-value="all"/.exec(html);
+    assert.ok(allChip, '★默认选中那枚（类别「全部」）必须是 `on` 类 + `aria-pressed="true"` **同时**在位（两处说法一致）');
+    // 换一档：选中的那枚换成势力，且真数照旧跟着走
+    const fac = renderEntitiesHtml(w, { view: { kind: 'faction' } });
+    assert.ok(fac.includes('aria-pressed="true" data-action="ents-filter" data-value="faction"'), '★换档后按下态跟着换（势力）');
+    assert.ok(fac.includes('aria-pressed="false" data-action="ents-filter" data-value="all"'), '★旧选中档退回 false（不是留 true 或干脆不印）');
+    // 三类钮（筛选/排序/分组）是同一个 `chip()` 产的 ⇒ 逐类各咬一枚，防"只给筛选钮加"
+    for (const [act, val] of [['ents-sort', 'active'], ['ents-group', 'none']]) {
+        assert.ok(html.includes(`aria-pressed="true" data-action="${act}" data-value="${val}"`), `★${act} 的 chip 也有按下态（同一契约）`);
+    }
 });
 
 test('★细案实体页：两处既有入口按细案改挂工具条（不许在改版里丢掉）', () => {

@@ -253,11 +253,44 @@
    最没信息的词占最显眼的位置；而规模/上级/麾下/麾下实力全挤在同一个 div 里连成长段 ⇒ 糊成一团。
    新版：**每格一义**（身份 / 位置 / 关系属性 / 在办盘算 / 活跃 / 操作），实值加重、空态一律退成
    虚线小 chip；关系属性改成「标签 + 值」的竖排行（带左侧细脊线），长名单（麾下）才换行。
-   ★leg49 再改：六列 → **三列**（上面 `.sw2-entity-row` 那条），位置/活跃两列至此整条退场。 */
-.sw2-entity-row.sw2-player{border-style:dashed;border-color:var(--sw2-amber-dim);}
+   ★leg49 再改：六列 → **三列**（**就在下面那条 `.sw2-entity-row`**），位置/活跃两列至此整条退场。 */
+
+/* ★leg49（细案 spec-entities-page-ia §3.1「行（三列）」）：三列版式。
+   病根：621 张**等价卡平铺**（真账实测 170319px 高、626 枚按钮、0 个搜索）⇒ 面板没法用。
+   治法：一行三格（名号 / 归属与来历 / 在办的事）+ 一屏 60 行 + 工具条（搜索/筛选/排序/分组）；
+   位置列与「最近活跃」列**退场**（真账只有 23.5% / 3.9% 的行有值 ⇒ 一列印 76%~96% 的空），
+   但位置仍在**搜索面**里（`entsSearchTextOf`）——不占列 ≠ 查不到。
+   ★版式散文（上面那段）说的就是本规则：**本文件同一选择器只许声明一次**，规则必须落在它自己的版位。
+     评审第一轮曾"就地删掉旧六列那条、在下面另写一条新的"——留下同一选择器两处声明（下面那条静默
+     盖住上面那条残骸）+ 一段指向不存在位置的散文 ⇒ 本笔把规则**搬回原位**、删掉下面那份副本
+     （与上一轮修 `.sw2-chip` / `.sw2-agstage` 同一条纪律）。 */
+.sw2-entity-row{display:grid;grid-template-columns:212px minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:baseline;padding:7px 12px;border-bottom:1px solid var(--sw2-line-soft);}
+/* 热行（有在办盘算，`.sw2-hot` 由 `src/render.js` 按 `busyOwners` 打）：**只靠左那根琥珀竖脊 +
+   一层淡底**标出。★「覆盖空气」的处置（评审第二轮 #4）：第一轮把 `background:var(--sw2-card-2)`
+   单独挂在 `.sw2-hot` 上，而**基规则从头到尾没设过 `background`** ⇒ 那条声明在语义上是"覆盖空气"
+   （能工作但误导：读样式的人顺着它往上找，找不到被覆盖的是哪条）。
+   两条路里选了**如实注释 + 留原样**：① 把淡底并进基规则会让**所有**行都染上底色（真账 621 行，
+      那是"改一整页观感"，超出本轮评审修正的范围）；② 删掉这半句则热行当场失去淡底（同样改观感）。
+   ⇒ 底色**就在本行原地**交代清楚、不假称它压着谁；`.sw2-hot` 的语义 = 左脊（结构）+ 淡底（强调）。 */
+.sw2-entity-row.sw2-hot{background:var(--sw2-card-2);border-left:2px solid var(--sw2-amber);}
+.sw2-entity-row > *{min-width:0;}
 .sw2-cell{min-width:0;}
 .sw2-ename{font-weight:700;font-size:14.5px;line-height:1.35;}
 .sw2-ename small{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;margin-top:2px;}
+/* 「归属与来历」那一格（三列版式的第二格；`render.js` 的 `origin`/`crewHtml` 拼出来的一串）。
+   ★这一串会被 `-webkit-line-clamp:2` **剪掉第三行起**——所以每类值的颜色都显式落一条，
+     剪没剪、剪在哪，读样式表就能查得到（旧六列版式里这些是分开的格子，不需要 clamp，也就没这些类）。 */
+.sw2-relone{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.sw2-relone-who{color:var(--sw2-text);}
+.sw2-relone-pow{color:var(--sw2-amber);}
+.sw2-relone-dim{color:var(--sw2-text-faint);}
+.sw2-relone-sep{color:var(--sw2-line);}
+/* 麾下名单（`render.js:883` 的 `sw2-relone-crew`）：这一串是**关系格里最长的那条**（一家势力麾下几十号人），
+   也就是最容易被上面那把剪刀吃满两行、当场截断的那一条；`-who`/`-pow`/`-dim`/`-sep` 都有规则而它没有
+   ⇒ 评审第二轮 #3 要求"与 `-dim` 同级补一条"。取值就是基规则那档正文色（**不是** `-dim` 退色档）：
+   它是内容（谁在麾下），而"麾下实力"那种注脚才走 `-dim`——本条与已有观感**逐像素一致**，
+   作用是把"这条被剪"在样式表里显式登记（原先全仓只有生产者、零声明）。 */
+.sw2-relone-crew{color:var(--sw2-text-dim);}
 /* 关系与属性：竖排「标签 + 值」，标签定宽对齐 ⇒ 一眼扫下来能比 */
 .sw2-relations{display:flex;flex-direction:column;gap:3px;}
 .sw2-relrow{display:flex;align-items:baseline;gap:6px;font-size:12.5px;line-height:1.5;}
@@ -280,19 +313,10 @@
 .sw2-eagenda{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.5;}
 .sw2-eagenda b{color:var(--sw2-text);font-weight:600;}
 
-/* ★leg49（细案 spec-entities-page-ia §3.2）：三列版式 + 工具条 + 分组 + 分页。
-   病根：621 张**等价卡平铺**（真账实测 170319px 高、626 枚按钮、0 个搜索）⇒ 面板没法用。
-   治法：一行三格（名号 / 归属与来历 / 在办的事）+ 一屏 60 行 + 工具条（搜索/筛选/排序/分组）。
-   ★位置列与「最近活跃」列**退场**（真账只有 23.5% / 3.9% 的行有值 ⇒ 一列印 76%~96% 的空）；
-     但位置仍在**搜索面**里（`entsSearchTextOf`）——不占列 ≠ 查不到。 */
-.sw2-entity-row{display:grid;grid-template-columns:212px minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:baseline;padding:7px 12px;border-bottom:1px solid var(--sw2-line-soft);}
-.sw2-entity-row.sw2-hot{background:var(--sw2-card-2);border-left:2px solid var(--sw2-amber);}
-.sw2-entity-row > *{min-width:0;}
-.sw2-relone{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.sw2-relone-who{color:var(--sw2-text);}
-.sw2-relone-pow{color:var(--sw2-amber);}
-.sw2-relone-dim{color:var(--sw2-text-faint);}
-.sw2-relone-sep{color:var(--sw2-line);}
+/* ★leg49（细案 spec-entities-page-ia §3.2）：工具条 + 分组 + 分页。
+   ★三列版式与关系格的规则**不在这里**——它们已搬回各自版位（约 :250 那段 · 关系格那段）；
+     本文件同一选择器只许声明一次（评审第二轮 #1：这里曾又落一条 `.sw2-entity-row`，
+     静默盖住上面那条残骸），故本段只放"工具条—分组—分页"这三类新物件。 */
 .sw2-agcell{font-size:12.5px;line-height:1.5;color:var(--sw2-text);}
 /* 在办那一格里的阶段后缀：与 `.sw2-agstage`（旧内联那支，仍是块级）同色，只补一个同行间距。
    ★不重复写一条裸 `.sw2-agstage{...}`——本文件已有一条（"在办盘算：这一行的主句"那段），
