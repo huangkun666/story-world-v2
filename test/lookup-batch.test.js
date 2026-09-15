@@ -435,6 +435,18 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         assert.ok(actions.includes('lookup-entity'), '行内「查」在产物里');
         assert.ok(actions.includes('lookup-batch-all'), '批量入口在产物里');
         assert.ok(handlers.has('lookup-entity') && handlers.has('lookup-batch-all'), '★本棒新加的两个入口真的有处理器');
+        // ★细案实体页（leg49 Task 4）：工具条与分页器的三个动作必须真的有处理器。
+        //   上面 :433 那条是全产物差异检查（治"有没有漏"），这一段补的是**正向点名**
+        //   （治"点名的这三个必须在"）——两组判据分工不同，缺任一组都会漏掉一类断线。
+        for (const act of ['ents-filter', 'ents-sort', 'ents-page']) {
+            assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
+        }
+        // ★分组动作 `ents-group` 在 Task 4 时**还没有任何控件产生它**（分组钮连同分组渲染一起去 Task 5）
+        //   ⇒ 它的处理器**应该已经注册好**（`web/index.js` 四个动作是一起加的），但产物里搜不到这个名字。
+        //   两条断言一起锁，把"处理器已备好"与"控件还没上"这两件事**分开说实话**
+        //   （等 Task 5 加上控件后，前一条仍成立、后一条按 Task 5 计划自行翻转）。
+        assert.ok(handlers.has('ents-group'), '★分组动作的处理器已备好（Task 5 才点亮控件）');
+        assert.ok(!actions.includes('ents-group'), '★此刻产物里不该有分组控件（中途不交付死控件）');
     } finally {
         if (savedW === undefined) delete globalThis.window; else globalThis.window = savedW;
         if (savedD === undefined) delete globalThis.document; else globalThis.document = savedD;
