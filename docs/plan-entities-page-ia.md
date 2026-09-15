@@ -328,7 +328,9 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
         const parentDerived = e.parentSource === '结构推导';
         const derivedTip = '这条是结构推出来的：由组织条目的驻地/隶属推出（书里没在这个名号自己身上明述），不是模型创作';
         // （推）：位置/归属是推来的 ⇒ 标记落在**名号格**（位置列已退场，来源标记不许跟着一起消失
-        //   ——lookup-batch.test.js:381 与"引擎推的不许当书里写的"这条纪律都指着它）
+        //   ——lookup-batch.test.js:381 与"引擎推的不许当书里写的"这条纪律都指着它）。
+        // ★两支都要保留：`parentSource`（归属推导）与 `位置来源`（位置推导）——
+        //   旧代码两个都判，本次**只改落点不改判定**（parentSource 有 5 个测试文件在用，删除它会连坐）。
         const derived = parentDerived || world.meta?.entityFields?.[e.id]?.位置来源 === '结构推导';
         const rec = world.meta?.entityFields?.[e.id];
         const lookupState = (f) => rec?.attempts?.[f]?.state ?? 'none';
@@ -515,6 +517,15 @@ Run: `node --test test/render.test.js`
 Expected: FAIL —— `id="sw2_ents_q"` 不存在
 
 - [ ] **Step 3: 实现工具条与分页**
+
+★ **本步还要顺带收掉两处同源的"假承诺"文案**（Task 2 复审判定：同类缺陷各只差一个行状态/一个文件位置）：
+1. **`web/index.js:1989`**（接线层的玩家可见报错）现写着
+   `'这一栏已经有原话了（要重查请用「重查」）'`——**那个行内「重查」钮在 Task 2 已被撤掉**。
+   改成指向**真实存在的入口**：`'这一栏已经有原话了（要连「书未明述」一起推倒重查，用页顶的「补全全册实力」）'`。
+   ★改完跑 `grep -n "要重查请用" web/index.js` 应为空。
+2. **`src/render.js` 的 `pending` 态按钮 tooltip** 现说「…再点一次重查…」，与页脚新口径（行内「查」不负责推倒重查）自相矛盾，
+   且 `pending` 且 `attempts.count ≥ 2` 的行点下去会落到上面那条错措辞。
+   把 tooltip 改成**只承诺它真做的事**：`'按需去世界书取这个名号的原话（只补没定的栏）'`。
 
 在 `src/render.js` 里 `renderEntitiesHtml` **之前**插入两个渲染函数：
 
