@@ -182,8 +182,11 @@ export function entityLabel(world, id) {
     return e ? e.name || id : id;
 }
 
-export function kindLabel(entity, world) {
-    if (entity.id === world.context?.playerId) return '你的棋子';
+// ★leg49（细案 J11）：**玩家那一支已删**——旧版对玩家返回「你的棋子」，而三列版式里
+//   玩家那一行靠「归属与来历 + 在办的事」自证（细案 §3.1：玩家标记不许搬回来）。
+//   类别词只由 kind 决定（角色/势力），玩家与旁人同口径。
+//   ★承重改动，已核过调用面：全仓只有实体页一处消费（kindLabel 的玩家支无人依赖）。
+export function kindLabel(entity) {
     return LABELS.kind[entity.kind] || '实体';
 }
 
@@ -650,20 +653,6 @@ export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
 
 // ============ 角色与势力页 ============
 
-// 行内查书按钮（leg25 d）：有已定案的栏 → 同时给「重查」；否则只给「查」。
-//   口径：查 = forceFields null（只补没定案的）；重查 = forceFields 'absent'（连「书未明述」推倒重来）。
-//   ★leg40b：「已定案」的判据原为 `['实力','位置'].some(...)`——**`'位置'` 是死条件**：
-//   位置查书这条腿在 leg25 f 已摘掉（`ENTITY_LOOKUP_FIELDS = ['实力']`），它的查书标记
-//   在真账里恒为 none ⇒ 这一项永远为 false，只把判据弄糊。收成单栏。
-function lookupButtons(e, lookupState) {
-    const settled = ['ok', 'absent'].includes(lookupState('实力'));
-    const ask = `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" title="${attrText('只补还没定案的栏（已查到的原话不动）')}">查</button>`;
-    const again = settled
-        ? `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" data-force="absent" title="${attrText('连「书未明述」也推倒重查——旧版取书 bug 误标的假「书未明述」靠这个清掉')}">重查</button>`
-        : '';
-    return `${ask}${again}`;
-}
-
 // ============ 细案 spec-entities-page-ia：实体页数据选择层（纯函数，可导出单测） ============
 // 分工（照 renderChronicleHtml 的 view.chronicleFilter 同款）：**选数据住渲染层、存状态住接线层**。
 //   ⇒ 接线层只持一份视图状态对象，一行数据逻辑都不写（本仓"零第二份状态"纪律）。
@@ -717,31 +706,69 @@ export function selectEntityPage(world, view = {}) {
     return { rows: slice, total: (world?.entities || []).length, hit, page, pages, from: (page - 1) * ENTS_PAGE_SIZE + (slice.length ? 1 : 0), to: (page - 1) * ENTS_PAGE_SIZE + slice.length };
 }
 
-export function renderEntitiesHtml(world, { config = null } = {}) {
-    // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、镜头徽、分支/隶属
+// ★leg49（细案 spec-entities-page-ia）：行渲染三列化——**位置列与活跃列退场**。
+//   ★`lookupButtons()` 已删（它改造后零引用 = 死代码，本仓的体检纪律）：行内查询钮收成
+//   "只在待查的那几行出现"——真账 621 实体里只有 ~12 行是待查态，旧版每行印两枚 ⇒ 626 枚按钮。
+export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
+    // K46：镜头名单（pack 引擎层同口径）+ 麾下成员派生——全册展示、隶属
     const lens = new Set(lensList(world).map((x) => x.e.id));
-    // leg24 片1（停抄书）：行内「补抽」与头部「补抽未抽属性/隶属」两枚按钮下掉——
-    // 它们是"按需从书里抄属性/隶属"的入口（leg21/K49），而这条流水线已整条删除。
-    // 名册权威只用于身份（名字+类别）与照书办的结构声明，不再作为按钮候选口径。
-    // leg24 片5（界面）：①**撤掉分量条**——那个 0-1 的数引擎已不再消费（用户拍板删），显示它等于把
-    //   废数当客观给玩家看（旧法：条 + 数字）；②改成「据/无据」标记——账上真有的才算有据（设计硬规矩一）；
-    //   ③属性**只有模型提议过才显示**（空着就是空着，不摆一排 0.5 冒充数据）。
-    // leg25 c（用户令「删」）：四维属性 chip（含第十三棒的双通道无障碍写法）**整段删除**——
-    //   那些数不存在了，面板上再也没有可渲染的属性列。同一行位置改由查书标记（实力/位置）承担，
-    //   书里的说法照抄成文本显示（不再是 0–1 的数）。
-    const rows = (world.entities || []).map((e) => {
+    // ★细案 spec-entities-page-ia：三列版式（名号 / 归属与来历 / 在办的事）。
+    //   位置与最近活跃**不占版面**：位置 23.5% 有值、最近活跃 3.9% 有值
+    //   （真账 621 实体实测）⇒ 一列印 76% / 96% 的空，是把信号淹在噪声里。
+    //   ★但位置仍在搜索面里（entsSearchTextOf）——不占列 ≠ 查不到。
+    const page = selectEntityPage(world, view);
+    const busyOwners = new Set((world.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
+
+    const rows = page.rows.map((e) => {
         const agenda = (world.agendas || []).find((a) => !a.closed && a.owner === e.id);
-        const status = e.status && e.status !== 'active' ? `<span class="sw2-visible ${e.status === 'dead' ? 'v-hidden' : 'v-known'}">${LABELS.status[e.status]}</span>` : '';
+        const status = e.status && e.status !== 'active'
+            ? `<span class="sw2-visible ${e.status === 'dead' ? 'v-hidden' : 'v-known'}">${LABELS.status[e.status]}</span>` : '';
         const lensBadge = lens.has(e.id) && (!e.status || e.status === 'active') ? '<span class="sw2-visible v-known">在场</span>' : '';
-        // leg23：势力挂到统治者/上级时用「上级」措辞（角色仍是「隶属」）；名下机构/部门单列一行
-        // leg25 e：**来源外显**——结构推导来的归属（不是书里对这个名号自己的明述）标「（推）」，
-        //   与位置继承同款纪律（用户质疑过"推错会不会帮倒忙"）：标了来源，模型与人都不会当明述用。
-        // leg25 f：归属/规模/分支/机构/麾下**改由结构化区块渲染**（下面 rel/crew 几行），
-        //   旧的 `affil/scaleHtml/branch/organ` 四个段落串已删——它们就是"糊成一团"的来源。
         const parentDerived = e.parentSource === '结构推导';
-        // 势力麾下（leg23 membersOf 反查）：成员名单 + 成员各自账上的「实力」原话。
-        //   细案（用户拍板）：**势力不写实力字段**——势力的实力由麾下成员派生显示
-        //   （没有成员档位就整条不显示，绝不替它算个总档）。
+        const derivedTip = '这条是结构推出来的：由组织条目的驻地/隶属推出（书里没在这个名号自己身上明述），不是模型创作';
+        // （推）：位置/归属是推来的 ⇒ 标记落在**名号格**（位置列已退场，来源标记不许跟着一起消失
+        //   ——lookup-batch.test.js:381 与"引擎推的不许当书里写的"这条纪律都指着它）。
+        // ★两支都要保留：`parentSource`（归属推导）与 `位置来源`（位置推导）——
+        //   旧代码两个都判，本次**只改落点不改判定**（parentSource 有 5 个测试文件在用，删它会连坐）。
+        const derived = parentDerived || world.meta?.entityFields?.[e.id]?.位置来源 === '结构推导';
+        const rec = world.meta?.entityFields?.[e.id];
+        const lookupState = (f) => rec?.attempts?.[f]?.state ?? 'none';
+        // 查询钮：只在**真需要补**的行出现（旧版每行两枚 ⇒ 真账 626 枚；真账只有 ~12 行是待查态）
+        // ★口径照既有 `lookupButtons()`（`src/render.js:658`）：action 名是 **`lookup-entity`**、
+        //   id 走 `data-entity`、强制重查走 `data-force="absent"`——**不许自造 action 名**
+        //   （`test/lookup-batch.test.js` 有一条"画了按钮就必须有人接"的审计会当场抓红）。
+        const settled = ['ok', 'absent'].includes(lookupState('实力'));
+        // ★近况/待查态**不收进静默**：行内 chip 退场（真账 621 行 ⇒ 626 枚控件的病根），
+        //   但那句话必须还在玩家手上——落点是**查询钮自己的悬停**（同一枚控件既当入口又当说明）：
+        //   未定案 ⇒ 只说"只补没定案的栏"；定过案还悬着 ⇒ 那是真的没查到，再给「查」钮（会走 force 覆盖）。
+        const lookState = lookupState('实力');
+        // ★这枚钮同时承担**三态说明**（旧版那枚「未查」chip 的整句口径照旧在位：
+        //   「查过之后这里会写『未加载到』或『书未明述』」——它被既有用例按整句锁着，不许悄悄缩短）：
+        //   未定案 ⇒ 只说"只补没定案的栏"；定过案还悬着（查过/书里没有）⇒ 再点一次走 force 重查。
+        const ASK_TIP = '只补还没定案的栏（已查到的原话不动；查过之后这里会写「未加载到」或「书未明述」）';
+        const askTip = lookState === 'pending'
+            ? `查过书但这轮模型没抽出来（下轮再补，不代表书里没有）——再点一次重查，${ASK_TIP}`
+            : lookState === 'absent'
+                ? `书里确实没写这一栏——再点一次可连「书未明述」也推倒重查，${ASK_TIP}`
+                : ASK_TIP;
+        const lookupBtn = e.kind === 'character' && !settled
+            ? `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" title="${attrText(askTip)}">查</button>`
+            : '';
+        // 归属与来历：**一串同源的事**（归属 › 分支 · 机构 › 实力 · 规模 › 性质 · 倾向），一个格子说完
+        //   ★分支/机构也在这一串里：旧六格版式里它们是关系区的两行，三列版式里并入本格——
+        //     "只改落点不改信息"（`test/render.test.js` 的 K46 用例锁着分支/麾下，不许在本笔里丢掉）。
+        const origin = [
+            e.parent ? `<span class="sw2-relone-who">${escapeHtml(e.parent)}</span>` : '',
+            e.branches?.length ? `<span class="sw2-relone-branch">分支 ${escapeHtml(e.branches.join('、'))}</span>` : '',
+            e.organs?.length ? `<span class="sw2-relone-organ">机构 ${escapeHtml(e.organs.join('、'))}</span>` : '',
+            // ★"势力不写实力"（细案拍板）：势力的实力由**麾下成员派生**（见下 crewPowerHtml），
+            //   势力自己账上即便有值也不渲染——旧版这条锁在 `test/render.test.js` 里，本笔不许丢。
+            e.kind === 'character' && typeof e['实力'] === 'string' && e['实力'].trim()
+                ? `<span class="sw2-visually-hidden">实力：书里明述的原话。</span><span class="sw2-relone-pow" title="${attrText('实力：书里明述的原话（角色字段；势力不写实力）')}">${escapeHtml(e['实力'])}</span>` : '',
+            typeof e['规模'] === 'string' && e['规模'].trim() ? escapeHtml(e['规模']) : '',
+            typeof e['性质'] === 'string' && e['性质'].trim() ? escapeHtml(e['性质']) : '',
+            typeof e['倾向'] === 'string' && e['倾向'].trim() ? `<span class="sw2-relone-dim">${escapeHtml(e['倾向'])}</span>` : '',
+        ].filter(Boolean).join('<span class="sw2-relone-sep"> · </span>');
         const crew = e.kind === 'faction' ? membersOf(world, e) : null;
         const crewPower = crew
             ? crew.map((n) => {
@@ -749,108 +776,29 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
                 return typeof m?.['实力'] === 'string' && m['实力'].trim() ? `${n}（${m['实力']}）` : null;
             }).filter(Boolean)
             : [];
-        // leg25 c：`dims`（账上有几维数值）**删除**——四维不存在，"有据 n/4"无从谈起。
-        //   这一行原来是"据/无据"徽章的来源；现在只剩位置/归属/在办这些**结构性事实**。
-        // 细案 spec-entity-field-lookup（用户 2026-09-11）：按需查书补的字段显示**查书标记**——
-        //   ①有值=原文原话（角色才有实力）②**未查**=还没轮到查它（新世界的常态，**必须显示**，
-        //   否则整栏空白，用户会以为"看不到属性"就是这个插件的全部）③未加载到=查过但模型没给
-        //   （可能只是漏抽，下轮再补）④书未明述=引擎确认书里没有相关条目。
-        //   ★第二十五棒修正（用户实拍："根本看不到属性"）：旧版只做了 ③④ 两态标签，**②直接空白** = bug。
-        const rec = world.meta?.entityFields?.[e.id];
-        const lookupState = (f) => rec?.attempts?.[f]?.state ?? 'none';
-        // 查书标记 chip（不占整列——见下「未载」口径修正）
-        // leg25 f：标签**一律保留**（旧版位置那种调用传空 label，title 就变成「：还没轮到查它…」——
-        //   悬停文案缺主语；现在标签在位，读起来是「位置：还没轮到查它…」）。
-        const lookupChip = (f, label = f) => {
-            const st = lookupState(f);
-            if (st === 'pending') return `<span class="sw2-eattr nodata">${label}<b>未加载到</b></span>`;
-            if (st === 'absent') return `<span class="sw2-eattr nodata">${label}<b>书未明述</b></span>`;
-            // leg25 d 修（子代理报回、实测确认）：title 属性里原先写了裸双引号（`"未加载到"`），
-            //   属性值被就地截断 → 悬停只显示前半句（且残余文字漏成游离文本）。改用「」，
-            //   escapeHtml 不转义半角引号，凡是进属性的文案都不许带裸 `"`。
-            // ★leg40b：这条纪律现在有唯一的执行者——`attrText()`（见下），所有 title 都走它。
-            if (st === 'none') return `<span class="sw2-eattr nodata" title="${attrText(`${label}：还没轮到查它（轮到时会按需去世界书取原话；查过之后这里会写「未加载到」或「书未明述」）`)}"><b>未查</b></span>`;
-            return '';
-        };
-        const orig = rec?.位置来源 === '结构推导' ? '（推）' : '';
-        const derivedTip = '这条是结构推出来的：由组织条目的驻地/隶属推出（书里没在这个名号自己身上明述），不是模型创作';
-        // ---------- 位置列（**一栏一义**：这里只说"在哪"）----------
-        // leg25 f 口径修正（用户实拍截图的直接观感问题）：旧版把没有位置渲染成裸字「未载」，
-        //   而它独占一个 74px 整列、与名号同一基线 ⇒ **最没信息的那个词占了最显眼的位置**。
-        //   现改为虚线小 chip（与「未查/未加载到」同一套空态语言），"没查到"的缘故收回 title。
-        // ★★leg40b（**A1：一条永不会兑现的承诺**）：上一版这里还有一条三态链
-        //   （`lookupState('位置')` ⇒ 未载/未加载到/书未明述），而**位置查书这条腿在 leg25 f 就被摘掉了**
-        //   （`src/entity-lookup.js` 的 `ENTITY_LOOKUP_FIELDS = ['实力']`）。真账实测：
-        //   `meta.entityFields` 里只有 `实力:pending×7 / 实力:absent×5`，**`位置:*` 一条都没有**
-        //   ⇒ 那三态里有两态**永远不可能出现**，而关系区那枚 chip 的悬停还写着
-        //   「轮到时会按需去世界书取原话」——那是这个系统**永远不会做**的事，真账上挂了 405 行。
-        //   ⇒ 收成一句话：位置只有「有值」与「未载」两态，悬停如实说清"未载"的来路（两条都不承诺查书）。
-        const locHtml = (e.location && e.location !== '未明')
-            ? `<span class="sw2-locval">${escapeHtml(e.location)}</span>${orig ? `<span class="sw2-quiet-note" title="${attrText(derivedTip)}">（推）</span>` : ''}`
-            : `<span class="sw2-eattr nodata" title="${attrText('书里没写这个名号在何处（未载 ≠ 在别处）；位置不从世界书逐条查取，只由账上已有的组织驻地结构推断一次')}">未载</span>`;
-
-        // ---------- 关系与属性（竖排若干行，每行一义）----------
-        // 旧版把规模/上级/分支/机构/麾下/麾下实力**全部挤进一个 div 里连成一长段**——
-        //   用户截图里"规模：… 麾下：… 麾下实力：…"糊成一团的可读性问题就出在这。
-        const rel = [];
-        if (e.kind === 'character' && typeof e['实力'] === 'string' && e['实力'].trim()) {
-            rel.push(`<span class="sw2-relrow" title="实力：书里明述的原话（角色字段；势力不写实力）"><span class="sw2-visually-hidden">实力：书里明述的原话。</span><i aria-hidden="true">实力</i><span class="sw2-relval">${escapeHtml(e['实力'])}</span></span>`);
-        } else if (e.kind === 'character') {
-            rel.push(`<span class="sw2-relrow">${lookupChip('实力')}</span>`);
-        }
-        // 位置行只对**角色**摆（势力行不摆实力/位置两栏——避免把"势力的实力"又摆回来，用户拍板）。
-        //   有真位置时它是值（与位置列同一事实，可接受；这一栏读起来是"位置：X"）。
-        //   ★leg40b：没有位置时**不再摆查书标记**（位置不查书，见上 locHtml 那段）——
-        //   位置列已经说了「未载」，这一行再挂一枚同样的 chip 是同一事实说两遍（leg25 f 立的"一栏一义"）。
-        if (e.kind === 'character' && e.location && e.location !== '未明') {
-            rel.push(`<span class="sw2-relrow"><i>位置</i><span class="sw2-relval">${escapeHtml(e.location)}</span>${orig ? `<span class="sw2-quiet-note" title="${attrText(derivedTip)}">（推）</span>` : ''}</span>`);
-        }
-        if (e.parent) {
-            rel.push(`<span class="sw2-relrow"${parentDerived ? ` title="${attrText(derivedTip)}"` : ''}><i>${e.kind === 'faction' ? '上级' : '隶属'}</i><span class="sw2-relval">${escapeHtml(e.parent)}</span>${parentDerived ? '<span class="sw2-quiet-note">（推）</span>' : ''}</span>`);
-        }
-        if (e.kind === 'faction' && typeof e['规模'] === 'string' && e['规模'].trim()) {
-            rel.push(`<span class="sw2-relrow"><i>规模</i><span class="sw2-relval">${escapeHtml(e['规模'])}</span></span>`);
-        }
-        if (e.kind === 'faction' && e.branches?.length) {
-            rel.push(`<span class="sw2-relrow"><i>分支</i><span class="sw2-relval">${escapeHtml(e.branches.join('、'))}</span></span>`);
-        }
-        if (e.organs?.length) {
-            rel.push(`<span class="sw2-relrow"><i>机构</i><span class="sw2-relval">${escapeHtml(e.organs.join('、'))}</span></span>`);
-        }
-        const crewHtml = crew ? `<div class="sw2-crew"><i>麾下</i>${escapeHtml(crew.join('、'))}</div>` : '';
-        const crewPowerHtml = crewPower.length ? `<div class="sw2-crew sw2-crew-pow"><i>麾下实力</i>${escapeHtml(crewPower.join('、'))}</div>` : '';
-        const relHtml = rel.length ? `<div class="sw2-relations">${rel.join('')}</div>` : '';
-
-        // ---------- 在办盘算（唯一的主句块）----------
+        const crewHtml = crew?.length
+            ? `<span class="sw2-relone-sep"> · </span><span class="sw2-relone-crew">麾下 ${escapeHtml(crew.join('、'))}</span>` : '';
+        const crewPowerHtml = crewPower.length
+            ? `<span class="sw2-relone-sep"> · </span><span class="sw2-relone-dim">麾下实力 ${escapeHtml(crewPower.join('、'))}</span>` : '';
+        // 在办的事：**只有真在办才有字**（旧版无在办时印一句"眼下没有在办的盘算。"占主句位，真账 ~600 行都是它）
         const agendaHtml = agenda
-            ? `<div class="sw2-agline"><span class="sw2-aggoal">${escapeHtml(agenda.goal)}</span>`
-                + (agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : '')
-                + `<div class="sw2-agstage">${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}</div></div>`
-            : `<div class="sw2-aidle">${e.id === world.context?.playerId ? '你的每一步从对话里来。' : '眼下没有在办的盘算。'}</div>`;
-
-        // 归属空着：**只在这个实体确实该有归属却查不到时**说，且收敛成小字（旧版是个虚线徽章，
-        //   与「在办」抢同一格的注意力——用户截图里它反而比真内容显眼）。
-        // ★leg40b：真账实测这一句挂在 **360/621 行**上——"书里没写隶属的普通人"是**常态不是异常**，
-        //   逐行印一句带解释的免责声明，等于把真信号（谁有归属）淹在噪声里。收成四个字，解释收进悬停。
-        const showOrphan = !e.parent && !(e.organs?.length) && !(e.branches?.length) && !crew?.length;
-        return `<div class="sw2-entity-row${e.id === world.context?.playerId ? ' sw2-player' : ''}">`
-            + `<div class="sw2-cell sw2-c-name"><div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}${status}${lensBadge}</small></div></div>`
-            // ★leg40b（D6）：这个悬停原来写「位置集的**受控词表**；不在集内的原话只留档，不写进账」——
-            //   leg33c 已按用户拍板把位置改成**自由文本**、位置集从硬闸降级为参照表，那句话早已不成立。
-            + `<div class="sw2-cell sw2-c-loc" title="${attrText('这个名号在何处（书里明述的原话；带（推）的是由组织驻地结构推出）。书里没写的显示「未载」——那是"不知道"，不是"在别处"')}">${locHtml}</div>`
-            + `<div class="sw2-cell sw2-c-rel">${relHtml}${crewHtml}${crewPowerHtml}${showOrphan ? '<div class="sw2-orphan" title="书里没写它隶属谁，也没有结构依据推出来">未载归属</div>' : ''}</div>`
-            + `<div class="sw2-cell sw2-c-agenda">${agendaHtml}</div>`
-            + `<div class="sw2-cell sw2-c-active"><span class="sw2-quiet-note">最近活跃</span><br>${typeof e.lastActiveTick === 'number' ? fmtTick(e.lastActiveTick) : '—'}</div>`
-            // leg25 d：行内两个入口（细案 §6）。**未查过**只需「查」（补缺）；**已定案**（含被旧 bug
-            //   误标的「书未明述」）给「重查」——它走 force 覆盖，否则 absent 是永久闸、永远查不动。
-            + `<div class="sw2-cell sw2-c-act">${lookupButtons(e, lookupState)}</div>`
+            ? `<span class="sw2-aggoal">${escapeHtml(agenda.goal)}</span><span class="sw2-agstage">${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}</span>${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}`
+            : '';
+        const hot = busyOwners.has(e.id) ? ' sw2-hot' : '';
+        return `<div class="sw2-entity-row${hot}">`
+            + `<div class="sw2-cell sw2-c-name">`
+            + `<div class="sw2-ename">${escapeHtml(e.name)}<small>${kindLabel(e, world)}${status}${lensBadge}</small>`
+            + (derived ? `<span class="sw2-quiet-note" title="${attrText(derivedTip)}">（推）</span>` : '')
+            + lookupBtn
+            + `</div></div>`
+            // ★空态不占版面（细案）：没有来历就**整格留白**，连占位 span 都不印
+            //   （真账 621 实体里 403 行是"无来历记载"——印什么都等于把噪声摊进主线）。
+            + `<div class="sw2-cell sw2-relone">${origin}${crewHtml}${crewPowerHtml}</div>`
+            + `<div class="sw2-cell sw2-agcell">${agendaHtml}</div>`
             + `</div>`;
     });
-    const allEnts = world.entities || [];
-    const quiet = allEnts.filter((e) => e.status && e.status !== 'active').length;   // 退休/已灭（镜外另计）
-    // leg25 c：原「其中 N 位账面无数」随四维一起删除——没有数值维度了，"账面无数"这个说法失去所指。
-    // leg25 d（细案 spec-lookup-batch-refresh §6）：批量补全入口 + 进度（进度由 config 注入，
-    //   渲染层不持任务状态——面板零第二份状态纪律）。
+    // ★本任务只做"行"：头部与工具条见 Task 3。批量补全钮与查书三态注脚**暂留原位**
+    //   （它们只由 config 进渲染层，且 lookup-batch 的两条既有锁指着它们）⇒ Task 3 挪进工具条。
     const task = config?.lookupTask || null;
     const batchBtn = task
         ? `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('再点一次可停；已查到的都留账')}">■ 停止补全 ${task.cursor}/${task.total}</button>`
@@ -858,7 +806,7 @@ export function renderEntitiesHtml(world, { config = null } = {}) {
     const batchHint = task
         ? `<span class="sw2-hint">补全中 ${task.cursor}/${task.total}（成功 ${task.success} · 未加载到 ${task.pending} · 书未明述 ${task.absent} · 失败 ${task.failed}）——随世界推进分批跑</span>`
         : '';
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${allEnts.length} · 本轮镜头 ${lens.size}）${quiet ? ` <small class="sw2-quiet-note">另 ${quiet} 位退休/已灭</small>` : ''}<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${page.total} · 本轮镜头 ${lens.size}）<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
         + `<div class="sw2-list-tools" style="margin:6px 0 8px">${batchBtn}${batchHint}</div>`
         + `<div class="sw2-entity-list">${rows.join('')}</div>`
         + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。每行的<b>查</b>=只补没定的栏，<b>重查</b>=连「书未明述」也推倒重查（旧版误标的假「书未明述」靠它清掉）。</div>`;

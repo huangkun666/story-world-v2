@@ -378,7 +378,7 @@ test('leg25 d：★位置来源必须落账且外显——"书里明述"与"结�
     assert.ok(line.includes('西极昆仑山（推）'), '★推定来的地点必须标（推）——人不许把"引擎推的"当"书里写的"');
     // ③ 面板也标
     const html = renderEntitiesHtml(d.ssot, {});
-    assert.ok(html.includes('（推）'), '★面板位置列标（推）');
+    assert.ok(html.includes('（推）'), '★面板标（推）——位置列已退场，来源标记改落名号格（引擎推的不许当书里写的）');
     // ④ 书里明述的来源不被推导降级
     const w2 = world();
     w2.context.positions = ['未明', '西极昆仑山'];
