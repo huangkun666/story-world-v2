@@ -33,6 +33,34 @@ export const PARAM_NATURE = {
 export const independentKeys = () => PARAM_KEYS.filter((k) => PARAM_NATURE[k] === 'independent');
 export const dependentKeys = () => PARAM_KEYS.filter((k) => PARAM_NATURE[k] === 'dependent');
 
+// ★★leg53（用户令「民生那一格拿掉」）：**面板上真正画出来的那几格**。
+//   为什么需要这一层（而不是直接从 `PARAM_KEYS` 里删掉 `民生度`）：
+//     · `PARAM_KEYS` 是**账本键表**——`setting-guard.test.js:93` 明确锁着"键表沿用（账本已有先例）"，
+//       旧账里可能真有 `民生度` 那个键；从键表里删掉它 = 旧账那个键变成"认不出的键"，
+//       会被 `param-store.normalizeStore` 当垃圾**静默丢弃**（本仓最忌的"悄悄吃掉账上的键"）。
+//     · 而"面板画不画它"是**另一件事**：本棒实测它**没有任何生产者**（见 `src/unrest.js` 头部的取证）。
+//   ⇒ 两件事分开：**键表不动**（旧账兼容）、**面板不画**（用户裁示）。
+//   ★`民生度` 为什么被拿掉而不是接一个生产者：本棒试过两条结构输入都不成立
+//     （"空闲实体占比"恒 0% = 死腿；"了结/新生比"是速度不是水平）⇒ 硬凑就是引擎在编语义。
+export const PANEL_ENV_KEYS = Object.freeze(PARAM_KEYS.filter((k) => k !== '民生度'));
+
+// ★★★leg53：**哪几格是"引擎每轮算的"**（＝真源**不许**插手的那几格）。
+//   本棒之前 `动乱度` 没有任何生产者 ⇒ 它只在初始化时由**抽书**写一次，此后永远不动。
+//   现在 `src/unrest.js` 每轮从账上真发生的事推它（用户令「引擎每轮算、覆盖书里那个」）。
+//   ⇒ 由此产生三条必须挡住的东西（**这三条是本常量存在的理由**，缺一条都会出真事故）：
+//     ① **真源不许接纳它**：`loadMergedEnv` 会把"账上已有的参数键"接进插件配置区
+//        ⇒ 引擎每轮算出来的**结果**会被写进用户的配置桶，然后又被镜像回来
+//        （"谁写谁读"绕成一圈 + 用户的 settings.json 里多出一个我方派生的值）。
+//     ② **快照不许把它当"参数"剥掉**：`web/index.js` 的 `stripParamKeys` 判"只有参数在动 ⇒ 不拍快照"，
+//        若把引擎派生的这一格也算进"参数"，它就从快照里被剥掉 ⇒ **回档丢状态**。
+//     ③ **面板的「依据」要照着它说实话**（`render.js` 的 `readout`：写"引擎每轮算的"而不是"书里原话"）。
+//   ★为什么这份名单住在**本模块**（叶子）而不是 `unrest.js`：依赖方向是
+//     `render → unrest → setting`，而 `setting.js` 也要用它（比 `eventBornTick` 的家）——
+//     名单若住 `unrest.js`，`setting.js` 就得反过来 import `unrest.js` ⇒ **嵌套循环**（本仓明禁）。
+//     `params.js` 是叶子（零 import），住这里谁都能取，且"哪些键是参数"本来就是这个模块的语义。
+//   ★`unrest.js` 会把它**再导出**一次（`ENGINE_DERIVED_ENV`），所以两种 import 路径都对。
+export const ENGINE_DERIVED = Object.freeze(['动乱度']);
+
 // 档位表：从"最差"到"最好"排列（顺序即语义方向，供面板排下拉用）
 export const PARAM_GEARS = {
     民生度: ['崩溃', '艰难', '尚可', '富足'],

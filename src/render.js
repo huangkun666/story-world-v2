@@ -6,7 +6,7 @@
 //   全边界 escapeHtml（XSS 防线）。
 // 玩家语言词典（A-3 黑名单以共识样例 v3 为准——"盘算/谋划"为玩家通词放行）：
 //   禁：分量/熵泵/里程碑/上溯/波及/指纹/派生源/强度参数名/hardPower…/tick/裸 id。
-import { PARAM_GEARS, PARAM_KEYS, PARAM_UNSET, SWITCH_PARAMS, dependentKeys, independentKeys, paramsOf, paramsRows, switchOn } from './params.js';   // leg26：环境量数值 → 世界参数档位（玩家可选）
+import { PARAM_GEARS, PANEL_ENV_KEYS, PARAM_UNSET, SWITCH_PARAMS, dependentKeys, independentKeys, normalizeParam, paramsOf, paramsRows, switchOn } from './params.js';   // leg26：环境量数值 → 世界参数档位（玩家可选）；★leg53：PANEL_ENV_KEYS = 面板真画的那几格（民生已撤）
 // ★★leg52：**参数真源**的两个纯函数（`isPlayerInputKey` / `normalizeStoreValue`）——
 //   设定页与观棋信息带从此**和有旋钮的参数页读同一本账**（详见下面 `paramEnvOverride` 的记档）。
 //   依赖方向：render → param-store → （params / limits），**无环**（param-store 是叶子，只依赖两张常量表）。
@@ -18,6 +18,8 @@ import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';
 import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
 import { LIMIT_ROWS } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）
+// ★★leg53：**哪几格是引擎每轮算的**——从生产者那边取（不是面板自己另写一份名单，本仓"一处口径"）。
+import { ENGINE_DERIVED_ENV } from './unrest.js';
 import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张力行改说可验证事实（近 N 轮事件数），与公式共用同一口径
 
 // 面板构建号（自证用）：用户实机常遇到"改了代码但页面还是旧的"（浏览器缓存 web/index.js）。
@@ -145,7 +147,10 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   `test/render.test.js` 的"版位升位且不含引擎术语"与"工具栏与列表头零引擎术语"两条里锁着）。
 //   ★★leg52（`leg52-params-and-tide`）：同一页四键并成一张卡 + 推进卡撤走 + 撤销卡上移 +
 //   长说明折进「？」+ 观棋页浪尖去重（大势只放大势、浪尖只放浪尖）+ 设定页/信息带改读真源。
-export const PANEL_BUILD = 'leg52-params-and-tide';
+//   ★★★leg53（`leg53-unrest-producer`）：**乱象那一格真有生产者了**——引擎每轮从账上真发生的事
+//   推一个档位（`src/unrest.js`：近 10 轮出事铺到几个不同地点 ⇒ 四档）；**民生那一格撤下**
+//   （它没有任何生产者，永远「未定」）；乱象的「依据」如实写「引擎每轮算的」（不再糊成"书里原话"）。
+export const PANEL_BUILD = 'leg53-unrest-producer';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -243,10 +248,15 @@ const dotSteps = (progress, maxSteps) => {
 
 // ============ 观棋页 ============
 
-export function renderDigestHtml(world) {
+export function renderDigestHtml(world, { config = {} } = {}) {
     // leg26：参数档位是**世界输入**，不是引擎判出的"危险处境"——所以时局句不再由它拼"越界的处境"。
     //   档位只如实列出来（人话原话），引擎对它们**零表态**（不裁好壞、不排序、不换算）。
-    const rows = paramsRows(world);
+    // ★★leg52 登记、**leg53 一并收口**：这一句原来读 `paramsRows(world)`（＝**滞后镜像**，没走真源），
+    //   是本仓"一个数两把尺子"的**第四个面**（前三个在 leg52 收口）。真账上当时看不出差异
+    //   （民生/时局都是未定），但只要玩家真设了天时就会分叉。⇒ 现在也走 `resolveEnv`（与其余三个面同源）。
+    // ★★leg53：同时只列 `PANEL_ENV_KEYS`（面板上真画的那几格）——民生撤了，时局句里也不该再报它。
+    const env = resolveEnv(world, config.paramEnv);
+    const rows = PANEL_ENV_KEYS.map((k) => ({ key: k, value: normalizeParam(k, env[k]) || PARAM_UNSET }));
     const setList = rows.filter((r) => r.value !== PARAM_UNSET).map((r) => `${LABELS.env[r.key]}${r.value}`);
     const unsetCount = rows.length - setList.length;
 
@@ -340,7 +350,9 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //   本来就是**唯一真源**（此前那两个导出零引用，而这里自己又判了一遍 `r.nature`：同一个口径两份实现）。
     const rowsOf = (keys) => keys.map((k) => rows.find((r) => r.key === k)).filter(Boolean);
     const indep = rowsOf(independentKeys());
-    const dep = rowsOf(dependentKeys());
+    // ★★leg53：因变量那一组也走 `PANEL_ENV_KEYS` 过滤 —— 民生那一格撤了，面板上就**不该再有它的行**
+    //   （`dependentKeys()` 仍返回它俩：那是**账本口径**，不是"面板该画什么"）。
+    const dep = rowsOf(dependentKeys().filter((k) => PANEL_ENV_KEYS.includes(k)));
     const setCount = rows.filter((r) => r.value !== PARAM_UNSET).length;
 
     // 自变量卡：**给旋钮**（玩家定，引擎照抄）
@@ -382,14 +394,19 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //   ★为什么不做 leg51 原来那版"删下拉、只留只读氛围标签"：**那是有损**——
     //     真源实测 `天时 = 大灾`（玩家真的设过），删下拉＝玩家从此设不了天时。
     const knobRow = (r) => knob(r);
-    // 因变量行：**不给旋钮**——只呈现（书里写的原话，或空着写「未定」）
+    // 因变量行：**不给旋钮**——只呈现（引擎算出来的档位，或空着写「未定」）
     // ★leg52：这一行是**三格**（名称 / 值 / 依据），与 `knobRow` 的两行式（当前 / 设定为）不同形，
     //   故**不合并**——照本仓纪律"同一个键只许有一个归属者"，宁可两行形态并存，也不把只读格塞进
     //   "设定为"那一行（那会让玩家以为它也有旋钮，正是 leg26 立"因变量不给旋钮"要防的误读）。
+    // ★★★leg53：**「依据」那一格必须说实话**——它说的是**这个值从哪来**，三种来路分别报：
+    //     · `动乱度` ⇒ **引擎每轮算的**（`src/unrest.js`：近 10 轮出事铺到几个不同地点）；
+    //     · 其余因变量 ⇒ 书里抽到的原话 / 没写就空着。
+    //   ★为什么这一格不能糊弄：本棒之前它写死「书里原话」，而真账上那个 `动荡` 是抽书来的、
+    //     引擎从不算它 ⇒ 一句"书里原话"就把"这一格其实没生产者"这件事盖住了（用户正是这么发现的）。
     const readout = (r) => `<div class="sw2-row">`
         + `<span>${LABELS.env[r.key] || escapeHtml(r.key)} <span class="sw2-param-kind sw2-param-kind-dep">因变量</span></span>`
         + `<b class="sw2-param-val" data-param-cell="${escapeHtml(r.key)}">${escapeHtml(r.value)}</b>`
-        + `<em>${r.value === PARAM_UNSET ? '书里没写 ⇒ 空着' : '书里原话'}</em></div>`;
+        + `<em>${r.value === PARAM_UNSET ? '还没有据 ⇒ 空着' : (ENGINE_DERIVED_ENV.includes(r.key) ? '引擎每轮算的' : '书里原话')}</em></div>`;
 
     // 开关类参数（写记忆 / 记编年史书）——同一页、同一条写通道，渲染成开关而不是下拉
     // leg27 h：开关卡下面挂**上次投递的实测事实**（用户两次靠肉眼发现记忆没生效 ⇒ 必须有自证面）。
@@ -499,22 +516,26 @@ export function renderParamsHtml(world, { config = {} } = {}) {
             { summary: '撤销的范围' })
         + `</div>`;
 
-    // ★★leg52（用户令「四键合并成一栏 · 只把说明文字折叠」）：**世界气氛与条件**一张卡装下四键。
-    //   卡的构成（三条纪律）：
-    //     ① **首句留在外面**（"这一栏是世界的样子，不是世界的开关"——它是结论，玩家先读这一句）；
-    //     ② 长解释（自变量/因变量的区别、"不参与任何判断"那句）**折进「？说明」**，默认收起；
-    //     ③ **下拉/只读格一个都不动**（天时·时局仍是旋钮，民生·乱象仍是只读行）。
+    // ★★leg52（用户令「四键合并成一栏 · 只把说明文字折叠」）：**世界气氛与条件**一张卡装下这几格。
+    // ★★★leg53（用户令「民生那一格拿掉」+「乱象接成真的」）：这一卡从**四格变三格**，且**性质说清了**：
+    //     ① **天时 / 时局** = 你定的条件（自变量，有旋钮）；
+    //     ② **乱象** = **引擎每轮从账上真发生的事算出来的**（因变量，只读）——
+    //        这是本棒新接的**生产者**（`src/unrest.js`）：近 10 轮里"出事"铺开到几个**不同地点** ⇒ 四档。
+    //        ★旧文案写「乱象是书里写的原话」——**在 leg53 之前就有一半是错的**（真账里那个 `动荡` 确实是
+    //        书里抽的，但"书里原话"这个说法会让人以为它永远来自书）；现在**两个来源都要说**：
+    //        载入时书里抽到的那个会被引擎的读数**接上并覆盖**（用户拍板「引擎每轮算、覆盖书里那个」）。
+    //     ③ **民生** 已从面板撤下（它**没有生产者**，永远「未定」——见 `params.js` 的 `PANEL_ENV_KEYS`）。
     //   ★与 `capCard` 的**世界尺度**分开成两张卡，不是重复：这一卡是**世界的样子**（书/玩家给的描述
-    //     性条件，引擎一条都不读），那一卡是**世界能跑多宽**（就是引擎的闸值本身）——性质不同，
-    //     合成一张会让玩家以为"拧天时＝拧引擎"（leg26 立"引擎不读档位"那条纪律正为防这个）。
+    //     性条件 + 引擎从账上派生的读数），那一卡是**世界能跑多宽**（就是引擎的闸值本身）——性质不同。
     const atmoCard = `<div class="sw2-set-card sw2-atmo-card" style="grid-column:1/-1">`
         + `<h4>世界气氛与条件</h4>`
         + foldHint('这一栏是<b>世界的样子</b>，不是世界的开关。',
-            '<b>天时 / 时局</b>是你定的条件（引擎照抄摆放，<b>不参与任何判断</b>）；'
-            + '<b>民生 / 乱象</b>是书里写的原话（结果，只读）——拧它等于假装"拧一下结果就变了"，'
-            + '世界不发明事实，也就没有那个函数。没写就空着，<b>绝不算一个数出来冒充它</b>。'
+            '<b>天时 / 时局</b>是你定的条件（引擎照抄摆放，<b>不参与任何判断</b>）。'
+            + '<b>乱象</b>是<b>引擎每轮算的</b>：看近 10 轮里"出事"铺到了几个<b>不同的地点</b>——'
+            + '地点越散、档位越重；同一个地方出十件事，也只算一个地点。'
+            + '它不发明事实：只从账上已经落账的事里数，一个字都不添。'
             + '世界变宽变窄是下面那张「世界尺度」的事，与这一栏无关。',
-            { summary: '这四格分别是什么' })
+            { summary: '这几格分别是什么' })
         + indep.map(knobRow).join('')
         + dep.map(readout).join('')
         + `</div>`;
@@ -540,8 +561,13 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         + `</div>`
         // ★leg52：这一段旧文案与 `atmoCard` 折叠里的解释**说的是同一件事**（"因变量只呈现/绝不冒充"），
         //   两处都说＝同一事实说两遍（正是本棒在观棋页治的病）⇒ 收进卡内折叠，页脚这一段撤掉。
-        + `<div class="sw2-sv-sub" style="margin-top:10px">档位只被引擎照抄摆放，<b>不参与任何判断</b>；`
-        + `世界的走向由世界上正在发生的事决定，不由这几个词决定。</div>`;
+        // ★★★leg53：措辞必须**收窄**——旧句是"档位只被引擎照抄摆放，不参与任何判断"，
+        //   而现在 **乱象是引擎每轮算出来的**（`src/unrest.js`）⇒ 那句对乱象不成立了。
+        //   ⇒ 定稿：分两句说清**三种性质**（你定的条件 / 引擎每轮算的 / 都是只读呈现），
+        //     而不是用一句"档位……"把它们糊在一起（那正是本棒要治的"一个词盖住两件事"）。
+        + `<div class="sw2-sv-sub" style="margin-top:10px"><b>天时 / 时局</b>是你定的条件，引擎照抄摆放、`
+        + `<b>不参与任何判断</b>；<b>乱象</b>是引擎每轮从账上真发生的事算出来的读数。`
+        + `两个都不改世界的走向——走向由世界上正在发生的事决定，不由这几个词决定。</div>`;
 }
 
 export function renderInfoBandHtml(world, { config = {} } = {}) {
@@ -552,8 +578,9 @@ export function renderInfoBandHtml(world, { config = {} } = {}) {
     const env = resolveEnv(world, config.paramEnv);
     const pre = !world.meta || world.meta.tick === 0;   // leg21：未演化态诚实标注（基线值非事实值）
     const baselineHint = pre ? ' <span class="sw2-baseline-hint">基线值 · 首轮后随世界演化</span>' : '';
-    // leg26：参数四键 = 玩家/书定的**档位原话**；没定的显示「未定」（不填占位值）
-    const envRows = PARAM_KEYS.map((k) => envRowHtml(k, env[k]));
+    // leg26：参数档位 = 玩家/书定的**档位原话**；没定的显示「未定」（不填占位值）
+    // ★★leg53：改走 `PANEL_ENV_KEYS` —— 面板**不再画民生那一格**（用户令「拿掉」；理由见 `params.js`）。
+    const envRows = PANEL_ENV_KEYS.map((k) => envRowHtml(k, env[k]));
     const t = dyn?.tension || {};
     const tides = (dyn?.derivedFrom || []).slice(-3).reverse().map((x) => tideLabel(world, x));
     const counts = {
@@ -713,7 +740,7 @@ export function renderSideHtml(world) {
 
 export function renderBoardHtml(world, opts = {}) {
     return {
-        digest: renderDigestHtml(world),
+        digest: renderDigestHtml(world, opts),
         // ★leg52：`opts.config.paramEnv`（＝参数真源）透传下去 —— 信息带要与参数页同源。
         infoband: renderInfoBandHtml(world, opts),
         agendaStrip: renderAgendaStripHtml(world),
@@ -1451,7 +1478,8 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             + `<div class="sw2-sv-sub">尚未抽取——设定池未就绪。</div></div>`
             + `<div class="sw2-sv-cards"><span class="sw2-sv-chip stale">未抽取</span></div></div>`;
     }
-    const envRows = PARAM_KEYS.map((k) => envRowHtml(k, env[k])).join('');
+    // ★★leg53：同信息带——设定页也不再画民生那一格（`PANEL_ENV_KEYS`，一处口径两个面共用）
+    const envRows = PANEL_ENV_KEYS.map((k) => envRowHtml(k, env[k])).join('');
     const tides = (dyn?.derivedFrom || []).slice(-5).reverse().map((x) => tideLabel(world, x)).join('<br>');
     const canon = frozen.canon || {};
     const scaleRows = (canon.powerScale || []).map((p) => `<div class="sw2-sv-row"><b>${escapeHtml(p.level)}</b><span>${escapeHtml(p.note)}</span></div>`).join('');

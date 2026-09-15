@@ -35,6 +35,7 @@ import { switchOn } from '../src/params.js';
 //   世界账的 `dynamic.env` 降级为**镜像**（引擎照旧读它）。本文件只用它的两个只读小工具：
 //   `isParamStoreKey`（判"这个键是不是参数"——快照闸要用）与 `normalizeStore`（读旧迁移用）。
 import { isParamStoreKey, normalizeStore, PARAMS_SETTINGS_KEY } from '../src/param-store.js';
+import { ENGINE_DERIVED } from '../src/params.js';   // ★leg53：引擎每轮算的那几格（快照不许把它们当参数剥掉）
 // ★★★leg46（用户令「重构代码吧，我已经没有耐心了」）：**参数全生命周期收进一个模块**。
 //   本文件从此**只留接线**：面板取 `hub.displayEnv()`、改动调 `hub.set(world,key,value)`、
 //   载入调 `hub.commit(world)`。写存储/回读核对/镜像/撤销/自证面**一律不再出现在本文件里**
@@ -945,11 +946,19 @@ function snapshotStore() {
 //     世界就逐字节变了，过不了下面那道内容闸 ⇒ **拧一次旋钮烧掉一个快照位**（15 份窗口被旋钮吃掉）。
 //   口径（能机械核）：把**参数键全部摘掉**之后两份世界**逐字节相同** ⇒ 这一步只有参数在动，
 //     **不是世界动了** ⇒ 不拍。此时参数的真源在插件配置里（本笔刚搬的家），快照本来也管不到它。
+// ★★★leg53：**引擎每轮算的那几格不算"参数"**。
+//   为什么必须加这一条（本棒实测的真事故形状）：`动乱度` 现在由 `src/unrest.js` 每轮从账上派生，
+//   而本函数下面按 `isParamStoreKey` 剥"参数键"——它会**连引擎派生的那一格一起剥掉**
+//   ⇒ `isParamOnlyChange` 会把"乱象变了"误判成"只有参数在动" ⇒ **不拍快照** ⇒ **回档丢状态**。
+//   口径：`isParamStoreKey`（形状上属于参数表）≠ **"该被当参数剥掉"**——派生结果**是世界状态**。
 function stripParamKeys(world) {
     const copy = JSON.parse(JSON.stringify(world));      // 深拷贝：绝不动真账一个键
     const env = copy?.context?.setting?.dynamic?.env;
     if (!env || typeof env !== 'object') return copy;
-    for (const k of Object.keys(env)) if (isParamStoreKey(k)) delete env[k];
+    for (const k of Object.keys(env)) {
+        if (ENGINE_DERIVED.includes(k)) continue;        // ★派生结果留在指纹里（它是世界状态）
+        if (isParamStoreKey(k)) delete env[k];
+    }
     return copy;
 }
 let sw2SnapLastWorldFp = null;   // 上一份"摘掉参数键"的世界指纹（判"只有参数在动"的基准）

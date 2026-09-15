@@ -32,7 +32,7 @@
 //     ⇒ 本模块按**世界名**分桶存（`{ version, worlds: { [世界名]: env } }`），换聊天不串味。
 //   · 清成「未定」= **删键**（照 `params.js` 既有语义："空着就是空着"，绝不写占位值）。
 
-import { PARAM_KEYS, PARAM_NATURE, isParamKey, normalizeParam, SWITCH_PARAMS } from './params.js';
+import { PARAM_KEYS, PARAM_NATURE, ENGINE_DERIVED, isParamKey, normalizeParam, SWITCH_PARAMS } from './params.js';
 import { LIMIT_KEYS, limitKey } from './limits.js';
 
 /** `extensionSettings` 里我们那一格（带版本号：以后搬家/改形不至于误读旧形）。 */
@@ -122,6 +122,18 @@ export function loadMergedEnv(bucket, worldName, worldEnv, legacyPendingEnv) {
         if (!src || typeof src !== 'object') return;
         for (const [k, v] of Object.entries(src)) {
             if (!isParamStoreKey(k)) continue;
+            // ★★★leg53：**只有"玩家能拧的键"才配进真源**——两道闸，缺一条都出真事故：
+            //   ① **因变量一律不接纳**（`isPlayerInputKey` 把 `民生度`/`动乱度` 排除在外）。
+            //      ★这一条是**旧洞**：本函数此前只按 `isParamStoreKey`（**形状**）筛，
+            //        于是账上那个旧的 `民生度` 会被接进真源桶（`settings.json`），
+            //        而真源桶的语义是"玩家在这个世界选过什么"——**因变量是结果、不是玩家的选择**。
+            //        （leg41 立 `isPlayerInputKey` 时就说了"形状 vs 权限是两件事"，这一路当时漏了。）
+            //   ② **引擎每轮算的键不接纳**（`ENGINE_DERIVED`）：它每轮都在变，
+            //      收进来只会让真源里躺一个下一轮就过期的**派生结果**，且下一轮载入时
+            //      "真源优先"会把这个旧结果顶回账上（自愈，但白抖一次 + 语义污染）。
+            //   ⇒ 口径：**真源 = 玩家的选择**；世界的**结果**（无论书抽的还是引擎算的）都归账上。
+            if (!isPlayerInputKey(k)) continue;
+            if (ENGINE_DERIVED.includes(k)) continue;
             if (onlyMissing && Object.prototype.hasOwnProperty.call(own, k)) continue;
             const norm = normalizeStoreValue(k, v);
             if (typeof norm === 'string') own[k] = norm;

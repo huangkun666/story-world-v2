@@ -35,7 +35,7 @@
 //   `备注` **我方一个字不写**（那是留给用户手写的格子，每轮覆盖会把他的字抹掉）。
 //   同一条纪律也适用于"格子的取舍"：没有真数据的格子**整行不出现**，不许用 `—` 充数。
 
-import { paramsRows } from './params.js';
+import { paramsRows, PANEL_ENV_KEYS } from './params.js';   // ★leg53：PANEL_ENV_KEYS = 面板口径（民生已撤，这一面跟着走）
 // leg29：`positionLine` **不再 import**——用户口径「位置不用管，聊天 llm 知道」，本桥已在 leg29 去掉位置面。
 //   留着它就是"死 import"（本仓在 leg25 f 专门清过这类东西：纸面机制与死代码一样有毒）。
 
@@ -145,7 +145,11 @@ function compact(obj) {
  */
 export function buildMemoryPayload(world, { eventTail = MEMORY_EVENT_TAIL } = {}) {
     const tick = world?.meta?.tick ?? 0;
-    const params = paramsRows(world).map((r) => `${r.key}：${r.value}`).join(' · ');
+    // ★★leg53：这一行也走 `PANEL_ENV_KEYS` —— **同一个面板口径，第五个面**。
+    //   它投出去的是**中文列**（`世界状态 · 详细说明`），玩家会在记忆插件里逐字看到 ⇒ 就是玩家可见面。
+    //   民生那一格撤了，这里也不许再报（否则"面板上没有、记忆插件里有"＝又一个两把尺子）。
+    const params = paramsRows(world).filter((r) => PANEL_ENV_KEYS.includes(r.key))
+        .map((r) => `${r.key}：${r.value}`).join(' · ');
     const open = (world?.agendas || []).filter((a) => !a.closed);
     const pending = (world?.events || []).filter((e) => !e.closed);
     const events = world?.events || [];

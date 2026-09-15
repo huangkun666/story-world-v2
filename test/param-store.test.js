@@ -11,6 +11,7 @@ import {
     ALL_PARAM_KEYS,
 } from '../src/param-store.js';
 import { createParamUndoStack } from '../src/undo-stack.js';
+import { ENGINE_DERIVED } from '../src/params.js';   // ★leg53：引擎每轮算的那几格（真源不许接纳它们）
 
 const mkWorld = (env = {}, worldName = '大荒z') => ({
     context: { world: worldName, setting: { dynamic: { tension: { polarity: 'P', intensity: 0.5 }, env: { ...env } } } },
@@ -55,13 +56,28 @@ test('leg41·param-store：桶形状——洗坏形/丢垃圾键/按世界名分
 
 test('leg41·param-store：载入合并的优先级——**真源 > 账上 > 旧兜底**（真源一旦写过就永远是它）', () => {
     const bucket = { version: 1, worlds: { 大荒z: { 天时: '大灾' } } };
-    const r = loadMergedEnv(bucket, '大荒z', { 天时: '平常', 动乱度: '动荡' }, { 张力推手: '紧绷' });
+    const r = loadMergedEnv(bucket, '大荒z', { 天时: '平常', 张力推手: '紧绷' }, { 每轮递线: '6' });
     assert.equal(r.env['天时'], '大灾', '★真源赢（哪怕账上是别的档位）');
-    assert.equal(r.env['动乱度'], '动荡', '账上有的、真源没有的 ⇒ 接纳（升级不丢档位）');
-    assert.equal(r.env['张力推手'], '紧绷', '旧兜底只在真源与账上都没有时才补');
+    assert.equal(r.env['张力推手'], '紧绷', '账上有的、真源没有的 ⇒ 接纳（升级不丢档位）');
+    assert.equal(r.env['每轮递线'], '6', '旧兜底只在真源与账上都没有时才补');
     assert.equal(r.changed, true);
     const same = loadMergedEnv(bucket, '大荒z', { 天时: '大灾' }, null);
     assert.equal(same.changed, false, '★没有需要接纳的键 ⇒ changed:false（调用方据此不白写一次配置）');
+});
+
+test('★★★leg53：**引擎每轮算的那几格不许被"接纳"进真源**（派生结果归账上，真源只管玩家能拧的）', () => {
+    // 病（本棒实测的机理）：`动乱度` 现在由 `src/unrest.js` 每轮从账上派生，而载入接纳会把
+    //   "账上已有的参数键"接进**插件配置桶**（`settings.json`）⇒ 引擎算的**结果**被写进
+    //   "玩家在这个世界选过什么"那个桶里 = **语义污染**，且那份值下一轮就过期。
+    // ★这条同时守住旧账兼容的另一半：**玩家能拧的键照旧接纳**（不许因为堵这一格把接纳整条关掉）。
+    const r = loadMergedEnv({ version: 1, worlds: {} }, 'W', { 动乱度: '动荡', 天时: '大灾', 民生度: '艰难' }, null);
+    assert.equal(r.env['动乱度'], undefined, '★引擎派生的那一格**不许**进真源（它是结果，不是玩家的选择）');
+    assert.equal(r.env['天时'], '大灾', '★玩家能拧的照旧接纳（旧账升级不丢档位）');
+    assert.equal(r.env['民生度'], undefined, '★`民生度` 也不进真源（因变量，真源无权管辖——leg41 立的规矩）');
+    // 所以"真源桶里只有玩家输入"这条不变量，在任何源上都成立
+    for (const k of Object.keys(r.env)) {
+        assert.ok(!ENGINE_DERIVED.includes(k), `★真源里不许有引擎派生的键「${k}」`);
+    }
 });
 
 test('leg41·param-store：镜像——只碰参数键；世界别的 env 键一个不动；无变化返回原对象', () => {

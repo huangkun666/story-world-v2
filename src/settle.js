@@ -7,6 +7,7 @@ import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
 import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.js';   // K29：张力强度更新 + 浪尖派生（A-5 两来源）；bornTickOf 共用契约解析器
+import { updateUnrestGear } from './unrest.js';   // ★leg53：乱象档位派生（引擎每轮从账上真发生的事推——用户令）
 // ★★leg40b 续（**尺度上限参数化**·用户令「能不能直接把这些闸门参数直接放进参数页？」）：生效上限统一从这里取——
 //   账上设了档位就用档位，没设就用本文件里的**出厂默认**（`limits.js` 引用式取它们，不重写数字）。
 //   口径与 `params.js` 一致（值落 `context.setting.dynamic.env` / 白名单归一 / 缺键=默认）。
@@ -957,6 +958,17 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     pulseEntropy(world, tick, chronicle);   // K27 熵泵（细案 §3.5 → A-6）：环境推演器每 ENV_TICK 一步；越阈落状态源事件；恢复闭环
     reactivateNamed(world, events, tick, chronicle);   // K37 复归：本 tick 落账事件点名 → retired 升回 active
     retireInactive(world, tick, warnings, chronicle);  // K37 背景化 GC：扫描轮条件退休 + 超席位强制（守卫）
+    // ★★leg53（用户令「引擎每轮从账上真发生的事推一个档位」）：**乱象的生产者**——
+    //   `updateUnrestGear` 是纯函数（返回新世界），而本函数（`settleTick`）全程**就地改 `world`**
+    //   （上面每一行都是 `applyX(world, …)` 那种写法）⇒ 这里把结果**装回**同一个对象，
+    //   免得两条"引擎每轮写"的路一个改入参、一个返回新值（同一件事两种写法＝本仓老病）。
+    //   ★位置：放在 `retireInactive` **之后**——那个函数会改实体的 `status`，而本机制的数
+    //     派生自**事件**（此时已全部落账），放末尾保证"读的是这一轮最终那份账"。
+    //   ★它只写 `env.动乱度` 一个键（判据 E 条锁着"不动别人的键"）。
+    {
+        const next = updateUnrestGear(world, tick);
+        if (next !== world) world.context.setting.dynamic = next.context.setting.dynamic;
+    }
     chronicleEvents(world, gstep, tick, chronicle);
     world.chronicle = [...world.chronicle, ...chronicle];   // 编年落账（推进留痕 + 事件条目）
     archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）

@@ -189,14 +189,30 @@ test('★leg46·⑤b：**ST 的配置通道完全没跟上**（settings.json 那
 
 // ── ⑥ 载入接纳 ────────────────────────────────────────────────────────────
 test('★★leg46·⑥：载入接纳——账上已有的档位**一次性进真源**（升级不丢档位、幂等）', async () => {
-    const st = makeSt({ env: { 动乱度: '动荡', autoAdvance: '0', 天时: '大灾' } });
+    // ★★leg53（口径升级）：夹具里的 `动乱度` 换成一个**玩家能拧**的键——因为从本棒起
+    //   `动乱度` 是**引擎每轮算的**（`src/unrest.js`），真源**不许接纳**它（另有一条专锁）。
+    //   **判据的实质一字未变**：账上已有的玩家档位一次性进真源、且幂等。
+    const st = makeSt({ env: { 张力推手: '紧绷', autoAdvance: '0', 天时: '大灾' } });
     const hub = await makeHub();
     const c = hub.commit(st.world);
     assert.equal(c.adopted, true, '第一次载入要接纳');
-    assert.deepEqual(c.env, { 动乱度: '动荡', autoAdvance: '0', 天时: '大灾' }, '账上那三个键进真源');
-    assert.deepEqual(st.store(), { 动乱度: '动荡', autoAdvance: '0', 天时: '大灾' }, '★落进主路');
+    assert.deepEqual(c.env, { 张力推手: '紧绷', autoAdvance: '0', 天时: '大灾' }, '账上那三个键进真源');
+    assert.deepEqual(st.store(), { 张力推手: '紧绷', autoAdvance: '0', 天时: '大灾' }, '★落进主路');
     const again = hub.commit(c.world);
     assert.equal(again.adopted, false, '★幂等：第二次载入不再"接纳"（否则每次打开面板都白写一次）');
+});
+
+test('★★★leg53：**引擎每轮算的那一格，载入时不会被写进真源**（派生结果归账上）', async () => {
+    // leg53 实测的机理：`loadMergedEnv` 会把"账上已有的参数键"接进插件配置桶；
+    //   若照收 `动乱度`，就会把**引擎算出来的结果**写进"玩家选过什么"那个桶
+    //   （`settings.json`）——语义污染，且那份值下一轮就过期。
+    const st = makeSt({ env: { 动乱度: '大乱', 天时: '大灾' } });
+    const hub = await makeHub();
+    const c = hub.commit(st.world);
+    assert.equal(st.store()['动乱度'], undefined, '★引擎算的那一格**不许**进真源桶');
+    assert.equal(st.store()['天时'], '大灾', '★玩家能拧的照旧接纳（不许把接纳整条关掉）');
+    assert.equal(c.world.context.setting.dynamic.env['动乱度'], '大乱',
+        '★但它照旧留在**账上**（引擎读/面板画都读这一格）');
 });
 
 test('★leg46·⑥b：载入接纳**只动这个世界的桶**', async () => {
@@ -322,7 +338,8 @@ test('★leg46·⑧d：非法值/未知键**绝不被当成清空**（三态分�
 
 // ── ⑪ 自检面（用户令「老问题没解决，还是会回归默认」之后加的那一枚）────────────────
 test('★★★leg46·⑪：自检读数**一次拿全**（键名 · 原文 · 能不能写 · 世界名/桶键 · 真源 · 引擎镜像）', async () => {
-    const st = makeSt({ env: { 动乱度: '动荡' } });
+    // ★★leg53：夹具里的 `动乱度` 换成玩家能拧的键（派生结果不再进真源，见那条专锁）
+    const st = makeSt({ env: { 张力推手: '紧绷' } });
     sw2ResetFlushState();
     // ★先走一次"载入接纳"（真机上打开面板就会走：`loadWorld` → `hub.commit`）——
     //   否则"账上已有的那批"进不了真源（**判定只归 `commit` 管**，`set-param` 不管接纳）。
@@ -352,8 +369,8 @@ test('★★★leg46·⑪：自检读数**一次拿全**（键名 · 原文 · �
     assert.equal(ev['桶键'], '大荒z');
     assert.equal(ev['世界名与桶键一致'], true);
     // ④ 真源 / 引擎镜像 / 不一致的键
-    assert.deepEqual(ev['真源'], { 动乱度: '动荡', 天时: '大灾' }, '真源 = 账上接纳那批 ⊕ 刚写的那一个');
-    assert.deepEqual(ev['账上镜像'], { 动乱度: '动荡', 天时: '大灾' }, '引擎镜像必须跟上');
+    assert.deepEqual(ev['真源'], { 张力推手: '紧绷', 天时: '大灾' }, '真源 = 账上接纳那批 ⊕ 刚写的那一个');
+    assert.deepEqual(ev['账上镜像'], { 张力推手: '紧绷', 天时: '大灾' }, '引擎镜像必须跟上');
     assert.deepEqual(ev['真源与镜像不一致的键'], [], '一致');
     // ⑤ 可粘贴的文本（玩家复制给维护者的就是这一段）
     const text = mod.paramEvidenceText(ev);
@@ -574,8 +591,10 @@ test('★★★leg46·⑬c（**用户实机审计抓出来的真缺陷**）：**
     //   ① 写墓碑**只许动它自己那个键**，参数桶一个字节都不许变；
     //   ② 正常读写那条路上，**墓碑不许影响任何键**（玩家写过的键必须在）；
     //   ③ 全程只有"玩家清空"那一下会让键消失。
-    const st = makeSt({ env: { 动乱度: '动荡' } });
-    sw2ResetFlushState();
+    // ★★leg53：账上那个"已有的第二个键"从 `动乱度` 换成 `张力推手`——
+    //   因为 `动乱度` 现在是**引擎每轮算的**，真源**不再接纳**它（那条专锁管着）。
+    //   本用例要判的是"**别的键会不会被顺手弄丢**"，用哪个键当"第二个键"不影响判据实质。
+    const st = makeSt({ env: { 张力推手: '紧绷' } });
     const { createParamHub } = await import('../src/param-hub.js');
     const hub = createParamHub({
         storage: () => globalThis.window.localStorage,
@@ -608,7 +627,7 @@ test('★★★leg46·⑬c（**用户实机审计抓出来的真缺陷**）：**
         && watch[i - 1].split('|').filter((k) => k && !keys.split('|').includes(k) && k !== '每轮递线').length);
     assert.deepEqual(lostByOthers, [], `★除了玩家清空那一下，任何写入都不许把别的键弄丢；实际序列：${JSON.stringify(watch)}`);
     // ② 最终态：玩家最后给的那个值必须在（＋账上原有两个键）
-    assert.deepEqual(st.store(), { 动乱度: '动荡', 每轮递线: '6' }, '★玩家写过的键必须都在，值是他最后选的那个');
+    assert.deepEqual(st.store(), { 张力推手: '紧绷', 每轮递线: '6' }, '★玩家写过的键必须都在，值是他最后选的那个');
     assert.equal(st.mirror()['每轮递线'], '6', '★镜像里也要在（引擎读它跑）');
     // ③ 清空过又给回来的键，**墓碑不许留着**（留着就会在别的路上把它再吃掉）
     const del = JSON.parse(ls.getItem('sw2_params_v1-deleted') || '{}');
