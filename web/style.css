@@ -258,8 +258,6 @@
 .sw2-cell{min-width:0;}
 .sw2-ename{font-weight:700;font-size:14.5px;line-height:1.35;}
 .sw2-ename small{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;margin-top:2px;}
-/* 位置：实值用正文色（它是真事实），空态退成虚线 chip —— 与「未查/未加载到」同一套语言 */
-.sw2-locval{color:var(--sw2-text);}
 /* 关系与属性：竖排「标签 + 值」，标签定宽对齐 ⇒ 一眼扫下来能比 */
 .sw2-relations{display:flex;flex-direction:column;gap:3px;}
 .sw2-relrow{display:flex;align-items:baseline;gap:6px;font-size:12.5px;line-height:1.5;}
@@ -281,7 +279,6 @@
 .sw2-eattr.nodata b{color:var(--sw2-text-faint);}
 .sw2-eagenda{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.5;}
 .sw2-eagenda b{color:var(--sw2-text);font-weight:600;}
-.sw2-eactive{font-size:11.5px;color:var(--sw2-text-faint);text-align:right;}
 
 /* ★leg49（细案 spec-entities-page-ia §3.2）：三列版式 + 工具条 + 分组 + 分页。
    病根：621 张**等价卡平铺**（真账实测 170319px 高、626 枚按钮、0 个搜索）⇒ 面板没法用。
@@ -314,7 +311,6 @@
 .sw2-ents-grp-block>summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-radius:7px;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);}
 .sw2-ents-grp-t{font-weight:600;}
 .sw2-ents-grp-c{color:var(--sw2-text-faint);font-size:12px;}
-.sw2-btn-mini{padding:1px 7px;font-size:11px;margin-left:6px;}
 
 /* ---------- 设定档案页 ---------- */
 .sw2-sv-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap;}

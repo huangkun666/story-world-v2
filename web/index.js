@@ -70,7 +70,9 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 // ★leg49（细案 spec-entities-page-ia）同步升位：实体页版式整套换了（三列 + 工具条 + 分组 + 分页），
 //   `web/style.css` 里的规则增删一起走 ⇒ CSS 版本号必须跟着升，否则浏览器缓存旧样式
 //   （"页面是新代码、样式是旧的"正是这一串要治的病）。与 `PANEL_BUILD` 同批。
-const CSS_VERSION = '20260916-leg49-entities-three-cols';
+//   ★名字随 `PANEL_BUILD` 一起被评审修正过（原名 `…-leg49-entities-three-cols` 含 `entity`，
+//   与"玩家可见文本零引擎术语"那条锁对撞 ⇒ 用户拍板改名 `leg49-three-column-roster`）。
+const CSS_VERSION = '20260916-leg49-three-column-roster';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 

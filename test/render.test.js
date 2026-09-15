@@ -255,6 +255,16 @@ const has = (html, snippet) => new RegExp(
     snippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'),
 ).test(html);
 
+// 产物计数小工具（Task 5 评审修正 #5 起：分组真数要逐组核，见"组头带真数"那条）
+function count(s, needle) { return s.split(needle).length - 1; }
+// 从实体页产物里切出**列表体**（分组时切到第一段 `</div></details>` 为止——这样"未知 grp 与 none 同形"
+// 这条断言比的是同一段东西：两者都不含 `</div></details>` ⇒ 整段原样比较）。
+function bodyOf(html) {
+    let b = html.slice(html.indexOf('<div class="sw2-entity-list">'));
+    const end = b.indexOf('</div></details>');
+    return end === -1 ? b : b.slice(0, end);
+}
+
 function world() {
     const w = JSON.parse(readFileSync(path.join(ROOT, 'test', 'fixtures', 'live-world.json'), 'utf8'));
     w.context.playerId = 'e_player';
@@ -1253,18 +1263,13 @@ test('★细案实体页：命中计数与页码如实印出（不是估计值�
 test('★细案实体页：工具栏与列表头**零引擎术语**（构建号也在玩家视线内）', () => {
     const html = renderEntitiesHtml(world());
     const text = String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-    // ★★leg49 Task 5 如实登记的一处**计划内冲突**（本仓纪律：假绿比红灯坏得多，故写在这里而不是悄悄改）
-    //   `PANEL_BUILD` 被细案钉成 `leg49-entities-three-cols`（含 `entities`）——
-    //   而下面这串是 leg31 立的"构建号也不许带引擎术语"的锁（leg31 当年把 `leg31b-agenda-top10`
-    //   改名才过，见 `src/render.js:71-72`）。两条要求**在同一串字符上直接对撞**，
-    //   且细案同时要求 `构建号在玩家视线内`（表头那颗 `构建 …`）⇒ 无法两全。
-    //   处置：**只**把"构建号自己那一个 token"从扫描里抠掉（`构建 <token>` 整段替换成 `构建号`），
-    //   **其余全部文本（含工具栏每个 chip、每个组头、每行）照旧全量过禁词**——
-    //   抠的是一个已知的内部标识，不是放宽"零引擎术语"这条纪律本身。
-    //   ⚠该冲突已在 Task 5 报告里点名为疑虑；若评审判定该改名，改 `PANEL_BUILD` 一行即可（判据同批改）。
-    const swept = text.replace(new RegExp(`构建\\s*${PANEL_BUILD}`, 'g'), '构建号');
+    // ★Task 5 评审修正 #1：这里原先把「构建号自己那一个 token」从扫描里**抠掉**（`构建 <token>` → `构建号`），
+    //   理由是细案把它钉成 `leg49-entities-three-cols`（含 `entities`）与 leg31 立的"构建号也不许带引擎术语"
+    //   这条锁对撞。用户拍板**改名**（`PANEL_BUILD` → `leg49-three-column-roster`）⇒ 冲突消失
+    //   ⇒ 抠洞撤销，**禁词扫描恢复全量**（构建号自己也必须过扫描——改完它本来就过得去）。
+    //   反向锁照旧在下面（构建号必须在玩家视线内），两条一起把"改名过锁"与"不许藏起来"都钉死。
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'entity', 'ENTITIES']) {
-        assert.ok(!swept.toLowerCase().includes(bad.toLowerCase()), `工具栏不得出现引擎术语「${bad}」`);
+        assert.ok(!text.toLowerCase().includes(bad.toLowerCase()), `工具栏不得出现引擎术语「${bad}」`);
     }
     // 构建号本身照旧在玩家视线内（细案要求"版位升降位"，这一条把"不许为了过禁词把它藏起来"钉死）
     assert.ok(text.includes(`构建 ${PANEL_BUILD}`), '★构建号必须在玩家视线内（表头）——不许为了过禁词而藏它');
@@ -1276,15 +1281,72 @@ test('★细案实体页：分组——按归属/位置/类别切成可展开的
     // ★分组控件**在本任务**落地（用户拍板：从 Task 3 移到这里，与分组渲染同批——中途不许有死控件）
     const plain = renderEntitiesHtml(w);
     assert.ok(plain.includes('data-action="ents-group"'), '★分组钮在位（本任务才加）');
-    const html = renderEntitiesHtml(w, { view: { grp: 'parent' } });
+    // ★夹具补几行带归属的：真账那份 fixture 只有 3 家势力 + 玩家，**全都没有 parent**
+    //   ⇒ 按归属分组只会得到「（无归属）」一组，"逐组真数/求和"根本咬不住。
+    const w2 = world();
+    w2.entities.push(
+        { id: 'e_t1', kind: 'character', name: '组员一', parent: '上级甲' },
+        { id: 'e_t2', kind: 'character', name: '组员二', parent: '上级甲' },
+        { id: 'e_t3', kind: 'character', name: '组员三', parent: '上级乙' },
+        { id: 'e_t4', kind: 'character', name: '组员四', parent: '上级乙' },
+    );
+    const html = renderEntitiesHtml(w2, { view: { grp: 'parent' } });
     assert.ok(html.includes('sw2-ents-grp-block'), '分组容器在位');
-    assert.ok(html.includes('<summary'), '组头可展开（details/summary）');
-    const none = renderEntitiesHtml(w, { view: { grp: 'none' } });
+    // ★Task 5 评审修正 #3：原先这条断言写的是 `html.includes('<summary')`——**恒真**（假绿）：
+    //   工具条那个「？」提示本身就是 `<details class="sw2-ents-asks"><summary …>`（`src/render.js:747`），
+    //   所以连 `grp:'none'` 的产物也能过它，对"组头是不是可展开结构"零信号。
+    //   ⇒ 改成锁**真实结构**（组头那一段原文，含 `open` 与紧邻的 summary）。
+    assert.ok(html.includes('<details class="sw2-ents-grp-block" open><summary>'), '组头是 details/summary 结构');
+    assert.ok(!renderEntitiesHtml(w2, { view: { grp: 'none' } }).includes('sw2-ents-grp-block'), '对照：不分组时没有这个结构');
+    // ★Task 5 评审修正 #5：原文只锁"容器在不在"，标题写着"组头带真数"却一个数都没验。补两条真数断言。
+    //   结构（**实测产物**，非照描述猜）：`<details class="sw2-ents-grp-block" open><summary>`
+    //   `<span class="sw2-ents-grp-t">组名</span><span class="sw2-ents-grp-c">本页 N 位</span></summary>`
+    //   `<div class="sw2-entity-list">…行…</div></details>`
+    const marks = [...html.matchAll(/<details class="sw2-ents-grp-block"/g)].map((m) => m.index);
+    assert.ok(marks.length >= 2, `本用例的夹具下该有多组（否则"逐组真数"咬不住），实得 ${marks.length}`);
+    let grouped = 0;
+    marks.forEach((start, i) => {
+        const seg = html.slice(start, i + 1 < marks.length ? marks[i + 1] : html.length);
+        const m = /<span class="sw2-ents-grp-c">本页 (\d+) 位<\/span>/.exec(seg);
+        assert.ok(m, '每个组头的计数必须写成「本页 N 位」（评审 #2：不许与同屏的「全册 N」读混）');
+        const rows = count(seg, '<div class="sw2-entity-row');
+        assert.equal(Number(m[1]), rows, '★组头的数必须等于该组内真实行数');
+        grouped += rows;
+    });
+    // ② 各组行数之和 = 本页行数（本页行数从同一份渲染的**不分组**产物里数出来，不另写一份口径）
+    const plainRows = count(bodyOf(renderEntitiesHtml(w2)), '<div class="sw2-entity-row');
+    assert.ok(plainRows > 0, '不分组产物里必须真有行（否则这条和稀泥）');
+    assert.equal(grouped, plainRows, '★各组行数之和 = 本页行数（分组不吞行、不重复计）');
+    assert.equal(count(html, '<div class="sw2-entity-list">'), marks.length, '每组恰好一个列表容器');
+    const none = renderEntitiesHtml(w2, { view: { grp: 'none' } });
     assert.ok(!none.includes('sw2-ents-grp-block'), '不分组时不出现分组容器');
+    // ★Task 5 评审修正 #6：未知 `view.grp` 原先在下标取 `keyOf` 时会抛 TypeError ⇒ 退化成**不分组**。
+    const bogus = renderEntitiesHtml(w2, { view: { grp: 'nope' } });
+    assert.ok(!bogus.includes('sw2-ents-grp-block'), '★未知分组口径退化成不分组（不抛）');
+    assert.equal(bodyOf(bogus), bodyOf(none), '★未知值与 `none` 的列表体逐字节同形');
+    // ★缺 `kind` 的实体 → 组头是兜底组名，不许把字面 `undefined` 印给玩家
+    //   （这里**自造最小世界**而不是取 `world()`：那份夹具的实体形状受 `selectEntityPage` 归一化影响，
+    //    自造的三行才能把"有一个缺 kind"钉成断言的前提——不靠猜）
+    const w3 = {
+        version: 1, context: { world: 'x' }, entities: [
+            { id: 'e_a', kind: 'character', name: '甲角色' },
+            { id: 'e_b', kind: 'faction', name: '乙势力' },
+            { id: 'e_c', name: '丙缺类别' },
+        ],
+        weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 },
+    };
+    const byKind = renderEntitiesHtml(w3, { view: { grp: 'kind' } });
+    assert.equal(count(byKind, 'class="sw2-ents-grp-block"'), 3, '对照：`grp:kind` 真的按类别切出了三组');
+    assert.ok(!byKind.includes('>undefined<'), '★缺 kind ⇒ 组头不得印字面 undefined');
+    assert.ok(byKind.includes('<span class="sw2-ents-grp-t">（类别未载）</span>'), '缺 kind ⇒ 兜底组名在位');
+    // ⚠反向实验留档（评审修正 #5 的诚实边界）：`keyOf` 之外那层 `|| '（未分组）'` 兜底**当前咬不住**——
+    //   三个 keyer 自己都会回字符串（`e.parent || '（无归属）'` 之类）⇒ 删掉那一层，产物逐字节不变
+    //   （实测：`undefined` 永不落进组名）。故**不为它编一条断言**充数；它留着是防御性的，
+    //   真正的锁是上面这两条（它们咬得住"keyer 的兜底被删"）。
 });
 
 test('★细案实体页：版位升位且不含引擎术语（构建号在玩家视线内）', () => {
-    assert.equal(PANEL_BUILD, 'leg49-entities-three-cols');
+    assert.equal(PANEL_BUILD, 'leg49-three-column-roster');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

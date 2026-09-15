@@ -70,6 +70,11 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   但**世界行为变了** ⇒ 构建号照旧走一格（同 leg29 立的规矩）。
 //   ⚠**构建号里不许出现引擎术语**：本棒第一版起名 `leg31b-agenda-top10` ⇒ 当场被 K33/A-3 那三条
 //   "玩家可见文本零引擎术语"的用例抓红（**构建号渲染在实体表表头 = 玩家视线内**）⇒ 改为不含禁词的写法。
+//   ★leg49 又踩了同一颗雷（细案初稿 `leg49-entities-three-cols` 含 `entity`）——当时的处置是从扫描里
+//   **把构建号抠掉**（= 假绿），评审揪出后用户拍板改名 ⇒ 扫描恢复全量。详见本常量处的留档。
+//   ⚠留档纠错（评审修正 #1 的附带发现）：本行曾按评审转述写过"构建号只被弱化后的逐 token 测试守着"，
+//   但**全仓 grep（`逐 token`/`逐token`/`弱化`）找不到那样一段描述**——真正在守构建号的是
+//   `test/render.test.js` 里那两条（构建号自己不许含禁词 + 构建号必须在玩家视线内）。不写没核实过的话。
 //   ★leg32（**这一格与前两格性质不同：这次界面真的变了**，起因是用户实机「盘算并没有变多
 //   甚至一点变化都没有」）：leg31b 只改了引擎那个数，而**面板把分母写死成 `/5`** ⇒ 玩家无法从
 //   面板判断变宽是否生效。本棒把分母改成读引擎真源，并在参数页摆出三道上限（只读）。
@@ -128,9 +133,13 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 // ★leg49（细案 spec-entities-page-ia）升位：**玩家可见面真的变了**——「角色与势力」页从
 //   621 张等价卡平铺（真账实测 170319px 高、626 枚按钮、0 个搜索）改成三列 + 工具条 + 分组 + 分页。
 //   这一串本身就是"页面是不是新代码"的凭证（前七轮反复栽在浏览器缓存上）⇒ 版位必须跟着走。
-//   ★禁词纪律：本串不含 agenda/tick/ssot/schema（玩家视线内的字符串不许露引擎术语，判据在
-//   `test/render.test.js` 的"版位升位且不含引擎术语"那条里锁着）。
-export const PANEL_BUILD = 'leg49-entities-three-cols';
+//   ★这一串的**取名被评审修正过**：细案初稿写 `leg49-entities-three-cols`，而它含 `entity`
+//   ——与 leg31 立的"构建号也不许带引擎术语"那条锁在**同一串字符**上直接对撞。当时 Task 5 的处置
+//   是从禁词扫描里把构建号**抠掉**（本仓纪律：抠洞就是假绿）。评审揪出 ⇒ 用户拍板**改名**：
+//   `leg49-three-column-roster` ⇒ 冲突消失，扫描恢复全量（判据同批撤掉抠洞，见 test/render.test.js）。
+//   ★禁词纪律：本串不含 agenda/tick/ssot/schema/entity（玩家视线内的字符串不许露引擎术语，判据在
+//   `test/render.test.js` 的"版位升位且不含引擎术语"与"工具栏与列表头零引擎术语"两条里锁着）。
+export const PANEL_BUILD = 'leg49-three-column-roster';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -898,26 +907,38 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
     // 分组（细案 §3.2）：把同一批行按归属/位置/类别切开，组头带真数（details 折叠）
     //   ★只有**本页那 60 行**参与分组（`page.rows` 与 `rows` 同序同长 ⇒ 按下标配对），
     //     不是全册分组——全册分组要么把组切碎（每组跨页），要么得改分页语义（超出本笔范围）。
-    //   ★不分组时走上面那条分支，产物与 Task 4 逐字节一致（"不分组时零变化"）。
+    //   ★★评审修正 #2（组头计数歧义）：正因为只切本页，组头**必须明说"本页"**——
+    //     同屏还有两处册量级的数（分页器「命中 621」与表头「全册 621」），原写法「N 位」会被读成
+    //     "全册该组共 N 位"（真账 11 页 ⇒ 同一组跨页分散，"散修 3 位"与下一页的"散修 N 位"是两件事）。
+    //     ⇒ 文案改成 **「本页 N 位」**。**只改措辞**：没有把分页与分组耦合（那超出本笔范围）。
+    //   ★不分组时走上面那条分支，**列表体**与 Task 4 逐字节一致（"不分组时零变化"）
+    //     ——⚠话只能说到"列表体"：本笔同一批还改了表头那半句（「命中 N」→「筛掉 N」，
+    //     见下方 Task 3 评审 Minor ①），整页并不逐字节一致（评审修正 #8：注释不许夸大）。
     let body;
-    if ((view?.grp ?? 'none') === 'none') {
+    const grp = view?.grp ?? 'none';
+    // ★评审修正 #6：未知/缺失的 `grp` 原先会走到下标取值那一步拿到 `undefined`，调它当场抛 TypeError
+    //   ⇒ 与 `?? 'none'` 同一语义：**退化成不分组**（面板点不出未知值，但渲染层不该因为一个越界字符串炸掉整页）。
+    const KEYERS = {
+        parent: (e) => e.parent || '（无归属）',
+        loc: (e) => (e.location && e.location !== '未明') ? e.location : '（位置未载）',
+        kind: (e) => e.kind ? (LABELS.kind[e.kind] || e.kind) : '（类别未载）',
+    };
+    const keyOf = KEYERS[grp];
+    if (!keyOf) {
         body = `<div class="sw2-entity-list">${rows.join('')}</div>`;
     } else {
-        const keyOf = {
-            parent: (e) => e.parent || '（无归属）',
-            loc: (e) => (e.location && e.location !== '未明') ? e.location : '（位置未载）',
-            kind: (e) => LABELS.kind[e.kind] || e.kind,
-        }[view.grp];
         const groups = new Map();
         page.rows.forEach((e, i) => {
-            const k = keyOf(e);
+            // 兜底组名：⚠实测这一层**当前咬不住**（三个 keyer 自己都回字符串 ⇒ 删掉它产物逐字节不变，
+            //   反向实验见 `test/render.test.js` 分组用例末尾的留档）——留着是纯防御，不是判据。
+            const k = keyOf(e) || '（未分组）';
             if (!groups.has(k)) groups.set(k, []);
             groups.get(k).push(rows[i]);
         });
         const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
         body = sorted.map(([k, list]) =>
             `<details class="sw2-ents-grp-block" open><summary><span class="sw2-ents-grp-t">${escapeHtml(k)}</span>`
-            + `<span class="sw2-ents-grp-c">${list.length} 位</span></summary>`
+            + `<span class="sw2-ents-grp-c">本页 ${list.length} 位</span></summary>`
             + `<div class="sw2-entity-list">${list.join('')}</div></details>`).join('');
     }
     // ★同一事实不说两遍（Task 3 评审 Minor ①）：分页器已经说了「命中多少」⇒ 表头这句只说

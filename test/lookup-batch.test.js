@@ -446,7 +446,7 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         //   ★Task 4 时这里写的是反向断言（`!actions.includes('ents-group')`，"此刻产物里不该有分组控件"），
         //     那是**刻意自失效**的临时锁；本笔点亮控件时按计划同一笔翻转（与 `web/index.js` 的
         //     `page = 1` 复位一起，见 Task 5 报告）。
-        assert.ok(handlers.has('ents-group'), '★分组动作的处理器已备好（Task 5 才点亮控件）');
+        assert.ok(handlers.has('ents-group'), '★分组动作的处理器在位（控件已点亮，见下一条）');
         assert.ok(actions.includes('ents-group'), '★分组控件已点亮（Task 5 与分组渲染同批）');
     } finally {
         if (savedW === undefined) delete globalThis.window; else globalThis.window = savedW;
