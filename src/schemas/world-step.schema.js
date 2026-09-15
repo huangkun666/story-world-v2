@@ -104,6 +104,37 @@ export const worldStepSchema = {
                 },
             },
         },
+        // ★leg34（小说家条款 §6 实施）：**实体字段写回**——用户 ⑤「我认为 llm 有权决定任何字段，实力是可以增长的，
+        //   性情是可以大变的，就连死亡在一个有复活的世界都可以改变」。
+        //   ★**可选组**（不在顶层 required 里）：与既有七组不同，它缺席时世界照常推进（引擎视作"本轮没有变更提议"）。
+        //     为什么可选：①七个必填组的理由是"省键 = 形状不合法"（leg32 实测整步被拒），而这两组缺席**没有等价危害**；
+        //     ②既有 ~110 处夹具与历史快照都只有七组，强行必填会一次性砸掉且**无收益**。
+        //   ★形状与 `entityFates` 同构：**模型只有提议权**，复核与落账归引擎（`settle.js` applyEntityUpdates）。
+        entityUpdates: {
+            kind: 'array',
+            items: {
+                kind: 'object',
+                additional: false,
+                required: ['entity', 'field', 'value', 'cause'],
+                props: {
+                    entity: { kind: 'string', minLength: 1 },   // 照抄输入实体 id
+                    field: { kind: 'string', minLength: 1 },    // 字段名（黑名单见 check-step：id/name/kind 不可改）
+                    value: { kind: 'string', minLength: 1 },    // ★文本，不许增量数值（四维被删的原因）
+                    // ★`cause` = 「因果变更」与「模型随口改」的**唯一分界**（细案 §6.2 约束 1/3）：
+                    //   必须指向账上真实存在、**且未闭环**的事件或盘算。
+                    cause: {
+                        kind: 'object',
+                        additional: false,
+                        required: ['type', 'ref'],
+                        props: {
+                            type: { kind: 'string', enum: ['event', 'agenda'] },
+                            ref: { kind: 'string', minLength: 1 },
+                        },
+                    },
+                    note: { kind: 'string' },                   // 为什么这次事件让它变了
+                },
+            },
+        },
         actions: {
             kind: 'array',
             items: {

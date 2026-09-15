@@ -171,7 +171,8 @@ export function missingFields(entity, meta, fields = ENTITY_LOOKUP_FIELDS) {
 // 口径（用户 2026-09-11 拍板「要：带覆盖开关」）：
 //   forceFields = 'absent'（默认）→ 只重查**被定为 absent 或卡在重试上限**的字段
 //   forceFields = 'all'            → 连已有值的字段也重查（面板上另有一个勾选，默认不选）
-export const FORCE_MODES = ['absent', 'all'];
+// ★leg40b（第二刀 · 死代码）：`FORCE_MODES = ['absent','all']` 导出已删——零引用；
+//   两种模式的**语义**仍由 `forcedFields()` 的 `forceFields` 参数承担（下面那段注释就是它的口径）。
 export function forcedFields(entity, meta, fields = ENTITY_LOOKUP_FIELDS, { forceFields = 'absent' } = {}) {
     const rec = meta?.entityFields?.[entity.id] || {};
     return fields.filter((f) => {
@@ -465,7 +466,10 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
                 // 有值：落账 + 留痕（from = 查过的条目；实测模型回的就是原文原话）
                 next[f] = v;
                 changed = true;
-                fieldsRec[f] = { value: v, from: (src && src[0]) || null, fetchedAt: tick };
+                // ★leg34 出处双源（丙′ 案）：这条路写的是 `source: '书里原话'`（**发票**），
+                //   与 `settle.js` 的 `applyEntityUpdates` 写的 `source: '变更'`（带因的变更记录）**分开记**
+                //   ⇒ 同一栏上"书里怎么说"与"后来怎么变"同时在场，互不覆盖（细案 §6.3「原话不会丢」的机械保证）。
+                fieldsRec[f] = { value: v, from: (src && src[0]) || null, fetchedAt: tick, source: '书里原话' };
                 attempts[f] = { count: (attempts[f]?.count ?? 0) + 1, lastTriedAt: tick, state: 'ok' };
                 stats.ok += 1;
                 stats.written.push(`${e.name}.${f}=${v}`);

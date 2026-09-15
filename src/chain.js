@@ -34,6 +34,10 @@ function evNode(ev, children) {
         position: ev.position ?? '',
         born: eventBornTick(ev.id),
         closed: !!ev.closed,
+        // ★leg40：**这个根是从世界源起的**（`source.type==='seed'`，由 `seed-roots.js` 落账）——
+        //   面板上必须与"由世界处境而生"分开显示：前者是**书里写着的事**，后者是**局势自己拱出来的处境**，
+        //   两者混成一句话会把"这条线有来路"这件事说反（而本棒整套改动正是在修"线没有来路"）。
+        seed: ev.source?.type === 'seed' ? true : undefined,
     };
     if (children) node.children = children;
     return node;
@@ -110,6 +114,9 @@ function sourceUp(world, evs, ags, ms, srcEv, seen) {
     const walk = (ev) => {
         const t = ev.source?.type;
         if (t === 'state') { out.push({ kind: 'state-root' }); return; }
+        // ★leg40：**世界源起的根**（`seed-roots.js` 落账的第四型源）——它不是"局势自己拱出来的处境"，
+        //   是**书里写着的事**（`seedFrom.quote` 就是那句话）⇒ 单独成一个终节点，面板上必须分开说。
+        if (t === 'seed') { out.push({ kind: 'seed-root', seedFrom: ev.seedFrom || null }); return; }
         if (t === 'plot') { out.push(agendaNode(world, ags, ags.get(ev.source?.ref))); return; }
         const ref = ev.source?.ref;
         if (!ref) { out.push({ kind: 'gap', reason: 'missing' }); return; }

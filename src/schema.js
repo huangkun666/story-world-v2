@@ -22,7 +22,13 @@ function walk(value, schema, path, errors) {
             for (const [k, v] of Object.entries(value)) {
                 const sub = schema.props?.[k];
                 if (!sub) {
-                    if (!schema.additional) errors.push(`${path}.${k}: 未知字段`);
+                    // ★leg34：`denied` = **显式拒收的已退休字段**（与 `additional` 配合用）。
+                    //   为什么需要它：放开额外字段（`additional: true`）会把**删掉的旧字段一起放回来**——
+                    //   本棒实测 `attrs`（四维浮点，leg25 c 已删）当场被重新接受，3 条老用例红。
+                    //   而那条规矩是硬规矩：「**删字段只删一半最危险**——引擎不写、契约仍收 = 看起来删了其实没有」。
+                    //   ⇒ 分工：`additional` 管"**没见过的键**"（放行），`denied` 管"**见过但已废的键**"（拒收）。
+                    if (schema.denied?.includes(k)) errors.push(`${path}.${k}: 已退休字段（不再接受——"删字段只删一半"最危险）`);
+                    else if (!schema.additional) errors.push(`${path}.${k}: 未知字段`);
                     continue;
                 }
                 walk(v, sub, `${path}.${k}`, errors);

@@ -124,7 +124,15 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
     return {
         // leg25 c：返回的新 step 里**不再拼 `stateChanges`**——契约层该字段已删，
         //   再拼一个空数组会让下游 checkWorldStep 判"未知字段"（实测冒烟当场炸在这里）。
-        step: { actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities, entityFates: step.entityFates || [] },
+        // ★leg34：新增一处**必须原样透传**（这一行是白名单式重建——漏一个键，那条通道就整段哑掉；
+        //   本棒实测：漏了 `entityUpdates` ⇒ 字段写回**永远不落账**，而 25 条新用例里 10 条红）。
+        //   `entityUpdates` = **因果变更**，不是"主动作"：它由一件已落账的事驱动（cause 必填且须未闭环，
+        //   `check-step` 已核），与 `entityFates`（覆灭）同性质 ⇒ 照它**原样透传**，不进静默门。
+        step: {
+            actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities,
+            entityFates: step.entityFates || [],
+            entityUpdates: step.entityUpdates || [],
+        },
         silent: [...silentSet],
         lifted,
         dropped,
