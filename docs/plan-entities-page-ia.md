@@ -100,7 +100,17 @@ test('细案实体页：排序三档（在办优先 / 最近活跃优先 / 按�
     const base = { ...ENTS_DEFAULT_VIEW };
     assert.deepEqual(selectEntityPage(w, { ...base, sort: 'active' }).rows.map((e) => e.name), ['乙', '甲', '丙'], '在办优先，其余按最近活跃');
     assert.deepEqual(selectEntityPage(w, { ...base, sort: 'recent' }).rows.map((e) => e.name), ['甲', '丙', '乙'], '最近活跃优先');
-    assert.deepEqual(selectEntityPage(w, { ...base, sort: 'name' }).rows.map((e) => e.name), ['丙', '乙', '甲'], '按名号（中文序）');
+    // ★按名号：期望值 = **丙 甲 乙**（丙 bǐng < 甲 jiǎ < 乙 yǐ）。
+    //   ★★留档一处我写错的期望值（Task 1 评审当场纠正）：本计划初稿写的是 `['丙','乙','甲']`，那既不是拼音序、
+    //   也不是笔画序（实测 `zh-u-co-stroke` 给 `乙丙甲`），**就是错的**。
+    //   ★环境事实（实测）：Node v24.19.0 / ICU 78.3 **不含拼音排序数据**——
+    //   `new Intl.Collator('zh-u-co-pinyin').resolvedOptions().collation === 'default'`，
+    //   即 `localeCompare(name, 'zh')` 走的是**默认（部首/笔画）序**，不是拼音序。
+    //   真账 621 名号实测：末尾是「祝无双 · 转轮鬼圣 · 转轮鬼使 · 转轮王 · 追风 · 坐忘大罗」
+    //   （zhù/zhuǎn/zhuī/zuò 被拆散）⇒ **产品面已知限制**：想按拼音找名字会与预期有偏差。
+    //   三条出路（**均已评估，本笔选 A**）：A 接受默认序（零依赖、确定性，且"按名号"只是第三排序档，
+    //   真正的入口是搜索）；B 引拼音表（破坏"零依赖"纪律，且表外生僻字仍退化）；C 受控词表手写键（同上）。
+    assert.deepEqual(selectEntityPage(w, { ...base, sort: 'name' }).rows.map((e) => e.name), ['丙', '甲', '乙'], '按名号（ICU 默认序）');
 });
 
 test('细案实体页：分页 —— 一屏 60 行、页码越界夹紧、from/to 如实', () => {
@@ -153,7 +163,10 @@ export const ENTS_DEFAULT_VIEW = { q: '', kind: 'all', filters: [], grp: 'none',
 
 // 搜索面：★位置**在**这里（位置不占版面 ≠ 查不到——细案 §3.3 是硬口径）
 export function entsSearchTextOf(e) {
-    return [e?.name, e?.parent, e?.location, e?.['实力'], e?.['规模'], e?.['性质'], e?.['倾向'],
+    // ★Task 1 评审的 Minor 定夺：「未明」是**占位词不是内容**（不是地名），不许进搜索面——
+    //   否则搜「未明」会命中 475 个"位置未知"的人（本仓既有纪律："占位词绝不作为值渲染/检索"）。
+    const loc = typeof e?.location === 'string' && e.location !== '未明' ? e.location : '';
+    return [e?.name, e?.parent, loc, e?.['实力'], e?.['规模'], e?.['性质'], e?.['倾向'],
         ...(Array.isArray(e?.organs) ? e.organs : []), ...(Array.isArray(e?.branches) ? e.branches : [])]
         .filter((x) => typeof x === 'string' && x).join(' ').toLowerCase();
 }
@@ -195,7 +208,11 @@ export function selectEntityPage(world, view = {}) {
     const pages = Math.max(1, Math.ceil(hit / ENTS_PAGE_SIZE));
     const page = Math.min(Math.max(1, Number(v.page) || 1), pages);   // ★越界夹紧（不返回空页）
     const slice = rows.slice((page - 1) * ENTS_PAGE_SIZE, (page - 1) * ENTS_PAGE_SIZE + ENTS_PAGE_SIZE);
-    return { rows: slice, total: (world?.entities || []).length, hit, page, pages, from: (page - 1) * ENTS_PAGE_SIZE + (slice.length ? 1 : 0), to: (page - 1) * ENTS_PAGE_SIZE + slice.length };
+    // ★Task 1 评审的 Minor 定夺：空结果时 from/to **按意图**都是 0（不写 `?1:0` 那种没解释的三元），
+    //   Task 3 的分页器遇到 hit===0 时只印「命中 0」，不印「显示第 0–0 条」。
+    const from = slice.length ? (page - 1) * ENTS_PAGE_SIZE + 1 : 0;
+    const to = slice.length ? (page - 1) * ENTS_PAGE_SIZE + slice.length : 0;
+    return { rows: slice, total: (world?.entities || []).length, hit, page, pages, from, to };
 }
 ```
 
@@ -450,10 +467,25 @@ test('★细案实体页 J5：搜索控件与分页控件**必须存在**（旧�
     assert.ok(html.includes('data-action="ents-page"'), '★分页控件在位');
     assert.ok(html.includes('data-action="ents-filter"'), '筛选 chip 在位');
     assert.ok(html.includes('data-action="ents-sort"'), '排序控件在位');
-    assert.ok(html.includes('data-action="ents-group"'), '分组控件在位');
+    // ★分组控件**不在本任务**（用户拍板：从 Task 3 移到 Task 5，中途不许交付死控件）
+    assert.ok(!html.includes('data-action="ents-group"'), '★本任务不许出现分组控件（它连同分组渲染一起去 Task 5）');
     // 计数不许写死：chip 上的数来自 entsHitCounts
     const c = entsHitCounts(w);
     assert.ok(html.includes(`>${c.all}<`), `「全部」格印真数 ${c.all}`);
+});
+
+test('★细案实体页：两处既有入口按细案改挂工具条（不许在改版里丢掉）', () => {
+    const w = world();
+    // ① 全册补全按钮（lookup-batch.test.js:436/447 锁它，原在页眉）
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('data-action="lookup-batch-all"'), '★「⬇ 补全全册实力」入口仍在');
+    assert.ok(html.includes('⬇ 补全全册实力'), '文案不变（既有用例按这句锁）');
+    // 跑到「停止补全」那一态
+    const running = renderEntitiesHtml(w, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } });
+    assert.ok(running.includes('■ 停止补全 4/623'), '★进度态照旧由 config.lookupTask 进渲染层');
+    // ② 查书三态说明（render.test.js:547/620 锁它，原在页底整行）⇒ 收进可展开的「？」
+    assert.ok(html.includes('sw2-ents-asks'), '三态说明改成可展开容器');
+    assert.ok(html.includes('账上只记查到的与玩出来的东西'), '★说明文本必须**连续出现**（既有用例用 includes 锁它）');
 });
 
 test('★细案实体页：命中计数与页码如实印出（不是估计值）', () => {
@@ -487,8 +519,10 @@ Expected: FAIL —— `id="sw2_ents_q"` 不存在
 在 `src/render.js` 里 `renderEntitiesHtml` **之前**插入两个渲染函数：
 
 ```js
-// 实体页工具条（细案 §3.2）：两行——搜索 + 类别 + 筛选 + 分组 ／ 排序 + 命中计数
-export function renderEntsToolbar(world, view) {
+// 实体页工具条（细案 §3.2）：两行——搜索 + 类别 + 筛选 ／ 排序 + 全册补全 + 查书三态提示
+//   ★`config` 必须从 `renderEntitiesHtml` 透传进来——批量补全进度**只由 config 进渲染层**
+//   （本仓纪律：渲染层不持任务状态；真路是 `config.lookupTask`，见 `web/index.js` 的 `renderCfg()`）
+export function renderEntsToolbar(world, view, config = null) {
     const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
     const c = entsHitCounts(world);
     const filters = new Set(v.filters || []);
@@ -496,6 +530,16 @@ export function renderEntsToolbar(world, view) {
         `<button class="sw2-chip${on ? ' on' : ''}" data-action="${action}" data-value="${value}">${label}`
         + (n == null ? '' : `<span class="sw2-chip-n">${n}</span>`) + '</button>';
     const kinds = [['all', '全部', c.all], ['faction', '势力', c.faction], ['character', '角色', c.character]];
+    // 既有「⬇ 补全全册实力 / ■ 停止补全」按钮（`lookup-batch.test.js:436-448` 锁它；原在页眉，改挂工具条）
+    const task = config?.lookupTask || null;
+    const batchButtonHtml = task
+        ? `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('再点一次可停；已查到的都留账')}">■ 停止补全 ${task.cursor}/${task.total}</button>`
+        : `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('把全册在册角色的实力按需查一遍（借世界推进分批跑，不阻塞推进；再点一次可停）')}">⬇ 补全全册实力</button>`;
+    // 查书三态说明：页底那整行太长 ⇒ 收进可展开的「？」（★文本必须**连续**出现，`render.test.js:547/620` 用 includes 锁它）
+    const asksHintHtml = `<details class="sw2-ents-asks"><summary title="${attrText('这三种标记各是什么意思')}">？</summary>`
+        + `<div class="sw2-ents-asks-body">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；`
+        + `<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。`
+        + `每行的<b>查</b>=只补没定的栏，<b>重查</b>=连「书未明述」也推倒重查。</div></details>`;
     return `<div class="sw2-ents-tools">`
         + `<div class="sw2-ents-tools-row">`
         + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
@@ -504,22 +548,22 @@ export function renderEntsToolbar(world, view) {
         + chip('ents-filter', 'recent', '最近动过的', filters.has('recent'), c.recent)
         + chip('ents-filter', 'named', '有归属的', filters.has('named'), c.named)
         + chip('ents-filter', 'orphan', '无归属的', filters.has('orphan'), c.orphan)
-        + `<span class="sw2-ents-grp">分组</span>`
-        + [['none', '不分组'], ['parent', '按归属'], ['loc', '按位置'], ['kind', '按类别']]
-            .map(([g, label]) => chip('ents-group', g, label, v.grp === g)).join('')
         + `</div>`
         + `<div class="sw2-ents-tools-row">`
         + `<span class="sw2-ents-grp">排序</span>`
         + [['active', '在办优先'], ['recent', '最近活跃优先'], ['name', '按名号']]
             .map(([s, label]) => chip('ents-sort', s, label, v.sort === s)).join('')
-        + `<span class="sw2-ents-hit"></span>`
+        + batchButtonHtml      // ★既有「⬇ 补全全册实力」，从页眉挪到这里（lookup-batch.test.js:436/447 锁它）
+        + asksHintHtml         // ★页底那句三态注脚（render.test.js:547/620 锁它），改成可展开的「？」
         + `</div></div>`;
 }
 
 // 分页（细案 §3.2）：一屏 60 行
+//   ★空结果时只印「命中 0」——**不印「显示第 0–0 条」**（Task 1 评审定夺：空态不占版面）
 export function renderEntsPager(info) {
     if (!info || info.pages <= 1) {
-        return `<div class="sw2-ents-pager"><span class="sw2-ents-hit">命中 <b>${info?.hit ?? 0}</b>　显示第 ${info?.from ?? 0}–${info?.to ?? 0} 条</span></div>`;
+        const span = info && info.hit > 0 ? `　显示第 ${info.from}–${info.to} 条` : '';
+        return `<div class="sw2-ents-pager"><span class="sw2-ents-hit">命中 <b>${info?.hit ?? 0}</b>${span}</span></div>`;
     }
     return `<div class="sw2-ents-pager">`
         + `<button class="sw2-btn" data-action="ents-page" data-value="prev"${info.page <= 1 ? ' disabled' : ''}>‹ 上一页</button>`
@@ -709,6 +753,9 @@ git commit -m "细案实体页 4/5：接线——一份视图状态 + 只重画�
 ```js
 test('★细案实体页：分组——按归属/位置/类别切成可展开的组，组头带真数', () => {
     const w = world();
+    // ★分组控件**在本任务**落地（用户拍板：从 Task 3 移到这里，与分组渲染同批——中途不许有死控件）
+    const plain = renderEntitiesHtml(w);
+    assert.ok(plain.includes('data-action="ents-group"'), '★分组钮在位（本任务才加）');
     const html = renderEntitiesHtml(w, { view: { grp: 'parent' } });
     assert.ok(html.includes('sw2-ents-grp-block'), '分组容器在位');
     assert.ok(html.includes('<summary'), '组头可展开（details/summary）');
@@ -733,7 +780,16 @@ Expected: FAIL —— `sw2-ents-grp-block` 不存在；`PANEL_BUILD` 仍是 `leg
 
 - [ ] **Step 3: 实现分组渲染**
 
-在 `renderEntitiesHtml` 里，把拼 `rows` 那段之后、`return` 之前加分组包装（**不分组时零变化**）：
+**先给工具条补上分组钮**（用户拍板：它从 Task 3 移到这里，与分组渲染同批落地）——
+在 `renderEntsToolbar` 的第一行 row 里，紧跟「无归属的」那枚 chip 之后插入：
+
+```js
+        + `<span class="sw2-ents-grp">分组</span>`
+        + [['none', '不分组'], ['parent', '按归属'], ['loc', '按位置'], ['kind', '按类别']]
+            .map(([g, label]) => chip('ents-group', g, label, v.grp === g)).join('')
+```
+
+然后在 `renderEntitiesHtml` 里，把拼 `rows` 那段之后、`return` 之前加分组包装（**不分组时零变化**）：
 
 ```js
     // 分组（细案 §3.2）：把同一批行按归属/位置/类别切开，组头带真数（details 折叠）
@@ -876,6 +932,8 @@ git commit -m "细案实体页 6/6：留档换档 + 实施记录（用户验收�
 | **类型一致性** | `selectEntityPage` / `entsHitCounts` / `ENTS_DEFAULT_VIEW` / `ENTS_PAGE_SIZE` / `renderEntsToolbar` / `renderEntsPager` 在 Task 1/3 定义、Task 2/4/5 消费，名字与参数一致；`sw2EntsView` 字段名（`q`/`kind`/`filters`/`grp`/`sort`/`page`）与 `ENTS_DEFAULT_VIEW` 同形 |
 | **发现的缺口（已补）** | ① `kindLabel` 对玩家返回「你的棋子」会撞 J11 ⇒ Task 2 Step 3 明写要删那一支；② `（推）` 原来落在位置列 ⇒ Task 2 给了新落点（名号格）+ `lookup-batch.test.js:381` 的处理；③ 分组要动列表容器 ⇒ 单独放 Task 5 与 CSS 同批；④ `renderAll` 不透传实体页 view ⇒ Task 5 Step 8 明写要加 |
 | **★ 引用符号逐个核名（本计划初稿在这里错了 5 处，全部已改）** | ① `--sw2-bg` **不存在** ⇒ 真名 `--sw2-panel`；② `sw2PanelConfig` **不存在** ⇒ 真名 `renderCfg()`（`web/index.js:1852`）；③ 我写的 `redrawEntsView()` 会**另造一处重绘** ⇒ 改用本仓唯一通道 `refreshSections(['entities'])`（`:1868`）；④ 实体页查询钮的 action 真名是 **`lookup-entity`**（`src/render.js:660`，不是 `entity-lookup`），force 走 `data-force="absent"`、id 走 `data-entity`；⑤ `sw2-player` 这个类在实体页**根本没用**（真名是 `sw2-entity-row sw2-player`，而我在 Task 2 已把它删掉）⇒ J11 的断言改成"不出现 `sw2-player`"。 |
+| **★ 开工前用户拍板四处（已全部写回计划）** | ① 在分支 `leg49-entities-three-cols` 上做（不在 main 直接开工）；② **分组控件从 Task 3 移到 Task 5**（中途不许交付死控件）；③ 页底查书三态注脚改成可展开的「？」（文本必须连续出现，既有两条 `includes` 断言照旧能咬）；④ **「⬇ 补全全册实力」保留**，从页眉挪到工具条第一行。 |
+| **★ Task 1 评审的 Minor 定夺（已写回计划）** | ① **排序期望值我写错了**：`sort:'name'` 的正确期望是 `['丙','甲','乙']`（丙 bǐng < 甲 jiǎ < 乙 yǐ），初稿写的 `['丙','乙','甲']` 既非拼音序也非笔画序 ⇒ 已改正并留档**产品面已知限制**：ICU 78.3 无拼音排序数据（`collation` 解析为 `default`），真账实测走**部首/笔画序**（末尾「祝无双·转轮鬼圣·转轮鬼使·转轮王·追风·坐忘大罗」被拆散）；本笔选"接受默认序"（零依赖 + 确定性；真正的入口是搜索，不是排序）。② 空结果 `from/to` **按意图都是 0**，分页器不印「显示第 0–0 条」。③ `entsSearchTextOf` 不再收「未明」（占位词不是内容，否则搜「未明」命中 475 人）。④ `recent/named/orphan` 两个调用点各写一遍谓词——评审说现在**过早**（只有两处），**留到 Task 3 接 chip 时若出现第三处消费者再提成一张表**。 |
 | **★ 一个会直接弄坏功能的陷阱（已查清并写进 Task 4）** | `refreshSections` 里那条"控件正被操作 ⇒ 押后重绘"的闸只认 `#sw2_view_params / #sw2_view_settings / .sw2-tabs`（`playerIsTouchingParams`，`:203-211`）——**实体页不在闸内** ⇒ 用 `refreshSections(['entities'])` 时打字会照常重绘。若当初照我第一版自己拼 `innerHTML`，就绕过了 `sw2SectionRefreshRunning` 防重入标志，会重新引爆 leg27 那次的"重绘自己咬自己"。 |
 | **承重墙** | 六个任务没有一处碰 `settle.js`/`pack.js`/`gate.js`/`check-step.js`/schemas；`MAIN_PROMPT_V` 全程未升 |
 | **判据数推演** | 基线 731 ⇒ T1 +4（735）⇒ T2 +4（739）⇒ T3 +3（742）⇒ T4 +0（审计用例内加断言，743）⇒ T5 +2（745）⇒ T6 +0（745）。**每个任务末尾的数字都对得上这条推演。** |
