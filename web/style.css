@@ -216,13 +216,51 @@
 .sw2-map-details > .sw2-side{margin-top:2px;}
 
 /* ---------- 编年页 ---------- */
-.sw2-chronicle{display:flex;flex-direction:column;gap:5px;max-height:560px;overflow:auto;padding-right:4px;}
+/* ★leg50（细案 spec-chronicle-page-ia）：**撤掉 560px 的内滚动框**——真账实测内容实高 14326px
+   挤在 560px 里（溢出 25.6 倍、一屏只看得到 13 行）⇒ 改自然高度，与「角色与势力」同一套。 */
+.sw2-chronicle{display:flex;flex-direction:column;gap:5px;padding-right:4px;}
 .sw2-ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px;}
 .sw2-ch-line:hover{background:var(--sw2-card);}
 .sw2-ch-line .sw2-ch-round{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);flex:none;width:44px;text-align:right;}
-.sw2-ch-line .sw2-ch-text{flex:1;color:var(--sw2-text-dim);}
-.sw2-ch-line.sw2-ch-event .sw2-ch-text{color:var(--sw2-text);}
+.sw2-ch-line .sw2-ch-text{flex:1;min-width:0;color:var(--sw2-text-dim);display:flex;gap:10px;align-items:baseline;}
+/* 账目行的原文可能很长 ⇒ 单行截断（"一行只有三样"这条版式不许被长账句撑破） */
+/*   ★实测（700px 宽窗）：`sw2-ch-mid` 原先写 `flex:none` ⇒ 它**不肯让位**，21 行正文压到
+     「链」钮与徽上（最多压 98px）。定稿：**事名与中段都许缩、都截断**，"链"钮与徽永远不让位
+     （它们是控件与判据，缩没了就是另一种病）。 */
+.sw2-ch-line .sw2-ch-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.sw2-ch-line.sw2-ch-event .sw2-ch-nm{flex:0 1 auto;color:var(--sw2-text);font-weight:600;}
+.sw2-ch-line.sw2-ch-book .sw2-ch-nm{flex:1 1 auto;}
+.sw2-ch-line .sw2-ch-mid{flex:0 1 auto;min-width:48px;font-size:12.5px;color:var(--sw2-text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sw2-ch-line .sw2-ch-k{color:var(--sw2-amber-dim);}
+.sw2-ch-line .sw2-ch-w{color:var(--sw2-text-dim);}
+.sw2-ch-line.sw2-ch-event{background:var(--sw2-card);border-left:3px solid var(--sw2-amber-dim);padding-left:7px;}
+/* 类别徽：真事件 = 事件；账目 = 四个子类词（细案 §3.1） */
+.sw2-ch-badge{flex:none;font-size:10.5px;border-radius:6px;padding:0 7px;}
+.sw2-ch-badge.ev{color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);}
+.sw2-ch-badge.bk{color:var(--sw2-text-faint);border:1px dashed var(--sw2-line);}
 .sw2-ch-roll{font-size:12.5px;color:var(--sw2-amber);font-weight:600;padding:9px 10px;margin-top:5px;border-top:1px dashed var(--sw2-line);border-bottom:1px dashed var(--sw2-line);}
+/* 分层块（真结构 = details.sw2-ch-group，判据按它咬——不是 <summary> 那种恒真判据） */
+.sw2-ch-group{margin:6px 0 2px;border:1px solid var(--sw2-line-soft);border-radius:9px;background:var(--sw2-card);}
+.sw2-ch-group > summary{display:flex;align-items:baseline;gap:10px;padding:8px 12px;cursor:pointer;user-select:none;list-style:none;}
+.sw2-ch-group > summary::-webkit-details-marker{display:none;}
+.sw2-ch-group > summary:hover{background:var(--sw2-card-2);border-radius:9px;}
+.sw2-ch-group > summary .sw2-ch-gt{font-weight:600;font-size:13px;color:var(--sw2-text);}
+.sw2-ch-group > summary .sw2-ch-gc{font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-ch-group[open] > summary{border-bottom:1px solid var(--sw2-line-soft);border-radius:9px 9px 0 0;}
+.sw2-ch-empty{padding:10px 12px;font-size:12.5px;color:var(--sw2-text-faint);}
+/* 层内分页器（细案 §3.4：分页器的粒是"层"，不是"组"） */
+.sw2-ch-pager{display:flex;align-items:center;gap:10px;padding:2px 0 4px;}
+.sw2-ch-pager .sw2-ch-hit{font-size:12px;color:var(--sw2-text-faint);margin-left:auto;}
+.sw2-ch-pager .sw2-ch-hit b{color:var(--sw2-text);}
+/* 工具条（照实体页"乙 · 分组块"排布：每块自带标签、块内 nowrap、块整体折行） */
+.sw2-ch-tools{margin-bottom:9px;}
+.sw2-ch-tools-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;}
+.sw2-ch-g{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;}
+.sw2-ch-g + .sw2-ch-g{border-left:1px solid var(--sw2-line-soft);padding-left:12px;}
+.sw2-ch-gl{font-size:11px;color:var(--sw2-text-faint);letter-spacing:1px;flex:none;}
+.sw2-ch-g-q{flex:1;min-width:190px;}
+.sw2-ch-q{width:100%;padding:6px 10px;border-radius:7px;border:1px solid var(--sw2-line);background:var(--sw2-panel);color:var(--sw2-text);font:inherit;font-size:13px;}
+.sw2-ch-q:focus{outline:none;border-color:var(--sw2-amber-dim);}
 
 /* ---------- 大事纪·旧卷页 ---------- */
 .sw2-arch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}

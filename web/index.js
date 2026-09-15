@@ -7,7 +7,7 @@
 // K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll, renderVolumeReadHtml, renderChainViewHtml, LABELS, PANEL_BUILD, makeEntsView } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml, renderChainViewHtml, LABELS, PANEL_BUILD, makeEntsView, makeChronicleView } from '../src/render.js';
 import { expandChain } from '../src/chain.js';
 import { migrateLegacyAttrs } from '../src/settle.js';   // leg24 片4：旧账一次性清理（读到热账后、渲染前）
 import {
@@ -79,7 +79,13 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 // ★工具条排布定稿（用户实拍截图 +「这个角色和势力这个位置比较乱」⇒ 拍板「就乙吧」）：
 //   `web/style.css` 又动了（新增 `.sw2-ents-g` / `.sw2-ents-gl` / `.sw2-ents-g-q` 三条、删掉被标签替代的
 //   `.sw2-ents-grp`）⇒ 照同一条纪律再往前走一格。`PANEL_BUILD` 仍**不动**（同上：它是验收判据）。
-const CSS_VERSION = '20260916-leg49-three-column-roster-f2';
+// ★leg50（细案 spec-chronicle-page-ia）同批升位：编年页版式整套换了（撤 560px 内滚动框 + 分层块
+//   + 工具条 + 每层分页器），`web/style.css` 里的规则增删一起走 ⇒ CSS 版本号必须跟着升。
+//   ★`PANEL_BUILD` 也同批升位（`leg50-story-and-ledger`）：本笔玩家可见面**真的变了**
+//     （用户验收第①步会照着念这一串，所以它必须能对上本笔）。
+//   ★起名前先过禁词扫描——`leg50-layered-chronicle-tools` 与 `leg50-chronicle-layers` **都被扫出 `chronicle`**
+//     （leg49 §4① 的同一颗雷，那一条踩过两次）⇒ 定稿 `leg50-story-and-ledger`（零禁词）。
+const CSS_VERSION = '20260917-leg50-story-and-ledger';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -179,8 +185,9 @@ function openWindow() {
 
 function closeWindow() {
     document.getElementById(WINDOW_ID)?.classList.remove('sw2-open');
-    // ★细案实体页：视图态随关面板重置（照 `sw2ChronicleFilter` 的口径"纯视图态、关面板重置"）
+    // ★细案实体页：视图态随关面板重置（照编年页 `sw2ChronicleView` 的口径"纯视图态、关面板重置"）
     sw2EntsViewReset();
+    sw2ChronicleViewReset();
     const menu = document.getElementById('extensionsMenu');
     if (menu) menu.style.display = '';
 }
@@ -258,7 +265,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         //   "默认"与"你改的值"在同一格里分不清）。
         const live = sw2CollectLiveParamValues();
         const cfgForRender = renderCfg(live.env ? { paramEnv: live.env } : {});
-        const out = renderAll(world, { config: cfgForRender, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter, entsView: sw2EntsView } });
+        const out = renderAll(world, { config: cfgForRender, oldVolumes, view: { chronicleView: sw2ChronicleView, entsView: sw2EntsView } });
         // ★★leg46 续·六（**格与控件同源**）：页面刚用 `cfg.paramEnv` 画完 ⇒ 顺手用**同一份**把显示格对齐。
         //   为什么必须用同一份（用户第四次实机：四个下拉都选对了、四格却写「未定」）：格若自己去读第二遍真源，
         //   就会与控件错开一个时刻（读到空 ⇒ 写「未定」），看起来就像"什么都没生效"。
@@ -1090,14 +1097,22 @@ let sw2TickQueue = null;
 // ---------- K34/K36：会话态（模块级 · 面板零第二份状态） ----------
 let sw2LastSettings = null;
 let sw2PrevChronicle = null;      // 上一渲染的编年行数（第十三棒：进展计数用）
-let sw2ChronicleFilter = null;    // K41 编年五筛视图态（kind Set；null=全选；纯视图态——不落 SSOT、不落盘，重绘保留，关面板重置）
+// ★细案 spec-chronicle-page-ia（leg50）：编年页的**唯一一份**视图状态
+//   （数据逻辑全在 `src/render.js` 的纯函数里：`selectChroniclePage` / `classifyChronicle`；
+//    这里只存状态，一行数据逻辑都不写——与 `sw2EntsView` 完全同款：纯视图态、不落 SSOT、不落盘、
+//    重绘保留、关面板重置）。★默认值只有一份真源（`makeChronicleView()`）。
+//   ★本笔**退场**了旧的 `sw2ChronicleFilter`（五筛 kind Set）——五筛是引擎词，玩家读不懂（细案 §3.5）。
+let sw2ChronicleView = makeChronicleView();
+function sw2ChronicleViewReset() { sw2ChronicleView = makeChronicleView(); }
+// ★leg50 编年页搜索框的组合期标志（模块级 `let`：三支监听要共享它）
+let sw2ChronicleComposing = false;
 let sw2LastWorld = null;          // K41：链视图入口持引用（同一对象，零第二份状态）
 let sw2SnapshotCache = null;      // leg27 后：快照清单（IDB 读回的元信息 + 摘要文案）——随 config 进渲染层，面板零第二份状态
 let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单（选人调用失败时退回它，再退兜底名单）
 
 // ★细案 spec-entities-page-ia：实体页的**唯一一份**视图状态
 //   （数据逻辑全在 `src/render.js` 的纯函数里：`selectEntityPage` / `entsHitCounts`；这里只存状态，
-//    一行数据逻辑都不写——本仓"零第二份状态"纪律，与上面的 `sw2ChronicleFilter` 完全同款：
+//    一行数据逻辑都不写——本仓"零第二份状态"纪律，与上面的 `sw2ChronicleView` 完全同款：
 //    纯视图态、不落 SSOT、不落盘、重绘保留、关面板重置）
 //   ★终审 M10：默认值**只有一份真源**（渲染层的 `makeEntsView()`）——原先这里与 `src/render.js` 的
 //     `ENTS_DEFAULT_VIEW` 各写一份字面量、靠人同步（本笔加 `scope` 字段时正是两处都要改）。
@@ -1899,7 +1914,7 @@ function refreshSections(names) {
     try {
         const win = document.getElementById(WINDOW_ID);
         if (!win || !sw2LastWorld) return;
-        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: { chronicleFilter: sw2ChronicleFilter, entsView: sw2EntsView } });
+        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: { chronicleView: sw2ChronicleView, entsView: sw2EntsView } });
         for (const name of names || []) {
             const el = win.querySelector(`#sw2_view_${name}`);
             if (!el) continue;
@@ -2961,18 +2976,46 @@ if (typeof window !== 'undefined') {
         }
     };
 
-    bus['set-filter'] = (payload) => {
-        const t = payload?.filter;
-        if (t === 'all' || t == null) {
-            sw2ChronicleFilter = null;
-        } else {
-            sw2ChronicleFilter = sw2ChronicleFilter ? new Set(sw2ChronicleFilter) : new Set();
-            if (sw2ChronicleFilter.has(t)) sw2ChronicleFilter.delete(t);
-            else sw2ChronicleFilter.add(t);
-            if (!sw2ChronicleFilter.size) sw2ChronicleFilter = null;
-        }
-        if (sw2LastWorld) refreshWorld(sw2LastWorld);
-        else setStatus('还没有世界（编年筛无处可用）');
+    // ---------- leg50（细案 spec-chronicle-page-ia）：编年页工具条五个动作 ----------
+    // 口径与实体页四枚动作**完全同款**：改状态一行 + 只重绘本页（选数据一行都不写在这里，
+    // 全在 `src/render.js` 的 `selectChroniclePage` 纯函数里）。★重绘走 `refreshSections(['chronicle'])`。
+    //   ★回第一页的规矩（照实体页的既有理由）：
+    //     · 换"只看/了结/轮次" ⇒ **回第一页**（命中集合变了，停在第 3 页会落在另一批行上）；
+    //     · 换"计数口径" ⇒ **不回第一页**（一个行都不动，只是几枚钮换了把尺子；回首页 = 无理由的位移）。
+    bus['ch-layer'] = (payload) => {
+        const v = String(payload?.value || 'all');
+        if (['all', 'event', 'book'].includes(v)) sw2ChronicleView.layer = v;
+        sw2ChronicleView.page = 1;
+        sw2ChronicleView.pageBook = 1;
+        refreshSections(['chronicle']);
+    };
+    bus['ch-closed'] = (payload) => {
+        const v = String(payload?.value || 'any');
+        if (['any', 'done', 'open'].includes(v)) sw2ChronicleView.closed = v;
+        sw2ChronicleView.page = 1;
+        sw2ChronicleView.pageBook = 1;
+        refreshSections(['chronicle']);
+    };
+    bus['ch-range'] = (payload) => {
+        const v = String(payload?.value || '10');
+        if (['5', '10', 'all'].includes(v)) sw2ChronicleView.range = v;
+        sw2ChronicleView.page = 1;
+        sw2ChronicleView.pageBook = 1;
+        refreshSections(['chronicle']);
+    };
+    bus['ch-scope'] = (payload) => {
+        const v = String(payload?.value || 'all');
+        if (v === 'all' || v === 'hit') sw2ChronicleView.scope = v;
+        refreshSections(['chronicle']);      // ★不动 page（与 `ents-scope` 同一条理由）
+    };
+    bus['ch-page'] = (payload) => {
+        // ★页码由渲染层夹紧（`selectChroniclePage` 的越界夹紧），这里只管加减——零第二份夹紧逻辑。
+        //   ★两层的页是两枚分页器、两个游标（细案 §3.4：一枚共享分页器会在"收起的名单"上翻页 ⇒ 死控件）。
+        const layer = String(payload?.layer || 'event');
+        const delta = String(payload?.value) === 'prev' ? -1 : 1;
+        if (layer === 'book') sw2ChronicleView.pageBook += delta;
+        else sw2ChronicleView.page += delta;
+        refreshSections(['chronicle']);
     };
 
     // ---------- leg49（细案 spec-entities-page-ia）：实体页工具条四枚动作 ----------
@@ -3285,9 +3328,24 @@ function bindActions() {
     //     造不出真序列，而这段护栏的可观察效果"不发生一次重绘"要真 DOM + 真世界对象才看得见。
     win.addEventListener('compositionstart', (e) => {
         if (e.target?.closest?.('#sw2_ents_q')) sw2EntsComposing = true;
+        if (e.target?.closest?.('#sw2_ch_q')) sw2ChronicleComposing = true;
     });
     win.addEventListener('compositionend', (e) => {
         const q = e.target?.closest?.('#sw2_ents_q');
+        const cq = e.target?.closest?.('#sw2_ch_q');
+        if (cq) {
+            // ★leg50 编年页搜索框：与实体页那一支**逐字同款**（同一个病、同一副药——
+            //   "重绘把搜索框节点换掉 ⇒ 中文输入法组合被当场打断"）。
+            sw2ChronicleComposing = false;
+            const caret = cq.selectionStart;
+            sw2ChronicleView.q = String(cq.value || '');
+            sw2ChronicleView.page = 1;        // 换搜索词必回第一页（同筛选）
+            sw2ChronicleView.pageBook = 1;
+            refreshSections(['chronicle']);
+            const again = win.querySelector('#sw2_ch_q');
+            if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
+            return;
+        }
         if (!q) return;
         sw2EntsComposing = false;
         // 组合结束 = 补一次**正常的提交**（组合期一次都没提交过）；四步与下面 input 那支同形。
@@ -3300,7 +3358,19 @@ function bindActions() {
     });
     win.addEventListener('input', (e) => {
         // ★C1 护栏：组合期**在改状态与重绘之前**早退（这两样都会把组合打断）
-        if (e.isComposing || sw2EntsComposing) return;
+        if (e.isComposing || sw2EntsComposing || sw2ChronicleComposing) return;
+        // ★leg50 编年页搜索框（同款四步）
+        const cq = e.target?.closest?.('#sw2_ch_q');
+        if (cq) {
+            const caret = cq.selectionStart;
+            sw2ChronicleView.q = String(cq.value || '');
+            sw2ChronicleView.page = 1;
+            sw2ChronicleView.pageBook = 1;
+            refreshSections(['chronicle']);
+            const again = win.querySelector('#sw2_ch_q');
+            if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
+            return;
+        }
         const q = e.target?.closest?.('#sw2_ents_q');
         if (!q) return;
         const caret = q.selectionStart;
