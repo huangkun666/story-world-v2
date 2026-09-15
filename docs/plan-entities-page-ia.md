@@ -633,24 +633,42 @@ git commit -m "细案实体页 3/5：工具条——搜索/筛选/排序/分页�
 
 **Interfaces:**
 - Consumes: Task 3 的控件属性（`ents-filter`/`ents-sort`/`ents-group`/`ents-page` + `data-value`、`#sw2_ents_q`）
-- Produces: `sw2EntsView`（模块级对象，唯一一份）· 动作名 `ents-filter` / `ents-sort` / `ents-group` / `ents-page` · 函数 `renderEntsView()`
+- Produces: `sw2EntsView`（模块级 `let`，唯一一份）· `sw2EntsViewReset()` · 动作名 `ents-filter` / `ents-sort` / `ents-group` / `ents-page`
+  - ★**无新增渲染函数**：接线走既有的 `refreshSections(['entities'])` 与本仓既有的 `renderCfg()` 通道
+    （计划初稿在这里写过一个 `renderEntsView()` 辅助函数，**那会另造一处重绘口子，已作废**；
+    实际落地的两个渲染函数是 Task 3 的 `renderEntsToolbar` 与 `renderEntsPager`）
 
 - [ ] **Step 1: 写失败用例（接线审计：新动作必须有处理器）**
 
-在 `test/lookup-batch.test.js` 那条审计用例**内部**（`:403` 那条，它在断言区里断言）追加一行，覆盖新动作：
+★ **先读 `test/lookup-batch.test.js:403-442` 那条审计**——它的机制是**全产物差异检查**，不只是点名断言：
 
 ```js
-        // ★细案实体页：四个新动作必须都有真处理器（画了按钮没人接 = 本仓老病，这条审计就是治它的）
-        for (const act of ['ents-filter', 'ents-sort', 'ents-group', 'ents-page']) {
-            assert.ok(actions.includes(act), `★${act} 必须有真实处理器`);
-        }
+const NON_BUS = new Set(['advance-world']);                                   // :432
+const dangling = actions.filter((a) => !handlers.has(a) && !NON_BUS.has(a));  // :433
+assert.deepEqual(dangling, [], `★这些动作画了按钮但没有处理器：${dangling.join('、')}`);  // :434
 ```
 
-★ **变量名要对齐那条用例的既有写法**：改之前先读 `test/lookup-batch.test.js:403-440`，
-看它到底是用 `actions`（产物里的 action 名数组）还是别的容器做断言——**照它已有的写法加，不要自造第二套**。
-★ **RED 的形态会与计划原稿不同**：`ents-filter` / `ents-sort` / `ents-page` 在 Task 3 已接线（会直接绿），
-唯一还可能红的是 **`ents-group`**（它的控件要到 Task 5 才出现）。所以本步的 RED 证据是
-`★ents-group 必须有真实处理器`，**先确认它真红**（若它也不红 ⇒ 说明该断言对 `ents-group` 无效，要改断言方式）。
+即：**只要产物里出现一个没注册处理器的 `data-action`，它就红**。所以：
+- Task 3 接线之前，它会因为 `ents-filter`/`ents-sort`/`ents-page` 三个新动作而红（这就是接线被前置的原因）；
+- 本任务只需**补一条正向点名断言**（在 `:437` 那行之后追加）：
+
+```js
+        // ★细案实体页：工具条与分页器的三个动作必须真的有处理器（全产物差异检查在 :433 已覆盖"有没有漏"，
+        //   这一行补的是"点名的这三个必须有"——两组判据分工不同）
+        for (const act of ['ents-filter', 'ents-sort', 'ents-page']) {
+            assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
+        }
+        // ★分组动作 `ents-group` 在 Task 3/4 时**还没有任何控件产生它**（分组钮属 Task 5）——
+        //   它的处理器**应该已经注册好**（`web/index.js` 里四个动作是一起加的），但产物里搜不到这个名字。
+        //   两条一起锁，把"处理器已备好"与"控件还没上"这两件事**分开说实话**（等 Task 5 加控件后，前半仍成立）。
+        assert.ok(handlers.has('ents-group'), '★分组动作的处理器已备好（Task 5 才点亮控件）');
+        assert.ok(!actions.includes('ents-group'), '★此刻产物里不该有分组控件（中途不交付死控件）');
+```
+
+★ **RED 的形态**（如实说明，别指望一个假的 red）：本任务**大部分会直接绿**，因为三个动作的处理器在 Task 3 已随控件落地。
+真正还能红的只有把上面第一条 `for` 里**故意写错一个动作名**来验证断言有效；
+**不许为了凑一个 red 而先把已成立的接线删掉**（那正是"为测试而破坏实现"）。
+若四条断言全部直接绿 ⇒ 本任务的正确定性是「**核对 + 补判据**」，**报告里就如实写"无 RED，因为接线已被 Task 3 前置完成"**，不要编造 TDD 证据。
 
 - [ ] **Step 2: 跑用例确认失败**
 
