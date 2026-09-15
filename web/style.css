@@ -319,10 +319,18 @@
 .sw2-agcell .sw2-agstage{color:var(--sw2-text-faint);margin-left:6px;}
 .sw2-ents-tools{display:flex;flex-direction:column;gap:7px;margin:8px 0 10px;position:sticky;top:0;background:var(--sw2-panel);z-index:3;padding:6px 0;}
 .sw2-ents-tools-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
-.sw2-ents-q{flex:1;min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid var(--sw2-line);background:var(--sw2-card);color:var(--sw2-text);font:inherit;}
+/* ★★leg49 工具条排布（乙 · 分组块 · 用户拍板「就乙吧」）：
+   原来 21 个控件平铺、靠 flex-wrap 自然折行 ⇒ 实测折成 9 个视觉行（工具条 154px），
+   且「分组」标签与它管的 4 枚钮被折到不同行。现在控件按"一伙的"分块：
+   **块是整体折行的单位**（`flex:none` + 内含 `nowrap`）⇒ 窄屏时整块下去，绝不把块内的钮打散。 */
+.sw2-ents-g{display:flex;flex-wrap:nowrap;gap:6px;align-items:center;flex:none;padding-left:11px;border-left:1px solid var(--sw2-line-soft);}
+.sw2-ents-g:first-child{padding-left:0;border-left:0;}
+.sw2-ents-gl{color:var(--sw2-text-faint);font-size:11px;letter-spacing:1px;white-space:nowrap;}
+/* 搜索块特殊：它是**唯一该伸缩**的块（其余按内容宽度），窄屏时可独占一行 */
+.sw2-ents-g-q{flex:1 1 220px;padding-left:0;border-left:0;}
+.sw2-ents-q{flex:1;min-width:180px;padding:6px 10px;border-radius:6px;border:1px solid var(--sw2-line);background:var(--sw2-card);color:var(--sw2-text);font:inherit;}
 .sw2-chip.on{background:var(--sw2-amber-dim);color:var(--sw2-text);border-color:var(--sw2-amber);}
 .sw2-chip-n{opacity:.7;margin-left:5px;}
-.sw2-ents-grp{color:var(--sw2-text-faint);font-size:11px;letter-spacing:1px;margin-left:4px;}
 .sw2-ents-hit{color:var(--sw2-text-dim);font-size:12px;margin-left:auto;}
 .sw2-ents-pager{display:flex;gap:10px;align-items:center;justify-content:center;padding:14px 0;}
 .sw2-ents-empty{padding:34px;text-align:center;color:var(--sw2-text-faint);}

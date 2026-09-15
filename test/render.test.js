@@ -1301,6 +1301,46 @@ test('★细案实体页 J5：搜索控件与分页控件**必须存在**（旧�
     }
 });
 
+test('★工具条排布（乙 · 分组块）：控件按「一伙的」分组，每组自带标签，块间一条竖线', () => {
+    // 起因（用户实拍截图 + 一句「这个角色和势力这个位置比较乱」）：原工具条把 **21 个控件平铺**在两个 flex 行里、
+    //   靠 `flex-wrap` 自然折行 ⇒ 实测折成 **9 个视觉行**（工具条高 154px），而且
+    //   ①「分组」这个标签与它管的 4 枚钮被折到**不同行**（读不出谁管谁）；
+    //   ② 那段查书三态长提示直接印在第二行里，**独吃两行**。
+    // 定稿（用户拍板「就乙吧」）：**六块**——搜索 / 类别 / 筛选 / 排序 / 分组 / 计数，每块自带标签、
+    //   块与块之间一条竖线；长提示收进「？」。**控件一个不增不减**（J5 那几条继续咬）。
+    const w = world();
+    const html = renderEntitiesHtml(w);
+    // ① 六块之分：搜索块 + 五个带标签的块
+    assert.ok(html.includes('class="sw2-ents-g sw2-ents-g-q"'), '搜索独占一块（它是唯一该伸缩的）');
+    for (const label of ['类别', '筛选', '排序', '分组', '计数']) {
+        assert.ok(html.includes(`<span class="sw2-ents-gl">${label}</span>`), `★「${label}」块自带标签（标签与它管的钮不许分离）`);
+    }
+    // ② 五个标签块是**块的直接子**（不是散在行里的行内文字）
+    assert.equal((html.match(/class="sw2-ents-g"/g) || []).length, 5, '除搜索块外恰有五块（类别/筛选/排序/分组/计数）');
+    // ③ 搜索框所在的块里**只有**搜索框（不许再往里塞 chip ——那正是原来"折成 9 行"的来路）
+    const qBlock = /<div class="sw2-ents-g sw2-ents-g-q">([\s\S]*?)<\/div>/.exec(html);
+    assert.ok(qBlock, '搜索块可切出');
+    assert.ok(!qBlock[1].includes('sw2-chip'), '★搜索块里不许混入 chip（分组边界的判据）');
+    // ④ 每块内的 chip 都属于该块的 action（组合正确，不是把钮挪错块）
+    const gBlock = /<div class="sw2-ents-g"><span class="sw2-ents-gl">分组<\/span>([\s\S]*?)<\/div>/.exec(html);
+    assert.ok(gBlock && gBlock[1].includes('data-action="ents-group"'), '★「分组」块里装的是分组钮');
+    assert.ok(gBlock && !gBlock[1].includes('data-action="ents-sort"'), '★「分组」块里不许混进排序钮');
+    const sBlock = /<div class="sw2-ents-g"><span class="sw2-ents-gl">排序<\/span>([\s\S]*?)<\/div>/.exec(html);
+    assert.ok(sBlock && sBlock[1].includes('data-action="ents-sort"'), '★「排序」块里装的是排序钮');
+    assert.ok(sBlock && !sBlock[1].includes('data-action="ents-group"'), '★「排序」块里不许混进分组钮');
+    // ⑤ 长提示收进可展开的「？」（不再独占版面）
+    assert.ok(html.includes('sw2-ents-asks'), '长提示走可展开容器');
+    // ⑥ 外观契约（与实物同款）：块的换行单位 + 块间竖线 + 标签样式。
+    //   ★判据要咬在**真正承担这件事的那条规则**上：允许换行的是**块容器** `.sw2-ents-tools-row`
+    //     （外层 `.sw2-ents-tools` 是纵向 column，不承担换行）；块**自身**必须 `flex-wrap:nowrap`
+    //     ——这一条才是"窄屏时整块下去、不把块内的钮打散"的保证（也就是"乱"的病根所在）。
+    const css = readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8');
+    assert.match(css, /\.sw2-ents-tools-row\s*\{[^}]*flex-wrap\s*:\s*wrap/, '★块容器允许换行（窄屏时整块折下去）');
+    assert.match(css, /\.sw2-ents-g\s*\{[^}]*flex-wrap\s*:\s*nowrap/, '★块自身不许拆行（块内的钮永远待在一起）');
+    assert.match(css, /\.sw2-ents-g\s*\{[^}]*border-left/, '★块与块之间有一条竖线（视觉上读得出"这几枚是一伙的"）');
+    assert.match(css, /\.sw2-ents-gl\s*\{/, '块标签有自己的样式（不是裸文字）');
+});
+
 test('★细案实体页：两处既有入口按细案改挂工具条（不许在改版里丢掉）', () => {
     const w = world();
     // ① 全册补全按钮（lookup-batch.test.js:436/447 锁它，原在页眉）

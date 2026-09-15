@@ -820,29 +820,39 @@ export function renderEntsToolbar(world, view, config = null) {
         : '当前：每枚钮显示整个名册的数（不随筛选变）。点一下切到"当前结果"口径。';
     const scopeChip = `<button class="sw2-chip${v.scope === 'hit' ? ' on' : ''}" aria-pressed="${v.scope === 'hit' ? 'true' : 'false'}"`
         + ` data-action="ents-scope" data-value="${v.scope === 'hit' ? 'all' : 'hit'}" title="${attrText(scopeTip)}">计数：${scopeLabel}</button>`;
+    // ★★工具条排布定稿（用户实拍截图 +「这个角色和势力这个位置比较乱」⇒ 拍板「就乙吧」）：
+    //   病是量出来的：原版把 **21 个控件平铺**在两个 flex 行里、靠 `flex-wrap` 自然折行
+    //   ⇒ 实测折成 **9 个视觉行**（工具条高 154px），而且「分组」这个标签与它管的 4 枚钮**被折到不同行**
+    //   （读不出谁管谁），那段三态长提示还直接印在行里、**独吃两行**。
+    //   治法 = **乙 · 分组块**：**五块带标签的**（类别 / 筛选 / 排序 / 分组 / 计数）+ 搜索块（唯一该伸缩的），
+    //   每块自带标签、块与块之间一条竖线；块是**整体折行**的单位（窄屏时整块下去，不把块内的钮打散）。
+    //   ★两个"动作"（⬇ 补全全册实力 / ？）**不套块**：它们不是"一伙的选项"，是各干一件事的钮
+    //     （套上块会让"块"这个概念变糊——判据正是按块数咬的）。
+    //   ★控件一个不增不减（J5 那几条继续咬），`sw2-ents-tools-row` 容器类保留（既有判据按它切文本）。
+    const g = (label, inner) => `<div class="sw2-ents-g"><span class="sw2-ents-gl">${label}</span>${inner}</div>`;
+    const gq = (inner) => `<div class="sw2-ents-g sw2-ents-g-q">${inner}</div>`;
     return `<div class="sw2-ents-tools">`
         + `<div class="sw2-ents-tools-row">`
-        + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" aria-label="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质" enterkeyhint="search" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
-        + kinds.map(([k, label, n]) => chip('ents-filter', k, label, v.kind === k, n)).join('')
-        + chip('ents-filter', 'busy', '只看在办', filters.has('busy'), c.busy)
-        + chip('ents-filter', 'recent', '最近动过的', filters.has('recent'), c.recent)
-        + chip('ents-filter', 'named', '有归属的', filters.has('named'), c.named)
-        + chip('ents-filter', 'orphan', '无归属的', filters.has('orphan'), c.orphan)
-        + scopeChip
-        + `<span class="sw2-ents-grp">分组</span>`
-        + [['none', '不分组'], ['parent', '按归属'], ['loc', '按位置'], ['kind', '按类别']]
-            .map(([g, label]) => chip('ents-group', g, label, v.grp === g)).join('')
-        + `</div>`
-        + `<div class="sw2-ents-tools-row">`
-        + `<span class="sw2-ents-grp">排序</span>`
+        + gq(`<input id="sw2_ents_q" class="sw2-ents-q" type="search" aria-label="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质" enterkeyhint="search" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`)
+        + g('类别', kinds.map(([k, label, n]) => chip('ents-filter', k, label, v.kind === k, n)).join(''))
+        + g('筛选',
+            chip('ents-filter', 'busy', '只看在办', filters.has('busy'), c.busy)
+            + chip('ents-filter', 'recent', '最近动过的', filters.has('recent'), c.recent)
+            + chip('ents-filter', 'named', '有归属的', filters.has('named'), c.named)
+            + chip('ents-filter', 'orphan', '无归属的', filters.has('orphan'), c.orphan))
         // ★排序钮的文案与筛选钮**同词**（「最近动过的」）：`render.test.js` 的 K34 与 J1/J2 两条
         //   明文锁着「最近活跃」只进排序与筛选、不进版面——同一句话在筛选钮上已经是「最近动过的」，
         //   排序钮照它写，玩家也不必认两个词（口径由 `selectEntityPage` 的 `recent` 键承担）。
-        + [['active', '在办优先'], ['recent', '最近动过的优先'], ['name', '按名号']]
-            .map(([s, label]) => chip('ents-sort', s, label, v.sort === s)).join('')
+        + g('排序', [['active', '在办优先'], ['recent', '最近动过的优先'], ['name', '按名号']]
+            .map(([s, label]) => chip('ents-sort', s, label, v.sort === s)).join(''))
+        + g('分组', [['none', '不分组'], ['parent', '按归属'], ['loc', '按位置'], ['kind', '按类别']]
+            .map(([gr, label]) => chip('ents-group', gr, label, v.grp === gr)).join(''))
+        + g('计数', scopeChip)
         + batchButtonHtml      // ★既有「⬇ 补全全册实力」，从页眉挪到这里（lookup-batch.test.js:436/447 锁它）
-        + batchHintHtml        // ★在跑时的进度行（lookup-batch.test.js:451 锁「补全中 4/623」）
         + asksHintHtml         // ★页底那句三态注脚（render.test.js:547/620 锁它），改成可展开的「？」
+        + `</div>`
+        + `<div class="sw2-ents-tools-row">`
+        + batchHintHtml                // ★在跑时的进度行（lookup-batch.test.js:451 锁「补全中 4/623」）
         // ★页底只留这一句**指路**（它是"全册重查入口在哪"的答案，`render.test.js:594-600` 断言从
         //   「每行的<b>查</b>」切到文末的那一段里含「补全全册实力」）：三态释义已收进上面那个「？」，
         //   这里只说入口——那枚钮就在本工具条上（行内那枚<b>查</b>**不负责推倒重查**，这是 Task 2 定稿的口径）。

@@ -76,7 +76,10 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 //   ⇒ 照本文件顶上那条纪律（"CSS 动了就必须升位，否则浏览器吃旧样式"）往前走一格。
 //   ★`PANEL_BUILD` **不动**：它是用户验收第①步的判据（印在参数页最下面那行上），本笔的修正不该改它；
 //     这两个版本号本来的关系是"同批升位"，不是"必须同一串"。
-const CSS_VERSION = '20260916-leg49-three-column-roster-f1';
+// ★工具条排布定稿（用户实拍截图 +「这个角色和势力这个位置比较乱」⇒ 拍板「就乙吧」）：
+//   `web/style.css` 又动了（新增 `.sw2-ents-g` / `.sw2-ents-gl` / `.sw2-ents-g-q` 三条、删掉被标签替代的
+//   `.sw2-ents-grp`）⇒ 照同一条纪律再往前走一格。`PANEL_BUILD` 仍**不动**（同上：它是验收判据）。
+const CSS_VERSION = '20260916-leg49-three-column-roster-f2';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
