@@ -1,0 +1,165 @@
+// story-world-v2/test/limits.test.js
+// ★★leg40b 续：**世界尺度上限参数化**的判据（用户令「能不能直接把这些闸门参数直接放进参数页？」→ 拍板"甲+乙档全开"）。
+//
+// 三组判据，对应这次改动的三条硬要求：
+//   ① **默认逐字不变**：账上没设档位 ⇒ 生效值 = 出厂默认，且引擎行为与参数化之前**逐字节相同**
+//      （这是本改动唯一的"不许出错"项——参数化最容易出的病就是"某条路仍读旧常量"或"默认被悄悄改掉"）。
+//   ② **白名单只有一把尺子**：面板给的档位 = `limits.js` 的 `LIMIT_GEARS` = 引擎认的值；
+//      不在表内的一律弃键（不写占位值）——与 `params.js` 的 `normalizeParam` 同口径。
+//   ③ **档位真能改引擎判据**：把上限调低 ⇒ 引擎按新值拒提议并留痕（**这是"参数化成功"的机械判据**）。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+    LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS, LIMIT_META, LIMIT_ROWS,
+    limitsOf, normalizeLimit, resolveLimits, usingDefaults, limitKey,
+} from '../src/limits.js';
+import { AGENDA_CAPS, EVENT_CAPS, ENTITY_BIRTH_PER_TICK, settleTick } from '../src/settle.js';
+import { buildEvolutionPack, THREADS_TOP, IDLE_FACES_TOP } from '../src/pack.js';
+
+/** 一份最小但真形状的世界（够 `settleTick` 跑完一轮空步）。 */
+function world({ tick = 1, env = null } = {}) {
+    const w = {
+        version: 1,
+        context: {
+            world: '测试世界', tension: 0.5, positions: ['大营'],
+            setting: { dynamic: { env: env || {} } },
+        },
+        entities: [
+            { id: 'e_a', kind: 'character', name: '甲', location: '大营', lastActiveTick: tick },
+            { id: 'e_b', kind: 'character', name: '乙', location: '大营', lastActiveTick: tick },
+        ],
+        weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
+        meta: { tick, simLog: [] },
+    };
+    return w;
+}
+const stepWith = (over = {}) => ({
+    actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [],
+    newEntities: [], entityFates: [], entityUpdates: [], ...over,
+});
+const newAgenda = (owner) => ({ entity: owner, goal: '起一条自己的线', visibility: 'known', source: { type: 'state' } });
+
+// ---------- ① 默认逐字不变 ----------
+test('尺度上限：出厂默认 = 参数化之前的值（与既有常量逐项相等）', () => {
+    assert.equal(LIMIT_DEFAULTS.每轮递线, THREADS_TOP, '每轮递线默认 = pack.js 的 THREADS_TOP');
+    assert.equal(LIMIT_DEFAULTS.每轮事件, EVENT_CAPS.perTick, '每轮事件默认 = EVENT_CAPS.perTick');
+    assert.equal(LIMIT_DEFAULTS.顶层大计, AGENDA_CAPS.topLevel, '顶层大计默认 = AGENDA_CAPS.topLevel');
+    assert.equal(LIMIT_DEFAULTS.在飞大计, AGENDA_CAPS.open, '在飞大计默认 = AGENDA_CAPS.open');
+    assert.equal(LIMIT_DEFAULTS.每轮递线, 3, '出厂 3（本仓历史值，改了就是行为变更，必须显式）');
+    assert.equal(LIMIT_DEFAULTS.每轮事件, 6, '出厂 6');
+});
+
+test('尺度上限：账上没设 ⇒ 生效值 = 出厂默认；`usingDefaults` 如实报', () => {
+    for (const w of [world(), world({ env: {} }), null, undefined, { context: {} }]) {
+        assert.deepEqual(resolveLimits(w), { ...LIMIT_DEFAULTS }, `未设档位时必须给全套默认（输入 ${JSON.stringify(w)}）`);
+        assert.equal(usingDefaults(w), true, '未设档位 ⇒ usingDefaults 为真');
+    }
+});
+
+test('★尺度上限：默认下引擎行为与参数化之前**逐字节相同**（发号/条数/警告口径）', () => {
+    // 同一份输入跑两次：一次"什么都没设"，一次"显式写成出厂值" ⇒ 结果必须逐字节相同。
+    //   （这条抓的是"某条路仍读旧常量"——若引擎某处还硬读常量而另一处读了参数，两次就会分叉）
+    const s = stepWith({ newEvents: [{ title: '一件事', source: { type: 'state' }, position: '大营', ripples: ['e_a'] }] });
+    const a = settleTick({ ssot: world(), step: s });
+    const b = settleTick({ ssot: world({ env: { 每轮事件: '6', 顶层大计: '15', 在飞大计: '20', 每轮递线: '3' } }), step: s });
+    assert.equal(a.ok, true, '空世界上的这一步应通过');
+    assert.equal(b.ok, true);
+    assert.equal(JSON.stringify(a.stage.warnings), JSON.stringify(b.stage.warnings), '警告逐字相同');
+    assert.equal(a.ssot.meta.tick, b.ssot.meta.tick, 'tick 相同');
+    assert.deepEqual(a.ssot.events, b.ssot.events, '落账的事件逐字节相同');
+});
+
+// ---------- ② 白名单只有一把尺子 ----------
+test('尺度上限：白名单归一——不在表内的键/值一律弃（与 params.js 同口径）', () => {
+    assert.equal(normalizeLimit('每轮递线', '6'), 6, '字符串数字认（dynamic.env 里存的就是字符串）');
+    assert.equal(normalizeLimit('每轮递线', 6), 6, '数字也认');
+    assert.equal(normalizeLimit('每轮递线', '7'), null, '不在档位表里的值 ⇒ null（弃键，不写占位值）');
+    assert.equal(normalizeLimit('每轮递线', ''), null);
+    assert.equal(normalizeLimit('每轮递线', 'abc'), null);
+    assert.equal(normalizeLimit('不存在的键', '6'), null, '不认识的键 ⇒ null');
+    assert.equal(normalizeLimit('天时', '平常'), null, '★同名不许串台：`params.js` 的档位词不是本表的键');
+    // `limitKey` 一个函数管两件事：认键（无值）+ 归一键（有值）
+    assert.equal(limitKey('每轮递线'), true);
+    assert.equal(limitKey('每轮递线', '12'), null, '12 不在「每轮递线」的档位表里（上限 9）');
+    assert.equal(limitKey('每轮事件', '12'), 12, '12 在「每轮事件」的表里');
+    assert.equal(limitKey('天时'), null, '★不认 `params.js` 的键（两张表分开，不许互相吃）');
+});
+
+test('尺度上限：每个键都有档位表与人话（面板靠它排下拉；档位必须含出厂默认）', () => {
+    for (const k of LIMIT_KEYS) {
+        assert.ok(Array.isArray(LIMIT_GEARS[k]) && LIMIT_GEARS[k].length >= 2, `「${k}」要有至少两档`);
+        assert.ok(LIMIT_GEARS[k].includes(LIMIT_DEFAULTS[k]), `「${k}」的档位表必须含出厂默认 ${LIMIT_DEFAULTS[k]}`);
+        assert.ok(LIMIT_META[k]?.label && LIMIT_META[k]?.hint, `「${k}」要有人话标签与说明`);
+        // A-3 禁的是**引擎术语**（tick/entity/agenda/schema/ssot 这类账本词），不是「引擎」这个自称——
+        //   同页其余文案（`params.js`/`render.js`）一直用「引擎只照抄」这种说法。
+        assert.ok(!/tick|entity|agenda|schema|ssot/i.test(LIMIT_META[k].hint), `「${k}」的说明不许漏账本术语（A-3）`);
+    }
+});
+
+test('尺度上限：已设档位覆盖默认；未设的键仍回默认（逐键独立）', () => {
+    const w = world({ env: { 每轮递线: '6' } });
+    const lim = resolveLimits(w);
+    assert.equal(lim.每轮递线, 6, '设了的用账上的');
+    assert.equal(lim.每轮事件, LIMIT_DEFAULTS.每轮事件, '没设的仍回默认');
+    assert.deepEqual(limitsOf(w), { 每轮递线: 6 }, '`limitsOf` 只报**已设**的键');
+    assert.equal(usingDefaults(w), false, '设过档位 ⇒ 不再是全默认');
+    // 面板行：值与"是否默认"如实报
+    const rows = LIMIT_ROWS(w);
+    assert.equal(rows.length, LIMIT_KEYS.length);
+    assert.equal(rows.find((r) => r.key === '每轮递线').isDefault, false);
+    assert.equal(rows.find((r) => r.key === '每轮事件').isDefault, true);
+    // 非法值不许进结果（旧账里的脏值也不生效）
+    assert.deepEqual(limitsOf(world({ env: { 每轮递线: '99' } })), {}, '脏值 ⇒ 弃键（当没设，用默认）');
+});
+
+// ---------- ③ 档位真能改引擎判据 ----------
+test('★★尺度上限：把「在飞大计」调到 20 的下限之外 ⇒ 引擎按新值拒提议并留痕（参数化生效的机械判据）', () => {
+    // 造一个"已经在飞 20 件"的世界：这时按出厂的 20 上限，任何新提议都该被拒。
+    const w = world();
+    w.agendas = Array.from({ length: 20 }, (_, i) => ({ id: `a_${i}`, owner: 'e_a', goal: `旧线${i}`, closed: false, parentId: i === 0 ? undefined : 'a_0' }));
+    const s = stepWith({ newAgendas: [newAgenda('e_b')] });
+    const atCap = settleTick({ ssot: w, step: s });
+    assert.equal(atCap.ok, true, '超限只是拒那条提议，世界照常推进');
+    assert.equal(atCap.ssot.agendas.filter((a) => !a.closed).length, 20, '在飞总数没涨（被上限挡住）');
+    assert.ok(atCap.stage.warnings.some((x) => x.includes('在飞全局') && x.includes('20')), `要留痕并写出新上限：${atCap.stage.warnings.join('; ')}`);
+
+    // 同一个世界，把「在飞大计」调到 30 ⇒ 同一条提议应当**通过**（这就是"档位真的进了判据"）
+    const w2 = world({ env: { 在飞大计: '30' } });
+    w2.agendas = structuredClone(w.agendas);
+    const raised = settleTick({ ssot: w2, step: stepWith({ newAgendas: [newAgenda('e_b')] }) });
+    assert.equal(raised.ssot.agendas.filter((a) => !a.closed).length, 21, '★上限抬到 30 ⇒ 这条提议落账了（档位生效）');
+    assert.ok(!raised.stage.warnings.some((x) => x.includes('在飞全局')), '不再报那条拒签');
+});
+
+test('★★尺度上限：「每轮事件」调到 9 ⇒ 一轮能落 9 件（出厂 6 会裁掉 3 件）', () => {
+    const mk = () => Array.from({ length: 9 }, (_, i) => ({ title: `事${i}`, source: { type: 'state' }, position: '大营', ripples: ['e_a'] }));
+    const at6 = settleTick({ ssot: world(), step: stepWith({ newEvents: mk() }) });
+    const flooded = at6.stage.warnings.filter((x) => x.includes('事件洪峰'));
+    assert.equal(flooded.length, 3, `出厂 6 ⇒ 应有 3 件被洪峰拒（实际 ${flooded.length}）`);
+    assert.ok(flooded.every((x) => x.includes('≤6')), '留痕要写出**生效的**上限值');
+
+    const at9 = settleTick({ ssot: world({ env: { 每轮事件: '9' } }), step: stepWith({ newEvents: mk() }) });
+    assert.equal(at9.stage.warnings.filter((x) => x.includes('事件洪峰')).length, 0, '★上限抬到 9 ⇒ 一件都不裁');
+    assert.equal(at9.ssot.events.filter((e) => String(e.id).startsWith('ev_2_')).length, 9, '九件全落账');
+});
+
+test('★尺度上限：「每轮递线」进包（线捆条数 = 档位），未设时仍是出厂 THREADS_TOP', () => {
+    // 造 8 条线头（无来路的未决事件）
+    const w = world();
+    w.events = Array.from({ length: 8 }, (_, i) => ({
+        id: `ev_1_${i + 1}`, title: `线头${i}`, source: { type: 'state' }, position: `地${i}`, ripples: ['e_a'], links: { up: [], down: [] }, closed: false,
+    }));
+    const at3 = buildEvolutionPack(w, null);
+    assert.equal(at3.pack.threads.length, 3, '未设档位 ⇒ 出厂 3 条');
+    const at6 = buildEvolutionPack(w, null, { lim: { ...LIMIT_DEFAULTS, 每轮递线: 6 } });
+    assert.equal(at6.pack.threads.length, 6, '★档位 6 ⇒ 递 6 条（面板与引擎同源）');
+    // 只读的那几个仍然照旧（它们不是本轮旋钮）。
+    //   ★`idleFaces` 这里**不拿这一份最小夹具去断言条数**：只有 2 个实体时该名单本来就空
+    //     （`computeIdleFaces` 会把玩家/top-1/有在办盘算的人排掉）⇒ 断言"等于某个数"是**空绿**。
+    //     改为断言"它的口径没被这次改动碰过"（仍是出厂 `IDLE_FACES_TOP` 那一份），并对**关键字面**下判据。
+    assert.ok(IDLE_FACES_TOP === 12, '待启用名单仍是出厂 12（丙档未开）');
+    assert.ok(Array.isArray(at6.pack.idleFaces), '该栏恒为数组（形状口径不变）');
+    assert.ok(ENTITY_BIRTH_PER_TICK === 1, '入局新人仍是出厂 1（丙档未开）');
+    assert.equal(AGENDA_CAPS.perTick, 3, '每轮新生盘算仍是出厂 3（丙档未开）');
+});

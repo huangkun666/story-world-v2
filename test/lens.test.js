@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildEvolutionPack, lensList, trimPack, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
+import { buildEvolutionPack, lensList, trimPack, EVOLUTION_BUDGET_TOKENS, computeOpenRoots, computeThreads, computeClosedRoots, THREADS_TOP, CLOSED_ROOTS_TOP } from '../src/pack.js';
 import { runTick } from '../src/tick.js';
 
 function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick = 0, moveFact = null } = {}) {
@@ -205,7 +205,88 @@ test('leg25: 未超预算 → pack.trimmed 缺省（不写该键）、输出与�
     // 逐字节锁：与手工构造的"旧版出包形状"一致（键序=对象字面量序，无 trimmed 插入）
     // ★leg32c：新增 `closedAgendas`（已了结盘算台账）——键序由 pack 字面量决定，此处如实锁上
     // ★leg32g：新增 `idleFaces`（待启用名单）
-    assert.deepEqual(Object.keys(p.pack), ['world', 'tension', 'setting', 'positions', 'entities', 'agendas', 'pendingEvents', 'recentClosedEvents', 'playerMove', 'dialogueBook', 'closedAgendas', 'idleFaces']);
+    // ★leg40：新增 `openRoots`（线头台账：起了根还没人接的未决事件）+ `threads`（线捆：每轮点名推进的那几条）
+    //   + `closedRoots`（拾遗：已了结、没人接的旧事件——"接上它也算一步"）
+    //   为什么它们是**恒为数组**而不是"空则缺键"：本条锁把 pack 键集合逐字钉住 ⇒ 有时有键、有时无键就没法锁。
+    // ★leg34：新增 `departed`（离场名册，dead/retired 只报 id+name）——它是"带因复活"通道的**前提**：
+    //   死者不进包 ⇒ 模型拿不到他的 id ⇒ 复活提议永远提不出来（本棒实测这一格原本是死代码）。
+    assert.deepEqual(Object.keys(p.pack), ['world', 'tension', 'setting', 'positions', 'entities', 'agendas', 'pendingEvents', 'departed', 'recentClosedEvents', 'playerMove', 'dialogueBook', 'closedAgendas', 'idleFaces', 'openRoots', 'threads', 'closedRoots']);
+});
+
+// ---------- leg40：线头台账 + 线捆（"起了根、得有人接着浇"）----------
+// 口径（全机械，见 `pack.js` 的 `computeOpenRoots` 注释）：
+//   线头 = 未决事件里 `source.ref` **不指向池内事件/盘算**（或没有 ref）的那些。
+//   为什么要有它：真账 59 轮里模型自己起过 9 条这样的线、下一轮一条都没被接续；
+//   4 臂对跑实测把台账递到眼前 + "每条各写一步" ⇒ 接续 1/13 → 4/13、一轮并推 3 条（62.5%）。
+test('leg40: 线头（openRoots）=无来路的未决事件；有来路的（指向池内事件/盘算）不算', () => {
+    const w = mkWorld({
+        entities: [ent('e_a', '甲', 'character'), ent('e_b', '乙', 'faction')],
+        events: [
+            { id: 'ev_1', title: '凭空起的事', source: { type: 'state' }, position: '青丘', closed: false, ripples: ['e_a'] },
+            { id: 'ev_2', title: '引了不存在的事', source: { type: 'ripple', ref: 'ev_404' }, position: '云梦', closed: false },
+            { id: 'ev_3', title: '挂在盘算上', source: { type: 'plot', ref: 'a_1' }, position: '中央', closed: false },
+            { id: 'ev_4', title: '前一事的余波', source: { type: 'ripple', ref: 'ev_1' }, position: '青丘', closed: false },
+            { id: 'ev_5', title: '已了结的线头', source: { type: 'state' }, position: '青丘', closed: true },
+        ],
+        agendas: [{ id: 'a_1', owner: 'e_a', goal: '谋划', stage: 's', visibility: 'known', progress: 1, maxSteps: 3, closed: false }],
+        tick: 3,
+    });
+    const roots = computeOpenRoots(w);
+    assert.deepEqual(roots.map((r) => r.id), ['ev_1', 'ev_2'], '线头 = state 源 + 悬空 ref；指向池内事件/盘算的不算');
+    assert.deepEqual(Object.keys(roots[0]), ['id', 'title', 'position', 'ripples'], '线头只报这四样（够模型认人认地，不堆正文）');
+    assert.equal(roots[0].ripples, 1, 'ripples 是**人数**（引擎给的读数，不是名单）');
+    assert.ok(!roots.some((r) => r.id === 'ev_5'), '已了结的事件不是线头');
+    // 线捆：条数上限 + 结构（id/title/position/people）
+    const threads = computeThreads(w);
+    assert.ok(threads.length <= THREADS_TOP, `线捆至多 ${THREADS_TOP} 条（要"每条各写一步"⇒ 条数必须远小于 perTick 闸）`);
+    assert.equal(threads.length, 2, '本例只有两条线头 ⇒ 线捆就是这两条');
+    assert.deepEqual(Object.keys(threads[0]), ['id', 'title', 'position', 'people'], '线捆每条报：自己是谁/在哪儿/有哪些人');
+    assert.deepEqual(threads[0].people, ['甲'], 'people 是**账上真有的名字**（从 ripples 换成名字，不生成）');
+    // 确定性：同一 world 两次出包逐字节一致（不许掺随机/时间）
+    assert.deepEqual(computeThreads(w), computeThreads(w), '同一 world 两次调用结果逐字节一致');
+    // 出包时两栏恒在（键序锁之外再锁一次"形状恒为数组"）
+    const p = buildEvolutionPack(w, null);
+    assert.ok(Array.isArray(p.pack.openRoots) && Array.isArray(p.pack.threads), '两栏恒为数组（空则 []）');
+    assert.equal(p.pack.openRoots.length, 2);
+});
+
+// ---------- leg40 第三条料路：**拾遗**（已了结、没人接的旧事件）----------
+// 用户原话：「要么就直接挖插件已有的事件呗」——真账实测：已了结 34 条里 **14 条没有任何下游**。
+// 口径：已了结 + 没有任何事件的 source.ref 指向它 + 不是熵泵；排序＝出生轮新→旧。
+test('leg40·拾遗（closedRoots）：已了结**且没人接**的旧事件才算；被接过的、还在飞的、熵泵的都不算', () => {
+    const w = mkWorld({
+        entities: [ent('e_a', '甲', 'character'), ent('e_b', '乙', 'faction')],
+        events: [
+            { id: 'ev_10_1', title: '没人接的旧事', source: { type: 'state' }, position: '青丘', closed: true, ripples: ['e_a'] },
+            { id: 'ev_12_1', title: '更近的旧事', source: { type: 'plot', ref: 'a_9' }, position: '云梦', closed: true, ripples: ['e_a', 'e_b'] },
+            { id: 'ev_11_1', title: '被接过的旧事', source: { type: 'state' }, position: '青丘', closed: true },
+            { id: 'ev_13_1', title: '接着上面那条', source: { type: 'ripple', ref: 'ev_11_1' }, position: '青丘', closed: false },
+            { id: 'ev_14_1', title: '还在飞的', source: { type: 'state' }, position: '青丘', closed: false },
+            { id: 'ev_pump_9_1', title: '天下安稳：已 10 轮无新事上桌', source: { type: 'state' }, closed: true },
+        ],
+        agendas: [{ id: 'a_9', owner: 'e_a', goal: '谋划', stage: 's', visibility: 'known', progress: 1, maxSteps: 3, closed: true }],
+        tick: 14,
+    });
+    const closed = computeClosedRoots(w);
+    // ★排序两级：**新地优先**（本例两条旧事分别在"云梦/青丘"，而开着的池子里有"青丘"⇒ 云梦那条排前）→ 出生轮新→旧
+    assert.deepEqual(closed.map((x) => x.id), ['ev_12_1', 'ev_10_1'], '★只收"已了结 + 没人接"的；新地优先、再按出生轮新→旧');
+    assert.ok(!closed.some((x) => x.id === 'ev_11_1'), '被别的事接过（有下游）的旧事不算');
+    assert.ok(!closed.some((x) => x.id === 'ev_14_1'), '还在飞的不是"旧事"（它在 openRoots 那一栏）');
+    assert.ok(!closed.some((x) => x.id.startsWith('ev_pump_')), '熵泵事件是"世界静下来了"的读数，不是故事线');
+    assert.deepEqual(Object.keys(closed[0]), ['id', 'title', 'position', 'people'], '形状与线捆一致：自己是谁/在哪儿/有哪些人');
+    assert.deepEqual(closed[0].people, ['甲', '乙'], 'people 是账上真有的名字');
+    assert.deepEqual(computeClosedRoots(w), computeClosedRoots(w), '同一 world 两次出包逐字节一致');
+    // 上限
+    const many = mkWorld({
+        entities: [ent('e_a', '甲', 'character')],
+        events: Array.from({ length: 20 }, (_, i) => ({ id: `ev_${i + 1}_1`, title: `旧事${i}`, source: { type: 'state' }, closed: true })),
+        tick: 30,
+    });
+    assert.ok(computeClosedRoots(many).length <= CLOSED_ROOTS_TOP, `上限 ${CLOSED_ROOTS_TOP} 条（与线捆同一条体积纪律）`);
+    // 出包时三栏恒在
+    const p = buildEvolutionPack(w, null);
+    assert.ok(Array.isArray(p.pack.closedRoots), 'closedRoots 恒为数组（空则 []）');
+    assert.equal(p.pack.closedRoots.length, 2);
 });
 
 // ---------- leg25：**端到端**裁剪路径（真实 runTick 车道，不只是直调 buildEvolutionPack）----------

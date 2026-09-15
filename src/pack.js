@@ -27,6 +27,9 @@ export const LENS_RECENT_TICKS = 5;   // 提案（片3）：镜头第③段"近�
 //   加满这三样实测只要 ~430 token（余量的 2%）。数字是提案态（铁律 2），先按"够用且不堆"取。
 export const EVENT_LEDGER_TAIL = 8;    // 已闭环事件带回包里几条（旧值是写死的 2，且只有 id+title）
 export const AGENDA_LEDGER_TAIL = 12;  // 已了结盘算带回包里几条（旧值：一条都不带）
+// ★leg34：**离场名册**带回包里几个（dead/retired；只报 id+name）。它是"带因复活"通道的**前提**——
+//   死者不在包里 ⇒ 模型拿不到他的 id ⇒ 复活提议永远提不出来（本棒实测：这一栏原本是死代码）。见下方 `departed` 注释。
+export const DEPARTED_TAIL = 20;
 // ★★leg32g（用户：「还是不行啊，永远围绕那几个势力是为什么」——本棒把这个闭环量穿了）：
 //   **待启用名单**（`idleFaces`）：引擎每轮机械算出一小撮"从没出手、也没人点名"的在册实体，放进包里。
 //   为什么必须有这个面（真账 tick 38 实测的**自锁闭环**）：
@@ -57,8 +60,8 @@ export const STALE_CHAIN_HEAD_MIN_RIPPLES = 2;   // 牵动人数低于此数才�
  * 排序 = id 序 → 按 tick **轮转**切片 ⇒ 每轮换一批人露头；同一 world 两次调用逐字节一致（无随机）。
  * @returns {{id:string,name:string,kind:string}[]}
  */
-export function computeIdleFaces(ssot) {
-    if (!IDLE_FACES_TOP || IDLE_FACES_TOP <= 0) return [];
+export function computeIdleFaces(ssot, top = IDLE_FACES_TOP) {
+    if (!top || top <= 0) return [];
     const tickNow = ssot.meta?.tick ?? 0;
     const playerId = ssot.context?.playerId;
     const topId = (ssot.entities || [])[0]?.id;                       // gate.js 的保送口径：首个 active 实体
@@ -72,12 +75,147 @@ export function computeIdleFaces(ssot) {
         return !(typeof e.lastActiveTick === 'number' && (tickNow - e.lastActiveTick) < QUIET_TICKS);
     }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     if (!pool.length) return [];
-    const off = (tickNow * IDLE_FACES_TOP) % pool.length;             // 轮转（确定性）
+    const off = (tickNow * top) % pool.length;                        // 轮转（确定性）
     // ★带 name/kind（不只是 id）：模型要"从名单里挑人"，光给一串 id 它无从判断谁是谁、是势力还是角色。
     //   成本实测：12 条 id+name+kind ≈ 180 token（预算余量两万，仍是为"看得见"花的小钱）。
-    return Array.from({ length: Math.min(IDLE_FACES_TOP, pool.length) },
+    return Array.from({ length: Math.min(top, pool.length) },
         (_, k) => { const e = pool[(off + k) % pool.length]; return { id: e.id, name: e.name, kind: e.kind }; });
 }
+// ★★leg40：**线头**（无来路的未决事件）与**线捆**——"起了根，得有人接着浇"。
+// 病灶（真账 59 轮 + 本棒 4 臂对跑实测）：
+//   · 模型**会**自己起头——59 轮里起过 **9 条**"无来路"的线（慈航医堡/截教/黑山老妖/天机阁主/楚星河…），
+//     条条有地点、有人；但**下一轮一条都没被接续**（全黏回那场大乱）。
+//   · 根因不是"起根能力"，是**没有台账**：那几条混在 31 条未决事件里，外观与那场大乱的分支**完全一样**
+//     ⇒ 模型认不出"哪条是我上轮起的、还没人接"。
+//   · 对跑读数（同起点 tick 59 · 各 8 轮 · `gemini-3.1-pro-preview`）：
+//     control 起点线头接续 1/13、`promptlist`（递台账）→ **4/13**、`threads`（分捆 + 每条各写一步）
+//     ⇒ **一轮并推 3 条线、24 条次点名里真被推 15 次 = 62.5%**（此前 16 个臂、约 190 次调用里
+//     "每轮新起主线"从未超过 1 条）。
+//
+// 口径（全机械、零语义判断——ANCHOR §4.8：不许用词表判语义）：
+//   ① **线头** = 未决事件里，`source.ref` **不指向池内任何事件/盘算**（或压根没有 ref）的那些。
+//      ★它们**不等于"与那场大乱无关"**（本棒实测：起点 13 条线头里 10 条标题带危机字样）——
+//        排序只按"机械可判的新颖度"，**不假装判得出语义**（见 ③）。
+//   ② **谁** = 那条例事 `ripples` 里的实体名字（账上真有的字，不生成）。
+//   ③ **顺序** = 三级确定性序，全部机械、**零语义判断**（ANCHOR §4.8：不许用词表判语义）：
+//      **a. 材料来源**：`source.type==='seed'`（书里的事，`seed-roots.js` 落账）排最前——
+//         它们本来就少（一次几条），而"线捆"这一栏的全部意义就是**把世界源里那些事推下去**。
+//      **b. 地点新鲜度**：位置**不在老链头的地盘里**的排前面。
+//         ★为什么这条是对的（本棒实测的因果，不是口味）：真账那 13 条老线头**全是同一场大乱的分支**
+//         （标题带大荒/死煞/劫气）；让它们先占位 ⇒ 新种进来的干净根**永远挤不进被点名的 3 条**
+//         ——实测发生了：种下 2 条干净根后线捆里仍是那 3 条老根。于是模型每轮被要求的仍是"接着写那场大乱"。
+//         ★"老链头的地盘"= **非 seed 线头的位置去重集合**（账上真有的字，不引入任何词表）；位置空着的算"不在任何地盘里"。
+//      **c. id 序兜底**（同一 world 两次出包逐字节一致）。
+//   ④ **线捆**只取最前 `THREADS_TOP` 条：世界步一次 `newEvents` 至多 `EVENT_CAPS.perTick=6`、
+//      `AGENDAS_CAPS.perTick=3` ⇒ 一次要求"每条各写一步"的条数必须 ≪ 闸，否则教模型撞闸。
+export const THREADS_TOP = 3;   // 提案态（铁律 2）：每轮点名推进的线捆条数；实测 3 条时"三条全推"出现过 3/8 轮
+// ★leg40：拾遗栏（已了结、没人接的旧事件）带回包里几条。提案态（铁律 2）。
+//   为什么是 6：真账实测这类"没人接的旧线头"有 14 条；一次给太多会把模型拉回"翻旧账"，
+//   给太少又补不上线头缺口 ⇒ 取 6（约 200 token），并按"出生轮新→旧"排（越近越接得上）。
+export const CLOSED_ROOTS_TOP = 6;
+
+/** 线头（无来路的未决事件）——见上方注释的口径 ①。 */
+export function computeOpenRoots(ssot) {
+    const open = (ssot?.events || []).filter((e) => !e.closed);
+    const evIds = new Set(open.map((e) => e.id));
+    const agIds = new Set((ssot?.agendas || []).map((a) => a.id));
+    return open
+        .filter((e) => !e.source?.ref || !(evIds.has(e.source.ref) || agIds.has(e.source.ref)))
+        .map((e) => ({ id: e.id, title: e.title, position: e.position, ripples: (e.ripples || []).length }));
+}
+
+/**
+ * 线捆（递给模型"这几条线，每条各写一步"的那个名单）——见上方注释口径 ②③④。
+ * ★为什么"分捆"而不是"一张平表"：平表（31 条混在一起）实测 = 模型每轮只推 1 条；
+ *   分捆 + "每条各写一步" ⇒ 一轮并推 3 条（62.5% 条次被推）。
+ */
+export function computeThreads(ssot, top = THREADS_TOP) {
+    return deliverThreads(ssot, top);
+}
+
+/**
+ * ★leg40b 续（**归因探针的配套**）：同一套排序、**可指定送达条数**的线捆。
+ *   为什么要有它：实验必须能问"送到 12 条会怎样"，而 `THREADS_TOP` 是模块常量。
+ *   纪律：**排序与截断只有这一份实现**（`computeThreads` 就是 `deliverThreads(ssot, THREADS_TOP)`）
+ *   ——探针不许自己再写一套排序（本仓老病：一个数两把尺子，见 leg32/leg33 的教训）。
+ *   生产默认一个字节没变（`THREADS_TOP` 仍是 3，`computeThreads` 行为逐字不变）。
+ */
+export function deliverThreads(ssot, top) {
+    if (!top || top <= 0) return [];
+    const nameOf = new Map((ssot?.entities || []).map((e) => [e.id, e.name]));
+    const byId = new Map((ssot?.events || []).map((e) => [e.id, e]));
+    const heads = computeOpenRoots(ssot);
+    // "老链头的地盘"：**非 seed 线头**的位置集合（口径 ③b——见上方注释里的实测因果）
+    const oldPlaces = new Set(heads
+        .filter((r) => byId.get(r.id)?.source?.type !== 'seed')
+        .map((r) => String(r.position || '').trim())
+        .filter(Boolean));
+    return heads
+        .map((r) => {
+            const ev = byId.get(r.id);
+            const pos = String(r.position || '').trim();
+            return {
+                id: r.id,
+                title: r.title,
+                position: r.position,
+                people: (ev?.ripples || []).map((id) => nameOf.get(id) || id),
+                _src: ev?.source?.type === 'seed' ? 0 : 1,          // a. 世界源起的根排最前
+                _fresh: pos && !oldPlaces.has(pos) ? 0 : 1,          // b. 不在老地盘里的排前面
+            };
+        })
+        .sort((a, b) => a._src - b._src || a._fresh - b._fresh || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .slice(0, top)
+        .map(({ _src, _fresh, ...keep }) => keep);
+}
+
+/**
+ * ★★leg40 第三条料路：**拾遗（`closedRoots`）**——"已了结、而且**没有任何下游**"的旧事件。
+ *
+ * 用户的判断（原话）：「要么就直接挖插件已有的事件呗，或者直接让 llm 新做种，不依赖任何已有原料」——
+ *   两条都对，本函数落地的是第一条。底数（真账 tick 59 实测）：**已了结事件 34 条里 14 条没有任何下游**
+ *   （`万法阁血遁突入内陆`/`大盘谷血战爆发`/`浩然剑宗察觉死煞外泄`…），外加 **28 条已了结盘算**（谁办过什么、因何而起）。
+ *   ⇒ "料枯竭"这个前提本身不成立：**账上现成有十几条没人接走的线头**，只是**没有任何栏目告诉模型"这几条还能接"**
+ *     （它现在只以 `id+title` 的形状躺在 `recentClosedEvents` 里，引擎只带最近 8 条）。
+ *
+ * 口径（全机械）：
+ *   ① **已了结**（`closed`）② **没有任何事件的 `source.ref` 指向它**（＝没人接着写过）
+ *   ③ 不是熵泵事件（`ev_pump_*` 是"世界静下来了"的读数，不是故事线）
+ *   ④ 排序（**两级，全机械**）：**位置不在"开着的线头地盘"里的排前面** → 出生轮新→旧 → id 序。
+ *      ★为什么必须有第一级（**实测逼出来的**）：真账那 14 条"没人接的旧事"里 **12 条都在"大荒"**
+ *        （`沈天君法旨镇压大盘谷`/`死煞核心彻底引爆`/`浩然剑气横空出世`…）——按"新→旧"排，拾遗栏 6 条**全是那一场的旧账**
+ *        ⇒ 等于又给模型添危机料（与本棒整治的方向相反）。
+ *        改成"新地优先"后，栏里先出 **2 条别处的事**（`万法阁引爆法器强冲`@东海 / `龙宫泣血断腕`@东海），其余才是大荒旧账。
+ *        判据里的"开着的线头地盘" = **当前未决事件的位置去重集合**（账上真有的字，不引入任何词表）。
+ *   ⑤ 只取最前 `CLOSED_ROOTS_TOP` 条（与线捆同一条体积纪律：一次要求太多会教模型撞 `perTick` 闸）
+ *
+ * ★与 `recentClosedEvents` 的**分工必须分清**（否则模型把它当背景读一遍就过去——leg39 的教训："给名单不给资格＝名单空转"）：
+ *   `recentClosedEvents` = "发生过什么"（背景，只报 id/title/source）；
+ *   `closedRoots`        = "**这几条没人接，接上它就算你这一步**"（可执行）。故它带 `people`（谁在里面），
+ *   并在提示词第 14 条里明确"拾遗也算一步"。
+ */
+export function computeClosedRoots(ssot) {
+    if (!CLOSED_ROOTS_TOP || CLOSED_ROOTS_TOP <= 0) return [];
+    const all = ssot?.events || [];
+    const referenced = new Set(all.map((e) => e.source?.ref).filter(Boolean));
+    const nameOf = new Map((ssot?.entities || []).map((e) => [e.id, e.name]));
+    // "老地盘"= 当前未决事件的位置集合（机械；用来把"别处的旧事"排到前面——见上方注释 ④）
+    const openPlaces = new Set(all.filter((e) => !e.closed).map((e) => String(e.position || '').trim()).filter(Boolean));
+    return all
+        .filter((e) => e.closed && !referenced.has(e.id) && !String(e.id).startsWith('ev_pump_'))
+        .map((e) => {
+            const pos = String(e.position || '').trim();
+            return {
+                id: e.id, title: e.title, position: e.position,
+                people: (e.ripples || []).map((id) => nameOf.get(id) || id),
+                _born: Number(String(e.id).split('_')[1]) || 0,
+                _fresh: pos && !openPlaces.has(pos) ? 0 : 1,
+            };
+        })
+        .sort((a, b) => a._fresh - b._fresh || b._born - a._born || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .slice(0, CLOSED_ROOTS_TOP)
+        .map(({ _born, _fresh, ...keep }) => keep);
+}
+
 // 体积估计（leg25：**模块级唯一一份**）——1 token ≈ 3 字符（中文），向上取整。
 // 为什么提到模块级：此前 `lensList` 与 `trimPack` 各自持有一份同名局部 `est`/`estBudget`，
 //   trimPack 被接进生产路径后，任何一次"只改一处"的编辑都可能让裁剪路径上的调用点悬空
@@ -217,7 +355,7 @@ export function membersOf(world, faction) {
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
 // leg25：出包末尾**强制整包预算**（超限按固定剪枝序裁，包内留 `trimmed` 痕迹；见 trimPack）
-export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
+export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } = {}) {
     // K44：镜头选择器——全量棋盘有序入镜（保送+分量序），预算内前缀；分量不随行泄漏（P3）
     // 细案 spec-entity-field-lookup §3（用户 2026-09-11 批准）：**选择权归 LLM 时**传 picks——
     //   名单改用"本轮上场选择器"选的实体（引擎只做校验，见 entity-lookup.js），不再按预算截前缀。
@@ -306,7 +444,37 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
     //   ★这份名单**不是纯展示**：`settle.js` 会把它**同时**交给门控（`gateWorldStep` 的第 4 个参数），
     //   让名单上的人获得"起头"资格——否则"模型照名单给他开线、引擎照样丢掉"，名单就是空转。
     //   ⇒ 口径实现在下面那个**导出的纯函数**里（一处真源：包与门控读同一份）。
+    // ★leg40b 续：`待启用名单`（`IDLE_FACES_TOP`=12）**刻意不做旋钮**（丙档只读：一次调太多，每个都得重跑基线）
+    //   ⇒ 这里仍是出厂常量（见 `buildEvolutionPack` 形参 `lim` 的注释）。
     const idleFaces = computeIdleFaces(ssot);
+    // ★★leg34（小说家条款 §6.4 那一格，实测坐实）：**离场名册**。
+    //   细案原话：「★**`pack.js:51`** 必须一并改——否则"复活了但模型看不见他"，世界继续当他死了」
+    //   ★本棒实测把这一格量得更准了：真账 621 实体里 `dead` 1（万子明）· `retired` 1（白小娥）——
+    //     **两个都不在包里**（`lensList` 按 status 过滤，见上方 `rows` 那一行）⇒ 模型**连他的名字和 id 都拿不到**，
+    //     而"带因复活"要求 `entityUpdates[].entity` 照抄一个 id ⇒ **不给名册 = 复活这条通道在生产上永远开不了**（死代码）。
+    //   ⇒ 口径（**只报 id+name**，不报 status ⇒ 零新事实、与"宁缺勿造"一致；面板/门控都不读它）：
+    //     · 为什么不是"把死者放回实体表"：那会让"死亡"从世界上消失（错的方向，方向反了）；
+    //     · 为什么限最近 `DEPARTED_TAIL` 个：复活是"最近的事"能解释的（细案 §6.4 风险条：防死而复生循环刷存在感）
+    //       ⇒ 只把**最近的离场**递到眼前，老的不堆包；实测本项目每 59 轮才 2 个，这一栏长期极小。
+    //     · 归零时**整栏不出现**（`undefined`，不是空数组）——硬规矩「空着就是空着」。
+    const departedRows = (ssot.entities || [])
+        .filter((e) => e.status === 'dead' || e.status === 'retired')
+        .sort((a, b) => (b.lastActiveTick ?? -1) - (a.lastActiveTick ?? -1) || (a.id < b.id ? -1 : 1))
+        .slice(0, DEPARTED_TAIL)
+        .map((e) => ({ id: e.id, name: e.name }));
+    // ★leg34（小说家条款 §7.3 闭环的**最后一格**）：**已取回字段**。
+    //   病根（本棒实测）：实体段是**行式表格、列固定**（leg31 `ENTITY_TABLE_HEADER` = id/kind/name/location/parent/实力/members/player），
+    //   而"主动查"要查的正是**丙级字段**（身份/定位/性质/规模/倾向…）——它们**不在列里** ⇒ 查回来写进 `entity['身份']` 之后，
+    //   **下一轮的包里一个字都没有** ⇒ 模型问完还是不知道答案，**这条通道等于白问**（与"复活是死代码"同族的接线没接完）。
+    //   ⇒ 口径：模型**主动问过**的值，单独成一段递过去（**只递它问过的**，不问的丙级字段照旧不进包——这正是"用时再查"的本义）。
+    //     不是给实体表加列（leg31 的表达法不许回退），是**另起一段**。
+    //   ⚠生命周期：原样 **1 轮**（由 `web/index.js` 的 `clearStaleFetched` 在下一轮消费后清掉）——
+    //     既保证模型看得见，又不会让"查过的字段"变成实质上的每轮必带。
+    // ★★leg34（用户追问「为什么聊天 llm 能直接获取世界书内容…都是一轮解决的啊」）：**本回合检索到的世界书片段**。
+    //   为什么放在**包里**而不是另起一次调用：ST 的关键词世界书与 `yuzuki-Memory` 的向量召回都是**组装提示词那一刻**
+    //   把书塞进去的 ⇒ **当轮可见、零额外调用、零跨轮状态**。本候选照同一条路走（检索在 `preStep`，出包之前）。
+    //   ★只在这一轮**真检索到**时出现（`meta.recalledText` 由编排层写；没检索就不留空栏）。
+    const recalledText = typeof ssot.meta?.recalledText === 'string' ? ssot.meta.recalledText.trim() : '';
     const pack = {
         world: ssot.context?.world,
         // 张力：有 setting 取演化层强度（引擎算），无则回退 context.tension 数字（细案 §3.1 兼容口径）
@@ -316,6 +484,11 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
         entities,
         agendas,
         pendingEvents,
+        // ★leg34：离场名册——见上方注释（复活通道的**前提**，不是展示品）。        //   ★形状口径：**恒为数组**（空则 `[]`），与 `idleFaces`/`pendingEvents` 一致。
+        //     为什么不留"空则整栏不出现"：`lens.test.js` 的**键序锁**（leg25 立、leg32c/leg32g 各续一次）
+        //     把 pack 的键集合逐字锁住了 ⇒ 此处若**有时有键、有时无键**，那条锁就只能在某个分支上为真。
+        //     （本仓既有先例：`setting` 缺省就是 `undefined` ⇒ **键在值为空**，不是键消失。）
+        departed: departedRows,
         recentClosedEvents: closedEvents,
         playerMove: moveFact || null,
         dialogueBook,
@@ -323,7 +496,20 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null } = {}) {
         closedAgendas,
         // ★leg32g：待启用名单——"该轮到却没露过面的人"（见上方 `idleFaces` 注释）
         idleFaces,
+        // ★★leg40：**线头台账 + 线捆**——"起了根、但还没人接的线"（见 `computeOpenRoots`/`computeThreads` 注释）。
+        //   恒为数组（空则 `[]`）：与 `idleFaces`/`departed` 同一形状口径，键序锁才稳。
+        openRoots: computeOpenRoots(ssot),
+        // ★leg40b 续（尺度上限参数化）：线捆条数 = 账上档位（`每轮递线`）优先、否则出厂 `THREADS_TOP`。
+        //   `lim` 由调用方（`runTick`）用 `resolveLimits(world)` 递进来——**本文件不反向 import**
+        //   （`limits.js` 要引用本文件的 `THREADS_TOP` 当默认值 ⇒ 反向 import 会成循环依赖）。
+        threads: computeThreads(ssot, lim?.每轮递线 ?? THREADS_TOP),
+        // ★★leg40 第三条料路：**拾遗**——已了结但**没人接**的旧事件（"接上它也算一步"，见 `computeClosedRoots` 注释）
+        closedRoots: computeClosedRoots(ssot),
     };
+    // ★leg34：**本回合检索到的世界书片段**——"有才挂键"（空着就是空着）。
+    //   为什么与 `departed` 口径不同（那个恒为数组）：`departed` 受 `lens.test.js` 的键序锁约束（它的世界里
+    //   有没有离场者都会走到同一分支）；这一段是**本回合真的检索到**才存在 ⇒ 挂 `undefined` 键没有意义。
+    if (recalledText) pack.recalled = recalledText;
     // leg25（死代码接线）：**总预算在这里强制**。此前 `trimPack` 全仓生产 0 调用——
     //   lensList 只按 lensMaxTokens 截**实体段**，agendas/pendingEvents/setting/positions **不参与任何裁剪**，
     //   30k 预算等于纸面数字（余量正被名册增长吃掉）。现改为：出包即自检**整包**预算，超限即按固定剪枝序裁。
@@ -395,6 +581,11 @@ export function trimPack(pack, budgetTokens = EVOLUTION_BUDGET_TOKENS) {
     });
     // ⑦ ★leg32g：待启用名单**整段丢弃**（不是截短——名单靠"轮转"保证公平，截短会让排在后面的永远露不了头）。
     stage('idleFaces', () => { pack.idleFaces = []; });
+    // ⑧ ★leg34：**检索到的世界书片段整段丢弃**——它排在固定剪枝序的**最后**。
+    //   为什么最后（最可牺牲）：它是**附加细节**（"这个人什么来头"），而前面每一段都是**当下必须知道的事**
+    //   （谁在办什么/什么事在飞/谁该轮到）。预算真不够时，先丢"书的复印件"，保住"世界的现状"。
+    //   ★守卫：**这一段不存在时这一步不执行**（否则剪枝顺序报告里会多出一条"丢了空气"的记录——读数就不实了）。
+    if (pack.recalled !== undefined) stage('recalled', () => { delete pack.recalled; });
     // 兜底痕迹：固定剪枝序全部用尽仍越界 → 如实记在包里（不许"预算已强制"变成一句空话）
     if (estTokensOf(pack) > budgetTokens) cut.push('budgetOverrun');
     if (cut.length) pack.trimmed = cut;

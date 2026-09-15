@@ -31,8 +31,48 @@ function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick 
 }
 const ent = (id, name, kind, extra = {}) => ({ id, kind, name, location: '中央', ...extra });
 
-test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-16：leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-16');
+test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-20：leg40 第 14 条「线捆 + 拾遗」+ leg39 视角改写「你就是这个世界」+ 多主线并立 + 事件三源分工 + 新线三由来 + leg34 字段写回/带因复活/主动查 + leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-20');
+    // ★leg40 第 14 条（线捆）：治"起了根没人浇"——真账 59 轮起过 9 条无来路的线、下一轮一条都没被接续。
+    assert.ok(MAIN_PROMPT.includes('"线捆"（threads）'), '第 14 条必须点名 threads 这一栏（模型得知道看哪儿）');
+    assert.ok(MAIN_PROMPT.includes('上面每一条，本回合各给它一步'), '★"每条各写一步"是这一条的核心要求（不是"挑一条"）');
+    // ★★leg40b 续（口径升级）：条数现在**由包自己说**（`limits.js` 的「每轮递线」可调 3/6/9）。
+    //   模板里存的是惰性记号（`TH_CN` 那两个 \u0001 包着的记号），**由 `assembleMainPrompt` 按本次递送条数渲染**
+    //   ⇒ 所以这条锁要**两段都锁**：①模板里那句"只推一条＝没做完"必须在（要点不许丢）；
+    //   ②默认 3 条时渲染出来的正文必须**与旧正文逐字相同**（这就是"默认行为不变"的判据）；
+    //   ③换成 6 条时必须跟着变（否则又回到"递 6 条而正文说三条"那个自相矛盾的坑）。
+    assert.ok(/条里只写一条 = 本回合没做完/.test(MAIN_PROMPT), '★必须把"只推一条"判为不合格（要点在模板里）');
+    const promptWith = (n) => assembleMainPrompt({ pack: { threads: Array.from({ length: n }, (_, i) => ({ id: 'ev_x_' + i })) }, text: '{}' });
+    assert.ok(promptWith(3).includes('三条里只写一条 = 本回合没做完'), '★默认 3 条 ⇒ 渲染出的正文与旧正文逐字相同');
+    assert.ok(promptWith(6).includes('六条里只写一条 = 本回合没做完'), '★递 6 条 ⇒ 正文说六条（不许还写"三条"）');
+    assert.ok(!promptWith(6).includes('最多只有三条'), '★旧的自相矛盾句（"这一栏最多只有三条"）不得回潮');
+    assert.ok(!/\u0001TH_/.test(promptWith(3)) && !/\u0001TH_/.test(promptWith(6)), '★惰性记号不许漏进正文');
+    assert.ok(MAIN_PROMPT.includes('不许把它们合并'), '★假并行（三线写成同一件事）必须明禁');
+    assert.ok(MAIN_PROMPT.includes('出现在这里 = 它**还在等你接着写**'), '线头台账的读法：留在栏里 = 还没人接');
+    // ★leg40 拾遗（closedRoots，用户给的第三条料路：挖账上已有的事件）
+    assert.ok(MAIN_PROMPT.includes('拾遗（closedRoots）'), '第 14 条必须点名 closedRoots 这一栏');
+    assert.ok(MAIN_PROMPT.includes('旧事也能接'), '拾遗的口径：旧事是可以接的（不是背景）');
+    assert.ok(MAIN_PROMPT.includes('没有任何事的来路指向它'), '拾遗的机械判据要写清（已了结 + 无下游）');
+    assert.ok(MAIN_PROMPT.includes('closedRoots 是可以动手接的'), '★与 recentClosedEvents 的分工必须写死（否则被当背景读过去）');
+    assert.ok(MAIN_PROMPT.includes('一轮**接一条就够**'), '★限量：防它挤掉线捆那几条的位子');
+    // ★与第 12 条（idleFaces）的语义分工必须清楚：一个是"谁该动"，一个是"哪条线没人接"
+    assert.ok(MAIN_PROMPT.includes('idleFaces'), '第 12 条（待启用名单）仍在场');
+    assert.ok(!MAIN_PROMPT.includes('本回合至少挑其中一条'), '旧"至少挑一条"口径不得回潮（它与"每条各写一步"直接打架）');
+    // ★leg39（用户令「告诉 llm 他是世界本身，世界是多主线并行的」）：视角与"多主线"口径必须真写进去——
+    //   改前实测：提示词通篇预设"只有一条主线"（"与主线无关""主线照推""主线之外再长出一条"），
+    //   且**从未出现过"多条主线/新主线/自己的轴"任何一种要求** ⇒ 模型给的正是它被要求的：一条主线+一堆小事。
+    assert.ok(MAIN_PROMPT.includes('你就是这个世界本身'), '视角：模型是这个世界，不是旁观者/旁白');
+    assert.ok(MAIN_PROMPT.includes('世界从来不只有一条线'), '开篇即立"多线"是世界本身的性质');
+    assert.ok(MAIN_PROMPT.includes('每条主线都有它自己的轴'), '★"主线各有自己的轴"必须明写（用户口径）');
+    assert.ok(MAIN_PROMPT.includes('三条主线如果全在讲同一件事的不同角度'), '★同题三线≠三线：必须点明这个假并行');
+    assert.ok(MAIN_PROMPT.includes('起了一条线，就得准备接着写它'), '★主线要能连着走（治"几轮就没影的小事"）');
+    assert.ok(MAIN_PROMPT.includes('有的正紧、有的刚起、有的快收尾'), '同时几条线在走，且各在不同的火候');
+    assert.ok(MAIN_PROMPT.includes('有人正在办它 → 用 "event"'), '新线三由来之一：event（最结实的那种）');
+    assert.ok(MAIN_PROMPT.includes('真没有任何人在办'), '新线三由来之三：只有真没人办才 state');
+    assert.ok(MAIN_PROMPT.includes('那是失忆的写法'), '点明"每条都写 state"的后果（线没来路、接不上）');
+    // ★旧口径不得回潮（"小事"框架正是"只有一条主线"的产物）
+    assert.ok(!MAIN_PROMPT.includes('写他们各自的小事'), '旧"小事"措辞必须退场（leg39 换档）');
+    assert.ok(!MAIN_PROMPT.includes('每轮至少起一件"与主线无关"的事'), '旧"与主线无关"措辞必须退场');
     // ★leg33c：位置口径改成**自由文本**（用户拍板「位置变成自由文本，位置集干脆删了」）——
     //   旧契约说"必须写位置集里的地名"，与引擎新口径（集外照收）**必须一致**，否则又在教模型自我审查。
     assert.ok(MAIN_PROMPT.includes('位置不是闸'), '铁律 3 必须明说"位置不是闸"（模型别自我审查）');
@@ -87,6 +127,35 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-16：leg33
     assert.ok(MAIN_PROMPT.includes('可以提议新实体入局') && MAIN_PROMPT.includes('覆灭与否全归引擎复核'));
     // 模板实体示例里不再有 attrs 键（leg25 c：入局数值面整条删）
     assert.ok(!OUTPUT_TEMPLATE.includes('"attrs"'), 'OUTPUT_TEMPLATE 不再示范 attrs（入局数值面已删）');
+    // ★leg34（用户令「把字段写回和模型主动查的接口做了吧，这个功能能顺便解决死亡可以带因复活」）：
+    //   铁律 13 的**语义**必须进模板（不只是版本号升位）——四条约束各锁一句，缺一句就是"模型不知道会撞闸"。
+    assert.ok(MAIN_PROMPT.includes('人会长、会变'), '铁律 13 存在');
+    assert.ok(MAIN_PROMPT.includes('一轮最多 3 条'), '约束②：每轮条数上限写进提示词');
+    // ★丙′ 案（用户拍板「location 可以放啊，只是给修改权而已」）：禁写面收窄到"引擎自己的账"——
+    //   提示词必须跟新口径一致，否则模型要么白写（以为能改的没写）、要么不敢写（以为不能改的）
+    assert.ok(MAIN_PROMPT.includes('这些栏不能改') && MAIN_PROMPT.includes('id / kind / name'),
+        '禁写面要点名（id/kind/name + 引擎自己的账）');
+    assert.ok(MAIN_PROMPT.includes('lastActiveTick') && MAIN_PROMPT.includes('fieldSource'),
+        '★引擎自己的账（出手记录 / 出处凭据）要写明不许填——填了等于伪造出处');
+    assert.ok(MAIN_PROMPT.includes('也能写一个**账上还没有的新名目**'), '★"可以写新栏"必须讲给模型（否则它不敢写"称号/心境/伤势"）');
+    assert.ok(MAIN_PROMPT.includes('位置与种族也照这个来'), '★location/race 可改要写明（用户拍板放开的）');
+    assert.equal(MAIN_PROMPT.includes('不能改 id / kind / name（改了等于换个人'), false, '旧的"只禁三个"口径不许残留');
+    assert.ok(MAIN_PROMPT.includes('不能改玩家棋子'), '约束④：玩家不可改写进提示词（红线 1）');
+    assert.ok(MAIN_PROMPT.includes('不能把 status 写成 "dead"'), '覆灭只走 entityFates 这条要讲明白（否则模型以为字段能杀人）');
+    assert.ok(MAIN_PROMPT.includes('值写文本'), '约束⑤：文本值进提示词（四维浮点被删的同一条理由）');
+    // ★复活的**唯一路径**必须写明"必须先发生一件提到他的事"——这是防"死而复生循环"的那把锁
+    assert.ok(MAIN_PROMPT.includes('本回合新落账的事点到了他的名字') && MAIN_PROMPT.includes('复活只能挂在一件正在发生的事上'),
+        '带因复活的口径进提示词（复活必须与"被重新点名"同轮）');
+    assert.ok(MAIN_PROMPT.includes('departed'), '离场名册（departed）必须在提示词里交代——否则模型不知道可以带回谁');
+    // ★leg34 修正：⑥「使用时再查」的**实现方式**不是"模型主动问"，而是"出包前检索、当轮随包递"
+    //   （用户追问「…都是一轮解决的啊」）⇒ 提示词里要讲的是 `recalled` 这一段，且写明"书里没有的别编"。
+    assert.ok(MAIN_PROMPT.includes('recalled'), '检索注入段（recalled）必须进提示词——否则模型不知道那段是书里原文');
+    assert.ok(MAIN_PROMPT.includes('别自己编设定'), '配套口径：书里没有的细节不许编（引擎不发明事实）');
+    assert.equal(MAIN_PROMPT.includes('fieldQueries'), false, '★"模型主动查"已撤，不许在提示词里回潮');
+    // entityUpdates 是"可选的"要说清，免得模型以为七组之外还得硬凑
+    assert.ok(MAIN_PROMPT.includes('这一组是**可选的**'), '可选性必须写明（缺席=本回合没有这件事）');
+    assert.ok(OUTPUT_TEMPLATE.includes('"entityUpdates"'), '模板必须示范 entityUpdates 形状（模型照模板写）');
+    assert.equal(OUTPUT_TEMPLATE.includes('"fieldQueries"'), false, '模板里也不许再示范已撤的那一组');
     assert.ok(!OUTPUT_TEMPLATE.includes('"stateChanges"'), 'OUTPUT_TEMPLATE 不再示范 stateChanges');
     assert.ok(MAIN_PROMPT.includes('dialogueBook=对话依据册'), '依据册段说明在模板（K38 补差包 C 条）');
     // init 路径可用
@@ -157,7 +226,11 @@ test('leg32c·铁律 9：长跑接得上（因果要有来路 / 同一件事不�
     assert.ok(MAIN_PROMPT.includes('事件要有来路'), '要交代"事件要有来路"');
     assert.ok(MAIN_PROMPT.includes('不要每件事都"由世界处境而生"'), '要防"每件都由处境而生"这种失忆写法');
     assert.ok(MAIN_PROMPT.includes('同一件事不要重开'), '要交代"同一件事不重开"');
-    assert.ok(MAIN_PROMPT.includes('世界是好几条线并排走'), '要交代"世界是好几条线并排走"（变宽的杠杆在模型侧）');
+    // ★leg39 换档：要点不变（世界多线并行），措辞升级——从"好几条**线**并排走"（预设只有一条主线）
+    //   改成"**好几条主线**在并排走 + 每条有它自己的轴 + 同时三五十条各自在推进"。
+    assert.ok(MAIN_PROMPT.includes('世界是好几条主线在并排走'), '要交代"世界是好几条主线在并排走"（变宽的杠杆在模型侧）');
+    assert.ok(MAIN_PROMPT.includes('此刻世界上应该**有三五条各自在推进的事**'), '要给出"同时几条线在走"的量级');
+    assert.ok(!MAIN_PROMPT.includes('世界是好几条线并排走'), '旧措辞（预设单主线的那版）不得回潮');
     assert.ok(MAIN_PROMPT.includes('玩家棋子只是其中一枚'), '玩家不是舞台中心（与铁律 5 同向）');
     // ② 铁律里点名了输入里的那三个字段/段——否则模型不知道该用哪块数据
     for (const k of ['agendas[].source', 'closedAgendas', 'recentClosedEvents']) {
