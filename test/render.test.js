@@ -978,26 +978,26 @@ test('leg24 片1：抄书入口在界面下掉（补抽两枚 + 重抽一枚）+
     for (const term of BLACKLIST) assert.ok(!text.includes(term), `含禁词「${term}」`);
 });
 
-test('K41/A-16②：五筛命中面——chips 全量、多选并集=行选择、无 kind 旧账恒显示 + 计数提示', () => {
+test('细案 spec-chronicle-page-ia（leg50）：五筛退场——旧口径按设计作废，且不许回潮', () => {
+    // ★这一条**替换**了 K41/A-16② 的五筛判据（旧口径）——理由（细案 §3.5，用户拍板 A+B）：
+    //   五筛（谋划/大事/牵动/暗处/时局）只是 `kind` 枚举的中文直译，玩家读不出"牵动"与"暗处"的界线；
+    //   真账 360 行里玩家真正会问的是"哪句是发生的事、哪句是账"。
+    //   ★**账上 `kind` 一个字不动**（链视图/大事纪照旧按它工作）——作废的只是"玩家可见的那一维"。
+    //   ★按本仓纪律：旧判据按设计升级并写明理由（不是"测试挂了"），并**加一条"不许回潮"的守门**。
     const all = renderChronicleHtml(filterWorld());
-    assert.match(all, /sw2-ch-filter/);
-    for (const f of ['all', 'scheme', 'major', 'ripple', 'shade', 'state']) {
-        assert.ok(all.includes(`data-filter="${f}"`), `chips 缺 ${f}`);
-    }
-    // 缺省（null）= 全选：全部行都在，无旧账提示
-    assert.ok(all.includes('开仓放粮') && all.includes('边关扣货') && all.includes('粮道拥堵') && all.includes('旧账：早先的某一行'));
-    assert.ok(!all.includes('另有 '), '全选态不出现旧账提示');
-    // 只看牵动：ripple 行 + 无章旧账行恒显示，其余隐藏；计数提示出现
-    const ripple = renderChronicleHtml(filterWorld(), { filter: new Set(['ripple']) });
-    assert.ok(ripple.includes('粮道拥堵'), 'ripple 行在');
-    assert.ok(ripple.includes('旧账：早先的某一行'), '无 kind 旧账恒显示（不藏）');
-    assert.ok(ripple.includes('已收进大事纪「发兵催战」'), 'A-16④：里程碑插行（卷标）筛选下恒显示');
-    assert.ok(!ripple.includes('开仓放粮') && !ripple.includes('由盘算「买粮」而生'), '其余筛类行隐藏（大事行唯一子串）');
-    assert.match(ripple, /另有 1 条旧账未分类，任何筛选下始终显示/);
-    // 多选=并集：谋划+暗处
-    const union = renderChronicleHtml(filterWorld(), { filter: new Set(['scheme', 'shade']) });
-    assert.ok(union.includes('开仓放粮'), '谋划行在');
-    assert.ok(!union.includes('粮道拥堵') && !union.includes('由盘算「买粮」而生'), '并集外隐藏');
+    assert.match(all, /sw2-ch-tools/, '新工具条在位');
+    assert.ok(!all.includes('sw2-ch-filter'), '★旧五筛容器 sw2-ch-filter 不许回潮');
+    assert.ok(!all.includes('set-filter') && !all.includes('data-filter'), '★旧五筛动作/chip 不许回潮');
+    // 玩家可见的类别词只剩这两个（细案 §3.1）：事件 / 账目子类
+    assert.match(all, /class="sw2-ch-badge ev">事件</);
+    assert.match(all, /class="sw2-ch-badge bk">/);
+    // 行仍然全在（"不藏"这条口径一个字没改）：真事件 + 账目都画出来了
+    //   ★`filterWorld()` 的夹具是 `kind` 章 + 纯正文，**没有** `事件「X」——` 那种生产者措辞
+    //     ⇒ 按兜底规则它们全是账目（这正是"宁可少上一个故事，不许把账当故事印"）。
+    //     真事件那一支的形状由 `test/chronicle-page.test.js` 的生产者全集判据咬。
+    assert.ok(all.includes('开仓放粮') && all.includes('粮道拥堵') && all.includes('旧账：早先的某一行'),
+        '一行都没丢（分层只换"上桌方式"，不换"有没有"）');
+    assert.match(all, /第 1–30 轮已收进大事纪「发兵催战」/, 'A-16④：里程碑插行照旧');
 });
 
 test('K41/A-15 入口：事件行「链」按钮（data-action + data-chain + id 悬停）；非事件行无按钮', () => {
@@ -1459,11 +1459,15 @@ test('★细案实体页：分组——按归属/位置/类别切成可展开的
     //   真正的锁是上面这两条（它们咬得住"keyer 的兜底被删"）。
 });
 
-test('★细案实体页：版位升位且不含引擎术语（构建号在玩家视线内）', () => {
-    assert.equal(PANEL_BUILD, 'leg49-three-column-roster');
-    for (const bad of ['agenda', 'tick', 'ssot', 'schema']) {
+test('★细案编年页（leg50）：版位升位且不含引擎术语（构建号在玩家视线内）', () => {
+    // ★leg50 换档（细案 spec-chronicle-page-ia）：玩家可见面真变了 ⇒ 构建号升位。
+    //   ★起名先过禁词扫描——`leg50-layered-chronicle-tools` / `leg50-chronicle-layers` 都被扫出 `chronicle`
+    //     （leg49 §4① 的同一颗雷，那条踩过两次）⇒ 定稿 `leg50-story-and-ledger`。
+    assert.equal(PANEL_BUILD, 'leg50-story-and-ledger');
+    for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
+    assert.match(PANEL_BUILD, /^leg\d+-/, '形状：legNN-…（升位链条要能一眼看出来）');
 });
 
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -1576,17 +1580,39 @@ test('★★终审 C1：中文输入法组合期不许抢 DOM（源码护栏 + �
     assert.equal(hasCompositionGuard(stripped), false,
         '★反向自证：把护栏那一行删掉，同一条判据必须变假——证明它不是恒真的假绿');
     // 组合起止的接线：走**事件委托**（与既有 click / input 委托并列，不是给节点挂监听——重绘会换掉节点）
-    assert.match(web, /addEventListener\('compositionstart',[\s\S]{0,200}?closest\?\.\('#sw2_ents_q'\)/,
-        '★`compositionstart` 委托到搜索框（只认 `#sw2_ents_q`，别把整面板的输入都拦下）');
-    assert.match(web, /addEventListener\('compositionend',[\s\S]{0,400}?refreshSections\(\['entities'\]\)/,
+    //   ★leg50：委托面从**一个**搜索框扩到**两个**（编年页新加 `#sw2_ch_q`，同一副药）——
+    //     所以这两条断言改按"两个框都在委托面里"咬，而不是只认实体页那一个。
+    assert.match(web, /addEventListener\('compositionstart',[\s\S]{0,400}?closest\?\.\('#sw2_ents_q'\)/,
+        '★`compositionstart` 委托到实体页搜索框（只认它，别把整面板的输入都拦下）');
+    assert.match(web, /addEventListener\('compositionstart',[\s\S]{0,400}?closest\?\.\('#sw2_ch_q'\)/,
+        '★leg50：`compositionstart` 也要委托到编年页搜索框（两个框同一副药）');
+    assert.match(web, /addEventListener\('compositionend',[\s\S]{0,1400}?refreshSections\(\['entities'\]\)/,
         '★`compositionend` 必须把整串落账**并补一次重绘**（组合期一次都没重绘）');
+    assert.match(web, /addEventListener\('compositionend',[\s\S]{0,900}?refreshSections\(\['chronicle'\]\)/,
+        '★leg50：编年页那支同理（`compositionend` 落账 + 补一次重绘）');
     assert.match(web, /^let sw2EntsComposing = false;$/m,
         '★组合态标志是模块级 `let`（不是函数内临时变量：两个监听要共享它）');
+    assert.match(web, /^let sw2ChronicleComposing = false;$/m,
+        '★leg50：编年页的组合态标志同样是模块级 `let`');
+
+    // ★★leg50 追加：编年页搜索框的 input 处理**也要**有组合期早退——
+    //   病与药与实体页逐字同款（同一屏里两个搜索框，只护一个等于没护）。
+    //   ★反向自证同上：把 `sw2ChronicleComposing` 那半句删掉，`hasChronicleGuard` 必须变假。
+    const hasChronicleGuard = (s) => /if \(e\.isComposing \|\| sw2EntsComposing \|\| sw2ChronicleComposing\) return;/.test(s);
+    const chSeg = inputHandlerSrc(web, '#sw2_ch_q');
+    assert.ok(chSeg.length > 80, '前置：找得到编年页搜索框那条 input 处理');
+    assert.equal(hasChronicleGuard(chSeg), true, '★编年页 input 处理同样必须先判组合期并早退');
+    const chStripped = chSeg.replace(/sw2ChronicleComposing/g, '');
+    assert.notEqual(chStripped, chSeg, '前置：反向自证真的删掉了东西');
+    assert.equal(hasChronicleGuard(chStripped), false,
+        '★反向自证：把编年页那半句护栏删掉，同一条判据必须变假（否则它就是恒真的假绿）');
 });
 
-function inputHandlerSrc(web) {
+function inputHandlerSrc(web, selector = '#sw2_ents_q') {
     // ★按**内容**挑，不按"第一次出现"挑：本文件另有一处 `win.addEventListener('input', onField)`（设置表单），
     //   取第一处会切到别人身上（本用例自己踩过：切到设置表单那段 ⇒ 判据假红）。
+    //   ★leg50：选择器改成参数（实体页 `#sw2_ents_q` / 编年页 `#sw2_ch_q`）——
+    //     两个搜索框各有一条 input 处理，按固定选择器挑只能看到一个（"只护一个等于没护"）。
     const marker = "addEventListener('input'";
     let from = 0;
     while (from < web.length) {
@@ -1602,7 +1628,7 @@ function inputHandlerSrc(web) {
                 if (depth === 0) { seg = web.slice(start, i + 1); break; }
             }
         }
-        if (seg.includes('#sw2_ents_q')) return seg;   // 认准搜索框那一支
+        if (seg.includes(selector)) return seg;   // 认准那一个搜索框的分支
         from = start + marker.length;
     }
     return '';

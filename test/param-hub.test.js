@@ -362,8 +362,10 @@ test('★★★leg46·⑪：自检读数**一次拿全**（键名 · 原文 · �
     assert.match(text, /世界名 = 大荒z/);
     assert.equal(text.split('\n')[0], '[story-world-v2 参数自检]', '★第一行是抬头（粘出来就知道是什么）');
     // ⑥ 构建号也在读数里（"页面是不是新代码"是第一件要分清的事）
+    //   ★leg50：形状从 `/^leg4\d/` 放宽到 `/^leg\d+/`——原来那条把"升位链条"钉死在 4x 上，
+    //     换到 leg50 就红（而它要说的只是"这是一串构建号"，不是"必须是第 4x 棒"）。
     assert.equal(typeof ev['构建号'], 'string');
-    assert.match(ev['构建号'], /^leg4\d/, `构建号形状不对：${ev['构建号']}`);
+    assert.match(ev['构建号'], /^leg\d+-/, `构建号形状不对：${ev['构建号']}`);
     void st;
 });
 

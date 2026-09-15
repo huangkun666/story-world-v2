@@ -452,6 +452,15 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         //   （上面 `:433` 那条差异检查已经会在缺处理器时咬红；这一段是**正向点名**，两组分工不同。）
         assert.ok(handlers.has('ents-scope'), '★口径开关的处理器在位（`bus[ents-scope]`）');
         assert.ok(actions.includes('ents-scope'), '★口径钮真的在产物里（否则上面那条是空锁）');
+        // ★leg50（细案 spec-chronicle-page-ia）：编年页工具条的五枚动作——同一条审计 + 正向点名。
+        //   上面那条差异检查（`:433`）已经会在缺处理器时咬红；这一段是**正向点名**（治"点名的必须在"）。
+        //   ★与本笔同时**撤掉**旧五筛动作 `set-filter`：撤了却留着渲染端 `data-action` = 死控件，
+        //     而这条审计正好是抓那个的（本笔一上手它就红了，那是它在干活，不是它坏了）。
+        for (const act of ['ch-layer', 'ch-closed', 'ch-range', 'ch-scope', 'ch-page']) {
+            assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
+            assert.ok(actions.includes(act), `★${act} 的控件真的在产物里（否则上面那条是空锁）`);
+        }
+        assert.ok(!handlers.has('set-filter'), '★旧五筛动作 `set-filter` 已撤（细案 §3.5）');
     } finally {
         if (savedW === undefined) delete globalThis.window; else globalThis.window = savedW;
         if (savedD === undefined) delete globalThis.document; else globalThis.document = savedD;

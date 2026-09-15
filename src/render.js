@@ -139,7 +139,7 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   `leg49-three-column-roster` ⇒ 冲突消失，扫描恢复全量（判据同批撤掉抠洞，见 test/render.test.js）。
 //   ★禁词纪律：本串不含 agenda/tick/ssot/schema/entity（玩家视线内的字符串不许露引擎术语，判据在
 //   `test/render.test.js` 的"版位升位且不含引擎术语"与"工具栏与列表头零引擎术语"两条里锁着）。
-export const PANEL_BUILD = 'leg49-three-column-roster';
+export const PANEL_BUILD = 'leg50-story-and-ledger';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -612,39 +612,333 @@ export function renderBoardHtml(world, opts = {}) {
 
 // ============ 编年页 ============
 
-export function renderChronicleHtml(world, { oldVolumes = [], filter = null } = {}) {
-    // K41 五筛（A-16②）：行选择 = 无 kind 旧账恒显示（不藏）∪ kind ∈ filter；filter=null 全选
-    // 闭环/涟漪平息行链目标（第十五棒）：chainRef 优先（新行盖章）→ eventRef（事件行）→
-    // 否则按行 id 解析历史闭环行（ch_<tick>_evc[2]_<evId>——行 id 内嵌事件 id；与 msIdTick 同款
-    // id 解析纪律：引擎 id 只进 data/title 悬停 A-3 豁免；旧账不篡改=渲染只读派生，不写回账本）
-    const chainTarget = (c) => c.chainRef || c.eventRef || (/^ch_\d+_evc2?_(ev_.+)$/.exec(String(c.id || '')) || [])[1] || '';
-    const rows = (world.chronicle || []).map((c) => {
-        if (filter != null && c.kind && !filter.has(c.kind)) return '';
-        const target = chainTarget(c);
-        return `<div class="sw2-ch-line${target ? ' sw2-ch-event' : ''}">`
-            + `<span class="sw2-ch-round">${c.tick}</span>`
-            + `<span class="sw2-ch-text">${escapeHtml(c.text)}</span>`
-            + (target ? `<button class="sw2-chainbtn" data-action="open-chain" data-chain="${escapeHtml(target)}" title="${escapeHtml(target)}">链</button>` : '')
-            + `</div>`;
-    }).filter(Boolean);
-    const legacyCount = (world.chronicle || []).filter((c) => !c.kind).length;
-    const chip = (token, label, on) => `<span class="sw2-fchip${on ? ' on' : ''}" data-action="set-filter" data-filter="${token}">${label}</span>`;
-    const chips = [chip('all', '全部', filter == null)]
-        .concat(CHRONICLE_FILTERS.map((f) => chip(f.token, f.label, filter != null && filter.has(f.token))))
-        .join('');
-    const legacyNote = filter != null && legacyCount > 0
-        ? `<em class="sw2-legacy-note">另有 ${legacyCount} 条旧账未分类，任何筛选下始终显示</em>` : '';
+// ============ 细案 spec-chronicle-page-ia：编年页数据选择层（纯函数，可导出单测） ============
+// 分工（与 `selectEntityPage`/`makeEntsView` **完全同款**）：**选数据住渲染层、存状态住接线层**。
+//   ⇒ 接线层（`web/index.js` 的 `sw2ChronicleView`）只持一份视图状态，一行数据逻辑都不写。
+export const CHRONICLE_PAGE_SIZE = 60;
+// ★细案 §3.5：五筛（谋划/大事/牵动/暗处/时局）**退场**——它们只是 `kind` 枚举的中文直译，
+//   玩家读不出"牵动"与"暗处"的界线。**账上 `kind` 一个字不动**（链视图/大事纪照旧按它工作），
+//   本笔只换**玩家看到的那一维**：真事件 / 账目（+ 已了结 / 未了结）。
+// ★默认值**只有这一份真源**（照实体页终审 M10）：接线层的视图态与重置都从 `makeChronicleView()` 取。
+export const CHRONICLE_DEFAULT_VIEW = { q: '', layer: 'all', closed: 'any', range: '10', scope: 'all', page: 1, pageBook: 1 };
+
+export function makeChronicleView() { return { ...CHRONICLE_DEFAULT_VIEW }; }
+
+// ── 分类（细案 §3.2）：**唯一干净判据＝行首 `事件「…」——`** ──────────────────────
+//   ★两次错法留档（§7.0 的原话，别重踩）：
+//     ① 按"地点非空"判 ⇒ 地点常是占位词「未明」⇒ 几乎全判成记账（演示当场报"真事件 0 行"）；
+//     ② 按"有没有「事发」"判 ⇒ `盘算「X」推进：…事发…` 与 `满步结算：…事发…` **记账行也带**。
+//   ★判据写成"配置 + 兜底"而不是罗列生产点：**不匹配的一律算账目**——
+//     新生产点即使措辞没见过，也只会落进账目而不会**伪装成情节**（宁可少上一个故事，不许把账当故事印）。
+//   ★生产者全集 20 种形状（`settle.js` 18 + `entropy.js` 2）已逐条验过 **零 UNKNOWN**（判据在
+//     `test/chronicle-page.test.js` 的"生产者全集"那条里，真账副本另跑一遍）。
+//   ★★子类口径必须**只此一处**：`类别徽`（T2）与`已了结`（下面 `chronicleIsClosed`）都吃本函数的结论，
+//     不许在渲染端再写一遍正则（"同一事实两处实现 ⇒ 迟早分叉"）。
+const BOOK_KIND_RULES = [
+    // 结清：满步结算（结清/变形）/ 取消（含"取消后遗留子盘算…"）
+    ['结清', (t) => /^盘算「[^」]+」(?:取消（|满步结算：)/.test(t) || /^取消后遗留子盘算/.test(t)],
+    // 了结：事件闭环 / 涟漪平息
+    ['了结', (t) => /^事件「[^」]+」(?:闭环（|涟漪平息（)/.test(t)],
+    // 起因：新盘算从哪来（因事而生 / 由处境而生）+ 实体的入局、覆灭、淡出、重回、复归
+    ['起因', (t) => /^(?:因事而生：|由处境而生：)/.test(t)
+        || /^「[^」]+」(?:入局（|覆灭|淡出视野（|带着因由重回场上（|复归（)/.test(t)],
+    // 走一步：推进 / 拆环 / 委派 / 兑现 / 熵泵（世界静默与收声）
+    ['走一步', (t) => /^(?:盘算「[^」]+」推进：|拆环：|委派：|兑现：|天下已不安静（|天下安稳：)/.test(t)],
+];
+// 账目兜底子类（措辞没见过的新生产点落这里：语义上就是"引擎又走了一步"）
+const BOOK_KIND_FALLBACK = '走一步';
+// 玩家可见的类别词（★四个词之外不许有别的；都不是引擎词）
+export const CHRONICLE_BOOK_LABELS = Object.freeze({ 走一步: '走一步', 了结: '了结', 起因: '起因', 结清: '结清' });
+
+export function classifyChronicle(line) {
+    const t = String(line?.text ?? '');
+    if (/^事件「[^」]+」——/.test(t)) return { isEvent: true, bookKind: '' };
+    for (const [kind, test] of BOOK_KIND_RULES) if (test(t)) return { isEvent: false, bookKind: kind };
+    return { isEvent: false, bookKind: BOOK_KIND_FALLBACK };
+}
+
+// ★「已了结」的口径（细案 §T1）：**闭环 / 涟漪平息 / 满步结算 / 取消** —— 与 `classifyChronicle` 的子类共用同一份判据
+//   （`了结` ∪ `结清`），真账实测 已了结 120 · 未了结 240。
+export function chronicleIsClosed(line) {
+    const k = classifyChronicle(line).bookKind;
+    return k === '了结' || k === '结清';
+}
+
+// 事名：`事件「X」——…` 取 X；账目行没有"事名"这个概念 ⇒ 返回空串（不假装有）
+export function chronicleNameOf(line) {
+    const t = String(line?.text ?? '');
+    if (!classifyChronicle(line).isEvent) return '';
+    return (/^事件「([^」]+)」——/.exec(t) || [])[1] || '';
+}
+
+// 因（三种关系）：沿…而来 / 由盘算…而生 / 由世界处境而生
+//   ★收口那一格（`」`）**全角半角都要吃**（`」` / `”` / `"`）：生产者的行是 `沿「X」而来`（全角），
+//     而演示脚本与夹具里常写成半角——只吃一种的话，真账上"因"这一格会静默抽不出来而夹具全绿（假的）。
+//   ★`[^」]+` 是"引号里不许再出现同一侧的引号"：账上实测 360 行的因**全部**能抽出来（见判据）。
+const CH_CLOSE = '[」”"]';
+export function chronicleCauseOf(line) {
+    const t = String(line?.text ?? '');
+    let m = new RegExp(`沿「([^」]+)${CH_CLOSE}而来`).exec(t);
+    if (m) return { rel: '沿', what: m[1] };
+    m = new RegExp(`由盘算「([^」]+)${CH_CLOSE}而生`).exec(t);
+    if (m) return { rel: '由盘算', what: m[1] };
+    if (/由世界处境而生/.test(t)) return { rel: '由处境', what: '' };
+    return { rel: '', what: '' };
+}
+
+// 地点 / 牵动的人（`事发 X` / `牵动 A、B`）
+//   ★分隔符**全角半角都要吃**（`，` 与 `,`）：生产者的行是 `……，事发 未明，牵动 万法阁、白小娥`（**全角**），
+//     而演示脚本与合成夹具里写的是半角——只吃半角时真账**一个字段都抽不出来**，而夹具全绿（假的）。
+//     真账实测：只吃半角 ⇒ 地点 0 行、牵动 0 行；两样都吃 ⇒ 地点 122 行 · 牵动 122 行（与 §7.0 的 123/122 对得上）。
+const CH_SEP = '[,，]';
+export function chroniclePlaceOf(line) {
+    return ((new RegExp(`${CH_SEP}事发\\s*([^,，]+)`).exec(String(line?.text ?? '')) || [])[1] || '').trim();
+}
+export function chroniclePeopleOf(line) {
+    return ((new RegExp(`${CH_SEP}牵动\\s*([^,，]+)`).exec(String(line?.text ?? '')) || [])[1] || '').trim();
+}
+
+// ★搜索面（细案 §3.6）：**事名 ∪ 因 ∪ 地点 ∪ 牵动的人**（+ 类别词，让"搜类别"也找得到）。
+//   ★占位词**不进搜索面**（照实体页终审 C2 的同一条口径）：真账里多数行的地点是「未明」，
+//     一搜它就把大半个账捞出来 ⇒ 玩家会以为搜索坏了。★"行原文"**刻意不进**——否则"原文里有未明"
+//     就等于"未明可搜"（自相矛盾）。
+export function chronicleSearchTextOf(line) {
+    const t = String(line?.text ?? '');
+    const cls = classifyChronicle(line);
+    const place = chroniclePlaceOf(line);
+    const cause = chronicleCauseOf(line);
+    return [
+        chronicleNameOf(line), cause.what, place === '未明' ? '' : place,
+        chroniclePeopleOf(line), t.includes('未明') ? '' : t,
+        cls.isEvent ? '事件' : (CHRONICLE_BOOK_LABELS[cls.bookKind] || ''),
+    ].filter((x) => typeof x === 'string' && x).join(' ').toLowerCase();
+}
+
+// ⚠链目标（细案 §4.1）：链钮口径**只此一处**——`chainRef` → `eventRef` → 行 id 解析
+//   （`ch_<tick>_evc2?_<evId>` 内嵌事件 id，与 msIdTick 同款 id 解析纪律：引擎 id 只进 data/title 悬停，
+//    A-3 豁免；旧账不篡改＝渲染只读派生，不写回账本）。★行 id 是编年行自己的 id，**不挂链**。
+export function chronicleChainTargetOf(line) {
+    const c = line || {};
+    return c.chainRef || c.eventRef || (/^ch_\d+_evc2?_(ev_.+)$/.exec(String(c.id || '')) || [])[1] || '';
+}
+
+// 每层内的子组（细案 §3.1）：事件层两组（近来 / 更早）· 账目层四组（四个子类，顺序固定 = 读起来由"在办"到"收摊"）
+const CH_BOOK_ORDER = ['走一步', '了结', '起因', '结清'];
+
+function chronicleLineInfo(line, idx) {
+    const cls = classifyChronicle(line);
+    return {
+        line, idx, tick: Number(line?.tick) || 0, isEvent: cls.isEvent, bookKind: cls.bookKind,
+        name: chronicleNameOf(line), cause: chronicleCauseOf(line),
+        place: chroniclePlaceOf(line), people: chroniclePeopleOf(line),
+        chain: chronicleChainTargetOf(line), closed: chronicleIsClosed(line),
+        text: String(line?.text ?? ''),
+        // ★搜索面在这里**只算一次**（管线的谓词与计数全吃它）——不许在别处再扫一遍账
+        search: chronicleSearchTextOf(line),
+    };
+}
+
+// 选中哪些行 + 怎么分层 —— 纯函数，唯一真源（判据逐格与真账副本对齐）
+export function selectChroniclePage(world, view = {}) {
+    const v = { ...CHRONICLE_DEFAULT_VIEW, ...(view || {}) };
+    const all = (world?.chronicle || []).map(chronicleLineInfo);
+    const tick = Number(world?.meta?.tick) || 0;
+    const q = String(v.q || '').trim().toLowerCase();
+    // 近 N 轮：`tick > 当前轮 - N`；`'all'` 不设时限。★账上轮数不足时按实际来（不印负数轮）
+    const win = v.range === 'all' ? null : (Number(v.range) || 0);
+    // ── 一条管线（照实体页 `entsRows` 的分工：**行集合只有这一处算**，分页/计数/分层全吃它）──
+    //   谓词逐条叠：层 → 了结 → 搜索。★搜索面**每行只算一次**（`info.search` 在 chronicleLineInfo 里
+    //   落地）——不许在别处再扫一遍 `world.chronicle`（"同一口径两处实现 ⇒ 迟早分叉"）。
+    let rows = all;
+    if (v.layer === 'event') rows = rows.filter((r) => r.isEvent);
+    else if (v.layer === 'book') rows = rows.filter((r) => !r.isEvent);
+    if (v.closed === 'done') rows = rows.filter((r) => r.closed);
+    else if (v.closed === 'open') rows = rows.filter((r) => !r.closed);
+    if (q) rows = rows.filter((r) => r.search.includes(q));
+    // ★顺序（确定性）：轮次新→旧 → 账上原始位次（同轮内保持账本顺序，绝不靠"看起来对"的二次排序）
+    rows = rows.slice().sort((a, b) => b.tick - a.tick || a.idx - b.idx);
+    // ── 分层用的三条叠（层/了结/搜索都吃上了，**只差时间窗**——"上桌方式"里只有轮次是分层的）──
+    const eventHit = rows.filter((r) => r.isEvent);
+    const bookHit = rows.filter((r) => !r.isEvent);
+    const hot = win == null ? eventHit.slice() : eventHit.filter((r) => r.tick > tick - win);
+    const old = win == null ? [] : eventHit.filter((r) => r.tick <= tick - win);
+    // 事件层受轮次限制（"近来发生的事"这一组的定义就是"近 N 轮内"）：
+    //   `range !== 'all'` ⇒ 事件层的主列表就是 hot 那一叠；`'all'` ⇒ 全部真事件上桌，折叠组不收
+    const eventRows = win == null ? eventHit : hot;
+    // 账目层：四组恒全量（没有"近 N 轮"这一说——账是流水，不做时间窗）
+    const g = (k) => bookHit.filter((r) => r.bookKind === k);
+    const count = (k) => g(k).length;
+    // 分页器**按层**（细案 §3.4：一枚共享分页器会让"在收起的名单上翻页" ⇒ 死控件）。
+    //   ★默认视图下事件层 = `layer:'event'` 的命中（123 = 29 hot + 94 old），账目层 = 237。
+    const hitEvent = v.layer === 'book' ? 0 : eventRows.length;
+    const hitBook = v.layer === 'event' ? 0 : bookHit.length;
+    const pagesOf = (n) => Math.max(1, Math.ceil(n / CHRONICLE_PAGE_SIZE));
+    const clampPage = (p, n) => Math.min(Math.max(1, Number(p) || 1), pagesOf(n));
+    const page = clampPage(v.page, hitEvent);
+    const pageBook = clampPage(v.pageBook, hitBook);
+    const slice = (list, p) => list.slice((p - 1) * CHRONICLE_PAGE_SIZE, p * CHRONICLE_PAGE_SIZE);
+    const events = slice(eventRows, page);
+    const books = slice(bookHit, pageBook);
+    const info = (n, p, rowsIn) => ({
+        hit: n, page: p, pages: pagesOf(n), rows: rowsIn,
+        from: (p - 1) * CHRONICLE_PAGE_SIZE + (rowsIn.length ? 1 : 0),
+        to: (p - 1) * CHRONICLE_PAGE_SIZE + rowsIn.length,
+    });
+    const byKind = {};
+    for (const k of CH_BOOK_ORDER) byKind[k] = count(k);
+    return {
+        total: all.length, tick, rangeN: win,
+        events: info(hitEvent, page, events),
+        books: info(hitBook, pageBook, books),
+        // ★两层各自的"本页行"（`events.rows` / `books.rows`）与事件层的**两个显示组**是两件事，别混：
+        //   `groups.hot.rows` = 事件层主列表本页（含轮 3 这种早于窗口但仍在主列表里的）
+        //   `groups.older.rows` = 早于窗口的真事件（收起的"更早的事"那一叠），两者**互斥**。
+        //   ★字段名不叫 `old` 而叫 `older`：`old` 与"本页行"只差一个字母，读代码的人（和我）
+        //     已经在这上面栽过一次（把主列表当成"近来那一组"）。
+        groups: {
+            hot: { key: 'hot', label: '近来发生的事', rows: events, hit: win == null ? 0 : hot.length, open: true },
+            older: { key: 'old', label: '更早的事', rows: win == null ? [] : slice(old, page), hit: old.length, open: false },
+        },
+        // 账目层四组：★全量给出去（不分页）——分页器只切**该层的主列表**（`books.rows`），
+        //   组内条数由 UI 用 `<details>` 自己折（细案 §3.4：分页器的粒是"层"不是"组"）
+        bookGroups: CH_BOOK_ORDER.map((k) => ({ key: k, label: CHRONICLE_BOOK_LABELS[k], rows: g(k), hit: count(k) })),
+        // 计数口径（chip 用）：`'all'` = 全册 · `'hit'` = 当前条件下点它会得到多少
+        //   ★两个口径共用上面那一条管线（`rows` 已吃上 层/了结/搜索；`'hit'` 另外把"层"那一维
+        //     换成"点它之后会得到的那一层"——照实体页 `entsHitCounts` 的同一说法）
+        counts: v.scope === 'hit'
+            ? (() => {
+                const pick = (patch) => {
+                    let rs = all;
+                    const lay = patch.layer ?? v.layer;
+                    if (lay === 'event') rs = rs.filter((r) => r.isEvent);
+                    else if (lay === 'book') rs = rs.filter((r) => !r.isEvent);
+                    const cl = patch.closed ?? v.closed;
+                    if (cl === 'done') rs = rs.filter((r) => r.closed);
+                    else if (cl === 'open') rs = rs.filter((r) => !r.closed);
+                    if (q) rs = rs.filter((r) => r.search.includes(q));
+                    return rs;
+                };
+                return {
+                    all: pick({ layer: 'all' }).length,
+                    event: pick({ layer: 'event' }).length,
+                    book: pick({ layer: 'book' }).length,
+                    done: pick({ closed: 'done' }).length,
+                    open: pick({ closed: 'open' }).length,
+                };
+            })()
+            : { all: all.length, event: all.filter((r) => r.isEvent).length, book: all.filter((r) => !r.isEvent).length, done: all.filter((r) => r.closed).length, open: all.filter((r) => !r.closed).length },
+    };
+}
+
+// ── 行渲染（细案 §3.1）：**一行只有三样**——轮次 · 事名 · 因与牵动（+ 类别徽 + 真有链目标才有的「链」）──
+//   ★"没有就留白"（照实体页纪律）：`事发 未明` 是占位词 ⇒ **不印**；没有牵动名单 ⇒ 不印；
+//     账目行没有"事名"这个概念 ⇒ 不假装有（印它自己那句原文，措辞原样照抄，一个字不改）。
+function chronicleRowHtml(r) {
+    const cause = r.cause.what
+        ? `<span class="sw2-ch-k">${escapeHtml(r.cause.rel)}</span>「<span class="sw2-ch-w">${escapeHtml(r.cause.what)}</span>」`
+        : (r.cause.rel ? `<span class="sw2-ch-k">${escapeHtml(r.cause.rel)}</span>` : '');
+    const place = r.place && r.place !== '未明' ? `事发 <span class="sw2-ch-w">${escapeHtml(r.place)}</span>` : '';
+    const mid = [cause, place, r.people ? `牵动 ${escapeHtml(r.people)}` : ''].filter(Boolean).join(' · ');
+    const badge = r.isEvent
+        ? `<span class="sw2-ch-badge ev">事件</span>`
+        : `<span class="sw2-ch-badge bk">${escapeHtml(CHRONICLE_BOOK_LABELS[r.bookKind] || '')}</span>`;
+    // 事名：真事件取 `事件「X」——` 里的 X；账目行印它自己的原文（不是"事名"）
+    const head = r.isEvent ? `「${escapeHtml(r.name)}」` : escapeHtml(r.text);
+    return `<div class="sw2-ch-line${r.isEvent ? ' sw2-ch-event' : ' sw2-ch-book'}">`
+        + `<span class="sw2-ch-round">${r.tick}</span>`
+        + `<span class="sw2-ch-text"><span class="sw2-ch-nm">${head}</span>`
+        + (mid ? `<span class="sw2-ch-mid">${mid}</span>` : '')
+        + `</span>`
+        + (r.chain ? `<button class="sw2-chainbtn" data-action="open-chain" data-chain="${attrText(r.chain)}" title="${attrText(r.chain)}">链</button>` : '')
+        + badge
+        + `</div>`;
+}
+
+// 分层渲染：一个折叠组（★真结构 = `details.sw2-ch-group`，判据按它咬——**不许**用 `includes('<summary')`，
+//   工具条那个「？」自己就含 `<summary>`，那正是 leg49 §4② 假绿的原形）
+function chronicleGroupHtml(key, label, note, rows, open) {
+    return `<details class="sw2-ch-group" data-group="${attrText(key)}"${open ? ' open' : ''}>`
+        + `<summary><span class="sw2-ch-gt">${escapeHtml(label)}</span>`
+        + `<span class="sw2-ch-gc">${escapeHtml(note)}</span></summary>`
+        + (rows.length ? rows.map(chronicleRowHtml).join('') : '<div class="sw2-ch-empty">这一类眼下是空的。</div>')
+        + `</details>`;
+}
+
+// 层内分页器（细案 §3.4：**分页器的粒是"层"**）——照实体页 `renderEntsPager` 的口径：
+//   一页装得下时两枚钮**照旧在位**（只是 `disabled`）；空结果只印「命中 0」，不印"第 0–0 条"。
+function chroniclePagerHtml(info, layer) {
+    const multi = info.pages > 1;
+    const range = info.hit > 0 ? `　显示第 ${info.from}–${info.to} 条` : '';
+    const where = multi ? `　第 ${info.page} / ${info.pages} 页` : '';
+    return `<div class="sw2-ch-pager" data-layer="${attrText(layer)}">`
+        + `<button class="sw2-btn" data-action="ch-page" data-value="prev" data-layer="${attrText(layer)}"${!multi || info.page <= 1 ? ' disabled' : ''}>‹ 上一页</button>`
+        + `<span class="sw2-ch-hit">命中 <b>${info.hit}</b>${range}${where}</span>`
+        + `<button class="sw2-btn" data-action="ch-page" data-value="next" data-layer="${attrText(layer)}"${!multi || info.page >= info.pages ? ' disabled' : ''}>下一页 ›</button>`
+        + `</div>`;
+}
+
+// 编年页工具条（细案 §3.7：照实体页"乙 · 分组块"排布——每块自带标签、块内不拆行）
+export function renderChronicleToolbar(world, view = {}) {
+    const v = { ...CHRONICLE_DEFAULT_VIEW, ...(view || {}) };
+    const sel = selectChroniclePage(world, v);
+    const c = sel.counts;
+    const chip = (action, value, label, on, n) =>
+        `<button class="sw2-chip${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" data-action="${action}" data-value="${attrText(value)}">${escapeHtml(label)}`
+        + (n == null ? '' : `<span class="sw2-chip-n">${n}</span>`) + '</button>';
+    const g = (label, inner) => `<div class="sw2-ch-g"><span class="sw2-ch-gl">${label}</span>${inner}</div>`;
+    const scopeLabel = v.scope === 'hit' ? '当前结果' : '全册';
+    const scopeTip = v.scope === 'hit'
+        ? '当前：每枚钮显示"在当前条件下点它会得到多少"（与页脚「命中」同一套数）。点一下切回全册。'
+        : '当前：每枚钮显示整个编年的数（不随筛选变）。点一下切到"当前结果"口径。';
+    return `<div class="sw2-ch-tools">`
+        + `<div class="sw2-ch-tools-row">`
+        + `<div class="sw2-ch-g sw2-ch-g-q"><input id="sw2_ch_q" class="sw2-ch-q" type="search" aria-label="搜索事名 / 因 / 地点 / 牵动的人" enterkeyhint="search" value="${attrText(v.q)}" placeholder="搜索事名 / 因 / 地点 / 牵动的人…"></div>`
+        + g('只看', chip('ch-layer', 'all', '全部', v.layer === 'all', c.all)
+            + chip('ch-layer', 'event', '真事件', v.layer === 'event', c.event)
+            + chip('ch-layer', 'book', '账目', v.layer === 'book', c.book))
+        + g('了结', chip('ch-closed', 'any', '全部', v.closed === 'any')
+            + chip('ch-closed', 'done', '已了结', v.closed === 'done', c.done)
+            + chip('ch-closed', 'open', '未了结', v.closed === 'open', c.open))
+        + g('轮次', chip('ch-range', '5', '近 5 轮', v.range === '5')
+            + chip('ch-range', '10', '近 10 轮', v.range === '10')
+            + chip('ch-range', 'all', '全部轮次', v.range === 'all'))
+        + g('计数', `<button class="sw2-chip${v.scope === 'hit' ? ' on' : ''}" aria-pressed="${v.scope === 'hit' ? 'true' : 'false'}" data-action="ch-scope" data-value="${v.scope === 'hit' ? 'all' : 'hit'}" title="${attrText(scopeTip)}">计数：${scopeLabel}</button>`)
+        + `</div></div>`;
+}
+
+export function renderChronicleHtml(world, { oldVolumes = [], view = {} } = {}) {
+    const v = { ...CHRONICLE_DEFAULT_VIEW, ...(view || {}) };
+    const sel = selectChroniclePage(world, v);
+    // 里程碑插行（A-16④）：卷标行**照旧在位**（筛选下也恒显示——它是"这段时间已收进大事纪"的路标）
     const notes = (world.milestones || []).map((m) => {
         const titles = Array.isArray(m.titles) ? m.titles : (m.title ? [m.title] : []);
         return `<div class="sw2-ch-roll">⚑ 第 1–${msIdTick(m.id)} 轮已收进大事纪「${escapeHtml(titles.join('、'))}」</div>`;
     });
-    const volumes = oldVolumes.map((v) => `<div class="sw2-cold-row"><span class="sw2-vol">${escapeHtml(v.id)}</span>`
-        + `<span class="sw2-volinfo">${escapeHtml(v.info)}</span><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(v.id)}">阅卷</span></div>`);
+    // ── 事件层（细案 §3.1）：近来（默认展开）+ 更早（收起）——**每层一枚分页器**，就在该层第一行右端 ──
+    const hot = sel.groups.hot, older = sel.groups.older;
+    const eventLayer = `
+${chroniclePagerHtml(sel.events, 'event')}
+${chronicleGroupHtml('hot', hot.label, `第 ${Math.max(1, sel.tick - (sel.rangeN ?? 0) + 1)}–${sel.tick} 轮 · 共 ${hot.hit} 行`, hot.rows, true)}
+${sel.rangeN == null ? '' : chronicleGroupHtml('old', older.label, `第 1–${Math.max(1, sel.tick - sel.rangeN)} 轮 · 共 ${older.hit} 行（展开看）`, older.rows, false)}`;
+    // ── 账目层（细案 §3.1）：四个子组（走一步 / 了结 / 起因 / 结清）──
+    const bookLayer = `
+${chroniclePagerHtml(sel.books, 'book')}
+${sel.bookGroups.map((bg) => chronicleGroupHtml(bg.key, bg.label, `共 ${bg.hit} 行`, bg.rows, false)).join('\n')}`;
+    // 层显示：`layer` 是"只看"（chips）管的——被筛掉的层整块不出现（★判据按"不出现 details.sw2-ch-group"咬）
+    const showEvent = v.layer !== 'book';
+    const showBook = v.layer !== 'event';
+    const volumes = oldVolumes.map((vol) => `<div class="sw2-cold-row"><span class="sw2-vol">${escapeHtml(vol.id)}</span>`
+        + `<span class="sw2-volinfo">${escapeHtml(vol.info)}</span><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(vol.id)}">阅卷</span></div>`);
     const volBlock = volumes.length
         ? `<div class="sw2-cold"><h4>旧卷（早于大事纪的编年原文 · 按需阅卷）</h4>${volumes.join('')}</div>` : '';
     return `<div class="sw2-col-head">编年 · 史卷</div>`
-        + `<div class="sw2-ch-filter">${chips}${legacyNote}</div>`
-        + `<div class="sw2-chronicle">${rows.join('')}${notes.join('')}</div>${volBlock}`;
+        + renderChronicleToolbar(world, v)
+        + `<div class="sw2-chronicle">`
+        + (showEvent ? `<div class="sw2-ch-layer" data-layer="event">${eventLayer}</div>` : '')
+        + (showBook ? `<div class="sw2-ch-layer" data-layer="book">${bookLayer}</div>` : '')
+        + notes.join('')
+        + (showEvent || showBook ? '' : '<div class="sw2-ch-empty">眼下这一类是空的。</div>')
+        + `</div>${volBlock}`;
 }
 
 // ============ 大事纪·旧卷页 ============
@@ -1328,7 +1622,7 @@ export function renderSnapshotsHtml(world, { config = {} } = {}) {
 export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {}) {
     return {
         board: renderBoardHtml(world),
-        chronicle: renderChronicleHtml(world, { oldVolumes, filter: view.chronicleFilter ?? null }),
+        chronicle: renderChronicleHtml(world, { oldVolumes, view: view.chronicleView ?? null }),
         archive: renderArchiveHtml(world, { oldVolumes }),
         // ★leg49：实体页视图态随 `view.entsView` 透传（与 `view.chronicleFilter` 同款）——
         //   工具条的搜索/筛选/排序/翻页都落在这一个对象上（接线层只存状态，选数据住本层纯函数）。
