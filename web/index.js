@@ -67,7 +67,10 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 //     ·「不要在参数界面出现」）⇒ CSS 同步升位。
 //   这一棒的现场是**真浏览器 + 真面板代码**跑出来的（见 docs/session-handoff-2026-09-16-leg48.md §2）：
 //   写入一直是好的，坏的是"读"——面板按**另一个桶/滞后一拍的镜像**把玩家选的值盖了回去。
-const CSS_VERSION = '20260916-leg48b-params-page-clean';
+// ★leg49（细案 spec-entities-page-ia）同步升位：实体页版式整套换了（三列 + 工具条 + 分组 + 分页），
+//   `web/style.css` 里的规则增删一起走 ⇒ CSS 版本号必须跟着升，否则浏览器缓存旧样式
+//   （"页面是新代码、样式是旧的"正是这一串要治的病）。与 `PANEL_BUILD` 同批。
+const CSS_VERSION = '20260916-leg49-entities-three-cols';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -2978,11 +2981,14 @@ if (typeof window !== 'undefined') {
         sw2EntsView.page = 1;
         refreshSections(['entities']);
     };
-    // ★分组那一档（`grp`）本任务**不渲染钮**（用户拍板：分组钮连同分组渲染一起去 Task 5），
-    //   处理器先在这里落位：Task 5 补上三枚钮时即插即用（"画了按钮就必须有人接"这条审计已经在咬）。
+    // ★分组那一档（`grp`）：控件与分组渲染在 Task 5 同批落地（用户拍板"中途不许有死控件"）。
+    //   ★`page = 1` 复位与三个兄弟动作一致（Task 4 评审判定它当时零可观察行为、约定本笔补）：
+    //     换了分组口径 ⇒ 命中集合的**切法与顺序都变**，停在第 3 页会落在另一批组上
+    //     （与"换筛选/换搜索词必回第一页"同一条道理，否则玩家以为点了没反应）。
     bus['ents-group'] = (payload) => {
         const v = String(payload?.value || 'none');
         if (['none', 'parent', 'loc', 'kind'].includes(v)) sw2EntsView.grp = v;
+        sw2EntsView.page = 1;
         refreshSections(['entities']);
     };
     bus['ents-page'] = (payload) => {

@@ -441,12 +441,13 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         for (const act of ['ents-filter', 'ents-sort', 'ents-page']) {
             assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
         }
-        // ★分组动作 `ents-group` 在 Task 4 时**还没有任何控件产生它**（分组钮连同分组渲染一起去 Task 5）
-        //   ⇒ 它的处理器**应该已经注册好**（`web/index.js` 四个动作是一起加的），但产物里搜不到这个名字。
-        //   两条断言一起锁，把"处理器已备好"与"控件还没上"这两件事**分开说实话**
-        //   （等 Task 5 加上控件后，前一条仍成立、后一条按 Task 5 计划自行翻转）。
+        // ★分组动作 `ents-group`：Task 5 起**控件已点亮**（分组钮连同分组渲染同批落地）——
+        //   这一段两条断言一起锁：处理器真实注册 + 产物里真的有控件产生它。
+        //   ★Task 4 时这里写的是反向断言（`!actions.includes('ents-group')`，"此刻产物里不该有分组控件"），
+        //     那是**刻意自失效**的临时锁；本笔点亮控件时按计划同一笔翻转（与 `web/index.js` 的
+        //     `page = 1` 复位一起，见 Task 5 报告）。
         assert.ok(handlers.has('ents-group'), '★分组动作的处理器已备好（Task 5 才点亮控件）');
-        assert.ok(!actions.includes('ents-group'), '★此刻产物里不该有分组控件（中途不交付死控件）');
+        assert.ok(actions.includes('ents-group'), '★分组控件已点亮（Task 5 与分组渲染同批）');
     } finally {
         if (savedW === undefined) delete globalThis.window; else globalThis.window = savedW;
         if (savedD === undefined) delete globalThis.document; else globalThis.document = savedD;

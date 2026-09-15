@@ -125,7 +125,12 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   **参数页的自检卡现在多两行**——`写入审计`（每一次写真源的留痕：谁写的 · 写后有哪些键 · 丢过谁 · 调用栈）
 //   与 `撤销步数`。构建号换新串的理由（照 leg29 立的规矩）：**玩家可见面真的变了**，而且这一串
 //   本身就是"页面是不是新代码"的凭证（前七轮反复栽在这上面）。CSS 同步升位：自检卡又多两行版式。
-export const PANEL_BUILD = 'leg48b-params-page-clean';
+// ★leg49（细案 spec-entities-page-ia）升位：**玩家可见面真的变了**——「角色与势力」页从
+//   621 张等价卡平铺（真账实测 170319px 高、626 枚按钮、0 个搜索）改成三列 + 工具条 + 分组 + 分页。
+//   这一串本身就是"页面是不是新代码"的凭证（前七轮反复栽在浏览器缓存上）⇒ 版位必须跟着走。
+//   ★禁词纪律：本串不含 agenda/tick/ssot/schema（玩家视线内的字符串不许露引擎术语，判据在
+//   `test/render.test.js` 的"版位升位且不含引擎术语"那条里锁着）。
+export const PANEL_BUILD = 'leg49-entities-three-cols';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -745,12 +750,15 @@ export function renderEntsToolbar(world, view, config = null) {
         + `每行的<b>查</b>=只补没定的栏（已查到的原话不动）。</div></details>`;
     return `<div class="sw2-ents-tools">`
         + `<div class="sw2-ents-tools-row">`
-        + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
+        + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" aria-label="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
         + kinds.map(([k, label, n]) => chip('ents-filter', k, label, v.kind === k, n)).join('')
         + chip('ents-filter', 'busy', '只看在办', filters.has('busy'), c.busy)
         + chip('ents-filter', 'recent', '最近动过的', filters.has('recent'), c.recent)
         + chip('ents-filter', 'named', '有归属的', filters.has('named'), c.named)
         + chip('ents-filter', 'orphan', '无归属的', filters.has('orphan'), c.orphan)
+        + `<span class="sw2-ents-grp">分组</span>`
+        + [['none', '不分组'], ['parent', '按归属'], ['loc', '按位置'], ['kind', '按类别']]
+            .map(([g, label]) => chip('ents-group', g, label, v.grp === g)).join('')
         + `</div>`
         + `<div class="sw2-ents-tools-row">`
         + `<span class="sw2-ents-grp">排序</span>`
@@ -887,11 +895,39 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
     //   （`renderEntsToolbar` 的第三个形参就是这里的 `config`：进度只由它进渲染层）。
     const empty = page.hit === 0
         ? '<div class="sw2-ents-empty">没有命中的名号——清掉筛选项或换个词试试。</div>' : '';
+    // 分组（细案 §3.2）：把同一批行按归属/位置/类别切开，组头带真数（details 折叠）
+    //   ★只有**本页那 60 行**参与分组（`page.rows` 与 `rows` 同序同长 ⇒ 按下标配对），
+    //     不是全册分组——全册分组要么把组切碎（每组跨页），要么得改分页语义（超出本笔范围）。
+    //   ★不分组时走上面那条分支，产物与 Task 4 逐字节一致（"不分组时零变化"）。
+    let body;
+    if ((view?.grp ?? 'none') === 'none') {
+        body = `<div class="sw2-entity-list">${rows.join('')}</div>`;
+    } else {
+        const keyOf = {
+            parent: (e) => e.parent || '（无归属）',
+            loc: (e) => (e.location && e.location !== '未明') ? e.location : '（位置未载）',
+            kind: (e) => LABELS.kind[e.kind] || e.kind,
+        }[view.grp];
+        const groups = new Map();
+        page.rows.forEach((e, i) => {
+            const k = keyOf(e);
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k).push(rows[i]);
+        });
+        const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+        body = sorted.map(([k, list]) =>
+            `<details class="sw2-ents-grp-block" open><summary><span class="sw2-ents-grp-t">${escapeHtml(k)}</span>`
+            + `<span class="sw2-ents-grp-c">${list.length} 位</span></summary>`
+            + `<div class="sw2-entity-list">${list.join('')}</div></details>`).join('');
+    }
+    // ★同一事实不说两遍（Task 3 评审 Minor ①）：分页器已经说了「命中多少」⇒ 表头这句只说
+    //   **筛掉了多少**（两个数各说一件事），且只在筛选态出现；不筛选时零出现。
+    const dropped = page.total - page.hit;
     return `<div class="sw2-list-head">全部角色与势力（全册 ${page.total} · 本轮镜头 ${lens.size}）`
-        + (page.hit !== page.total ? `<small class="sw2-quiet-note">命中 ${page.hit}</small>` : '')
+        + (page.hit !== page.total ? `<small class="sw2-quiet-note">筛掉 ${dropped}</small>` : '')
         + `<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
         + renderEntsToolbar(world, view, config)
-        + `<div class="sw2-entity-list">${rows.join('')}</div>`
+        + body
         + empty
         + renderEntsPager(page);
 }
