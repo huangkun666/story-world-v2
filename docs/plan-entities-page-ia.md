@@ -793,6 +793,13 @@ git commit -m "细案实体页 4/5：接线——一份视图状态 + 只重画�
 
 - [ ] **Step 1: 写失败用例（分组结构 + 构建号 + 禁词）**
 
+★★ **本步必须同时翻转一条 Task 4 留下的"自失效断言"**（Task 4 评审判定：它是刻意自失效的，
+Task 5 点亮分组控件时**必须同一笔改掉**，否则中途全量会红）：
+`test/lookup-batch.test.js:449` 现写着 `assert.ok(!actions.includes('ents-group'), '★此刻产物里不该有分组控件')`
+⇒ 本笔把它**改成正向**：`assert.ok(actions.includes('ents-group'), '★分组控件已点亮（Task 5 与分组渲染同批）')`。
+★同时确认 `web/index.js` 的 `bus['ents-group']` 已补上 `sw2EntsView.page = 1;`（Task 4 评审判定它当时零可观察行为，
+约定在本笔补——**先 grep 确认，缺了就补**）。
+
 ```js
 test('★细案实体页：分组——按归属/位置/类别切成可展开的组，组头带真数', () => {
     const w = world();
