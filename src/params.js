@@ -109,10 +109,31 @@ export function paramsOf(world) {
 // ★★leg41：`envOverride` = **参数真源**（插件配置区那一份）。传了就以它为准，不传才读世界账的镜像。
 //   为什么必须支持它：真源与镜像之间**永远存在一个短暂窗口**（镜像要等一次写账），
 //   面板若画镜像，玩家就会在这个窗口里看到旧值——那正是"改了就回默认"的观感来源。
+// ★★★leg52（**逐键覆盖，不是整份替换** —— 旧实现写错了，判据当场抓红，留档）：
+//   旧实现是 `const cur = envOverride ?? paramsOf(world)`（**整份替换**）⇒ 只要真源里出现
+//   **因变量**（`民生度`/`动乱度`），那一格就会被真源覆盖，**把世界刚写下的结果顶掉**。
+//   而 `param-store.js` 明写：**因变量永远不归真源管辖**（`isPlayerInputKey` 把它们排除在外），
+//   理由是"一次载入接纳就会把引擎刚写的世界结果钉成玩家输入、反压世界的新值"。
+//   ⇒ 定稿：**逐键覆盖 + 只认"归真源管辖"的键**——真源仍然优先（leg41 的口径一字未变），
+//     但两头都堵住：①真源里**没有**的键照旧读账；②真源里**混进来的因变量一律不采纳**
+//     （判据：`PARAM_NATURE[k] !== 'independent'` 就丢掉那个键）。
+//   ★为什么 leg52 之前咬不到：`render.js` 传进来的 `paramEnv` 已经过 `isPlayerInputKey` 过滤，
+//     所以这个洞被上游挡住了；本棒把过滤**同时**下沉到本层 ⇒ 两处一致是**一道锁**，不是一个补丁。
+//   ★为什么不 import `param-store.js`：本模块是**叶子**（只导出常量与纯函数），
+//     import 一个带状态语义的模块会把这层关系倒过来；判据用 `PARAM_NATURE` 就够，且它是**唯一真源**。
 export const PARAM_ROWS = (world, envOverride = null) => {
-    const cur = envOverride && typeof envOverride === 'object' ? envOverride : paramsOf(world);
+    const fromWorld = paramsOf(world);
+    const over = {};
+    if (envOverride && typeof envOverride === 'object') {
+        for (const [k, v] of Object.entries(envOverride)) {
+            if (!PARAM_KEYS.includes(k)) continue;                  // 不是参数键：不认
+            if (PARAM_NATURE[k] !== 'independent') continue;        // ★因变量：真源无权管辖，一律丢
+            over[k] = v;
+        }
+    }
+    const src = { ...fromWorld, ...over };
     return PARAM_KEYS.map((k) => {
-        const v = normalizeParam(k, cur?.[k]);
+        const v = normalizeParam(k, src[k]);
         return { key: k, value: v || PARAM_UNSET, options: PARAM_GEARS[k], nature: PARAM_NATURE[k] };
     });
 };

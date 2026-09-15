@@ -85,7 +85,10 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 //     （用户验收第①步会照着念这一串，所以它必须能对上本笔）。
 //   ★起名前先过禁词扫描——`leg50-layered-chronicle-tools` 与 `leg50-chronicle-layers` **都被扫出 `chronicle`**
 //     （leg49 §4① 的同一颗雷，那一条踩过两次）⇒ 定稿 `leg50-story-and-ledger`（零禁词）。
-const CSS_VERSION = '20260917-leg50-story-and-ledger';
+// ★★leg52 同批升位：参数页版式与观棋信息带**真的变了**（四键并卡 + 推进卡撤走 + 撤销卡上移 +
+//   长说明折进 `<details>` + 浪尖去重）⇒ `style.css` 增了 `.sw2-fold` 一族规则，CSS 版本号必须跟着升。
+//   ★同一条禁词纪律：`leg52-params-and-tide` 里零引擎术语（params/tide 是玩家词面的英文）。
+const CSS_VERSION = '20260917-leg52-params-and-tide';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 

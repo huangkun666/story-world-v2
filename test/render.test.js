@@ -16,6 +16,8 @@ import {
 } from '../src/render.js';
 import { AGENDA_CAPS } from '../src/settle.js';
 import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS } from '../src/limits.js';
+// ★leg52：面板的档位白名单＝参数表那两张表本身（从**真源**取，不抄字面量——否则面板造得出引擎不认的值）
+import { PARAM_GEARS } from '../src/params.js';
 import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -44,24 +46,54 @@ test('leg26 c：参数页——值不重复、因变量不给旋钮、自变量�
     // ★leg40c 续：原判据按 `data-param="<键>"` 定位——那张**卡片壳**上现在**刻意不再挂 data-param**
     //   （壳上挂它，事件 target 落在壳里时 `closest` 会抓到壳这个 div、`.value` 读成 undefined
     //   ⇒ 提交"未定"、玩家点的档位被丢掉——正是用户那条「点了还是改不了值」）。
-    //   故改按**性质标记**定位（`因变量`/`自变量` 标记只在对应那一处出现），判据内容不变。
+    // ★★leg52（**口径升级**·用户令「四键合并成一栏」）：四键从此**同住一张卡**（`sw2-atmo-card`）
+    //   ⇒ 旧判据"往回取到卡片开头"失效（往回退会退到**同一个**卡头，两个自变量两个因变量都命中它）。
+    //   ⇒ 定位改按**行**：每一行都有 `data-param-cell="<键>"`（leg46 续·五挂的那一格，**不是新加的钩子**）
+    //     —— 用 `data-param-cell` 而非 `data-param`，是因为判据 ④ 明令 `data-param` 只许控件挂。
+    //   ★判据的**实质一字未变**：因变量给不给旋钮、自变量给不给旋钮（"两行同卡"不影响这条区分）。
+    //   ★定位口径（**前后踩过两次，写死防重犯**）：
+    //     ① 不能用"往前找上一个 `<div class="sw2-row`"——自变量那一行**有两格**（`当前`/`设定为`）
+    //        ⇒ 从第一格往前找会退到**上一个参数的行头**；
+    //     ② 也不能用"先往前找 `data-param-cell=` 再回退到行头"——**同一个键的两格挂着同一个
+    //        `data-param-cell="<键>"`** ⇒ 第一次命中在 767、往前一找命中 767 自己、回退到的是**天时那行**，
+    //        于是"张力推手"被判成"没有 select"。
+    //     ⇒ 定稿（**三次踩坑才收口，别改回去**）：
+    //       ① 起点必须用 `lastIndexOf`，锚是**带键名的完整属性串** `data-param-cell="<键>"`
+    //          —— 用 `indexOf('<div class="sw2-row', cell)`（**向后**找）会落到**下一个参数的行头**：
+    //            实测「民生度」切出的是「乱象」那一行（假绿），而「动乱度」行头在 `cell` **之前**
+    //            ⇒ 向后找不到 ⇒ 切出空串（假红）；
+    //       ② 锚带键名，`lastIndexOf('data-param-cell=')` 那个更宽的锚才害人（同一键两格会自命中）；
+    //       ③ 自变量那一行**跨两格**（`当前` + `设定为`），故整段找 select，不切到下一个行头。
+    const atmoSeg = html.slice(html.indexOf('sw2-atmo-card'), html.indexOf('data-action="param-undo"'));
+    assert.ok(atmoSeg.length > 0, '四键那一卡的片段应当取得到（锚：sw2-atmo-card → 撤销按钮）');
     for (const key of ['民生度', '动乱度']) {
-        const at = html.indexOf('因变量');
-        const row = html.slice(Math.max(0, at - 400), at + 200);
-        assert.ok(!row.includes('<select'), `★因变量「${key}」被做成了旋钮（它只该呈现）`);
-        assert.ok(row.includes('因变量'), `因变量「${key}」要标明性质`);
+        // 因变量是**单行自足**的行（名称/值/依据三段同在一个 `sw2-row` 里）⇒ 取第一行
+        const oneRow = paramRowSeg(atmoSeg, key, { firstRowOnly: true });
+        assert.ok(oneRow, `因变量「${key}」应当有一行`);
+        assert.ok(!oneRow.includes('<select'), `★因变量「${key}」被做成了旋钮（它只该呈现）`);
+        assert.ok(oneRow.includes('因变量'), `因变量「${key}」要标明性质`);
     }
     // ③ 自变量（天时/外压）给旋钮
-    //    定位口径：`data-param` 挂在 `<select>` 上，而"自变量"标记在**同一张卡的标题**里
-    //    （标题在 select **之前**）⇒ 往回取到卡片开头，再截到下一张卡。
+    //    ★leg52：同上改在**四键那一卡**的片段里定位（旧法"往回取到卡片开头"在四键同卡之后已无区分力）；
+    //      "自变量"那个小标改由**卡头与卡内折叠**承担（同一张卡里 4 行，逐行标"自变量/因变量"
+    //      是把同一件事说四遍）⇒ 断言改成"它必须真有一个带 `data-param` 的 `<select>`"。
     for (const key of ['天时', '张力推手']) {
-        const at = html.indexOf(`data-param="${key}"`);
-        assert.ok(at > 0, `自变量「${key}」应有一个带 data-param 的控件`);
-        const cardStart = html.lastIndexOf('<div class="sw2-set-card', at);
-        const seg = html.slice(cardStart, at + 900);
-        assert.ok(seg.includes('<select'), `自变量「${key}」必须有旋钮`);
-        assert.ok(seg.includes('自变量'), `自变量「${key}」要标明性质`);
+        const row = paramRowSeg(atmoSeg, key);
+        assert.ok(row, `自变量「${key}」应当有一行`);
+        assert.ok(row.includes(`data-param="${key}"`) && row.includes('<select'),
+            `自变量「${key}」必须有旋钮`);
     }
+    // ③b ★leg52：**四键同卡**（旧版是四张独立的卡）——并把"合并 ≠ 混为一谈"锁住。
+    //   ★断言口径（**自己踩过一次**）：不许拿键名 `民生度/张力推手` 去找卡片正文——面板一律走
+    //     `LABELS.env`（民生/乱象/时局），`民生度` 只出现在**属性**里；要锁的是"卡里真把两种性质
+    //     分开说清了"，所以直接锁**那句人话本身**（它同时是"玩家读得到"的证明）。
+    assert.equal((html.match(/sw2-atmo-card/g) || []).length, 1, '★四键应合并成**一张**「世界气氛与条件」卡');
+    assert.ok(html.includes('世界气氛与条件'), '合并后的卡要有名字');
+    const atmoCardHtml = html.slice(html.indexOf('sw2-atmo-card'), html.indexOf('</details>', html.indexOf('sw2-atmo-card')));
+    assert.ok(/天时 \/ 时局[\s\S]{0,120}你定的条件/.test(atmoCardHtml),
+        '★卡内须写明"天时/时局 = 你定的条件"（合并 ≠ 混为一谈）');
+    assert.ok(/民生 \/ 乱象[\s\S]{0,120}只读/.test(atmoCardHtml),
+        '★卡内须写明"民生/乱象 = 结果，只读"（合并后仍要把两种性质分开说清）');
     // ④ ★leg40c 续：**控件之外的元素一律不许挂 `data-param`**
     //   （挂了就会在事件委托里"抢答"，把 undefined 当值提交——这条病刚在用户实机上出过一次）
     for (const m of html.matchAll(/<(\w+)([^>]*data-param="[^"]+"[^>]*)>/g)) {
@@ -316,6 +348,24 @@ test('K33/A-2：同输入两次 renderAll 逐字节一致（纯函数锁）；�
 });
 
 const textOnly = (html) => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+// ★★leg52：**参数行的定位助手**（三条锁共用一份实现 —— 本仓"同一口径不许两处实现"）。
+//   三处踩坑换来的口径，写死在这里，别在调用点各写一遍：
+//     ① 锚必须是**带键名的完整属性串** `data-param-cell="<键>"`（宽锚 `data-param-cell=` 会自命中）；
+//     ② 行头必须用 `lastIndexOf`（向后 `indexOf` 会落到**下一个参数的行头**：
+//        「民生度」会切出「乱象」那一行 = 假绿，而「动乱度」的行头在锚之前 ⇒ 切出空串 = 假红）；
+//     ③ 自变量那一行**跨两格**（`当前` + `设定为`，两格都挂同一个键）⇒ 不可切到"下一个行头"，
+//        只有因变量那种**单行自足**的行才可以切。
+export const paramRowSeg = (htmlSrc, key, { firstRowOnly = false } = {}) => {
+    const anchor = `data-param-cell="${key}"`;
+    const cell = String(htmlSrc).indexOf(anchor);
+    if (cell < 0) return '';
+    const start = String(htmlSrc).lastIndexOf('<div class="sw2-row', cell);
+    if (start < 0) return '';
+    const rest = String(htmlSrc).slice(start);
+    if (!firstRowOnly) return rest;
+    const next = rest.indexOf('<div class="sw2-row', 1);
+    return next < 0 ? rest : rest.slice(0, next);
+};
 function deepStrings(o, acc = []) {
     if (typeof o === 'string') acc.push(o);
     else if (Array.isArray(o)) for (const v of o) deepStrings(v, acc);
@@ -746,7 +796,12 @@ test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指�
     assert.match(html, /太岁陨落北山/);
     assert.match(html, /已冻结/);
     assert.match(html, /data-action="clear-evolution"/);
-    assert.match(html, /浪尖（派生源）/);
+    // ★★leg52（BLACKLIST 漏网 + 同一概念同一说法）：旧文案是 `浪尖（派生源）：…`——
+    //   **「派生源」是引擎术语**，而它**不在 `BLACKLIST` 数组里**（只有英文 derivedFrom），
+    //   所以"玩家可见文本零禁词"那几条全局扫描扫了十几棒都没咬住它。
+    //   ①措辞改成玩家话，与观棋信息带那一栏**同一口径**；②数组补上 `派生源`（见文件末尾 leg52 新锁）。
+    assert.match(html, /浪尖 · 刚收尾的大动作：/);
+    assert.ok(!html.includes('派生源'), '★设定页不许再出现「派生源」（引擎术语，本棒补进黑名单并改口径）');
     // 未抽取态
     const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
     const bareHtml = renderSettingHtml(bare);
@@ -856,7 +911,24 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
     assert.ok(infoband.includes('sw2-band-label">张力 · 结构性三件套'), '张力行独立成行');
     assert.ok(!infoband.includes('大势 · 结构性张力'), '旧标签（大势顶张力名）废除');
     assert.ok(infoband.includes('大势未聚（无主张力）。'), '无世情时大势行=未聚（不拼张力）');
-    assert.ok(infoband.includes('浪尖：血洗洛城'), '浪尖入大势句（目标名不露 id）');
+    // ★★leg52（用户令「**大势就放大势，浪尖就放浪尖**」）：浪尖从大势行**撤走**，只留独立那一栏。
+    //   旧断言是 `infoband.includes('浪尖：血洗洛城')`（浪尖入大势句）——那条**正是本棒要治的病**：
+    //   同一屏里 `derivedFrom` 画了两遍（大势行末尾 slice(0,2) + 独立栏 map 全部），
+    //   信息带可见字符只有 280，两处合计约占**四分之一**。
+    //   ⇒ 新判据（照 R2「同一事实不许说两遍」写成**可机械核**的形状）：
+    //     ① 浪尖的事实**出现**（在独立栏里，目标名不露 id）；
+    //     ② 大势行那一段里**不许再有浪尖**（"只放大势"）；
+    //     ③ 整个信息带里「浪尖」这个标签**恰好一次**（不是 0 次，也不是 2 次）。
+    const trendSeg = infoband.slice(
+        infoband.indexOf('sw2-band-label">大势'),
+        infoband.indexOf('sw2-band-label">张力'),
+    );
+    assert.ok(!trendSeg.includes('浪尖'), '★大势行只放大势——浪尖不许再挤进这一行');
+    assert.ok(trendSeg.includes('大势未聚（无主张力）。'), '★大势行留的是它自己那一个事实');
+    assert.ok(infoband.includes('浪尖 · 刚收尾的大动作'), '浪尖留在它自己那一栏（分组标题在位）');
+    assert.ok(infoband.includes('血洗洛城'), '浪尖的事实照旧上板（目标名不露 id）');
+    const tideLabelCount = (infoband.match(/浪尖/g) || []).length;
+    assert.equal(tideLabelCount, 1, `★同一屏里「浪尖」只许出现一次（实测 ${tideLabelCount} 次）`);
     // leg25 b（A1b）：张力行不再写「烈度带词 + 百分比」——那个 % 实测只反映事件密度（rival 腿恒为满值），
     //   带词会暗示"引擎判断了天下张力"。改为直说可验证的事实：近 N 轮事件几件。
     assert.ok(!infoband.includes('烈度'), '张力行不再用「烈度」带词（它暗示引擎判断了张力）');
@@ -1463,7 +1535,10 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     // ★leg50 换档（细案 spec-chronicle-page-ia）：玩家可见面真变了 ⇒ 构建号升位。
     //   ★起名先过禁词扫描——`leg50-layered-chronicle-tools` / `leg50-chronicle-layers` 都被扫出 `chronicle`
     //     （leg49 §4① 的同一颗雷，那条踩过两次）⇒ 定稿 `leg50-story-and-ledger`。
-    assert.equal(PANEL_BUILD, 'leg50-story-and-ledger');
+    // ★★leg52 换档（本棒）：参数页版式 + 观棋信息带**真的变了**（四键并卡 / 推进卡撤走 / 撤销卡上移 /
+    //   长说明折进 `<details>` / 浪尖去重 / 设定页与信息带改读真源）⇒ 构建号跟着升位。
+    //   ★同一条起名纪律：`leg52-params-and-tide` 里零引擎术语（下面那个循环就是扫描器）。
+    assert.equal(PANEL_BUILD, 'leg52-params-and-tide');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -1682,3 +1757,231 @@ test('★终审 M6：工具条那几个类——生产者与声明对齐（补�
         assert.match(css, new RegExp(`(^|\\n)\\.${cls}(?![\\w-])[^{\\n]*\\{`), `★${cls} 必须有自带声明`);
     }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ★★★ leg52（用户令「参数页 + 观棋页的待改项」+ 两条追加裁示）：本棒的六条新锁。
+//   口径来源：`docs/session-handoff-2026-09-17-leg51.md` §2/§3/§4（Task 1/3/4）+ 用户当场拍板：
+//     · 「保留天时/时局的下拉，只折叠说明文字并合并成一栏」
+//     · 「大势就放大势，浪尖就放浪尖」
+//     · 范围 = Task 1 + 说明文折叠 + 两把尺子对齐 + 派生源漏网
+//   一律**追加在文件末尾**（照本文件既有纪律：上面的行号不因本笔漂移）。
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+test('★★leg52·A：**参数页撤「推进」卡**（它是动作不是输入）——但入口一个都不许丢', () => {
+    // 病（leg51 §2.1）：`data-action="advance-world"` 在设置页也有一枚 ⇒ 参数页那枚是**重复入口**；
+    //   而 leg40b 当年把它挪过来的理由「这一页就是你对世界的输入」是错的——**推进一轮不写任何档位**。
+    //   用户令「推进和撤销不应该放到参数页吧」⇒ 拍板「推进撤、撤销留并上移」。
+    const w = world();
+    const params = renderParamsHtml(w, { config: {} });
+    const settings = renderSettingsHtml(w, { config: CONFIG });
+    assert.ok(!params.includes('data-action="advance-world"'), '★参数页不许再画「推进一轮」');
+    assert.ok(!params.includes('▶ 推进一轮'), '★参数页连那句话也不许留');
+    assert.ok(settings.includes('data-action="advance-world"'), '★★入口必须仍在设置页（撤一处 ≠ 撤入口）');
+    assert.ok(settings.includes('推进一轮'), '★设置页那枚的名字与状态栏提示同一口径');
+    // ★旧版那条判据的**实质**要保住：面板说"要推请按「推进一轮」"时，那枚按钮必须真的存在。
+    assert.ok(params.includes('「推进一轮」'), '关着总闸时那句指路仍要在（它在总闸卡的后果句里）');
+});
+
+test('★★leg52·B：**参数页撤「推进」卡 ≠ 删处理器**（接线那头一个字不许动）', () => {
+    // ★这是本棒最容易做错的一格：`test/lookup-batch.test.js` 与 `test/param-hub.test.js` 都有一条
+    //   "画了按钮就必须有人接"的全产物扫描，而 `advance-world` 是那张白名单里**唯一**的例外
+    //   （它走 `dispatchAction` 的 tick 队列特判，不走动作总线）。撤了页面上的按钮之后，
+    //   很容易顺手把 `web/index.js` 那个特判也删掉——**那会把设置页那枚变成死按钮**。
+    //   ⇒ 判据直接读源码，锁住"特判还在"（这是**唯一**能锁它的地方：动作总线上根本没有这个键）。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    assert.match(web, /action === 'advance-world'/, '★dispatchAction 里那个特判必须还在（否则设置页那枚变死按钮）');
+    assert.match(web, /sw2TickQueue\.advance\(\)/, '★特判必须真的调 tick 队列（不只是判了个名字）');
+});
+
+test('★★leg52·C：四键合并成一栏 —— **能力零损失**（天时/时局照旧能设、民生/乱象照旧只读）', () => {
+    // ★这是本棒对用户"有损决定先问"那条纪律的兑现：leg51 原案是"删下拉、降级成只读氛围标签"，
+    //   而用户裁示**保住下拉**。⇒ 判据要把"保住了什么"逐项点名，防下一棒又顺手降级。
+    const w = world();
+    const html = renderParamsHtml(w, { config: {} });
+    // ① 合并：四键同住一卡（数卡不数行——合并的是"卡"，不是"格"）
+    assert.equal((html.match(/sw2-atmo-card/g) || []).length, 1, '四键一张卡');
+    // ② **天时/时局仍是下拉**（每键一枚 `data-param` 的 select，且档位 = 白名单逐项）
+    for (const key of ['天时', '张力推手']) {
+        const anchor = `data-param="${key}"`;
+        const at = html.indexOf(anchor);
+        assert.ok(at > 0, `★「${key}」必须仍是可写参数（下拉）——删下拉＝玩家从此设不了它`);
+        const block = html.slice(html.lastIndexOf('<select', at), html.indexOf('</select>', at));
+        for (const g of PARAM_GEARS[key]) assert.ok(block.includes(`value="${g}"`), `「${key}」档位 ${g} 应在下拉里`);
+    }
+    // ③ **民生/乱象仍是只读行**（不许顺手给它们旋钮——那是 leg26 立的红线）
+    for (const key of ['民生度', '动乱度']) {
+        const row = paramRowSeg(html, key, { firstRowOnly: true });
+        assert.ok(row.includes('因变量') && !row.includes('<select'), `「${key}」必须仍是只读呈现`);
+    }
+    // ④ 四键之外**不多不少**：参数页上带 `data-param` 的可写档位 = 两个自变量 + 两个开关 + 四个上限
+    const writable = new Set([...html.matchAll(/data-param="([^"]+)"/g)].map((m) => m[1]));
+    for (const k of ['天时', '张力推手', 'autoAdvance', 'memoryEnabled', ...LIMIT_KEYS]) {
+        assert.ok(writable.has(k), `可写参数「${k}」不许在改版中丢掉`);
+    }
+    assert.ok(!writable.has('民生度') && !writable.has('动乱度'), '★因变量不许混进可写集合（PARAM_NATURE 红线）');
+});
+
+test('★★leg52·D：长说明折叠 —— **首句留在外面**、**后果句绝不折**、折叠壳看得见', () => {
+    // 病（leg51 §1）：说明文占参数页可见字符 **56.6%**（668/1180）；用户令「折叠」。
+    // ★三条口径（leg51 §4 Task 3 + §5 教训）：
+    //   ① **首句必须留在外面**（首句就是结论——leg51 自己的演示第一版把整段藏进去，玩家看不到结论）；
+    //   ② **后果话不折**（总闸那句"现在：插件静默…"是玩家最需要的一句）；
+    //   ③ 折叠壳**默认收起**，但"还有说明"这件事必须**看得见**（`<summary>` 不是隐形触发区）。
+    const off = world({ env: { autoAdvance: '0' } });
+    const html = renderParamsHtml(off, { config: {} });
+    // ① 有折叠壳，且默认是收起的（`<details>` 不写 `open`）
+    const folds = [...html.matchAll(/<details class="sw2-fold">([\s\S]*?)<\/details>/g)];
+    assert.ok(folds.length >= 2, `参数页应有若干折叠说明（实测 ${folds.length} 个）`);
+    assert.ok(!/<details class="sw2-fold" open/.test(html), '★折叠默认收起（要玩家自己展开）');
+    // ② 每个折叠壳都有**看得见的**招牌
+    for (const f of folds) assert.match(f[1], /<summary>[^<]+<\/summary>/, '★每个 `<details>` 都要有非空 `<summary>`');
+    // ③ 结论留外：卡片首句与开关后果句都在**折叠之外**
+    const outsideFolds = html.replace(/<details class="sw2-fold">[\s\S]*?<\/details>/g, '');
+    assert.ok(outsideFolds.includes('这一栏是<b>世界的样子</b>，不是世界的开关。'),
+        '★首句（结论）必须留在折叠外面');
+    assert.ok(outsideFolds.includes('插件静默'), '★★后果句（关掉总闸会怎样）绝不许折进去');
+    assert.ok(outsideFolds.includes('构建 <b>'), '★构建号不折（折起来＝排障时等于没有）');
+    // ④ 折进去的确实是"长说明"，不是把该留的也折了
+    assert.ok(!outsideFolds.includes('这四格分别是什么'), '折叠的招牌自己不该出现在外面');
+});
+
+test('★★leg52·E：**"一个数两把尺子"收口** —— 参数页 / 设定页 / 观棋信息带读**同一本源**', () => {
+    // ★★真账现场读数（本棒实测出来的**这条交接没看见的**真缺陷）：
+    //   真源 `extension_settings.story_world_v2_params` = { 天时:'大灾', 每轮递线:'9', … }
+    //   镜像 `dynamic.env`                                = { 动乱度:'动荡', autoAdvance:'0', … }（**没有天时**）
+    //   ⇒ 同一时刻：参数页画「天时 大灾」（读真源）· 设定页画「天时 未定」· 信息带画「天时 未定」（读镜像）。
+    //   `param-hub.js` 的口径是「**"这一格该显示什么值"只在 `displayEnv` 一处裁决**」，
+    //   而 leg48 只治好了**参数页**这一个面 ⇒ 本棒把另两个面拉齐。
+    const base = world();
+    const mirrorOnly = structuredClone(base);
+    // ★哨兵值的选法（**这条锁的全部技术含量**，第一版错了三回，逐条留档）：
+    //   ① 夹具的 `env` 里本来就有 `天时:'大灾'` ⇒ 必须**先摘掉**，否则"读真源"与"读账"结果一样，
+    //      这条锁会**两边都绿**；
+    //   ② `大灾` 不能直接当哨兵：它出现在「世界尺度」的**档位说明文**里（面板正常就会画出来）；
+    //   ③ **任何档位词都不能当"天时"的哨兵**——`<option>` 里的档位文本也是渲染产物
+    //      （实测 `风调雨顺` 在基线上就命中，因为它是天时下拉的第四个选项）。
+    //   ⇒ 定稿：哨兵只从**四个尺度上限的数字**里取（数字档位里"没被选中的那一档"面板不画成文本）
+    //     —— `每轮递线 = 9`：出厂默认是 3，`9` 只在真源里出现。
+    delete mirrorOnly.context.setting.dynamic.env['天时'];
+    mirrorOnly.context.setting.dynamic.env['动乱度'] = '动荡';
+    const SENTINEL_LIMIT = '9';                    // 每轮递线：出厂默认 3 ⇒ `9` 只在真源里
+    const limitCell = (html) => {
+        const at = html.indexOf('data-param-cell="每轮递线"');
+        return at < 0 ? '' : html.slice(at, html.indexOf('</b>', at));
+    };
+    assert.ok(!limitCell(renderParamsHtml(mirrorOnly, { config: {} })).includes(`>${SENTINEL_LIMIT}<`),
+        '前置：上限哨兵 `9` 不是基线值（否则这条锁两边都绿）');
+    const srcEnv = { 天时: '大灾', 每轮递线: SENTINEL_LIMIT };
+    const cfg = { paramEnv: srcEnv };
+
+    const p = renderParamsHtml(mirrorOnly, { config: cfg });
+    const s = renderSettingHtml(mirrorOnly, { config: cfg });
+    const band = renderInfoBandHtml(mirrorOnly, { config: cfg });
+    for (const [name, html] of [['参数页', p], ['设定页', s], ['观棋信息带', band]]) {
+        assert.ok(html.includes('大灾'), `★★${name} 必须读真源（真源里天时=大灾，镜像里根本没有天时）`);
+    }
+    assert.ok(p.includes(`data-param-cell="每轮递线">${SENTINEL_LIMIT}<`),
+        '★★参数页的四个上限也必须读真源（旧版这一栏单独漏掉过，判据在 leg41 抓红过一次）');
+    // 反向：**不给** paramEnv 时三个面一律退回读账（口径与 leg41 之前一致，行为不许变）。
+    //   ★口径（第三版才定稿）：**不能用"某个档位词一次都不出现"当判据**——
+    //     参数页的天时下拉把 **`大灾` 当 `<option>` 画出来了**（档位清单一律上板），
+    //     所以"未给真源时 textOnly 里没有大灾"这条**永远不成立**（我自己写了三版才看穿）。
+    //   ⇒ 改成**增量判据**：给了真源 ⇒ 该值多出现**恰好一次**（那一格）；不给 ⇒ 一次都不多。
+    //     这个形状同时锁住了"真源确实被采纳"与"只被采纳一次"（不是把值又重复画一遍）。
+    const countIn = (html, needle) => (textOnly(html).match(new RegExp(needle, 'g')) || []).length;
+    const p0 = renderParamsHtml(mirrorOnly, { config: {} });
+    const s0 = renderSettingHtml(mirrorOnly, { config: {} });
+    const b0 = renderInfoBandHtml(mirrorOnly, { config: {} });
+    assert.equal(countIn(p, '大灾') - countIn(p0, '大灾'), 1,
+        '★参数页：给了真源 ⇒ 「大灾」恰好多画一次（那一格）；镜像里没有它');
+    assert.equal(countIn(s, '大灾') - countIn(s0, '大灾'), 1,
+        '★设定页：同上（旧版这一页读镜像 ⇒ 增量恒为 0，正是本棒要治的病）');
+    assert.equal(countIn(band, '大灾') - countIn(b0, '大灾'), 1,
+        '★观棋信息带：同上');
+    assert.equal(countIn(s0, '大灾'), 0, '设定页没给真源时不该凭空画出一个天时');
+    assert.equal(countIn(b0, '大灾'), 0, '信息带没给真源时不该凭空画出一个天时');
+    // ★**因变量不许被真源覆盖**（`param-store.js` 明写"真源永不管辖因变量"）：
+    //   真源里塞一个 `民生度` ⇒ 三个面都**不许**采纳它，仍照账呈现。
+    //   ★口径（第二版才定稿）：**不许按"字面量在不在"判**——`富足` 是民生度的合法档位，
+    //     而参数页的天时下拉会把**所有档位词**当 `<option>` 画出来（`富足` 恰好在其中）
+    //     ⇒ 第一版那条字面判据**结构性假红**。要判的是"**这一格采纳了没有**"，所以按格判。
+    const cellText = (html, key) => {
+        const at = html.indexOf(`data-param-cell="${key}"`);
+        if (at < 0) return '';
+        const gt = html.indexOf('>', at);
+        return html.slice(gt + 1, html.indexOf('</b>', gt));
+    };
+    const sneaky = { 民生度: '富足', 动乱度: '大乱' };
+    assert.equal(cellText(renderParamsHtml(mirrorOnly, { config: { paramEnv: sneaky } }), '民生度'), '艰难',
+        '★★参数页：真源里的因变量不许覆盖账上的值（民生度仍应是账上的「艰难」）');
+    assert.equal(cellText(renderParamsHtml(mirrorOnly, { config: { paramEnv: sneaky } }), '动乱度'), '动荡',
+        '★★参数页：同上（动乱度仍应是账上的「动荡」）');
+    for (const [name, html] of [
+        ['设定页', renderSettingHtml(mirrorOnly, { config: { paramEnv: sneaky } })],
+        ['观棋信息带', renderInfoBandHtml(mirrorOnly, { config: { paramEnv: sneaky } })],
+    ]) {
+        assert.ok(html.includes('艰难') && !html.includes('富足'),
+            `★★${name} 不许采纳真源里的因变量（那是世界的结果，真源无权管辖）`);
+    }
+    // 三个面必须**同源同值**：同一份输入下，"天时"那一格在三个面里画的是同一个词
+    assert.ok(textOnly(s).includes('大灾') && textOnly(band).includes('大灾'),
+        '★设定页与信息带同源同值（本棒要治的正是"同一时刻画三个值"）');
+    // `renderAll` 是接线层真正调的那一扇门 —— 它必须把 `config` 继续透传下去
+    const all = renderAll(mirrorOnly, { config: cfg });
+    assert.ok(all.setting.includes('大灾'), '★★renderAll 必须把 paramEnv 透传给设定页（leg52 前它没传）');
+    assert.ok(all.board.infoband.includes('大灾'), '★★renderAll 必须把 paramEnv 透传给信息带');
+});
+
+test('★★leg52·G：**接线面**——每一次 `renderAll` 都必须带上 `renderCfg()`（真源才不会半路丢掉）', () => {
+    // 为什么必须锁这一层（本棒的"应用层"判据，与 E 那条"渲染层"判据配对）：
+    //   E 证明"给了 `paramEnv` 三个面就同源"；但**给不给**由 `web/index.js` 决定——
+    //   只要有一处 `renderAll(world, {...})` 忘了 `config: renderCfg()`，那一处就会静默退回读镜像，
+    //   于是"设定页/信息带偶发画旧值"会以**间歇**的形状回来（最难查的那一类）。
+    //   `renderCfg()` 是**唯一**的配置路（leg27 后它撤掉了 `config` 形参，只留这一条），
+    //   而它自己**总是**注入 `paramHub.displayEnv(w)` ⇒ 判据只需保证两件事：
+    //     ① `renderCfg` 里 `paramEnv` 仍然来自 `displayEnv`（不是另写一处"没有就是空"）；
+    //     ② 全仓每一处 `renderAll(` 的 `config` 都**溯源到 `renderCfg()`**。
+    //   ★口径（第一版太死，自证抓红留档）：不许把 `config:` 写成**字面** `renderCfg()`——`set-param`
+    //     那一处走的是 `const cfgForRender = renderCfg(live.env ? { paramEnv: live.env } : {})`，
+    //     它是**更紧**的一条路（刚写完的真源当场进渲染），字面判据会把它误判成漏传。
+    //     ⇒ 判据改成"**同文件里那一行的 config 变量是从 renderCfg 来的**"（向前找 400 字内的赋值）。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const cfgAt = web.indexOf('function renderCfg(');
+    assert.ok(cfgAt > 0, '前置：找得到 renderCfg');
+    const cfgSeg = web.slice(cfgAt, web.indexOf('\n}', cfgAt));
+    assert.match(cfgSeg, /paramEnv:\s*paramHub\.displayEnv\(/,
+        '★`paramEnv` 必须来自 `paramHub.displayEnv`（值的裁决只许一处——leg41 的"下拉全空白"就是这么来的）');
+    // ② 每一处 renderAll 的 config 都要溯源到 renderCfg
+    const calls = [...web.matchAll(/renderAll\(/g)];
+    assert.ok(calls.length >= 2, `前置：接线层有多处 renderAll（实测 ${calls.length} 处）`);
+    for (const m of calls) {
+        const line = web.slice(0, m.index).split('\n').length;
+        const seg = web.slice(m.index, m.index + 400);
+        const direct = /config:\s*renderCfg\(/.test(seg);
+        // `config: <某个变量>` ⇒ 往前找那个变量的赋值是不是 renderCfg(...)
+        const named = /config:\s*([A-Za-z_$][\w$]*)/.exec(seg);
+        let viaVar = false;
+        if (named) {
+            const before = web.slice(0, m.index);
+            viaVar = new RegExp(`(const|let|var)\\s+${named[1]}\\s*=\\s*renderCfg\\(`).test(before);
+            // 也认形参（例如 `renderAll(world, { config })`，config 由上层转手）
+            if (!viaVar) viaVar = new RegExp(`[{,]\\s*config\\s*[,}]|\\bconfig\\s*[,)]`).test(seg);
+        }
+        assert.ok(direct || viaVar,
+            `★web/index.js 第 ${line} 行的 renderAll 没把 config 溯源到 renderCfg() ⇒ 那一路会退回读镜像`);
+    }
+});
+
+test('★★leg52·F：BLACKLIST 漏网「派生源」—— 注释里禁的字面量，数组里必须真有', () => {
+    // 病：`render.js:8` 的文件头注释从 leg26 起就写着"禁：…**派生源**…"，
+    //   而 `BLACKLIST` 数组里**只有英文 `derivedFrom`** ⇒ 设定页那句「浪尖（派生源）」印了十几棒
+    //   都没被咬住——因为判据只扫渲染产物，**数组里没有的字面量＝不存在**（守门是空绿）。
+    assert.ok(BLACKLIST.includes('派生源'), '★声明里禁的词，数组里必须真有（否则那条守门是空绿）');
+    const full = renderAll(world(), { config: CONFIG, oldVolumes: VOLUMES });
+    const text = deepStrings(full).map(textOnly).join('\n');
+    for (const term of BLACKLIST) assert.ok(!text.includes(term), `★含禁词「${term}」`);
+    // ★反向自证（防这条锁退化成空绿）：夹具里**真的**有浪尖数据，改了措辞才有东西可扫
+    assert.ok(full.setting.includes('浪尖'), '前置：设定页真有浪尖那一栏（否则上面那条扫的是空气）');
+    assert.ok(!full.setting.includes('派生源'), '★设定页措辞已改成玩家话');
+});
+

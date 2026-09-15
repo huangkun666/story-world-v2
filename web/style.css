@@ -427,6 +427,18 @@
 .sw2-field textarea{width:100%;min-height:84px;resize:vertical;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13.5px;}
 .sw2-field textarea:focus{outline:none;border-color:var(--sw2-amber-dim);}
 .sw2-hint{font-size:11.5px;color:var(--sw2-text-faint);margin-top:4px;}
+/* ★★leg52（用户令「说明文字太长」）：**长说明折叠**壳。
+   口径三条（与 src/render.js 的 foldHint 一一对应，两处必须同时改）：
+     ① 首句**留在外面**（结论先给），只有"展开才看"的部分进这里；
+     ② `<summary>` 必须**看得见**——它是"还有说明"这件事的招牌，不许做成隐形触发区；
+     ③ 展开体沿用 `.sw2-hint`（同一个字号/颜色），即"折叠只改**在不在**，不改**长相**"。 */
+.sw2-fold{margin-top:4px;}
+.sw2-fold > summary{font-size:11.5px;color:var(--sw2-text-faint);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px;padding:1px 0;}
+.sw2-fold > summary::-webkit-details-marker{display:none;}
+.sw2-fold > summary::before{content:'？';display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid var(--sw2-line);border-radius:50%;font-size:9px;line-height:1;}
+.sw2-fold[open] > summary{color:var(--sw2-text-dim);}
+.sw2-fold > summary:hover{color:var(--sw2-text-dim);}
+.sw2-fold-body{margin-top:5px;padding-left:9px;border-left:2px solid var(--sw2-line);}
 /* 视障可达工具类（第十三棒 A 案）：释义文本对读屏可见、对视线隐藏（title 只是鼠标通道，不算无障碍） */
 .sw2-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
 .sw2-input{width:100%;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:8px 11px;font-size:13px;font-family:"Cascadia Mono",Consolas,monospace;}

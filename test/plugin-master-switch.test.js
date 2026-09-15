@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SWITCH_PARAMS, switchOn, isParamKey, normalizeParam } from '../src/params.js';
 import { ensureAutoAdvanceKey, sw2AutoAdvanceOn, sw2OnMessageReceived } from '../web/index.js';
-import { renderParamsHtml } from '../src/render.js';
+import { renderParamsHtml, renderSettingsHtml } from '../src/render.js';   // leg52：推进入口改在设置页，判据要扫那一页
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KEY = 'autoAdvance';
@@ -129,10 +129,20 @@ test('leg33d·④ 渲染面：总闸卡排在其余开关之前，且写出"当�
     assert.ok(iMaster < iMemory, '★总闸必须排在其余开关之前（它是入口，藏在中间就找不到）');
     assert.ok(htmlOff.includes('插件静默'), '★关着时要写出后果（否则"世界怎么不动了"会被当成 bug）');
     assert.ok(htmlOff.includes('推进一轮'), '关着时要指出手动出路（手动永不被闸）');
-    // ★leg40b（体检 · D1）：这句话现在**真的有去处**——参数页上就摆着那枚按钮。
-    //   旧版只说"要推请按「推进一轮」"，而面板上没有任何按钮叫这个名字（真入口叫「手动推进一步」、
-    //   还压在设置页里）⇒ 玩家照着提示找会找不到。判据：同一页里既有那句话、也有那枚按钮。
-    assert.ok(htmlOff.includes('data-action="advance-world"'), '★参数页要真的摆出「推进一轮」那枚按钮（不许只说不给）');
+    // ★★leg52（用户令「**推进和撤销不应该放到参数页吧**」→ 拍板「推进撤」· 依据 leg51 §2.1）：
+    //   leg40b 当年把「推进一轮」挪进参数页，理由是"这一页就是你对世界的输入"——
+    //   **而"推进一轮"不是输入，是动作**（它一个档位都不写）。且 `data-action="advance-world"`
+    //   在**设置页也有一枚** ⇒ 参数页这一枚是**重复入口**。⇒ 参数页那一张卡整段撤掉。
+    //   ★但 leg40b 原本那条判据的**实质必须保住**：面板上说"要推请按「推进一轮」"时，
+    //     **那一枚按钮必须真的存在、真的有人接**（"画了不接/只说不给"是本仓一贯要治的病）。
+    //     ⇒ 判据改指**留存的那一面**：设置页有它；且**参数页不再重复**它。
+    //     （"有人接"那一半由 `test/param-hub.test.js` 的 ⑪e 扫两页一起锁。）
+    assert.ok(!htmlOff.includes('data-action="advance-world"'),
+        '★leg52：参数页不再重复画「推进一轮」（它是动作，不是输入；设置页那枚是唯一入口）');
+    const settingsOff = renderSettingsHtml(off, { config: {} });
+    assert.ok(settingsOff.includes('data-action="advance-world"'),
+        '★★「要推请按「推进一轮」」这句提示必须真有一枚按钮兑现——它现在在**设置页**（入口一个不少）');
+    assert.ok(settingsOff.includes('推进一轮'), '设置页那枚按钮的名字与状态栏/提示同一口径');
     // 开着时的后果说明
     const on = world({ env: { [KEY]: '1', memoryEnabled: '0' } });
     const htmlOn = renderParamsHtml(on, {});

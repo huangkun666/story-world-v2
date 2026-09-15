@@ -409,24 +409,44 @@ test('★★leg46·⑪d：复制自检按钮**有真实处理器**（画了不�
 
 test('★★leg46·⑪e：**参数页上画出来的每个按钮都有人接**（画了不接 = 死代码，本仓一贯判据）', async () => {
     makeSt();
-    const { renderParamsHtml } = await import('../src/render.js');
+    const { renderParamsHtml, renderSettingsHtml } = await import('../src/render.js');
     const html = renderParamsHtml(st_liveWorld(), { config: { paramEnv: {}, paramDiag: mod.gatherParamEvidence() } });
     const actions = [...new Set([...html.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]))];
-    assert.ok(actions.length >= 3, `参数页上应当有若干动作（实测 ${JSON.stringify(actions)}）`);
-    // ★`advance-world` 是**有意的例外**：它不走动作总线，走 `dispatchAction` 里的特判
-    //   （`sw2TickQueue.advance()`，K36 手动补推那条路）；`lookup-batch.test.js` 里已有同类白名单
-    //   （它出现的历史原因正在 leg40b 那条"面板还没装配完"的兜底文案上）。⇒ 这里同样放行，但**只放行它一个**。
-    const NON_BUS = new Set(['advance-world']);
+    assert.ok(actions.length >= 2, `参数页上应当有若干动作（实测 ${JSON.stringify(actions)}）`);
+    // ★★leg52（**这条白名单可以整条撤掉了**）：原判据里有一个例外 `NON_BUS = {'advance-world'}`——
+    //   因为参数页当年画着「推进一轮」，而它**不走动作总线**（走 `dispatchAction` 的 tick 队列特判）。
+    //   本棒按用户令把那张卡从参数页撤走（"推进一轮"是动作、不是输入）⇒ 参数页上**不再有**这个动作，
+    //   ⇒ **例外随之消失**：本页画出来的**每一个**动作都必须能在动作总线上找到真处理器。
+    //   ★这正是本仓想要的形状——**白名单越短越可信**；留着一个用不上的例外，就是给下一具死按钮留门。
+    //   （`advance-world` 的接线由 `plugin-master-switch.test.js` 在**设置页**那一面锁着，入口没丢。）
     const bus = globalThis.window.__sw2Actions;
     for (const a of actions) {
-        if (NON_BUS.has(a)) continue;
         assert.equal(typeof bus[a], 'function', `★「${a}」按钮画在了参数页上，但没有真实处理器（玩家按下去不会有任何反应）`);
     }
+    assert.ok(!actions.includes('advance-world'),
+        '★leg52：参数页不许再画「推进一轮」（它是动作不是输入；设置页那枚是唯一入口）');
     assert.ok(actions.includes('param-undo'), '★撤销按钮必须在参数页上');
     // ★★★leg48：`param-doctor`（自检按钮）**已按用户令从这一页撤掉** ⇒ 不再要求它出现在页面上；
     //   但它的处理器仍必须留着（取证能力内部保留）——防"删界面顺手把能力也删了"。
     assert.ok(!actions.includes('param-doctor'), '★参数页上不该再有自检按钮（用户令「不要在参数界面出现」）');
     assert.equal(typeof bus['param-doctor'], 'function', '★但取证动作本身必须还在（内部保留）');
+
+    // ★★leg52 新增：**设置页**也扫一遍（同一把尺子）。
+    //   为什么必须加这一页：`advance-world` 现在**只**在设置页画——不扫它，这个入口就成了
+    //   "没人看着的那一格"（本仓的病从来不是"某处画错"，而是"某处没人扫"）。
+    const settingsHtml = renderSettingsHtml(st_liveWorld(), { config: { playerDesc: '', apiKey: '', baseUrl: '', model: '' } });
+    const setActions = [...new Set([...settingsHtml.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]))];
+    assert.ok(setActions.includes('advance-world'), '★设置页必须有「推进一轮」那枚按钮（参数页撤了它，入口只能在这儿）');
+    // `advance-world` 是这个面上**唯一**的有意例外（走 tick 队列特判，不走动作总线）；其余一律要有人接。
+    const NON_BUS = new Set(['advance-world']);
+    for (const a of setActions) {
+        if (NON_BUS.has(a)) continue;
+        assert.equal(typeof bus[a], 'function', `★「${a}」按钮画在了设置页上，但没有真实处理器`);
+    }
+    // ★例外必须是**被点名、且被另一条判据兑现**的那一个——不是"找不到处理器就放过"。
+    //   `advance-world` 的"真有人接"由 `test/plugin-master-switch.test.js` 与
+    //   `test/lookup-batch.test.js`（dispatchAction 特判那一面）锁着，故此处只登记例外本身。
+    assert.deepEqual([...NON_BUS], ['advance-world'], '★设置页的面只放行这一个例外（多一个就是给死按钮开门）');
 });
 
 function st_liveWorld() { return globalThis.window.SillyTavern.getContext().chatMetadata.story_world_v2.world; }
