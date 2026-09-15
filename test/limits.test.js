@@ -70,32 +70,52 @@ test('★尺度上限：默认下引擎行为与参数化之前**逐字节相同
     assert.deepEqual(a.ssot.events, b.ssot.events, '落账的事件逐字节相同');
 });
 
-// ---------- ② 白名单只有一把尺子 ----------
-test('尺度上限：白名单归一——不在表内的键/值一律弃（与 params.js 同口径）', () => {
+// ---------- ② 归一：**无上限**（用户令「能自由调数，当然也能无上限」） ----------
+test('★★★leg54：尺度上限**无上限**——输入框认任意 ≥1 的整数，不再有档位白名单', () => {
+    // ★用户的原话与理由（本棒拍板）：「**无上限其实就是模型自由发挥，我的想法是用户能自由调数当然也能无上限**」。
+    //   我去核了数字，**他说得对**：
+    //     · 旧白名单顶格只有 9 / 12 / 30 / 40，而**单轮输出预算 16384 token**
+    //       （`PROPOSED_CALL_LIMITS.maxTokens`，第十九棒定的）；一条事件在 JSON 里约 120–200 字符
+    //       ⇒ 预算够写**几十条** ⇒ **那个 12 从来没咬到过模型，它只是一张纸**。
+    //     · leg40b 实测也印证：59 轮真账逐轮新事件 **max 4**，引擎闸**一次没咬到**。
+    //   ⇒ 结论：**上限的真实边界是"模型一次能写多长"，不是我们的白名单**。
+    //     被拒也不叫停世界（leg40b 的死锁自愈在：tick 照常前进）。
+    //   ⇒ 本笔把白名单撤掉，只留"能不能让代码跑起来"的最小校验。
     assert.equal(normalizeLimit('每轮递线', '6'), 6, '字符串数字认（dynamic.env 里存的就是字符串）');
     assert.equal(normalizeLimit('每轮递线', 6), 6, '数字也认');
-    assert.equal(normalizeLimit('每轮递线', '7'), null, '不在档位表里的值 ⇒ null（弃键，不写占位值）');
-    assert.equal(normalizeLimit('每轮递线', ''), null);
-    assert.equal(normalizeLimit('每轮递线', 'abc'), null);
-    assert.equal(normalizeLimit('不存在的键', '6'), null, '不认识的键 ⇒ null');
+    assert.equal(normalizeLimit('每轮递线', '7'), 7, '★旧版这里返 null（7 不在表里）——现在**认**');
+    assert.equal(normalizeLimit('每轮递线', '100'), 100, '★大数照收（无上限）');
+    assert.equal(normalizeLimit('每轮递线', '99999'), 99999, '★再大也收（用户要的就是这个）');
+    // 最小校验（只有这四条还在挡）：
+    assert.equal(normalizeLimit('每轮递线', '0'), null, '0 不是合法条数 ⇒ 弃');
+    assert.equal(normalizeLimit('每轮递线', '-3'), null, '负数 ⇒ 弃');
+    assert.equal(normalizeLimit('每轮递线', '2.5'), null, '非整数 ⇒ 弃（"半件事"没有意义）');
+    assert.equal(normalizeLimit('每轮递线', 'abc'), null, '非数字 ⇒ 弃');
+    assert.equal(normalizeLimit('每轮递线', ''), null, '空 ⇒ null = **未定**（回出厂默认）');
+    assert.equal(normalizeLimit('每轮递线', undefined), null, '缺值同空');
+    assert.equal(normalizeLimit('不存在的键', '6'), null, '★键白名单**仍然在**（不认识的键一律弃）');
     assert.equal(normalizeLimit('天时', '平常'), null, '★同名不许串台：`params.js` 的档位词不是本表的键');
     // `limitKey` 一个函数管两件事：认键（无值）+ 归一键（有值）
     assert.equal(limitKey('每轮递线'), true);
-    assert.equal(limitKey('每轮递线', '12'), null, '12 不在「每轮递线」的档位表里（上限 9）');
-    assert.equal(limitKey('每轮事件', '12'), 12, '12 在「每轮事件」的表里');
+    assert.equal(limitKey('每轮递线', '12'), 12, '★旧版这里返 null（「每轮递线」原来顶格 9）——现在**认**');
     assert.equal(limitKey('天时'), null, '★不认 `params.js` 的键（两张表分开，不许互相吃）');
 });
 
-test('尺度上限：每个键都有档位表与人话（面板靠它排下拉；档位必须含出厂默认）', () => {
+test('★★★leg54：**契约面**——键表还在、档位表只作"建议值"（面板不再靠它排下拉）', () => {
+    // ★为什么 `LIMIT_GEARS` **不删**：它从"白名单"降级为**建议值/出厂档**——
+    //   ① 面板要在输入框下面提示"常用：3/6/9"（玩家不知道该填几）；
+    //   ② `LIMIT_DEFAULTS` 与它必须仍然互相自洽（判据下面那条锁着）；
+    //   ③ 旧账里那些值（3/6/12/15/20/30/40）**照旧读得出来**（都是合法整数）。
     for (const k of LIMIT_KEYS) {
-        assert.ok(Array.isArray(LIMIT_GEARS[k]) && LIMIT_GEARS[k].length >= 2, `「${k}」要有至少两档`);
-        assert.ok(LIMIT_GEARS[k].includes(LIMIT_DEFAULTS[k]), `「${k}」的档位表必须含出厂默认 ${LIMIT_DEFAULTS[k]}`);
+        assert.ok(Array.isArray(LIMIT_GEARS[k]) && LIMIT_GEARS[k].length >= 2, `「${k}」要有建议值（面板提示用）`);
+        assert.ok(LIMIT_GEARS[k].includes(LIMIT_DEFAULTS[k]), `「${k}」的建议值必须含出厂默认 ${LIMIT_DEFAULTS[k]}`);
         assert.ok(LIMIT_META[k]?.label && LIMIT_META[k]?.hint, `「${k}」要有人话标签与说明`);
         // A-3 禁的是**引擎术语**（tick/entity/agenda/schema/ssot 这类账本词），不是「引擎」这个自称——
         //   同页其余文案（`params.js`/`render.js`）一直用「引擎只照抄」这种说法。
         assert.ok(!/tick|entity|agenda|schema|ssot/i.test(LIMIT_META[k].hint), `「${k}」的说明不许漏账本术语（A-3）`);
     }
 });
+
 
 test('尺度上限：已设档位覆盖默认；未设的键仍回默认（逐键独立）', () => {
     const w = world({ env: { 每轮递线: '6' } });
@@ -110,7 +130,15 @@ test('尺度上限：已设档位覆盖默认；未设的键仍回默认（逐�
     assert.equal(rows.find((r) => r.key === '每轮递线').isDefault, false);
     assert.equal(rows.find((r) => r.key === '每轮事件').isDefault, true);
     // 非法值不许进结果（旧账里的脏值也不生效）
-    assert.deepEqual(limitsOf(world({ env: { 每轮递线: '99' } })), {}, '脏值 ⇒ 弃键（当没设，用默认）');
+    // ★★leg54（口径升级）：`'99'` 从这条移走了——它现在是**合法值**（无上限）。
+    //   这条判据的**实质一字未变**：真正读不懂的值一律当"没设"。
+    for (const dirty of ['0', '-1', '2.5', 'abc', '']) {
+        assert.deepEqual(limitsOf(world({ env: { 每轮递线: dirty } })), {},
+            `脏值「${dirty}」⇒ 弃键（当没设，用默认）`);
+    }
+    // ★对照（防这条锁退化成"什么都不认"）：大数是**认**的
+    assert.deepEqual(limitsOf(world({ env: { 每轮递线: '99' } })), { 每轮递线: 99 },
+        '★99 现在是合法的（无上限）——旧版这里判它脏');
 });
 
 // ---------- ③ 档位真能改引擎判据 ----------

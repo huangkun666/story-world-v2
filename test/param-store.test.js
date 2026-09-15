@@ -36,7 +36,12 @@ test('leg41·param-store：归一三态分明（合法值 / 清空 / 非法）�
     assert.equal(normalizeStoreValue('天时', ''), null, '空 ⇒ 清空');
     assert.equal(normalizeStoreValue('天时', '   '), null, '全空白 ⇒ 清空');
     assert.equal(normalizeStoreValue('天时', '春和景明'), false, '★非法档位 ⇒ false（**不是** null：绝不能被当成"清空"）');
-    assert.equal(normalizeStoreValue('每轮事件', '7'), false, '★不在白名单档位的数字同样拒绝');
+    // ★★leg54（口径升级）：`每轮事件: '7'` 从"非法"移走了——**上限无上限之后 7 是合法值**。
+    //   这条判据的**实质一字未变**：真正的非法（非数字/小数/0/负数）一律 `false`，不当清空。
+    assert.equal(normalizeStoreValue('每轮事件', '0'), false, '★0 不是合法条数 ⇒ false（**不是** null）');
+    assert.equal(normalizeStoreValue('每轮事件', '2.5'), false, '★小数 ⇒ false');
+    assert.equal(normalizeStoreValue('每轮事件', '-1'), false, '★负数 ⇒ false');
+    assert.equal(normalizeStoreValue('每轮事件', '7'), '7', '★但 7 现在**合法**（无上限；旧版这里判它非法）');
     assert.equal(normalizeStoreValue('没有这个键', '大灾'), false);
 });
 
@@ -44,12 +49,14 @@ test('leg41·param-store：桶形状——洗坏形/丢垃圾键/按世界名分
     assert.deepEqual(emptyStore(), { version: PARAMS_STORE_VERSION, worlds: {} });
     assert.deepEqual(normalizeStore(null), emptyStore(), '空/坏输入 ⇒ 空桶（绝不抛）');
     assert.deepEqual(normalizeStore({ version: 1, worlds: 'x' }), emptyStore());
-    const cleaned = normalizeStore({ version: 1, worlds: { 大荒z: { 天时: '大灾', 乱写的键: 'x', 每轮事件: '7', autoAdvance: 1 } } });
+    // ★★leg54（口径升级）：`每轮事件: '0'` 才是垃圾了（旧版用 '7'，而无上限之后 7 合法）。
+    //   这条判据的**实质一字未变**：洗桶时认不出的键与读不懂的值都丢，别搬进新家。
+    const cleaned = normalizeStore({ version: 1, worlds: { 大荒z: { 天时: '大灾', 乱写的键: 'x', 每轮事件: '0', autoAdvance: 1 } } });
     // ★口径（读实现确认过，不是猜）：归一先做 `String(v).trim()` ⇒ 数字 1 会被**认成开关的 '1'**；
-    //   真正的垃圾是"不在档位表里的值"（`每轮事件: '7'`）与"认不出的键"。
+    //   真正的垃圾是"读不懂的值"（`每轮事件: '0'`——条数不能是 0）与"认不出的键"。
     assert.deepEqual(cleaned.worlds['大荒z'], { 天时: '大灾', autoAdvance: '1' });
     assert.equal(cleaned.worlds['大荒z']['乱写的键'], undefined, '★认不出的键一律丢（不搬进新家）');
-    assert.equal(cleaned.worlds['大荒z']['每轮事件'], undefined, '★不在档位表里的值一律丢（这里 "7" 不是 6/9/12）');
+    assert.equal(cleaned.worlds['大荒z']['每轮事件'], undefined, '★读不懂的值一律丢（"0" 不是合法条数）');
     const badSwitch = normalizeStore({ version: 1, worlds: { W: { autoAdvance: '2' } } });
     assert.deepEqual(badSwitch.worlds.W, {}, '★开关只认 1/0（"2" 丢掉）');
 });

@@ -155,10 +155,32 @@ test('★★leg46·④b：面板画的就是这份值（渲染层与 hub **同�
     hub.set(st.mirror?.world || st.chatMetadata.story_world_v2.world, '每轮事件', '12');
     const { renderParamsHtml } = await import('../src/render.js');
     const html = renderParamsHtml(st.chatMetadata.story_world_v2.world, { config: { paramEnv: hub.displayEnv(st.chatMetadata.story_world_v2.world) } });
-    const seg = (key) => { const i = html.indexOf(`data-param="${key}"`); return html.slice(i, html.indexOf('</select>', i)); };
-    assert.match(seg('天时'), /<option value="大灾" selected>/, '天时那一栏选中玩家选的那档');
-    assert.match(seg('每轮事件'), /12" selected/, '上限那一栏也读真源（leg41 漏过它 ⇒ 画回 6）');
-    assert.match(seg('每轮递线'), /3" selected/, '真源没有 ⇒ 画出厂默认');
+    // ★★leg54：控件从 `<select>` 换成 `<input type="number">` ⇒ 取值方式跟着换。
+    //   判据的**实质一字未变**：❶ 玩家选的那档在控件上；❷ 上限那一栏也读真源；❸ 真源没有的画出厂默认。
+    //   （旧法读 `<option ... selected>`；新法读 `value="..."`。第三格原本凭"没有别的 option 被选中"
+    //     间接判，现在**直接读 value**，反而更准。）
+    const ctlVal = (key) => {
+        const i = html.indexOf(`data-param="${key}"`);
+        if (i < 0) return null;
+        // ★口径（第二版才写对）：`data-param` 挂在**控件标签自己**身上（leg40c 续立的规矩），
+        //   但两种控件的"当前值"放在**不同地方**：
+        //     · `<input type="number">`（上限那一栏）⇒ 标签上的 `value="…"`
+        //     · `<select>`（天时那一栏）⇒ **标签上没有 value**，选中项是里面那个 `<option … selected>`
+        //   （第一版只认标签上的 value ⇒ 天时读到 undefined。这不是实现的问题，是判据没覆盖两种形状。）
+        const open = Math.max(html.lastIndexOf('<input', i), html.lastIndexOf('<select', i));
+        if (open < 0) return null;
+        const tag = html.slice(open, html.indexOf('>', i) + 1);
+        const direct = (/value="([^"]*)"/.exec(tag) || [])[1];
+        if (direct !== undefined) return direct;
+        const body = html.slice(open, html.indexOf('</select>', i));
+        return (/<option value="([^"]*)" selected>/.exec(body) || [])[1];
+    };
+    assert.equal(ctlVal('天时'), '大灾', '天时那一栏是玩家选的那档');
+    assert.equal(ctlVal('每轮事件'), '12', '上限那一栏也读真源（leg41 漏过它 ⇒ 画回 6）');
+    assert.equal(ctlVal('每轮递线'), '3', '真源没有 ⇒ 画出厂默认');
+    // ★并且控件类型必须是数字输入框（无上限那件事的机械证据：`<select>` 装不下任意整数）
+    assert.match(html.slice(html.indexOf('data-param="每轮递线"') - 200, html.indexOf('data-param="每轮递线"')),
+        /<input[^>]*type="number"/, '★四个上限必须是数字输入框（不是下拉）');
 });
 
 // ── ⑤ 刷新：用户报的那一条 ────────────────────────────────────────────────
@@ -331,9 +353,16 @@ test('★leg46·⑧d：非法值/未知键**绝不被当成清空**（三态分�
     const hub = await makeHub();
     hub.set(st.world, '天时', '大灾');
     const before = st.store();
-    hub.set(st.chatMetadata.story_world_v2.world, '每轮事件', '999');      // 不在档位表里
+    // ★★leg54（口径升级）：`'999'` 从"非法"移走了——**上限无上限之后 999 是合法值**。
+    //   这条判据的**实质一字未变**：真正的非法（非数字/0/负数/小数）绝不能被当成"清空"。
+    for (const bad of ['abc', '0', '-5', '2.5']) {
+        hub.set(st.chatMetadata.story_world_v2.world, '每轮事件', bad);
+    }
     hub.set(st.chatMetadata.story_world_v2.world, '不存在的键', 'x');
-    assert.deepEqual(st.store(), before, '★两次非法提交之后，玩家的档位原样还在');
+    assert.deepEqual(st.store(), before, '★多次非法提交之后，玩家的档位原样还在');
+    // ★对照（防这条锁退化成"什么都不收"）：大数现在是**合法**的
+    hub.set(st.chatMetadata.story_world_v2.world, '每轮事件', '999');
+    assert.equal(st.store()['每轮事件'], '999', '★999 现在收得进去（无上限；旧版这里判它非法）');
 });
 
 // ── ⑪ 自检面（用户令「老问题没解决，还是会回归默认」之后加的那一枚）────────────────
@@ -743,6 +772,39 @@ test('★★★leg46·⑮（**用户第四次实机：「下拉是 9/12/30/40，
     let live2 = null;
     try { live2 = mod.sw2CollectLiveParamValues(); } finally { globalThis.document.getElementById = realGet; }
     assert.equal(live2.env, null, '★控件是空串 ⇒ 不覆盖（否则"清成未定"会被画成旧值）');
+    void st;
+});
+
+test('★★★leg54：**控件从 `<select>` 换成 `<input>` 之后，接线三条路都得认它**（漏一条就是"填了白填"）', async () => {
+    // ★为什么单独立一条：换控件类型时，采集/对齐/写格是**三条独立的代码路**，
+    //   而它们当初都只认 `SELECT`（或只认 SELECT+BUTTON）。漏掉任何一条的后果都是**同一个形状**：
+    //   玩家敲进去的数进不了 `paramEnv`（或对齐不回去）⇒ **"我填了它自己跳回去"**（leg48 治过的那条症状）。
+    //   ★本棒实测：采集那条**真的漏了**（`sw2CollectLiveParamValues` 只判 SELECT/BUTTON）
+    //     —— 是这条判据的思路逼出来的，不是我读代码看出来的。
+    const st = makeSt({ env: {} });
+    sw2ResetFlushState();
+    const mkInput = (k, v) => ({
+        tagName: 'INPUT', value: v,
+        classList: { contains: () => false },
+        getAttribute: (n) => (n === 'data-param' ? k : null),
+    });
+    const inputs = [mkInput('每轮递线', '50'), mkInput('每轮事件', '80')];
+    const win = { querySelectorAll: (sel) => (sel === '[data-action="set-param"][data-param]' ? inputs : []), querySelector: () => null };
+    const realGet = globalThis.document.getElementById;
+    globalThis.document.getElementById = (id) => (id === 'story_world2_window' ? win : null);
+    let live = null;
+    try { live = mod.sw2CollectLiveParamValues(); } finally { globalThis.document.getElementById = realGet; }
+    // ① **采集**：`<input>` 的值必须被采到（并覆盖在真源之上——真源里没有它）
+    assert.deepEqual(live.selects, { 每轮递线: '50', 每轮事件: '80' }, '★`<input>` 的现值要采全（旧版只认 SELECT/BUTTON）');
+    assert.equal(live.env['每轮递线'], '50', '★控件值要覆盖在真源之上（真源里没有它 ⇒ 不许画回出厂默认）');
+    // ② **对齐**：一笔操作结束后，`<input>` 也要被按真源对齐（旧版只认 SELECT ⇒ 静默退让）
+    const src = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const at = src.indexOf('export function sw2SetParamControl');
+    const seg = src.slice(at, at + 1400);
+    assert.match(seg, /tag !== 'SELECT' && tag !== 'INPUT'/,
+        '★`sw2SetParamControl` 必须同时认 SELECT 与 INPUT（否则"手滑清空"会留在屏幕上冒充一次改动）');
+    // ③ **写格**：`sw2ControlText` 早就同时认（这一条是防它被改窄）
+    assert.match(src, /tag === 'SELECT' \|\| tag === 'INPUT'/, '★`sw2ControlText` 必须同时认两种控件');
     void st;
 });
 

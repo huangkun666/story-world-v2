@@ -435,10 +435,15 @@ test('★leg32：面板分母不再写死——/15 与顶层 /N 都读引擎真�
 // ★★leg40b 续（**口径升级**·用户令「能不能直接把这些闸门参数直接放进参数页？」→ 拍板"甲+乙档全开"）：
 //   这条锁**原本锁的是"只读、无旋钮、不落 dynamic.env"**——那条口径**已被本次改动取代**，
 //   故照本仓规矩（口径变了就升级锁 + 加"旧措辞不得回潮"的守门），把判据换成**新契约四条**：
-//     ① 四个上限**都在页上**（还是与引擎真源同源，不钉死字面数）；② 每个都**真做成档位下拉**；
-//     ③ 下拉里的档位**逐项等于白名单**（面板造不出引擎不认的值——UI 与判据同源）；
+//     ① 四个上限**都在页上**（还是与引擎真源同源，不钉死字面数）；② 每个都**真做成可调控件**；
+//     ③ 控件上的值**逐项来自引擎真源**（面板造不出引擎不认的东西——UI 与判据同源）；
 //     ④ **`pack`/`sweep` 那两个"引擎自己的账"**（每轮新生盘算、入局新人）**仍然只读**（不许顺手全开）。
-test('★leg40b 续：参数页把世界尺度做成**四个可调档位**（旧"只读无旋钮"口径已升级）', () => {
+// ★★★leg54 再升级（用户令「**把调数字的框直接变成输入框或者无上限**」→ 拍板「真无上限」）：
+//     ②③ 的**形状换了**——从"档位下拉 + 选项逐项等于白名单"改成"**数字输入框 + 任意 ≥1 的整数**"。
+//     判据的**实质保住**：那四个数仍然是**可调**的、仍然**与引擎真源同源**、仍然**只有四个**。
+//     ★旧口径里"面板不许造出引擎不认的值"这一条**随白名单一起作废**（引擎现在什么都认）——
+//       取而代之的新守门是"**控件是数字输入框且带 min=1**"（读不懂的值仍然进不去）。
+test('★leg40b 续 + leg54：参数页把世界尺度做成**四个可调输入框**（旧"档位下拉"口径已升级）', () => {
     const html = renderParamsHtml(world());
     const seg = html.slice(html.indexOf('sw2-cap-card'));
     assert.ok(seg, '参数页应有世界尺度块（sw2-cap-card）');
@@ -447,21 +452,40 @@ test('★leg40b 续：参数页把世界尺度做成**四个可调档位**（旧
         assert.ok(seg.includes(`data-param="${k}"`), `上限「${k}」应做成可写参数`);
         assert.ok(seg.includes(String(LIMIT_DEFAULTS[k])), `上限「${k}」的当前值 ${LIMIT_DEFAULTS[k]} 应上板`);
     }
-    // ② 每个都是档位下拉（不是裸数字、也不是只读文本）
-    const selects = seg.match(/<select[^>]*data-action="set-param"[^>]*>/g) || [];
-    assert.equal(selects.length, LIMIT_KEYS.length, `应有 ${LIMIT_KEYS.length} 个上限下拉，实际 ${selects.length}`);
-    // ③ 下拉档位**逐项**等于白名单（面板不许多给一个引擎不认的值）
+    // ② 每个都是**数字输入框**（不是只读文本，也不再是下拉）
+    const inputs = seg.match(/<input[^>]*type="number"[^>]*data-action="set-param"[^>]*>/g) || [];
+    assert.equal(inputs.length, LIMIT_KEYS.length, `应有 ${LIMIT_KEYS.length} 个上限输入框，实际 ${inputs.length}`);
+    assert.ok(!/<select[^>]*data-action="set-param"[^>]*>/.test(seg), '★上限那一栏不许再有下拉（无上限装不进选项表）');
+    for (const tag of inputs) {
+        assert.match(tag, /min="1"/, '★必须有 min="1"（代码跑得起来的最小校验：条数不能是 0）');
+        assert.match(tag, /step="1"/, '★必须 step="1"（整数：半件事没有意义）');
+    }
+    // ③ 控件上的值 = 引擎真源那份（面板画的就是引擎读的）
     for (const k of LIMIT_KEYS) {
         const i = seg.indexOf(`data-param="${k}"`);
-        const block = seg.slice(i, seg.indexOf('</select>', i));
-        for (const g of LIMIT_GEARS[k]) assert.ok(block.includes(`value="${g}"`), `「${k}」的档位 ${g} 应出现在下拉里`);
-        const opts = (block.match(/<option /g) || []).length;
-        assert.equal(opts, LIMIT_GEARS[k].length, `「${k}」的下拉档位数应 = 白名单条数（多一个就是 UI 造了引擎不认的值）`);
+        const tag = seg.slice(seg.lastIndexOf('<input', i), seg.indexOf('>', i));
+        assert.match(tag, new RegExp(`value="${LIMIT_DEFAULTS[k]}"`), `「${k}」的控件值应 = 出厂默认`);
+        assert.ok(seg.slice(i).includes(String(LIMIT_DEFAULTS[k])), `「${k}」的当前值应上板`);
     }
     // ④ 仍然只读的那几个**不许**被顺手做成旋钮（它们是"引擎自己的账"，且一次调太多会互相掩盖）
     assert.ok(!seg.includes('data-param="每轮新生"'), '每轮新生盘算仍是只读（丙档）');
     assert.ok(!seg.includes('data-param="每轮入局"'), '每轮入局新人仍是只读（丙档）');
     assert.match(seg, /仍然固定/, '页上必须写明"哪些仍然不给旋钮"，否则玩家以为全开了');
+});
+
+test('★★★leg54：**"无上限"必须写在脸上 + 后果如实说**（填大了会以什么形式表现出来）', () => {
+    // ★这条判据的**存在理由**：无上限是用户要的，而它有一个不直观的后果——
+    //   **填得很大不会凭空多出事情**（一轮里发生几件，是模型自己决定的；它一次回复能写多长才是真天花板）。
+    //   不把这句话写在页上，玩家会以为"填 100 却只长了 3 件"＝插件坏了。
+    const html = renderParamsHtml(world(), { config: {} });
+    const cap = html.slice(html.indexOf('sw2-cap-card'));
+    assert.ok(cap.includes('没有上限'), '★"没有上限"必须写在页上（用户要的就是它）');
+    assert.match(cap, /不会凭空多出/, '★必须说清"填大不会凭空多出事情"');
+    assert.match(cap, /模型自己决定/, '★必须点名真正的天花板在哪（模型一次能写多长）');
+    assert.match(cap, /本轮裁定/, '★必须告诉玩家"被拒时去哪看"（否则那是一次静默的失败）');
+    // ★"常用"那串是**建议值**（`LIMIT_GEARS` 降级后的用途），不是白名单——它得在页上
+    assert.match(cap, /常用：/, '★建议值仍要给（玩家不知道该填几）');
+    for (const g of LIMIT_GEARS['每轮递线']) assert.ok(cap.includes(String(g)), `建议值 ${g} 应在页上`);
 });
 
 test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世情=未聚，不混张力）；张力归张力行；参数档位如实列出', () => {
@@ -1579,7 +1603,8 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   长说明折进 `<details>` / 浪尖去重 / 设定页与信息带改读真源）⇒ 构建号跟着升位。
     //   ★同一条起名纪律：`leg52-params-and-tide` 里零引擎术语（下面那个循环就是扫描器）。
     // ★★★leg53 换档：**乱象有了生产者**（引擎每轮算）+ 民生撤下 + 依据那一格改口径 ⇒ 玩家可见面真变了。
-    assert.equal(PANEL_BUILD, 'leg53-unrest-producer');
+    // ★★★leg54 换档：世界尺度四个框改成**数字输入框、无上限**（+ 设置页那行过期预算已修）⇒ 又变了。
+    assert.equal(PANEL_BUILD, 'leg54-unlimited-limits');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

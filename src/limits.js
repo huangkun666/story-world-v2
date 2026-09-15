@@ -92,12 +92,41 @@ export const LIMIT_META = Object.freeze({
 
 const isLimitKey = (k) => Object.prototype.hasOwnProperty.call(LIMIT_GEARS, k);
 
-/** 归一：只认白名单里的**数字档位**（字符串数字也认——`dynamic.env` 里存的是字符串）。 */
+/**
+ * ★★★leg54（用户令「**能自由调数，当然也能无上限**」）：归一 = **任意 ≥1 的整数**，不再是档位白名单。
+ *
+ * 为什么撤掉白名单（**这段是本笔的完整理由，别只抄结论**）：
+ *   · 用户原话：「无上限其实就是**模型自由发挥**，我的想法是用户能自由调数当然也能无上限」。
+ *     我去核了数字 ⇒ **他说得对**：
+ *       - 旧白名单顶格只有 9 / 12 / 30 / 40，而**单轮输出预算 16384 token**
+ *         （`PROPOSED_CALL_LIMITS.maxTokens`，第十九棒拍板定的；见 `transport-http.js` 的 E3 记档）；
+ *         一条事件在 JSON 里约 120–200 字符 ⇒ 预算够写**几十条**
+ *         ⇒ **那个 12 从来没咬到过模型，它只是一张纸**。
+ *       - leg40b 实测同样印证：59 轮真账**逐轮新事件 max 4**，引擎闸一次没咬到；
+ *         而"请求 6 ⇒ 真推 6.00 / 请求 12 ⇒ 真推 12.00"也都**推满了**（不是写不动）。
+ *     ⇒ **上限的真实边界是"模型一次能写多长"，不是我们的白名单。** 撤掉它，边界回到它本来该在的地方。
+ *   · 被拒的代价**不叫停世界**：leg40b 的死锁自愈在（同轮引用按位次认 / 丢掉写歪的那几条 /
+ *     重试一次 / 最后一档"世界安静一步"，**tick 照常前进**）⇒ 不是"静默卡死"。
+ *   · ★**但有一句必须留在面板上**（不是限制，是如实告知）：超出模型一次能写的量时，
+ *     你看不到"被拦"，只会看到"这轮没长出新事"（被拒的世界原样不动）——
+ *     要查就翻观棋窗口底部的「⚖ 本轮裁定 N 条」。
+ *
+ * ★**仍然在挡的四条**（都是"能不能让代码跑起来"的最小校验，不是产品上限）：
+ *     `≥ 1` 的**整数**；空/缺值 ⇒ `null` = **未定**（回出厂默认）；非数字/小数/负数/0 ⇒ 弃键。
+ *   ★键白名单（`LIMIT_KEYS`）**照旧在**——`limitKey('天时')` 仍返 `null`（两张表不许互相吃）。
+ *
+ * ★`LIMIT_GEARS` 从"白名单"降级为**建议值**：面板拿它在输入框下面提示"常用：3 / 6 / 9"
+ *   （玩家不知道该填几），旧账里那些值也都还是合法整数 ⇒ **旧账照旧读得出来**。
+ */
 export function normalizeLimit(key, value) {
     if (!isLimitKey(key)) return null;
-    const n = typeof value === 'number' ? value : Number(String(value ?? '').trim());
-    if (!Number.isFinite(n)) return null;
-    return LIMIT_GEARS[key].includes(n) ? n : null;
+    const raw = typeof value === 'number' ? value : String(value ?? '').trim();
+    if (raw === '') return null;                       // 空 = 未定（回出厂默认），不是 0
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) return null;              // 非数字
+    if (!Number.isInteger(n)) return null;             // 小数：("半件事"没有意义)
+    if (n < 1) return null;                            // 0 / 负数
+    return n;
 }
 
 /** 从世界账读**已设**的档位（只读、不发明；缺键=没设过 ⇒ 不进结果）。 */

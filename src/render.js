@@ -20,6 +20,12 @@ import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜�
 import { LIMIT_ROWS } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）
 // ★★leg53：**哪几格是引擎每轮算的**——从生产者那边取（不是面板自己另写一份名单，本仓"一处口径"）。
 import { ENGINE_DERIVED_ENV } from './unrest.js';
+// ★★★leg54：单轮演算上限那行原来**把数字写死**（"120 秒 / 4096 字"），而实值是 **16384**
+//   （第十九棒拍板、`transport-http.js` 的 E3 记档；`test/transport-http.test.js` 锁着）。
+//   ⇒ 面板印了一个**过期好几棒的数**，而且它正是"看不出哪个是准的"那种症状的来源
+//     （本棒我就是先信了这行、把预算记成 4096 —— 见交接 §"我踩的坑"）。
+//   ⇒ 改成**从真源现读**：`PROPOSED_CALL_LIMITS` 是那两个数的**唯一出处**。
+import { PROPOSED_CALL_LIMITS } from './transport-http.js';
 import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张力行改说可验证事实（近 N 轮事件数），与公式共用同一口径
 
 // 面板构建号（自证用）：用户实机常遇到"改了代码但页面还是旧的"（浏览器缓存 web/index.js）。
@@ -150,7 +156,10 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   ★★★leg53（`leg53-unrest-producer`）：**乱象那一格真有生产者了**——引擎每轮从账上真发生的事
 //   推一个档位（`src/unrest.js`：近 10 轮出事铺到几个不同地点 ⇒ 四档）；**民生那一格撤下**
 //   （它没有任何生产者，永远「未定」）；乱象的「依据」如实写「引擎每轮算的」（不再糊成"书里原话"）。
-export const PANEL_BUILD = 'leg53-unrest-producer';
+//   ★★★leg54（`leg54-unlimited-limits`）：**世界尺度那四个框改成数字输入框、拿掉上限**（用户令
+//   「能自由调数，当然也能无上限」）——旧的档位白名单（顶格 9/12/30/40）撤掉；
+//   顺带修**设置页印着过期预算**那个显示 bug（写着 4096，实值 16384）。
+export const PANEL_BUILD = 'leg54-unlimited-limits';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -457,19 +466,30 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //       走 `limits.js` 自己的表——两张表分开，正是为了不让第 ③ 条被悄悄破坏。
     //   ★**它的风险与边界（写在面板上，不藏）**：上调后"同时最多几件大计"会先见底（实测：请求=6 时六轮咬 4 次）；
     //     且真账从没跑过 20/30 这些档 ⇒ 面板如实把它标成"超出常用范围"，不假装有保证。
-    //   ★呈现纪律不变：档位**只报数**（不是"应该没问题"），改完下一轮生效。
+    // ★呈现纪律不变：档位**只报数**（不是"应该没问题"），改完下一轮生效。
     const limitRows = LIMIT_ROWS(world, cfg.paramEnv);
-    const limitKnob = (r) => {
-        const opts = r.options.map((g) => `<option value="${escapeHtml(String(g))}"${g === r.value ? ' selected' : ''}>${escapeHtml(String(g))}</option>`);
-        return `<div class="sw2-row" data-limit="${escapeHtml(r.key)}"><span>${escapeHtml(r.meta.label)}</span>`
-            + `<select class="sw2-param-select" data-action="set-param" data-param="${escapeHtml(r.key)}">${opts.join('')}</select>`
-            // ★★★leg46 续·十（用户第五次实机「我改了值旁边直接变成未定」）：**这一格不再画「默认」小标**。
-            //   两次教训叠起来：①小标只在"真源里没这个键"时出现，而那一刻控件上往往还留着玩家刚选的值
-            //   ⇒ 同一行里"控件 12 / 格 6默认"，**看起来就是"我的改动没生效"**；②它把"这格是不是你定的"
-            //   塞进了玩家读不懂的位置。⇒ 这一格**只显示值**，由 `web/index.js` 的 `sw2SetParamCell`
-            //   按**同一行的控件**对齐（控件是 12，格就是 12）；"出厂默认是多少/设没设过"交给自检卡说。
-            + `<b class="sw2-param-val" data-param-cell="${escapeHtml(r.key)}">${escapeHtml(String(r.value))}</b></div>`;
-    };
+    // ★★★leg54（用户令「**把调数字的框直接变成输入框或者无上限**」→ 拍板「真无上限：输入框 + 只验 ≥1 的整数」）：
+    //   旧版是 `<select>`（**只能点白名单里那三档**，顶格只有 9/12/30/40）。
+    //   ⇒ 改成 `<input type="number" min="1" step="1">`：键盘直接敲，**认任意 ≥1 的整数**。
+    //   ★为什么无上限是安全的（本笔核过数字，用户说得对）：
+    //     单轮输出预算 **16384 token**、一条事件约 120–200 字符 ⇒ 预算够写**几十条**；
+    //     而 leg40b 实测 59 轮真账**逐轮新事件 max 4** ⇒ **那个"12"从来没咬到过模型，它只是一张纸**。
+    //     真正的边界是"模型一次能写多长"——撤掉白名单就是**把边界还回它本来该在的地方**。
+    //   ★`suggest` 那串是**建议值**（`LIMIT_GEARS` 降级为建议）：玩家不知道该填几，给他三个常用档；
+    //     它**不再是白名单**（填别的照收）。
+    const limitKnob = (r) => `<div class="sw2-row" data-limit="${escapeHtml(r.key)}"><span>${escapeHtml(r.meta.label)}</span>`
+        // ★接线面**不用改**：`web/index.js` 的 `set-param` 是从 `closest('[data-action="set-param"]')` 上读
+        //   `.value` 的（`<select>` 与 `<input>` 都有 `.value`）⇒ 换控件类型不碰事件委托。
+        + `<input class="sw2-param-input" type="number" min="1" step="1" inputmode="numeric"`
+        + ` data-action="set-param" data-param="${escapeHtml(r.key)}" value="${escapeHtml(String(r.value))}"`
+        + ` title="${attrText(`填任意 ≥1 的整数；建议 ${r.options.join(' / ')}`)}">`
+        // ★★★leg46 续·十（用户第五次实机「我改了值旁边直接变成未定」）：**这一格不再画「默认」小标**。
+        //   两次教训叠起来：①小标只在"真源里没这个键"时出现，而那一刻控件上往往还留着玩家刚选的值
+        //   ⇒ 同一行里"控件 12 / 格 6默认"，**看起来就是"我的改动没生效"**；②它把"这格是不是你定的"
+        //   塞进了玩家读不懂的位置。⇒ 这一格**只显示值**，由 `web/index.js` 的 `sw2SetParamCell`
+        //   按**同一行的控件**对齐（控件是 12，格就是 12）；"出厂默认是多少/设没设过"交给自检卡说。
+        + `<b class="sw2-param-val" data-param-cell="${escapeHtml(r.key)}">${escapeHtml(String(r.value))}</b>`
+        + `<em class="sw2-limit-suggest">常用：${r.options.map((g) => escapeHtml(String(g))).join(' / ')}</em></div>`;
     //   读法（★leg52 改成"结论在外、长说明折起"）：总说明首句 + 四行旋钮 + 两条折叠说明。
     const capCard = `<div class="sw2-set-card sw2-cap-card" style="grid-column:1/-1">`
         + `<h4>世界尺度 · 可调上限</h4>`
@@ -478,9 +498,17 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //   构建号不在这页上，就只能靠猜（本仓老坑：改了代码但浏览器吃旧 index.js）。
         //   ★leg52：构建号**不折**（它是排障用的，折起来就等于没有）。
         + `<div class="sw2-hint" style="margin-bottom:8px">构建 <b>${escapeHtml(PANEL_BUILD)}</b> —— 若这里不是最新那串，请 <b>Ctrl+F5</b>（浏览器缓存了旧面板）。</div>`
-        + foldHint('这一栏决定<b>这个世界允许跑多宽</b>；改完<b>下一轮生效</b>（已落账的账不回改）。',
+        + foldHint('这一栏决定<b>这个世界允许跑多宽</b>；改完<b>下一轮生效</b>（已落账的账不回改）。'
+            + '四个框都能<b>直接填数</b>——没有上限，填多少就是多少。',
             '出厂默认就是现在这几个数。上调后"同时最多几件大计"会先见底——'
-            + '这几个上限之间会互相掩盖，一次只调一个才看得出是哪一个在起作用。',
+            + '这几个上限之间会互相掩盖，一次只调一个才看得出是哪一个在起作用。'
+            // ★★leg54：这一句是**如实告知**，不是限制（用户令「无上限」）——
+            //   真正的边界在模型那一边，玩家必须知道"填大了会以什么形式表现出来"，
+            //   否则他会以为"填 100 却只长了 3 件"是插件坏了。
+            + '<br>☆ 填得很大<b>不会凭空多出事情</b>：一轮里到底发生几件，是模型自己决定的'
+            + '（它一次回复能写多长就是那个真天花板）。'
+            + '超出它一次能写的量时，你不会看到"被拦"，只会看到<b>这一轮没长出新事</b>'
+            + '——要查就翻观棋窗口底部的「⚖ 本轮裁定」。',
             { summary: '改这些数要注意什么' })
         + limitRows.map(limitKnob).join('')
         + foldHint('',
@@ -1538,7 +1566,16 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         + `<div class="sw2-field"><label>服务地址</label><input class="sw2-input" id="sw2_base" value="${escapeHtml(cfg.baseUrl || '')}"></div>`
         + `<div class="sw2-field"><label>密钥</label><input class="sw2-input sw2-key-mask" id="sw2_key" value="${escapeHtml(cfg.apiKey ? '••••••••••••••••••••' : '')}"><div class="sw2-hint">本机读取 · 不落库 · 不打印</div></div>`
         + `<div class="sw2-field"><label>世界模型</label><input class="sw2-input" id="sw2_model" value="${escapeHtml(cfg.model || '')}"></div>` 
-        + `<div class="sw2-field"><label>单轮演算上限（提案：120 秒 / 4096 字）</label><input class="sw2-input" id="sw2_limits" value="120s · 4096" readonly title="${attrText('提案值展示 · 随 K38 报批联动后生效')}"><div class="sw2-hint">提案态：报批前不视为定案，此处仅展示。</div></div></div>`
+        // ★★★leg54（**修一个真的显示 bug**）：这一行原来是写死的「提案：120 秒 / **4096 字**」，
+        //   而实值是 **16384**（第十九棒拍板 `4096 → 16384`，`transport-http.js` 的 E3 记档，
+        //   `test/transport-http.test.js` 锁着）⇒ 面板印了一个**过期好几棒的数**。
+        //   ⇒ 改成**从真源现读**（`PROPOSED_CALL_LIMITS`），从此不可能再写歪。
+        //   ★教训（本棒我自己踩的，写在这里防下一任）：我就是**先信了这行**把预算记成 4096、
+        //     差点据此劝用户"不要放开上限"——**UI 上的数字也是要核的**，它和代码一样会过期。
+        + `<div class="sw2-field"><label>单轮演算上限（${Math.round(PROPOSED_CALL_LIMITS.timeoutMs / 1000)} 秒 / ${PROPOSED_CALL_LIMITS.maxTokens} token）</label>`
+        + `<input class="sw2-input" id="sw2_limits" value="${Math.round(PROPOSED_CALL_LIMITS.timeoutMs / 1000)}s · ${PROPOSED_CALL_LIMITS.maxTokens}" readonly title="${attrText('随 K38 报批联动后生效')}">`
+        + `<div class="sw2-hint">这是<b>模型一次回复</b>的长度上限（推理与正文<b>共享</b>这一份）。`
+        + `<b>世界尺度</b>那几个框填得再大，一轮里也只能写这么多。</div></div></div>`
         + `<div class="sw2-set-card"><h4>操作</h4><div class="sw2-actions">`
         + `<button class="sw2-btn sw2-primary" data-action="init-world">✨ 开始新世界</button>`
         // ★leg40b（D1）：名字与状态栏/参数页统一成「推进一轮」（原来叫「手动推进一步」，

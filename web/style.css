@@ -150,6 +150,18 @@
 /* 展开的原生列表：给了字号就跟着走（macOS/部分浏览器仍按系统渲染，这里只管能管的那部分） */
 .sw2-param-select option{font-size:12px;font-family:inherit;}
 .sw2-param-select:focus{outline:none;border-color:var(--sw2-text-faint);}
+/* ★★★leg54（用户令「把调数字的框直接变成输入框或者无上限」）：**数字输入框**。
+   为什么另立一个类而不是复用 `.sw2-param-select`：语义不同（一个选、一个填），
+   且**将来的宽度/对齐要分开调**；共用会让"改下拉的宽"顺手改到输入框上（本仓"一处口径"的反面）。
+   ★数字框的三条专属规则：①定宽（不然浏览器给个很宽的默认值，把「常用：3 / 6 / 9」挤走）；
+   ②右对齐（数位对齐，读数快）；③去掉浏览器给 number 框的上下箭头
+   （本面板一屏四个框，箭头既占地方又容易被滚轮误触——参数页早就为滚轮误触立过规矩）。 */
+.sw2-param-input{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:3px 7px;font-size:12px;font-family:inherit;width:72px;text-align:right;line-height:1.4;}
+.sw2-param-input:focus{outline:none;border-color:var(--sw2-text-faint);}
+.sw2-param-input::-webkit-outer-spin-button,.sw2-param-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.sw2-param-input[type=number]{-moz-appearance:textfield;appearance:textfield;}
+/* 「常用：3 / 6 / 9」那串**建议值**（leg54：`LIMIT_GEARS` 从白名单降级为建议）——它不该抢过值本身 */
+.sw2-limit-suggest{flex:none;}
 .sw2-param-val{color:var(--sw2-amber);}
 /* leg26 c：参数的性质标签（自变量/因变量）——因变量只是呈现，没有旋钮 */
 .sw2-param-kind{margin-left:6px;font-size:10px;padding:1px 6px;border-radius:7px;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}

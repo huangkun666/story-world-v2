@@ -89,7 +89,10 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 // ★★leg52 同批升位：参数页版式与观棋信息带**真的变了**（四键并卡 + 推进卡撤走 + 撤销卡上移 +
 //   长说明折进 `<details>` + 浪尖去重）⇒ `style.css` 增了 `.sw2-fold` 一族规则，CSS 版本号必须跟着升。
 //   ★同一条禁词纪律：`leg52-params-and-tide` 里零引擎术语（params/tide 是玩家词面的英文）。
-const CSS_VERSION = '20260917-leg52-params-and-tide';
+// ★★★leg54 同批升位：世界尺度那四个框从 `<select>` 换成 `<input type="number">`
+//   ⇒ `style.css` 增了 `.sw2-param-input` 一族规则（定宽/右对齐/去箭头）⇒ **CSS 版本号必须跟着升**。
+//   ★禁词纪律同前：`leg54-unlimited-limits` 零引擎术语（limits 是玩家词面）。
+const CSS_VERSION = '20260917-leg54-unlimited-limits';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -1746,6 +1749,14 @@ export function sw2CollectLiveParamValues() {
             if (tag === 'SELECT') {
                 const v = String(el.value ?? '').trim();
                 if (v) selects[key] = v;             // ★空串＝玩家清成未定 ⇒ 不覆盖（让真源/默认照旧说话）
+            } else if (tag === 'INPUT') {
+                // ★★★leg54：**数字输入框也要采**（世界尺度那四个框从 `<select>` 换成了 `<input>`）。
+                //   为什么漏不得（不然就是一个"能填、但填了白填"的控件）：
+                //   本函数的结果是 `paramEnv`（面板整块按它画）——漏采 ⇒ 玩家刚敲进去的数**进不了 `paramEnv`**
+                //   ⇒ 面板照真源/默认重画一遍 ⇒ **看起来就是"我填了它自己跳回去"**（leg48 治过的那条症状）。
+                //   ★空串照旧不覆盖（与 SELECT 同口径）：空 = 玩家清成未定，让真源/默认说话。
+                const v = String(el.value ?? '').trim();
+                if (v) selects[key] = v;
             } else if (tag === 'BUTTON') {
                 // 开关：亮着的那一枚按钮写着 data-value="1"
                 const on = el.classList?.contains?.('sw2-primary');
@@ -1886,7 +1897,14 @@ export function sw2SetParamControl(key) {
         const win = document.getElementById(WINDOW_ID);
         if (!win) return false;
         const el = win.querySelector(`[data-action="set-param"][data-param="${key}"]`);
-        if (!el || String(el.tagName || '').toUpperCase() !== 'SELECT') return false;
+        // ★★★leg54：**`<input>` 也必须被对齐**（世界尺度那四个框从下拉换成了数字输入框）。
+        //   旧版这一行只认 `SELECT` ⇒ 换控件之后它会**静默退让**，而这一退让的后果正是它当初要治的病：
+        //   玩家"手滑把框清空"之后，控件上空着、真源里还是老值 ⇒ 屏幕上留着一次**假的改动**
+        //   （leg48 那就是"改了档位、刷新回默认"的观感来源）。⇒ 两种控件都认。
+        //   ★`sw2ControlText`/下面写回的那两处**本来就同时认 SELECT 与 INPUT**（当初就写对了）——
+        //     只有这一道类型闸漏了，是个"改了一处、没改配套那一处"的实例。
+        const tag = String(el?.tagName || '').toUpperCase();
+        if (!el || (tag !== 'SELECT' && tag !== 'INPUT')) return false;
         // ★裁决只问一处：`paramHub.displayEnv`（真源 > 本页刚写的权威值 > 账上镜像 > 出厂默认）
         // ★★★leg48：**桶名取"hub 真正读写过的那个桶"**（`currentWorldName()`），不取"当下那个世界对象"——
         //   病因（真浏览器现场）：`loadWorld` 走空态/轮转失败时把**空态世界**交给面板，
