@@ -285,7 +285,7 @@
 .sw2-relone-pow{color:var(--sw2-amber);}
 .sw2-relone-dim{color:var(--sw2-text-faint);}
 .sw2-relone-sep{color:var(--sw2-line);}
-/* 麾下名单（`render.js:883` 的 `sw2-relone-crew`）：这一串是**关系格里最长的那条**（一家势力麾下几十号人），
+/* 麾下名单（`render.js:888` 的 `sw2-relone-crew`）：这一串是**关系格里最长的那条**（一家势力麾下几十号人），
    也就是最容易被上面那把剪刀吃满两行、当场截断的那一条；`-who`/`-pow`/`-dim`/`-sep` 都有规则而它没有
    ⇒ 评审第二轮 #3 要求"与 `-dim` 同级补一条"。取值就是基规则那档正文色（**不是** `-dim` 退色档）：
    它是内容（谁在麾下），而"麾下实力"那种注脚才走 `-dim`——本条与已有观感**逐像素一致**，
