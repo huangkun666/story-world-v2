@@ -1,6 +1,8 @@
 # 细案 · 世界模型层变宽（leg33 · 承接 leg32 §1 的"单焦点塌缩"）
 
 > **状态：待用户拍板。本文只出数与设计，一个字节的引擎改动都没有。**
+> ★**留档搬迁（2026-09-16）**：下面提到的 `session-handoff-2026-09-12-leg32.md` 已移到
+> `F:\deepseek\backups\story-world-v2-docs-pruned-20260916\`（引用的内容没变，只是文件搬家了）。
 > 前置（都已实测坐实，不是推测）：
 > - `docs/session-handoff-2026-09-12-leg32.md` §1：真账 8 条在飞盘算 8/8 挂在死煞同一件事上。
 > - 本棒 `demo/measure-single-focus-ab.js` 的真模型对跑（同起点真账副本 tick 53、三臂各 5 tick）：
