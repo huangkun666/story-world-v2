@@ -83,6 +83,24 @@ test('leg26 c：参数页——值不重复、因变量不给旋钮、自变量�
         assert.ok(row.includes(`data-param="${key}"`) && row.includes('<select'),
             `自变量「${key}」必须有旋钮`);
     }
+    // ③c ★★leg52（**真浏览器出图抓出来的回归**，锁死防重犯）：**每个自变量都得有名字**。
+    //   病：并卡之前四键各占一张卡、参数名写在**卡头 `<h4>`** 里；并成一张卡之后卡头只剩「世界气氛与条件」，
+    //   而那两行本身**从头到尾不提参数名** ⇒ 画面成了「当前 大灾 / 设定为 [大灾▾]」——
+    //   **玩家分不清这一行是天时还是时局**。⇒ 补 `.sw2-row.sw2-param-name` 组标题行，并把这条锁上。
+    //   ★为什么必须锁"文件名"而不是只锁"卡里有这四个字"：`PARAM_KEYS` 与 `LABELS.env` 到处都在，
+    //     只有"**紧贴该键那一行的前面**出现它的显示名"才是"玩家真能读到标签"的证据。
+    const DISPLAY = { 天时: '天时', 张力推手: '时局' };   // 面板一律走 LABELS.env，不印引擎键名
+    for (const key of ['天时', '张力推手']) {
+        // ★`withLabelRow`：组标题行在"当前"那一行**之前**，不带它这条锁就永远咬不到（假红）
+        const row = paramRowSeg(atmoSeg, key, { withLabelRow: true });
+        assert.ok(row.includes('sw2-param-name'),
+            `★自变量「${DISPLAY[key]}」缺组标题行——并卡后玩家会读到"当前 大灾/设定为…"而不知道这是哪一格`);
+        assert.ok(row.includes(`sw2-param-name"><b>${DISPLAY[key]}</b>`),
+            `★组标题里必须写「${DISPLAY[key]}」（证明玩家真能读到标签，而不只是卡里出现过这几个字）`);
+    }
+    // ③d 反向：显示名不许漏成引擎键名（`LABELS.env` 是唯一口径）
+    assert.ok(!html.includes('sw2-param-name"><b>张力推手</b>'),
+        '★组标题不许直接印引擎键名「张力推手」（面板一律走 LABELS.env → 「时局」）');
     // ③b ★leg52：**四键同卡**（旧版是四张独立的卡）——并把"合并 ≠ 混为一谈"锁住。
     //   ★断言口径（**自己踩过一次**）：不许拿键名 `民生度/张力推手` 去找卡片正文——面板一律走
     //     `LABELS.env`（民生/乱象/时局），`民生度` 只出现在**属性**里；要锁的是"卡里真把两种性质
@@ -355,12 +373,19 @@ const textOnly = (html) => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/
 //        「民生度」会切出「乱象」那一行 = 假绿，而「动乱度」的行头在锚之前 ⇒ 切出空串 = 假红）；
 //     ③ 自变量那一行**跨两格**（`当前` + `设定为`，两格都挂同一个键）⇒ 不可切到"下一个行头"，
 //        只有因变量那种**单行自足**的行才可以切。
-export const paramRowSeg = (htmlSrc, key, { firstRowOnly = false } = {}) => {
+//   ★leg52 续：`withLabelRow` —— 自变量的**组标题行**（`.sw2-param-name`）在"当前"那一行**之前**，
+//     默认切法切不到它。要判"玩家能不能读到标签"就必须把边界**再往前挪一行**
+//     （照本仓"判据要咬玩家真能看到的东西"的口径）。
+export const paramRowSeg = (htmlSrc, key, { firstRowOnly = false, withLabelRow = false } = {}) => {
     const anchor = `data-param-cell="${key}"`;
     const cell = String(htmlSrc).indexOf(anchor);
     if (cell < 0) return '';
-    const start = String(htmlSrc).lastIndexOf('<div class="sw2-row', cell);
+    let start = String(htmlSrc).lastIndexOf('<div class="sw2-row', cell);
     if (start < 0) return '';
+    if (withLabelRow) {
+        const before = String(htmlSrc).lastIndexOf('<div class="sw2-row', start - 1);
+        if (before >= 0 && String(htmlSrc).slice(before, start).includes('sw2-param-name')) start = before;
+    }
     const rest = String(htmlSrc).slice(start);
     if (!firstRowOnly) return rest;
     const next = rest.indexOf('<div class="sw2-row', 1);

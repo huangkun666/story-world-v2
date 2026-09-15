@@ -174,6 +174,14 @@
 .sw2-row > span:first-child{flex:none;min-width:52px;color:var(--sw2-text);}
 .sw2-row > em{font-style:normal;font-size:11.5px;line-height:1.5;color:var(--sw2-text-faint);flex:1;min-width:0;}
 .sw2-row + .sw2-row{border-top:1px dashed var(--sw2-line-soft);}
+/* ★★leg52：并卡后的**自变量组标题行**（「天时」/「时局」独占一行）。
+   为什么要有它：四键并成一张卡之后，参数名不再有卡头可挂，而"当前/设定为"两行本身不提参数名
+   ⇒ 出图一看是「当前 大灾 / 设定为 [大灾▾]」，玩家分不清是天时还是时局（真浏览器抓出来的回归）。
+   两条规则：①标题行**不带**虚线（它归下面两行管，不是并列的第三行）；
+             ②紧跟标题的那一行**也不带**虚线（否则标题会被一条线从自己的内容上切开）。 */
+.sw2-row.sw2-param-name{padding-bottom:2px;color:var(--sw2-text);}
+.sw2-row.sw2-param-name > b{color:var(--sw2-text);font-size:13px;}
+.sw2-row.sw2-param-name + .sw2-row{border-top:none;padding-top:2px;}
 .sw2-row b.sw2-param-val{flex:none;color:var(--sw2-amber);font-weight:600;min-width:44px;}
 .sw2-set-card .sw2-actions{display:flex;gap:8px;flex:none;}
 .sw2-set-card .sw2-btn{padding:4px 12px;font-size:12.5px;}

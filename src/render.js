@@ -361,7 +361,15 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //   ⇒ 引擎收到的是**「未定」**，玩家点的那一档被丢掉（"点了还是改不了值"）。
         //   ⇒ 治本：**壳上不许再挂 `data-param`**（同一个键只许有一个归属者——本仓"一字段一义"）。
         //     选择器/判据一律认 `[data-action="set-param"]`，不再认 `[data-param]`。
-        return `<div class="sw2-row"><span>当前</span><b class="sw2-param-val" data-param-cell="${escapeHtml(r.key)}">${escapeHtml(r.value)}</b></div>`
+        // ★★leg52（**并卡之后补回标签行** —— 真浏览器出图当场抓出来的回归，留档）：
+        //   旧版四键各占**一张卡**，参数名（天时/时局）写在**卡头 `<h4>`** 里；并成一张卡之后卡头只剩
+        //   「世界气氛与条件」，而这两行本身**从头到尾没提过参数名** ⇒ 出图一看是
+        //   「当前 大灾 / 设定为 [大灾▾]」——**玩家不知道这一行是天时还是时局**。
+        //   ⇒ 补一行 `.sw2-row.sw2-param-name` 当**组标题**（与因变量行的三格形态分工一致：
+        //     这里的标题**独占一行**，因为下面还有"当前/设定为"两行要归它管）。
+        //   ★判据 `leg52·C` 同步加一条"每个自变量都要有名字"（不然这种回归没人咬得住）。
+        return `<div class="sw2-row sw2-param-name"><b>${LABELS.env[r.key] || escapeHtml(r.key)}</b></div>`
+            + `<div class="sw2-row"><span>当前</span><b class="sw2-param-val" data-param-cell="${escapeHtml(r.key)}">${escapeHtml(r.value)}</b></div>`
             + `<div class="sw2-row"><span>设定为</span>`
             + `<select class="sw2-param-select" data-action="set-param" data-param="${escapeHtml(r.key)}">${opts.join('')}</select>`
             + `<em>引擎只照抄</em></div>`;
