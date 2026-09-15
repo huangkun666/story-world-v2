@@ -167,6 +167,8 @@ function openWindow() {
 
 function closeWindow() {
     document.getElementById(WINDOW_ID)?.classList.remove('sw2-open');
+    // ★细案实体页：视图态随关面板重置（照 `sw2ChronicleFilter` 的口径"纯视图态、关面板重置"）
+    sw2EntsViewReset();
     const menu = document.getElementById('extensionsMenu');
     if (menu) menu.style.display = '';
 }
@@ -244,7 +246,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         //   "默认"与"你改的值"在同一格里分不清）。
         const live = sw2CollectLiveParamValues();
         const cfgForRender = renderCfg(live.env ? { paramEnv: live.env } : {});
-        const out = renderAll(world, { config: cfgForRender, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter } });
+        const out = renderAll(world, { config: cfgForRender, oldVolumes, view: { chronicleFilter: sw2ChronicleFilter, entsView: sw2EntsView } });
         // ★★leg46 续·六（**格与控件同源**）：页面刚用 `cfg.paramEnv` 画完 ⇒ 顺手用**同一份**把显示格对齐。
         //   为什么必须用同一份（用户第四次实机：四个下拉都选对了、四格却写「未定」）：格若自己去读第二遍真源，
         //   就会与控件错开一个时刻（读到空 ⇒ 写「未定」），看起来就像"什么都没生效"。
@@ -1081,6 +1083,15 @@ let sw2LastWorld = null;          // K41：链视图入口持引用（同一对�
 let sw2SnapshotCache = null;      // leg27 后：快照清单（IDB 读回的元信息 + 摘要文案）——随 config 进渲染层，面板零第二份状态
 let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单（选人调用失败时退回它，再退兜底名单）
 
+// ★细案 spec-entities-page-ia：实体页的**唯一一份**视图状态
+//   （数据逻辑全在 `src/render.js` 的纯函数里：`selectEntityPage` / `entsHitCounts`；这里只存状态，
+//    一行数据逻辑都不写——本仓"零第二份状态"纪律，与上面的 `sw2ChronicleFilter` 完全同款：
+//    纯视图态、不落 SSOT、不落盘、重绘保留、关面板重置）
+let sw2EntsView = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', page: 1 };
+const SW2_ENTS_KINDS = new Set(['all', 'faction', 'character']);
+const SW2_ENTS_FILTERS = new Set(['busy', 'recent', 'named', 'orphan']);
+function sw2EntsViewReset() { sw2EntsView = { q: '', kind: 'all', filters: [], grp: 'none', sort: 'active', page: 1 }; }
+
 function modelSettings() {
     const ctx = freshCtx();
     const raw = ctx?.extensionSettings?.['story_world_v2'] ?? null;
@@ -1871,7 +1882,7 @@ function refreshSections(names) {
     try {
         const win = document.getElementById(WINDOW_ID);
         if (!win || !sw2LastWorld) return;
-        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: { chronicleFilter: sw2ChronicleFilter } });
+        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: { chronicleFilter: sw2ChronicleFilter, entsView: sw2EntsView } });
         for (const name of names || []) {
             const el = win.querySelector(`#sw2_view_${name}`);
             if (!el) continue;
@@ -1986,7 +1997,7 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
     if (!resolved) return { ok: false, error: '模型通道未配置' };
     const { entity, missing } = pickOneForLookup(world, id, { forceFields });
     if (!entity) return { ok: false, error: '账上没有这个实体' };
-    if (!missing.length) return { ok: false, error: '这一栏已经有原话了（要重查请用「重查」）' };
+    if (!missing.length) return { ok: false, error: '这一栏已经有原话了（要连「书未明述」一起推倒重查，用页顶的「补全全册实力」）' };
     const res = await runBatchLookup({
         ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
         ids: [id], forceFields, tick: world?.meta?.tick ?? 0,
@@ -2947,6 +2958,39 @@ if (typeof window !== 'undefined') {
         else setStatus('还没有世界（编年筛无处可用）');
     };
 
+    // ---------- leg49（细案 spec-entities-page-ia）：实体页工具条四枚动作 ----------
+    // 口径：改状态一行 + 只重绘本页。**选数据一行都不写在这里**（全在 `src/render.js` 的纯函数里）。
+    // ★重绘走 `refreshSections(['entities'])` 而不是自己拼 innerHTML：它是本仓唯一的局部重绘通道，
+    //   且跑在 `sw2SectionRefreshRunning` 防重入标志里（自拼 innerHTML 会绕过它 ⇒ 重绘自己咬自己）。
+    bus['ents-filter'] = (payload) => {
+        const v = String(payload?.value || '');
+        if (SW2_ENTS_KINDS.has(v)) sw2EntsView.kind = v;
+        else if (SW2_ENTS_FILTERS.has(v)) {
+            const i = sw2EntsView.filters.indexOf(v);
+            if (i >= 0) sw2EntsView.filters.splice(i, 1); else sw2EntsView.filters.push(v);
+        }
+        sw2EntsView.page = 1;          // ★换筛选必回第一页（否则"页码夹紧"会让人以为点了没反应）
+        refreshSections(['entities']);
+    };
+    bus['ents-sort'] = (payload) => {
+        const v = String(payload?.value || 'active');
+        if (['active', 'recent', 'name'].includes(v)) sw2EntsView.sort = v;
+        sw2EntsView.page = 1;
+        refreshSections(['entities']);
+    };
+    // ★分组那一档（`grp`）本任务**不渲染钮**（用户拍板：分组钮连同分组渲染一起去 Task 5），
+    //   处理器先在这里落位：Task 5 补上三枚钮时即插即用（"画了按钮就必须有人接"这条审计已经在咬）。
+    bus['ents-group'] = (payload) => {
+        const v = String(payload?.value || 'none');
+        if (['none', 'parent', 'loc', 'kind'].includes(v)) sw2EntsView.grp = v;
+        refreshSections(['entities']);
+    };
+    bus['ents-page'] = (payload) => {
+        // ★页码由渲染层夹紧（`selectEntityPage` 的越界夹紧），这里只管加减——零第二份夹紧逻辑
+        sw2EntsView.page += (String(payload?.value) === 'prev' ? -1 : 1);
+        refreshSections(['entities']);
+    };
+
     bus['open-chain'] = (payload) => {
         try {
             const id = payload?.chain;
@@ -3195,6 +3239,18 @@ function bindActions() {
         const action = el.getAttribute('data-action');
         const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity'), name: el.getAttribute('data-name'), force: el.getAttribute('data-force'), snap: el.getAttribute('data-snap'), tick: el.getAttribute('data-tick'), param: el.getAttribute('data-param'), value: el.getAttribute('data-value') };
         dispatchAction(action, payload, e);
+    });
+    // ★细案实体页：搜索框（`#sw2_ents_q`）走 input 通道——`refreshSections` 换掉 innerHTML 会**夺焦点**，
+    //   ⇒ 重绘后必须把焦点与光标还回去（不还，用户打到第二个字就掉焦点——这是"面板抢玩家的手"的另一种形态）。
+    win.addEventListener('input', (e) => {
+        const q = e.target?.closest?.('#sw2_ents_q');
+        if (!q) return;
+        const caret = q.selectionStart;
+        sw2EntsView.q = String(q.value || '');
+        sw2EntsView.page = 1;                 // 换搜索词必回第一页（同筛选）
+        refreshSections(['entities']);
+        const again = win.querySelector('#sw2_ents_q');
+        if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
     });
 }
 

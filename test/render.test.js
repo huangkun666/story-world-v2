@@ -1204,3 +1204,53 @@ test('★细案实体页 J11：行内不出现玩家标记与占位', () => {
     assert.ok(!html.includes('sw2-player'), '★玩家底纹不进新行（细案 J11）');
     assert.ok(!html.includes('你的棋子'), '★「你的棋子」标记退场；玩家靠归属与在办自证');
 });
+
+// ============ 细案 spec-entities-page-ia：工具条（J5：必须存在搜索与分页控件） ============
+test('★细案实体页 J5：搜索控件与分页控件**必须存在**（旧版各 0 个）', () => {
+    const w = world();
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('id="sw2_ents_q"'), '★搜索框在位（旧版：0 个）');
+    assert.match(html, /<input[^>]*type="search"/, '搜索框是真 input[type=search]');
+    assert.ok(html.includes('data-action="ents-page"'), '★分页控件在位');
+    assert.ok(html.includes('data-action="ents-filter"'), '筛选 chip 在位');
+    assert.ok(html.includes('data-action="ents-sort"'), '排序控件在位');
+    // ★分组控件**不在本任务**（用户拍板：从 Task 3 移到 Task 5，中途不许交付死控件）
+    assert.ok(!html.includes('data-action="ents-group"'), '★本任务不许出现分组控件（它连同分组渲染一起去 Task 5）');
+    // 计数不许写死：chip 上的数来自 entsHitCounts
+    const c = entsHitCounts(w);
+    assert.ok(html.includes(`>${c.all}<`), `「全部」格印真数 ${c.all}`);
+});
+
+test('★细案实体页：两处既有入口按细案改挂工具条（不许在改版里丢掉）', () => {
+    const w = world();
+    // ① 全册补全按钮（lookup-batch.test.js:436/447 锁它，原在页眉）
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('data-action="lookup-batch-all"'), '★「⬇ 补全全册实力」入口仍在');
+    assert.ok(html.includes('⬇ 补全全册实力'), '文案不变（既有用例按这句锁）');
+    // 跑到「停止补全」那一态
+    const running = renderEntitiesHtml(w, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } });
+    assert.ok(running.includes('■ 停止补全 4/623'), '★进度态照旧由 config.lookupTask 进渲染层');
+    // ② 查书三态说明（render.test.js:547/620 锁它，原在页底整行）⇒ 收进可展开的「？」
+    assert.ok(html.includes('sw2-ents-asks'), '三态说明改成可展开容器');
+    assert.ok(html.includes('账上只记查到的与玩出来的东西'), '★说明文本必须**连续出现**（既有用例用 includes 锁它）');
+});
+
+test('★细案实体页：命中计数与页码如实印出（不是估计值）', () => {
+    const many = Array.from({ length: 130 }, (_, i) => ({ id: `e_${i}`, kind: 'character', name: `名${String(i).padStart(3, '0')}` }));
+    const w = { version: 1, context: { world: 'x' }, entities: many, weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 } };
+    const html = renderEntitiesHtml(w);
+    assert.ok(html.includes('命中 <b>130</b>'), '命中数如实');
+    assert.ok(html.includes('显示第 1–60 条'), '区间如实');
+    assert.ok(html.includes('第 1 / 3 页'), '页码如实');
+    // 筛选态下计数跟着变
+    const html2 = renderEntitiesHtml(w, { view: { q: '名00' } });
+    assert.ok(html2.includes('命中 <b>10</b>'), '筛完计数跟着变');
+});
+
+test('★细案实体页：工具栏与列表头**零引擎术语**（构建号也在玩家视线内）', () => {
+    const html = renderEntitiesHtml(world());
+    const text = String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'entity', 'ENTITIES']) {
+        assert.ok(!text.toLowerCase().includes(bad.toLowerCase()), `工具栏不得出现引擎术语「${bad}」`);
+    }
+});

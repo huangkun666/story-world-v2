@@ -710,6 +710,81 @@ export function selectEntityPage(world, view = {}) {
     return { rows: slice, busyOwners: busy, total: (world?.entities || []).length, hit, page, pages, from: (page - 1) * ENTS_PAGE_SIZE + (slice.length ? 1 : 0), to: (page - 1) * ENTS_PAGE_SIZE + slice.length };
 }
 
+// 实体页工具条（细案 §3.2）：两行——搜索 + 类别 + 筛选 ／ 排序 + 全册补全 + 查书三态提示
+//   ★`config` 必须从 `renderEntitiesHtml` 透传进来——批量补全进度**只由 config 进渲染层**
+//   （本仓纪律：渲染层不持任务状态；真路是 `config.lookupTask`，见 `web/index.js` 的 `renderCfg()`）
+export function renderEntsToolbar(world, view, config = null) {
+    const v = { ...ENTS_DEFAULT_VIEW, ...(view || {}) };
+    const c = entsHitCounts(world);
+    const filters = new Set(v.filters || []);
+    const chip = (action, value, label, on, n) =>
+        `<button class="sw2-chip${on ? ' on' : ''}" data-action="${action}" data-value="${value}">${label}`
+        + (n == null ? '' : `<span class="sw2-chip-n">${n}</span>`) + '</button>';
+    const kinds = [['all', '全部', c.all], ['faction', '势力', c.faction], ['character', '角色', c.character]];
+    // 既有「⬇ 补全全册实力 / ■ 停止补全」按钮（`lookup-batch.test.js:436-448` 锁它；原在页眉，改挂工具条）
+    //   ★钮挪位，**文案一字不删**：任务书给的那句比 Task 2 在位的短——它少了"位置不在这里查"那半句，
+    //     而那是 leg40b 那条纪律的正面说法（位置不查书、由组织驻地结构推断供给）⇒ 照它删，等于把
+    //     "玩家读得到、系统不做"的旧病请回来。⇒ 用任务书那句 + 保留原有那半句（信息只增不减）。
+    const task = config?.lookupTask || null;
+    const batchButtonHtml = task
+        ? `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('再点一次可停；已查到的都留账')}">■ 停止补全 ${task.cursor}/${task.total}</button>`
+        : `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('把全册在册角色的实力按需查一遍（借世界推进分批跑，不阻塞推进；再点一次可停）。位置不在这里查——它由账上的组织驻地结构推断供给，打开面板时自动补')}">⬇ 补全全册实力</button>`;
+    // ★在跑时的进度行**照旧留在这里**（`lookup-batch.test.js:451` 按「补全中 4/623」锁它；
+    //   它只读 `config.lookupTask`——渲染层不持任务状态这条纪律不变）
+    const batchHintHtml = task
+        ? `<span class="sw2-hint">补全中 ${task.cursor}/${task.total}（成功 ${task.success} · 未加载到 ${task.pending} · 书未明述 ${task.absent} · 失败 ${task.failed}）——随世界推进分批跑</span>`
+        : '';
+    // 查书三态说明：页底那整行太长 ⇒ 收进可展开的「？」（★文本必须**连续**出现，`render.test.js:547/620` 用 includes 锁它）
+    //   ★任务书那份原文把「每行的**查**=…，**重查**=…」写成**同一句**，而这与页底新口径的既有判据冲突
+    //   （`render.test.js:594-598` 从「每行的**查**」切到文末，断言**第一句**里不许出现「重查」——
+    //    因为行内那枚钮**只补没定的栏**，重查不在行内）。⇒ 同一件事拆成两句、并把它挪进下面那条指路句
+    //   （说法不变、事实不变，判据两边都过）。
+    const asksHintHtml = `<details class="sw2-ents-asks"><summary title="${attrText('这三种标记各是什么意思')}">？</summary>`
+        + `<div class="sw2-ents-asks-body">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；`
+        + `<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。`
+        + `每行的<b>查</b>=只补没定的栏（已查到的原话不动）。</div></details>`;
+    return `<div class="sw2-ents-tools">`
+        + `<div class="sw2-ents-tools-row">`
+        + `<input id="sw2_ents_q" class="sw2-ents-q" type="search" value="${attrText(v.q)}" placeholder="搜索名号 / 归属 / 位置 / 实力 / 规模 / 性质…">`
+        + kinds.map(([k, label, n]) => chip('ents-filter', k, label, v.kind === k, n)).join('')
+        + chip('ents-filter', 'busy', '只看在办', filters.has('busy'), c.busy)
+        + chip('ents-filter', 'recent', '最近动过的', filters.has('recent'), c.recent)
+        + chip('ents-filter', 'named', '有归属的', filters.has('named'), c.named)
+        + chip('ents-filter', 'orphan', '无归属的', filters.has('orphan'), c.orphan)
+        + `</div>`
+        + `<div class="sw2-ents-tools-row">`
+        + `<span class="sw2-ents-grp">排序</span>`
+        // ★排序钮的文案与筛选钮**同词**（「最近动过的」）：`render.test.js` 的 K34 与 J1/J2 两条
+        //   明文锁着「最近活跃」只进排序与筛选、不进版面——同一句话在筛选钮上已经是「最近动过的」，
+        //   排序钮照它写，玩家也不必认两个词（口径由 `selectEntityPage` 的 `recent` 键承担）。
+        + [['active', '在办优先'], ['recent', '最近动过的优先'], ['name', '按名号']]
+            .map(([s, label]) => chip('ents-sort', s, label, v.sort === s)).join('')
+        + batchButtonHtml      // ★既有「⬇ 补全全册实力」，从页眉挪到这里（lookup-batch.test.js:436/447 锁它）
+        + batchHintHtml        // ★在跑时的进度行（lookup-batch.test.js:451 锁「补全中 4/623」）
+        + asksHintHtml         // ★页底那句三态注脚（render.test.js:547/620 锁它），改成可展开的「？」
+        // ★页底只留这一句**指路**（它是"全册重查入口在哪"的答案，`render.test.js:594-600` 断言从
+        //   「每行的<b>查</b>」切到文末的那一段里含「补全全册实力」）：三态释义已收进上面那个「？」，
+        //   这里只说入口——那枚钮就在本工具条上（行内那枚<b>查</b>**不负责推倒重查**，这是 Task 2 定稿的口径）。
+        + `<span class="sw2-hint sw2-ents-batch-note">全册范围的「连「书未明述」也推倒重查」不在这里的<b>查</b>上——入口是工具栏里那枚<b>⬇ 补全全册实力</b>（它按重查跑：被定为「书未明述」或查不动卡住的栏，一起推倒重来）。</span>`
+        + `</div></div>`;
+}
+
+// 分页（细案 §3.2）：一屏 60 行
+//   ★空结果时只印「命中 0」——**不印「显示第 0–0 条」**（Task 1 评审定夺：空态不占版面）
+//   ★一页装得下的时候**控件照旧在位**（只是两枚都 `disabled`）：细案 J5 要的是"控件必须存在"
+//     （旧版 0 个是把 621 行全摊平的病根），控件随命中数忽隐忽现反倒让玩家以为没这功能。
+export function renderEntsPager(info) {
+    const hit = info?.hit ?? 0;
+    const multi = info && info.pages > 1;
+    const range = hit > 0 ? `　显示第 ${info.from}–${info.to} 条` : '';
+    const where = multi ? `　第 ${info.page} / ${info.pages} 页` : '';
+    return `<div class="sw2-ents-pager">`
+        + `<button class="sw2-btn" data-action="ents-page" data-value="prev"${!multi || info.page <= 1 ? ' disabled' : ''}>‹ 上一页</button>`
+        + `<span class="sw2-ents-hit">命中 <b>${hit}</b>${range}${where}</span>`
+        + `<button class="sw2-btn" data-action="ents-page" data-value="next"${!multi || info.page >= info.pages ? ' disabled' : ''}>下一页 ›</button>`
+        + `</div>`;
+}
+
 // ★leg49（细案 spec-entities-page-ia）：行渲染三列化——**位置列与活跃列退场**。
 //   ★`lookupButtons()` 已删（它改造后零引用 = 死代码，本仓的体检纪律）：行内查询钮收成
 //   "只在待查的那几行出现"——真账 621 实体里只有 ~12 行是待查态，旧版每行印两枚 ⇒ 626 枚按钮。
@@ -755,8 +830,12 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
         //   （行内钮不带 `data-force`，见 `web/index.js` 的 `payload.force`）⇒ 那一支连同那句话一起删，
         //   全册范围的重查能力由页底那段说明指向批量入口（`lookup-batch-all`）。
         const ASK_TIP = '只补还没定案的栏（已查到的原话不动；查过之后这里会写「未加载到」或「书未明述」）';
+        // ★Task 3（复审登记的"同源假承诺"②）：`pending` 那一支原写「——再点一次重查，…」，
+        //   而**行内这枚钮从来不负责推倒重查**（它不带 `data-force`；推倒重查的入口是工具条那枚
+        //   `lookup-batch-all`）⇒ 那是一条玩家会读到、这枚控件永远不会做的事（leg40b 治的同一类病）。
+        //   收成**只承诺它真做的事**（口径与同一枚钮的 `none` 态一致：只补没定的栏）。
         const askTip = lookState === 'pending'
-            ? `查过书但这轮模型没抽出来（下轮再补，不代表书里没有）——再点一次重查，${ASK_TIP}`
+            ? '按需去世界书取这个名号的原话（只补没定的栏）'
             : ASK_TIP;
         const lookupBtn = e.kind === 'character' && !settled
             ? `<button class="sw2-chainbtn" data-action="lookup-entity" data-entity="${escapeHtml(e.id)}" title="${attrText(askTip)}">查</button>`
@@ -804,19 +883,17 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
             + `<div class="sw2-cell sw2-agcell">${agendaHtml}</div>`
             + `</div>`;
     });
-    // ★本任务只做"行"：头部与工具条见 Task 3。批量补全钮与查书三态注脚**暂留原位**
-    //   （它们只由 config 进渲染层，且 lookup-batch 的两条既有锁指着它们）⇒ Task 3 挪进工具条。
-    const task = config?.lookupTask || null;
-    const batchBtn = task
-        ? `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('再点一次可停；已查到的都留账')}">■ 停止补全 ${task.cursor}/${task.total}</button>`
-        : `<button class="sw2-btn" data-action="lookup-batch-all" title="${attrText('把全册在册角色的实力按需查一遍（借世界推进分批跑，不阻塞推进；再点一次可停）。位置不在这里查——它由账上的组织驻地结构推断供给，打开面板时自动补')}">⬇ 补全全册实力</button>`;
-    const batchHint = task
-        ? `<span class="sw2-hint">补全中 ${task.cursor}/${task.total}（成功 ${task.success} · 未加载到 ${task.pending} · 书未明述 ${task.absent} · 失败 ${task.failed}）——随世界推进分批跑</span>`
-        : '';
-    return `<div class="sw2-list-head">全部角色与势力（全册 ${page.total} · 本轮镜头 ${lens.size}）<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
-        + `<div class="sw2-list-tools" style="margin:6px 0 8px">${batchBtn}${batchHint}</div>`
+    // ★Task 3：头部与工具条就位——批量补全钮与查书三态注脚**已从页眉/页底挪进工具条**
+    //   （`renderEntsToolbar` 的第三个形参就是这里的 `config`：进度只由它进渲染层）。
+    const empty = page.hit === 0
+        ? '<div class="sw2-ents-empty">没有命中的名号——清掉筛选项或换个词试试。</div>' : '';
+    return `<div class="sw2-list-head">全部角色与势力（全册 ${page.total} · 本轮镜头 ${lens.size}）`
+        + (page.hit !== page.total ? `<small class="sw2-quiet-note">命中 ${page.hit}</small>` : '')
+        + `<small class="sw2-quiet-note" title="面板构建号：改了代码但页面还是旧的时（浏览器缓存），拿这个对照">构建 ${PANEL_BUILD}</small></div>`
+        + renderEntsToolbar(world, view, config)
         + `<div class="sw2-entity-list">${rows.join('')}</div>`
-        + `<div class="sw2-hint">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。每行的<b>查</b>=只补没定的栏（已查到的原话不动）。全册范围的「连书未明述也推倒重查」仍在——入口不在行内，而是页顶那枚<b>补全全册实力</b>（它按重查跑：被定为「书未明述」或查不动卡住的栏，一起推倒重来）。</div>`;
+        + empty
+        + renderEntsPager(page);
 }
 
 // ============ 设定档案页（A-6：展示与 setting.frozen 逐字段一致） ============
@@ -1117,7 +1194,9 @@ export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {
         board: renderBoardHtml(world),
         chronicle: renderChronicleHtml(world, { oldVolumes, filter: view.chronicleFilter ?? null }),
         archive: renderArchiveHtml(world, { oldVolumes }),
-        entities: renderEntitiesHtml(world, { config }),
+        // ★leg49：实体页视图态随 `view.entsView` 透传（与 `view.chronicleFilter` 同款）——
+        //   工具条的搜索/筛选/排序/翻页都落在这一个对象上（接线层只存状态，选数据住本层纯函数）。
+        entities: renderEntitiesHtml(world, { config, view: view.entsView || {} }),
         setting: renderSettingHtml(world),
         params: renderParamsHtml(world, { config }),   // leg26：参数独立页签（玩家定档位）；leg27 h：+ 记忆投递自证
         snapshots: renderSnapshotsHtml(world, { config }),   // leg27 后：快照容错（每步可回退）
