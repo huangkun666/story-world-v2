@@ -60,7 +60,16 @@ export const SWITCH_PARAMS = {
     //   `master: true` = 参数页把它**排在最前、单独一张卡**（其余开关管"插件对外的动作"，它管"插件自己"）。
     autoAdvance: { label: '插件总闸 · 自动推进', master: true, hint: '关掉=插件不再自动生效（发消息不推进世界、切聊天不自动载入），要推请按观棋窗口的「推进一轮」', def: '0' },
     memoryEnabled: { label: '写进记忆插件', hint: '把世界状态与大事投进「柚月の记忆」（逐字投原话，不经过任何模型）', def: '0' },
-    recordEnabled: { label: '记进编年史书', hint: '把本轮的编年行写进 ST 的「编年史」（书里的前史与它共存，互不覆盖）', def: '0' },
+    // ★★leg40b（面板本体体检 · 第二刀）：**「记进编年史书」开关已撤**（原 key `recordEnabled`）。
+    //   撤它的判据不是"不好用"，而是**它一个字节都不写**：全仓 `grep recordEnabled` 只有本文件那一行
+    //   与注释，没有任何消费者 ⇒ 它是一个**摆在玩家面前、点了会落一次盘、然后什么都不发生**的开关。
+    //   它的来路本仓早登记过：`docs/handoffs/session-handoff-2026-09-11-leg26.md` §7 E2——
+    //   「**我顺手加的面，落点未核验**」"要的话先读编年史插件接口；不要就撤"。
+    //   用户 2026-09-14 令「找出无用入口」⇒ 按该条登记的处置办：**撤**（要接实，得先读 ST 编年史插件接口，
+    //   那是一件独立的活，不该以一个假开关的形式挂在面板上）。
+    //   ★旧账无害：真账 `dynamic.env.recordEnabled` 现在写着 '0'，撤掉后它成为一个**无主键**——
+    //   没有任何读者，也不进任何注入口（`paramsOf` 只遍历 `PARAM_KEYS`，开关只从本表取）⇒ 不会污染面板。
+    //   纪律：**不做"读到旧键就静默删"的迁移**——那会给"引擎不主动改玩家账"开一个口子。
 };
 export const isSwitchParam = (key) => Object.prototype.hasOwnProperty.call(SWITCH_PARAMS, key);
 export const isParamKey = (key) => PARAM_KEYS.includes(key) || isSwitchParam(key);
@@ -97,9 +106,15 @@ export function paramsOf(world) {
 // 参数块（面板与注入共用**同一份口径**，防两处漂移）。
 // 未定的键照实写「未定」——**不是**"没有这一栏"，因为玩家要看见"还没定"。
 // 注意：这里落的是**引擎键名**（账本口径）；面板显示时用 LABELS.env 翻成玩家词。
-export const PARAM_ROWS = (world) => {
-    const cur = paramsOf(world);
-    return PARAM_KEYS.map((k) => ({ key: k, value: cur[k] || PARAM_UNSET, options: PARAM_GEARS[k], nature: PARAM_NATURE[k] }));
+// ★★leg41：`envOverride` = **参数真源**（插件配置区那一份）。传了就以它为准，不传才读世界账的镜像。
+//   为什么必须支持它：真源与镜像之间**永远存在一个短暂窗口**（镜像要等一次写账），
+//   面板若画镜像，玩家就会在这个窗口里看到旧值——那正是"改了就回默认"的观感来源。
+export const PARAM_ROWS = (world, envOverride = null) => {
+    const cur = envOverride && typeof envOverride === 'object' ? envOverride : paramsOf(world);
+    return PARAM_KEYS.map((k) => {
+        const v = normalizeParam(k, cur?.[k]);
+        return { key: k, value: v || PARAM_UNSET, options: PARAM_GEARS[k], nature: PARAM_NATURE[k] };
+    });
 };
 
 // 兼容别名（渲染层沿用 `paramsRows` 命名）
