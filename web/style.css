@@ -74,14 +74,15 @@
 .sw2-band-block{padding:10px 14px;flex:1;min-width:0;}
 .sw2-band-block + .sw2-band-block{border-left:1px solid var(--sw2-line-soft);}
 .sw2-band-label{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:7px;}
-.sw2-env-row{display:grid;grid-template-columns:44px 1fr 34px;gap:8px;align-items:center;margin-bottom:4px;}
+.sw2-env-row{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center;margin-bottom:4px;}
 .sw2-env-row:last-child{margin-bottom:0;}
 .sw2-env-row .sw2-env-name{font-size:11.5px;color:var(--sw2-text-dim);}
-.sw2-env-row .sw2-env-bar{height:5px;background:var(--sw2-card-2);border-radius:3px;overflow:hidden;}
-.sw2-env-row .sw2-env-bar i{display:block;height:100%;border-radius:3px;}
-.sw2-env-row .sw2-env-val{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-dim);text-align:right;}
 /* leg26：`.sw2-danger`（越阈危险带）整条下架——档位没有"危险/安全"之分，引擎对参数零表态。
-   同批下架 `.sw2-env-bar.sw2-env-unknown`（空心条）——档位是原话，不画条。 */
+   同批下架 `.sw2-env-bar.sw2-env-unknown`（空心条）——档位是原话，不画条。
+   ★leg40b（面板本体体检）：那条"档位条"本身（`.sw2-env-bar` + 内层 i）**这一棒才真正删掉**——
+   leg26 只是把空心态下架了，实心条还在，而它是 `width: 0% | 100%` 的**两态恒真**装饰
+   （有值就满格、没值就空），既不是比例也不是进度，只让玩家以为这里有个数。 */
+.sw2-env-row .sw2-env-val{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-dim);text-align:right;}
 .sw2-clash-main{font-size:14.5px;font-weight:700;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
 .sw2-clash-main .sw2-int{font-size:12px;font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-amber);font-weight:400;}
 .sw2-clash-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}

@@ -10,10 +10,14 @@
 //   ④ 渲染面：总闸卡**排在其余开关之前**，且写出**当前后果**（不是"应该没问题"）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SWITCH_PARAMS, switchOn, isParamKey, normalizeParam } from '../src/params.js';
 import { ensureAutoAdvanceKey, sw2AutoAdvanceOn, sw2OnMessageReceived } from '../web/index.js';
 import { renderParamsHtml } from '../src/render.js';
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KEY = 'autoAdvance';
 // 造一个"形状够用"的世界（render/迁移只读这几个字段）
 function world({ simLog = [], env = {}, noDynamic = false } = {}) {
@@ -125,8 +129,38 @@ test('leg33d·④ 渲染面：总闸卡排在其余开关之前，且写出"当�
     assert.ok(iMaster < iMemory, '★总闸必须排在其余开关之前（它是入口，藏在中间就找不到）');
     assert.ok(htmlOff.includes('插件静默'), '★关着时要写出后果（否则"世界怎么不动了"会被当成 bug）');
     assert.ok(htmlOff.includes('推进一轮'), '关着时要指出手动出路（手动永不被闸）');
+    // ★leg40b（体检 · D1）：这句话现在**真的有去处**——参数页上就摆着那枚按钮。
+    //   旧版只说"要推请按「推进一轮」"，而面板上没有任何按钮叫这个名字（真入口叫「手动推进一步」、
+    //   还压在设置页里）⇒ 玩家照着提示找会找不到。判据：同一页里既有那句话、也有那枚按钮。
+    assert.ok(htmlOff.includes('data-action="advance-world"'), '★参数页要真的摆出「推进一轮」那枚按钮（不许只说不给）');
     // 开着时的后果说明
     const on = world({ env: { [KEY]: '1', memoryEnabled: '0' } });
     const htmlOn = renderParamsHtml(on, {});
     assert.ok(htmlOn.includes('发消息会自动推进世界'), '★开着时也要写出后果（每收到一条消息推进一轮）');
+});
+
+// ★★leg40b（面板本体体检 · 第二刀）：**删掉"什么都不做"的开关**。
+//   病：参数页原来还有第三个开关「记进编年史书」（key `recordEnabled`），而它**一个字节都不写**——
+//   全仓只有 `params.js` 那一行定义 + 注释，没有任何消费者。它的来路本仓早登记过
+//   （`docs/handoffs/session-handoff-2026-09-11-leg26.md` §7 E2：「我顺手加的面，落点未核验」）。
+//   它比"没用"更坏：点了会**落一次盘 + 状态栏报"已开"**，然后什么也不发生。
+//   判据分两面：①它不许回潮（登记面 + 渲染面 + 写通道都要干净）；
+//   ②**留下来的那两个开关必须真有消费者**——这条是本用例真正的价值（防下一具壳再长出来）。
+test('★leg40b：参数开关表零"空壳"——每个开关都得有真消费者；recordEnabled 不得回潮', () => {
+    // ① 登记面：旧键已撤
+    assert.equal(SWITCH_PARAMS.recordEnabled, undefined, '★recordEnabled 已撤（它一个字节都不写）');
+    assert.ok(!isParamKey('recordEnabled'), '白名单不该再认它（认了 = set-param 会写一个无人读的键）');
+    // ② 渲染面：参数页不许再出现那张卡，也不许挂写通道
+    const html = renderParamsHtml(world({ env: { memoryEnabled: '0', recordEnabled: '0' } }), {});
+    assert.ok(!html.includes('记进编年史书'), '★参数页不许再摆这个开关');
+    assert.ok(!html.includes('data-param="recordEnabled"'), '★不许挂写通道');
+    assert.ok(!html.includes('编年史'), '「编年史」这个说法在参数页零残留（别改名回潮）');
+    // ③ ★留下的两个开关**必须各有一个真消费者**（源码级判据：读它的地方不止定义那一行）
+    const src = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const renderSrc = readFileSync(path.join(ROOT, 'src', 'render.js'), 'utf8');
+    for (const key of Object.keys(SWITCH_PARAMS)) {
+        const uses = (src.match(new RegExp(`'${key}'`, 'g')) || []).length
+            + (renderSrc.match(new RegExp(`'${key}'`, 'g')) || []).length;
+        assert.ok(uses >= 1, `★开关 ${key} 必须有真消费者（否则就是一个点了不动的壳）`);
+    }
 });

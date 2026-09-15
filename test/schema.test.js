@@ -125,7 +125,10 @@ test('SSOT schema（leg25 c）：实体 `attrs` 不再被接受——删字段�
     };
     const r = validate(doc, ssotSchema);
     assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes('$.entities[0].attrs: 未知字段')), r.errors.join('; '));
+    // ★leg34：错误措辞变了（实体已放开额外字段 ⇒ `attrs` 不再走"未知字段"那条，改走**显式拒收名单**）。
+    //   断言从"精确措辞"放宽到"**这一条被点名拒了**"——判据要锁的是"attrs 进不来"这个事实，不是文案。
+    assert.ok(r.errors.some((e) => e.startsWith('$.entities[0].attrs:')), r.errors.join('; '));
+    assert.ok(r.errors.some((e) => e.includes('attrs')), '必须点名是 attrs（别只说"某字段不行"）');
 });
 
 test('SSOT schema：盘算 closed 可选、meta.simLog 记账合法', () => {

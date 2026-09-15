@@ -1,12 +1,18 @@
 // story-world-v2/src/settle.js
 // 结算管线（S5）：按序 校验 → 薄裁定 → 因果挂链 → 一致性检查 → 分量重算（常量占位）→ 落账 → 编年 → GC/度量。
 // 纯函数：输入 SSOT 不被修改，返回新世界。硬规则出处：ANCHOR §3②/§4.2/§4.4/§4.5、切片细案 S5、长跑防线细案 §2.5。
-import { checkWorldStep } from './check-step.js';
+import { checkWorldStep, newEventIdsOf, normalizeSameStepEventRefs } from './check-step.js';
 import { buildEvolutionPack, computeIdleFaces } from './pack.js';
 import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
 import { pulseEntropy } from './entropy.js';   // K27：熵泵（环境推演器 + 越阈落状态源事件）
 import { updateTensionIntensity, pushTidePeak, eventBornTick } from './setting.js';   // K29：张力强度更新 + 浪尖派生（A-5 两来源）；bornTickOf 共用契约解析器
+// ★★leg40b 续（**尺度上限参数化**·用户令「能不能直接把这些闸门参数直接放进参数页？」）：生效上限统一从这里取——
+//   账上设了档位就用档位，没设就用本文件里的**出厂默认**（`limits.js` 引用式取它们，不重写数字）。
+//   口径与 `params.js` 一致（值落 `context.setting.dynamic.env` / 白名单归一 / 缺键=默认）。
+//   为什么**只在入口解析一次**再传着走：原先每个函数各自读模块常量 ⇒ 参数化时最易出的病就是
+//   "某一条路仍读旧常量"（本仓"一个数两把尺子"的老病）。
+import { resolveLimits, THREADS_TOP, EVENT_CAP_PER_TICK, AGENDA_CAP_PER_TICK, AGENDA_CAP_TOP_LEVEL, AGENDA_CAP_OPEN, ENTITY_BIRTH_PER_TICK } from './limits.js';
 // ★leg33：位置归一的**唯一真源**在 `position.js`（叶子模块，避开 settle↔check-step 的循环依赖）。
 //   ⚠必须是 `import` + `export` 两句——`export { X } from './y.js'` **不建立本地绑定**（本棒实测：
 //   只写 re-export 时模块内 `normalizePosition is not defined`，被新用例当场抓红）。
@@ -40,7 +46,11 @@ export { normalizePosition };
 //     放开它没有需求；而 leg31 实测"总量全放 + 涉及闸不动 ⇒ 崩在第 12 轮"，故**不同批碰它**。
 //   · 代价与自证：抬完跑 `node --test` + `node demo/smoke-demo.js`（切片世界新生 0/tick，此闸不参与）；
 //     面板分母已改读真源 ⇒ 这次**界面上能直接看见**上限变成 15/20/3（改前那版写死 5，看不见）。
-export const AGENDA_CAPS = { perTick: 3, open: 20, topLevel: 15 };
+// ★leg40b 续：出厂值住在 `limits.js`（唯一真源），这里只**重新组装成既有形状**并保持导出名
+//   ⇒ `smoke.js` / `render.js` / 各测试的 `AGENDA_CAPS.topLevel` 读法**零扰动**。
+//   ★为什么保留这两个别名对象而不是让调用方改读 `limits.js`：本轮改动面要小、可回退；
+//     下一棒若要彻底收口，再来删别名（届时 `grep AGENDA_CAPS` 只会在本文件与测试里）。
+export const AGENDA_CAPS = { perTick: AGENDA_CAP_PER_TICK, open: AGENDA_CAP_OPEN, topLevel: AGENDA_CAP_TOP_LEVEL };
 const AGENDA_STAGE_FALLBACK = '谋划';   // 新盘算缺省阶段（ssot schema 要求 stage 非空）
 // leg25 f（用户拍板「X1 认账简化」）：`VERDICT_HURT_THRESHOLD = 0.05` **已删除**。
 //   它曾是 K15「败露」判据的阈值（报批 #11 定案）。原判据吃 `hurtWindow`（近 2 tick 负向 δ），
@@ -51,7 +61,9 @@ const AGENDA_STAGE_FALLBACK = '谋划';   // 新盘算缺省阶段（ssot schema
 
 // K19 事件产率上限 / 链尾结清窗（因果链细案 §3.1/§3.2，T1/T2 已拍板；均提案态——曲线支撑：
 // 产率 max 4/tick 开局、稳态 1（细案 §1 配套曲线）；正式报批走报批支线，铁律 2/8）
-export const EVENT_CAPS = { perTick: 6 };
+export const EVENT_CAPS = { perTick: EVENT_CAP_PER_TICK };
+// ★leg40b 续：`ENTITY_BIRTH_PER_TICK` 的值住在 `limits.js`，这里**原样转出**（老调用方 `render.js`/测试零扰动）。
+export { ENTITY_BIRTH_PER_TICK } from './limits.js';
 export const CHAIN_SETTLE = 5;
 
 // K20 档案摘要化（因果链细案 §3.3，T3 已拍板 + T3-D1 引擎结构摘要；longrun §2.2 原值，提案态——随报批支线）
@@ -59,7 +71,8 @@ export const CHAIN_SETTLE = 5;
 export const ARCHIVE = { hotWindow: 20, milestoneEvery: 10 };
 
 // K37 实体治理数字组（细案 §3.7 → A-10..A-12；铁律 2：全部提案态，随 K37 曲线 + K38 报批）
-export const ENTITY_BIRTH_PER_TICK = 1;      // 提案：单轮新生 ≤1
+// ★leg40b 续：`ENTITY_BIRTH_PER_TICK` 已移居 `limits.js`（本文件从那里 import，仍是同一个名字/同一个值）。
+//   为什么移：它是"尺度上限"一族，与 `AGENDA_CAPS`/`EVENT_CAPS` 一样要**一个家**，否则参数化时会分身。
 export const ENTITY_IDLE_RETIRE_TICKS = 20;  // 提案：连续未活跃轮数（背景化条件）
 // leg24 片3 删除位：RETIRE_WEIGHT_FLOOR（"影响力低于地板才准退休"）已删——判据不再吃分量。
 //   片2 曾提前单摘它，三处冒烟当场红（应答机制 66→34、全册 active 破）；根因=当时门控还在吃分数，
@@ -138,6 +151,9 @@ export function migrateLegacyAttrs(ssot) {
 //     依据：引擎手上没有任何"计划被打崩/落空"的客观输入（`agenda` 不落 `source`；父终结时
 //     `parentId` 被 delete；`memory.done` 只记"做过什么"；50 tick 合成跑满步盘算 done=3、"起手未动"0 例）
 //     ⇒ 与其新造一个数字，不如把结论收回引擎职权边界内。详见 `docs/spec-failure-verdict-and-visibility.md` §2。
+// ★leg40b 续（死锁修复）：这里**不再需要**传"本轮新事件 id 名单"——`findEvent` 已改成**按位次解析**
+//   同轮引用（引擎的发号规矩就一条，见 check-step 的 `newEventIdsOf`），既不用调用方记得传，
+//   也不存在"传了才生效、忘了就静默失效"的那种两把尺子。
 function adjudicate(world, step, tick, warnings) {
     const checked = checkWorldStep(step, world);
     if (!checked.ok) {
@@ -151,10 +167,14 @@ function adjudicate(world, step, tick, warnings) {
 }
 
 // ③ 因果挂链：新事件落账为节点，上游指针入 links.up
+// ★leg40b 续（死锁修复·配套）：**新事件的发号规矩**现在住在 `check-step.js`（`newEventIdsOf`）——
+//   因为"校验时就能算出这批事件将拿到哪些 id"是**校验面**的知识（`findEvent` 要用它认同轮引用），
+//   而落账面（本文件）与净化器都从那里取 ⇒ 一处定义、三处同源（本仓老病是"一个数两把尺子"）。
 function hangEvents(world, step, tick) {
     const added = [];
+    const ids = newEventIdsOf(step, tick);
     step.newEvents.forEach((ev, i) => {
-        const id = `ev_${tick}_${i + 1}`;
+        const id = ids[i];
         const node = {
             id,
             title: ev.title,
@@ -297,7 +317,7 @@ function breakCycle(cycle, world, tick, chronicle) {
     });
 }
 
-export function spawnAgendas(world, gstep, tick, warnings, chronicle) {
+export function spawnAgendas(world, gstep, tick, warnings, chronicle, lim = resolveLimits(world)) {
     const spawned = [];
     for (const na of gstep.newAgendas || []) {
         const goal = na.goal;
@@ -306,16 +326,19 @@ export function spawnAgendas(world, gstep, tick, warnings, chronicle) {
         const topNow = (world.agendas || []).filter((a) => !a.closed && !a.parentId).length
             + spawned.filter((a) => !a.parentId).length;
         // GC 上限（A-3）：超限拒建 + 警告，世界其余照常（超限不新建，§4.3 语义之一）
+        // ★leg40b 续：三个上限一律走 `lim`（= `resolveLimits(world)`：账上档位优先、否则出厂默认）。
+        //   ★`每 tick 新生`（`AGENDA_CAPS.perTick`）**本轮刻意不做旋钮**——它是"一轮里最多新起几件"，
+        //     与 `每轮事件` 撞在一起调容易互相掩盖（且真账从未咬到）⇒ 留在丙档只读（见 `limits.js` 头注）。
         if (spawned.length >= AGENDA_CAPS.perTick) {
             warnings.push(`裁定: 盘算大厦顶（每 tick 新生 ≤${AGENDA_CAPS.perTick}）：${entityName(world, owner)} 提议「${goal}」被拒`);
             continue;
         }
-        if (openNow >= AGENDA_CAPS.open) {
-            warnings.push(`裁定: 盘算大厦顶（在飞全局 ≤${AGENDA_CAPS.open}）：${entityName(world, owner)} 提议「${goal}」被拒`);
+        if (openNow >= lim.在飞大计) {
+            warnings.push(`裁定: 盘算大厦顶（在飞全局 ≤${lim.在飞大计}）：${entityName(world, owner)} 提议「${goal}」被拒`);
             continue;
         }
-        if (na.source.type !== 'parent' && topNow >= AGENDA_CAPS.topLevel) {
-            warnings.push(`裁定: 盘算大厦顶（顶层 ≤${AGENDA_CAPS.topLevel}）：${entityName(world, owner)} 提议「${goal}」被拒`);
+        if (na.source.type !== 'parent' && topNow >= lim.顶层大计) {
+            warnings.push(`裁定: 盘算大厦顶（顶层 ≤${lim.顶层大计}）：${entityName(world, owner)} 提议「${goal}」被拒`);
             continue;
         }
         // 落账（§3.1：与既有 agenda 同形状 + 可选 parentId；id = a_<tick>_<n>；maxSteps 缺省 4）
@@ -715,6 +738,81 @@ function applyEntityFates(world, gstep, tick, warnings, chronicle) {
     }
 }
 
+// ★★leg34（小说家条款 §6 实施）：**实体字段写回** + **带因复活**（同一个通道）
+//   用户 ⑤：「llm 有权决定任何字段，实力是可以增长的，性情是可以大变的，就连死亡在一个有复活的世界都可以改变」
+//   ★这一笔让引擎**放弃"这值对不对"的判断权**，只保留"这变更有因、有痕、有额度"的核验（细案 §6.5 的真实代价，记在案）：
+//     50 轮后可能出现"同一人实力变了三次、前后不一致"——引擎**一律照收**，因为承重墙写着"不裁胜负、不打分、不判对错"。
+//     补救是**留痕**，不是判断：每条变更永久落账（值 + 因 + 轮次）⇒ 前后矛盾**可被发现**，但引擎不替世界仲裁。
+//   ★"只许改现值、不许回改历史"在**形状上**就已经成立：本函数只写得回 `entity[field]` 一个现值格，
+//     账上的事件/编年/里程碑**没有任何写通道** ⇒ 不需要额外判据（这是形状保证，不是口头纪律）。
+function applyEntityUpdates(world, gstep, tick, warnings, chronicle) {
+    const updates = gstep.entityUpdates || [];
+    const stats = { applied: 0, revived: 0 };
+    for (const u of updates) {
+        const ent = (world.entities || []).find((e) => e.id === u.entity);
+        if (!ent) continue;                                          // check 已拒（防御）
+        const prev = ent[u.field];
+        // 复核（check 已核，此处是"不信上游"的防御——照 applyEntityFates 的惯例）
+        const ref = u.cause?.ref;
+        const ev = u.cause?.type === 'event' ? (world.events || []).find((e) => e.id === ref) : null;
+        const ag = u.cause?.type === 'agenda' ? (world.agendas || []).find((a) => a.id === ref) : null;
+        if (ev?.closed || ag?.closed || (!ev && !ag)) {
+            warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因「${ref}」不在账或已了结（因果只能挂在正在发生的事上）`);
+            continue;
+        }
+        if (u.field === 'status') {
+            // ★带因复活：与 `reactivateNamed`（只认 retired）互补——dead 需要"模型声明 + 被那件未了结的事点名"两把钥匙。
+            //   ★闸②（本函数里的第二把钥匙）：**必须在本 tick 落账的编年里真的出现过这件因**。
+            //     为什么：check 只核"ripples 里有他"，而 ripples 是**模型自己写的**；若那件因是**前几轮**的旧事件，
+            //     模型可以把一个死人的 id 补进旧事件的波及名单……但旧事件本 tick 没上桌 ⇒ 这里直接拦住。
+            //     口径：**复活和被点名必须发生在同一轮**（dead → 被一件"正在发生的事"重新拉回场上）。
+            const thisTickNames = (gstep.newEvents || []).some((e) => (e.ripples || []).includes(ent.id));
+            if (!thisTickNames) {
+                warnings.push(`裁定: 复活复核拒绝——「${ent.name}」本 tick 没被新落账的事点名（复活必须与"被重新点名"同轮发生）`);
+                continue;
+            }
+            if ((ent.status || 'active') !== 'dead') {
+                warnings.push(`裁定: 复活复核拒绝——「${ent.name}」不是 dead（当前 ${ent.status || 'active'}）`);
+                continue;
+            }
+            ent.status = u.value;
+            ent.lastActiveTick = tick;                                // 复归即活跃（与 reactivateNamed 同口径）
+            stats.revived += 1;
+            chronicle.push({
+                id: `ch_${tick}_rev_${ent.id}`,
+                tick,
+                text: `「${ent.name}」带着因由重回场上（${u.note || `因「${ev?.title || ref}」`}）`,
+                kind: 'major',
+            });
+        } else {
+            ent[u.field] = u.value;
+            stats.applied += 1;
+        }
+        // ★留痕（细案 §6.3「原话不会丢」）：原值与现值同时在场、且能追到账。
+        //   ★结构照 `entity-lookup.js:468` 的既有形状（`{value, from, fetchedAt}`）⇒ 两条路共用一份来源账，不各写一套。
+        //   ★★`from` 是**出处双源**的落点（丙′ 案，用户拍板）：查书那条路写「书里原话」（发票），
+        //     模型变更这条写「变更」+ 因 + 原值 ⇒ **同一个人身上"书里怎么说"与"后来怎么变"同时在场**。
+        //     为什么必须有它：模型改了 `parent` 之后，`parentSourceFrom` 还写着 `member-line`（"书里成员行列了他"）
+        //     就**不实了**——而出处发票不许模型填（伪造出处＝把编的说成书里写的）⇒ 只能由引擎**追加**一条变更记录。
+        //     口径：**发票只增不改**（`fieldSource` 归引擎；模型每次变更在这里留一条带因的记录）。
+        world.meta.entityFields = world.meta.entityFields || {};
+        const rec = world.meta.entityFields[ent.id] ? { ...world.meta.entityFields[ent.id] } : {};
+        const fieldsRec = { ...(rec.fields || {}) };
+        const prior = fieldsRec[u.field] || null;
+        // ★★出处双源（本棒实测抓出来的：第一版直接覆盖 ⇒ **把查书那条"书里原话"记录覆盖掉了 = 发票真丢了**）
+        //   ⇒ 口径：**现值占主位、历史压栈**——`source` 恒等于"现值是谁写的"（现在的现值当然来自这次变更），
+        //     而**原来那条记录整条进 `prior`** ⇒ "书里怎么说"与"后来怎么变"**同时在场、互不覆盖**。
+        //     （不改 `entity.fieldSource`：那张发票是"书里原话"的证据，只由名册/查书写，本函数不碰。）
+        fieldsRec[u.field] = {
+            value: u.value, prev, cause: ref, causeType: u.cause?.type, tick, source: '变更',
+            prior,                                   // ← 上一版记录（可能是查书的「书里原话」，也可能是上一次变更）
+        };
+        rec.fields = fieldsRec;
+        world.meta.entityFields[ent.id] = rec;
+    }
+    return stats;
+}
+
 // K37 复归（细案 §3.7 → A-12）：被本 tick 落账事件点名（ripples 命中）→ retired 自动升回 active；
 // 一条确定性规则不发明状态机；dead 终局不复归；编年「复归」一笔（kind ripple——被波及点名而起的反应）
 function reactivateNamed(world, events, tick, chronicle) {
@@ -760,7 +858,10 @@ function retireInactive(world, tick, warnings, chronicle) {
     }
 }
 
-export function settleTick({ ssot, step, moveFact, calls = 1 }) {
+// ★★leg40b 续（**尺度上限参数化**）：读数口径统一到 `src/limits.js` 的 `resolveLimits(world)`——
+//   账上设了档位就用档位，没设就用本文件这些**出厂默认**（`limits.js` 引用式取它们，不重写数字）。
+//   口径与 `params.js` 一致：值落 `context.setting.dynamic.env`、白名单归一、缺键=用默认。
+export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }) {
     // 校验先行：不合格则世界如实不动（诚实不落账），tick 不推进
     const pre = checkWorldStep(step, ssot);
     if (!pre.ok) {
@@ -772,6 +873,14 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     const chronicle = [];
     const tick = world.meta.tick + 1;
     world.meta.tick = tick;
+    // ★leg40b 续（死锁修复·收尾一格）：**把"按位次认下来的同轮引用"改成引擎真发的号**。
+    //   为什么必须在落账前做：`findEvent` 只是"认了它"，而落账用的是 `step` 里的原字符串——
+    //   不改写 ⇒ 账上留一条悬空来路（本笔实测：模型写 ev_5_3、真号 ev_6_3，账上就记着 ev_5_3）。
+    //   放在校验**之后**（校验读的是模型原话，报错信息才准确）、落账**之前**（改写要生效）。
+    const stepN = normalizeSameStepEventRefs(step, tick);
+    // ★leg40b 续（死锁修复 ③）：**降级路径的回执**——"这一轮为什么不是模型写的那一轮"必须进
+    //   `stage.warnings`（面板裁定条 + `simLog` 都读它）。不给这个口子，那条降级就成了静默失败面。
+    for (const w of preWarnings || []) warnings.push(w);
     // ★leg33c：位置集外的非致命留痕先收（`pre.warnings`）——玩家的这一步也要能看到"这本书的位置够不够"。
     for (const w of pre.warnings || []) warnings.push(w);
     const playerId = world.context?.playerId ?? null;   // K8/K9：玩家棋子标注（红线 1 代码化就位）
@@ -783,10 +892,17 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     //   为什么必须传进来：名单上的人按结构三条件是静默的 ⇒ 模型照名单给他开线也会被门控丢掉
     //   ⇒ 那份名单就成了空转（"规则与引擎判据必须对得上"）。传进来 ⇒ 他们获得**一次起头资格**。
     const spotlight = new Set(computeIdleFaces(ssot).map((f) => f.id));
-    const gate = gateWorldStep(step, ssot, moveFact, spotlight);
-    const gstep = gate.step;
+    const gate = gateWorldStep(stepN, ssot, moveFact, spotlight);
+    // ★leg40b 续（死锁修复·收尾一格）：**把"按位次认下来的同轮引用"改成引擎真发的号**。
+    //   位置必须在**门控之后**：`gate.js:87-93` 会丢掉"静默方属主的 plot 事件"⇒ 数组位次会变，
+    //   而 `hangEvents` 是按**门控后**的位次发号 ⇒ 改写必须与发号看**同一个数组**，否则会指错人。
+    //   （校验仍读模型原话 ⇒ 报错信息准确；这里只把"已经认下来的"写对。）
+    //   不改写会怎样（本笔实测定到的真缺陷）：模型写 `ev_5_3`、真号 `ev_6_3` ⇒ 账上留一条悬空来路。
+    const gstep = normalizeSameStepEventRefs(gate.step, tick);
+    // ★leg40b 续：生效上限**在入口解析一次**，之后全文件都用它（防"某条路仍读旧常量"）。
+    const lim = resolveLimits(world);
     // K14 出生裁判（盘算树细案 §3.2 落点：gate 之后、裁定之前）：GC 上限 → 落账 → 挂因/委派留痕 → 环检测自动拆
-    const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle);
+    const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle, lim);
 
     // leg25 c：`hurtByEntity`（属性负向 δ 收集）随属性裁定一并删除——没有负向 δ 可收。
     // leg25 f：原来这里还有一段"把旧账残留的 hurtWindow 滑零自删"的补丁。**整段删除**——
@@ -800,10 +916,11 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     const born = spawnEntities(world, gstep, tick, warnings, chronicle);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
     // K19 事件产率上限（因果链细案 §3.2 → A-2）：按提议序保留前 ≤N，超限拒建 + 警告（"事件洪峰"——与盘算大厦顶
     // 同哲学：双面无痕于世界，留痕于 simLog）；门控后、影响通道前——被拒不涉影响/挂链/编年
-    if (gstep.newEvents.length > EVENT_CAPS.perTick) {
-        const kept = gstep.newEvents.slice(0, EVENT_CAPS.perTick);
-        for (const ev of gstep.newEvents.slice(EVENT_CAPS.perTick)) {
-            warnings.push(`裁定: 事件洪峰（每 tick ≤${EVENT_CAPS.perTick}）：「${ev.title}」被拒`);
+    // ★leg40b 续：这个上限现在**可调**（`每轮事件`：6/9/12 ⇒ `lim.每轮事件`），账上没设档位时 = 出厂 6（逐字不变）。
+    if (gstep.newEvents.length > lim.每轮事件) {
+        const kept = gstep.newEvents.slice(0, lim.每轮事件);
+        for (const ev of gstep.newEvents.slice(lim.每轮事件)) {
+            warnings.push(`裁定: 事件洪峰（每 tick ≤${lim.每轮事件}）：「${ev.title}」被拒`);
         }
         gstep.newEvents = kept;
     }
@@ -834,6 +951,9 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     pushTidePeak(world, closedIds, tick);   // K29：盘算浪尖派生（细案 §3.6②——顶层终结/取消 → derivedFrom 浪尖项，A-5 两来源之一）
     closeEvents(world, closedIds, tick, chronicle);   // 闭环三型：源结清（K9 执行债）+ 链尾结清（K19）+ 取消联闭（K22）
     applyEntityFates(world, gstep, tick, warnings, chronicle);   // K37 灭通道：覆灭复核落账（在闭环后——尘埃落定再言灭）
+    // ★leg34（小说家条款 §6）：字段写回 + 带因复活。位置在 `reactivateNamed` **之前**：
+    //   复活与"被点名复归"是同一件事的两种入口（dead 要模型声明，retired 自动），先落后者就好。
+    applyEntityUpdates(world, gstep, tick, warnings, chronicle);
     pulseEntropy(world, tick, chronicle);   // K27 熵泵（细案 §3.5 → A-6）：环境推演器每 ENV_TICK 一步；越阈落状态源事件；恢复闭环
     reactivateNamed(world, events, tick, chronicle);   // K37 复归：本 tick 落账事件点名 → retired 升回 active
     retireInactive(world, tick, warnings, chronicle);  // K37 背景化 GC：扫描轮条件退休 + 超席位强制（守卫）
@@ -846,8 +966,8 @@ export function settleTick({ ssot, step, moveFact, calls = 1 }) {
     // leg25 c：`stateChanges` 已从世界步契约删除 ⇒ 从分母里**移除**（留着恒为 0，会让分母少算一项——
     //   "删字段只删一半"的典型残留）。同处 `rejected` 的死过滤 `!w.includes('入局属性钳制')` 一并删除
     //   （那条警告已不可能产生）。
-    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates']
-        .reduce((n, k) => n + (step[k]?.length ?? 0), 0);
+    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates', 'entityUpdates']
+        .reduce((n, k) => n + (stepN[k]?.length ?? 0), 0);
     // ★leg32f：`提议丢弃:` 并入拒签分子——它在语义上与"裁定拒"同类（模型提了、世界没落账），
     //   漏掉它会让拒签率**低估**（丢掉的东西不计入分子 ⇒ 读数失真）。
     const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)

@@ -98,7 +98,9 @@ test('结算：基本 tick 全管线落账', () => {
     assert.equal(vr.ok, true, `结算基准世界（无残留）过 schema: ${vr.errors.join('; ')}`);
     const vrRaw = validate(w, ssotSchema);
     assert.equal(vrRaw.ok, false, '带旧账残留的世界如期被拒（attrs 不再被接受）');
-    assert.ok(vrRaw.errors.some((e) => e.includes('attrs') && e.includes('未知字段')), vrRaw.errors.join('; '));
+    // ★leg34：措辞变了（实体已放开额外字段 ⇒ attrs 走**显式拒收名单**，不再走"未知字段"）——
+    //   判据锁"attrs 被点名拒"这个**事实**，不锁文案。
+    assert.ok(vrRaw.errors.some((e) => e.startsWith('$.entities[0].attrs:')), vrRaw.errors.join('; '));
     const vrMigrated = validate(migrateLegacyAttrs(w), ssotSchema);
     assert.equal(vrMigrated.ok, true, `迁移摘除残留后重归合法: ${vrMigrated.errors.join('; ')}`);
 });
@@ -340,7 +342,8 @@ test('K9（leg25 c 改写）：玩家被 targeting → 世界照常落账，但�
     //   不是结算管线的活，见文件头）之后必须全量合法——即"残留只由迁移负责，迁移之后账是干净的"。
     const vrRaw = validate(r.ssot, ssotSchema);
     assert.equal(vrRaw.ok, false, '带旧账残留的世界如期被拒（attrs 不再被接受）');
-    assert.ok(vrRaw.errors.some((e) => e.includes('attrs') && e.includes('未知字段')), vrRaw.errors.join('; '));
+    // ★leg34：措辞变了（改走显式拒收名单）——锁"被点名拒"这个事实
+    assert.ok(vrRaw.errors.some((e) => /\.attrs:/.test(e)), vrRaw.errors.join('; '));
     const migrated = migrateLegacyAttrs(r.ssot);
     assert.equal(migrated.entities.find((e) => e.id === 'e_player').attrs, undefined, '迁移把残留摘掉');
     const vr = validate(migrated, ssotSchema);
