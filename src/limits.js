@@ -91,6 +91,12 @@ export const LIMIT_META = Object.freeze({
 });
 
 const isLimitKey = (k) => Object.prototype.hasOwnProperty.call(LIMIT_GEARS, k);
+// ★★★leg56：把"这个键是不是本表的"**导出**（原先只是个内部箭头函数）。
+//   为什么：观棋信息带要**按同一把尺子**从参数真源里挑出这四个上限（见 `render.js` 的
+//   `effectiveCaps`）——那份挑选如果自己再写一遍 `LIMIT_GEARS`/`LIMIT_DEFAULTS` 的键表，
+//   就是本仓吃过无数次的"**同一件事两处实现**"（leg53 的 `isParamStoreKey` vs `isPlayerInputKey`
+//   就是这么分叉出真事故的）⇒ 口径只许住一处，调用方 import 它。
+export const isLimitKeyOf = isLimitKey;
 
 /**
  * ★★★leg54（用户令「**能自由调数，当然也能无上限**」）：归一 = **任意 ≥1 的整数**，不再是档位白名单。

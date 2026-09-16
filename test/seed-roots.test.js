@@ -37,6 +37,20 @@ test('leg40·起根：提示词只问"书里正在发生的事"，并要求指�
     assert.ok(p.includes('书文正文'), '书文正文必须真的拼进去');
 });
 
+// ★leg60（用户实机报"起根一直是 0 条"时顺手查出的相邻 bug）：**二次截断**。
+//   本函数一直硬切 `.slice(0, SEED_CHUNK_CHAR=30000)`，而分块起根早把块切好了（实测块 ≈31,447 字符）
+//   ⇒ **每块尾巴约 1,400 字从来没进过提示词**（≈4.6%），而且与第 253 行那句注释**正相反**
+//   （注释写着"分块起根时不再二次截断……只属于单发路径"）。判据锁住两条路各自的口径。
+test('★leg60 起根提示词：单发路径仍按 30000 截断，分块路径传 Infinity ⇒ 一个字都不许再切', () => {
+    const long = '甲'.repeat(40000);
+    const oneShot = buildSeedRootsPrompt(long);
+    assert.ok(oneShot.length < 40000, '单发路径：保持 30000 上限（老调用方零扰动）');
+    assert.equal(oneShot.includes('甲'.repeat(30001)), false, '单发路径：第 30001 字之后不进去');
+    const chunked = buildSeedRootsPrompt(long, { maxChars: Number.POSITIVE_INFINITY });
+    assert.ok(chunked.includes(long), '★分块路径：整块原样进去（块的大小由调用方决定，这里不再动刀）');
+    assert.ok(chunked.includes('甲'.repeat(39999)), '★块尾巴那一段必须真的在提示词里（此前被静默切掉）');
+});
+
 test('leg40·起根：净化是机械的——没原话/没当事人/重复/形状不对的丢，且如实上报', () => {
     const { roots, warnings } = sanitizeSeedRoots({
         roots: [

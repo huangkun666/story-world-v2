@@ -39,8 +39,15 @@ export const SEED_CANDIDATES_TOP = 60;  // 改进版：候选池上限（"还没
  *       这正是"另起一条根"要的；而且**对得上就能落账**（对不上的名字仍会被 `applySeedRoots` 丢掉）。
  *   ★不传候选池时行为与旧版逐字一致（老调用方零扰动）。
  */
-export function buildSeedRootsPrompt(sourceText, { candidates = [] } = {}) {
-    const src = String(sourceText ?? '').slice(0, SEED_CHUNK_CHAR);
+export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = SEED_CHUNK_CHAR } = {}) {
+    // ★★leg60（用户实机报"起根一直是 0 条"时顺手查出来的相邻 bug）：**二次截断**。
+    //   本函数一直硬切 `.slice(0, SEED_CHUNK_CHAR)`，而 `seedRootsChunked` 早就把块按
+    //   `chunkBookText(src, chunkChars)` 切好了（实测块 ≈31,447 字符 > 30,000）⇒
+    //   **每块尾巴那 ~1,400 字从来没进过提示词**（约 4.6%），而且**与它自己的注释相反**——
+    //   第 253 行的注释写着"分块起根时不再二次截断……那道截断只属于单发路径"，代码却没做到。
+    //   ⇒ 口径与注释对齐：`maxChars` 可注入，**单发路径保持 30000**（老调用方零扰动），
+    //     分块路径传 `Infinity`（块的大小由调用方决定，这里不再动刀）。
+    const src = maxChars === Number.POSITIVE_INFINITY ? String(sourceText ?? '') : String(sourceText ?? '').slice(0, maxChars);
     const names = (Array.isArray(candidates) ? candidates : []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, SEED_CANDIDATES_TOP);
     const listBlock = names.length
         ? [
@@ -257,7 +264,8 @@ export async function seedRootsChunked({
         let roots = [];
         let err = null;
         try {
-            const raw = await extract(buildSeedRootsPrompt(sliced, { candidates }));
+            // ★leg60：**传 Infinity**——块已经由 `chunkBookText` 切好，这里不许再切（见 buildSeedRootsPrompt 头注）
+            const raw = await extract(buildSeedRootsPrompt(sliced, { candidates, maxChars: Number.POSITIVE_INFINITY }));
             const parsed = typeof raw === 'string' ? safeJson(raw) : raw;
             if (!parsed) throw new Error('返回的不是合法 JSON');
             const clean = sanitizeSeedRoots(parsed, { max: maxPerChunk });

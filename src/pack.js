@@ -351,6 +351,52 @@ export function membersOf(world, faction) {
     return heads;
 }
 
+// ★★leg60（用户令「把抽象这件事做好了」· 交接第 2 件「让设定进包」）：**刻度块**。
+//   病（逐处 grep 出来的消费面，见 `docs/measure-leg59c-generality.md` §7）：抽象出来的四件套
+//   （`rules`/`society`/`techOrMagic`/`historyNotes`）**只在 `render.js` 出现**，`powerScale` 只在
+//   `abstract.js` 当"档位标签校验词"，而 `pack.setting` **只带 tension+env**（A-8"冻结层不入包"）
+//   ⇒ **模型每轮一个字都看不到这本书的尺子**（真账：85 实体里 `实力` 0 条）。
+//   口径（用户拍的）：**只进"可判等的那一小块"——维度 + 取值范围 + 档位表**；散文型设定
+//   （社会格局/力量体系描述/史略）**不进每轮包**——它们留在账里给面板与开局抽取用。
+//   为什么这一小块值得违反 A-8：它是**锚**——模型写实力/属性时有书里的尺子可依（档位名逐字照抄），
+//   而不是各写各的形容词（"万人敌"/"很强"）；且它是**冻结的短表**（编译一次、之后每轮逐字相同）。
+//   体积纪律（上界，实测可复核）：维度 ≤ DIM_TOP 条 · 档位 ≤ TIER_TOP 条 · 每个字符串 ≤ SCALE_STR_MAX 字
+//   ⇒ 最坏 ≈ (8+24)×(30+8) ≈ 1,216 字符（对 30,000 token 的包预算是 4% 量级；leg28 实测峰值 19,241）。
+//   键口径：解析不出任何维度/档位 ⇒ 返回 null ⇒ **键不出现**（"空着就是空着"，与 env 同一条纪律）。
+export const DIM_TOP = 8;
+export const TIER_TOP = 24;
+export const SCALE_STR_MAX = 30;
+export function buildScaleAnchor(canon) {
+    if (!canon || typeof canon !== 'object') return null;
+    const cut = (s) => {
+        const t = String(s ?? '').trim();
+        return t.length > SCALE_STR_MAX ? t.slice(0, SCALE_STR_MAX) : t;
+    };
+    const dims = (Array.isArray(canon.dims) ? canon.dims : [])
+        .map((d) => {
+            const item = { 名: cut(d?.name) };
+            const range = cut(d?.range);
+            if (range) item.范围 = range;
+            return item;
+        })
+        .filter((d) => d.名)
+        .slice(0, DIM_TOP);
+    const tiers = (Array.isArray(canon.powerScale) ? canon.powerScale : [])
+        .map((p) => {
+            const item = { 档: cut(p?.level) };
+            const note = cut(p?.note);
+            if (note) item.标定 = note;
+            return item;
+        })
+        .filter((t) => t.档)
+        .slice(0, TIER_TOP);
+    if (!dims.length && !tiers.length) return null;
+    const out = {};
+    if (dims.length) out.维度 = dims;
+    if (tiers.length) out.档位 = tiers;
+    return out;
+}
+
 // 固定打包序：活跃实体简表 → 在飞盘算（含 memory）→ 未决事件 → 最近 2 tick 关闭事件 → 玩家落子事实 → 张力
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
@@ -422,6 +468,8 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         id: e.id, title: e.title, source: e.source,
     }));
     const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
+    // ★★leg60（交接第 2 件）：**刻度块**——A-8 体积纪律的**唯一一处窄口**（见 `buildScaleAnchor` 头注）。
+    const scale = buildScaleAnchor(ssot.context?.setting?.frozen?.canon);
     // K38 补差包（敲定稿 C 条）：对话依据册摘要进包——"谁反复被点名"模型看得见（dialogueFact 源/镜头依据；
     // 只取前 TOP 条，计数+最近提及轮；依据册总量留在账上）
     const db = ssot.meta?.dialogueBook;
@@ -479,7 +527,12 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         world: ssot.context?.world,
         // 张力：有 setting 取演化层强度（引擎算），无则回退 context.tension 数字（细案 §3.1 兼容口径）
         tension: dyn ? dyn.tension?.intensity : ssot.context?.tension,
-        setting: dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : undefined,   // 大势块：张力三件 + 环境量（固定小结；derivedFrom 属引擎记账不入包）
+        // ★★leg60：大势块 = 张力三件 + 环境量（固定小结）**+ 刻度**（维度/范围/档位，见 buildScaleAnchor）。
+        //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
+        setting: (dyn || scale) ? {
+            ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
+            ...(scale ? { 刻度: scale } : {}),
+        } : undefined,
         positions: ssot.context?.positions,
         entities,
         agendas,

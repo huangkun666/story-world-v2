@@ -194,6 +194,38 @@ test('K31 净化逐项取好弃坏：坏项弃置记 errors，好项全保留（
     assert.equal(cleaned.tension.intensity, undefined); // 模型侧 intensity 不在净化结果里
 });
 
+test('★leg60 编译完整性落账 + 维度/刻度过 K24 schema（可选键：旧账不带它也合法）', async () => {
+    // 这一条锁的是**整条契约链**（prompt 形状 → 净化 → 合并 → 落账 → schema）——
+    //   leg60 给 canon 加了 `dims`（书里的尺子）、给 frozen 加了 `compile`（编译完整性读数），
+    //   两样都是**可选键**：老账没有照样过校验（旧世界零扰动），新账有则必须过。
+    const raw = {
+        ...FULL_RAW,
+        dims: [{ name: '勇武', range: '-100~100' }, { name: '韬略', range: '-100~100' }, { name: '气度' }, { name: '勇武', range: '重复项应去重' }, { name: '' }],
+    };
+    const r = await extractWorldSetting({
+        sourceText: BOOK,
+        extract: fakeExtract(raw),
+        compileInfo: { entries: 827, enabled: 264, disabled: 563, declared: 554, picked: 188, skipped: 366, titleNames: 189 },
+    });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.setting.frozen.canon.dims, [
+        { name: '勇武', range: '-100~100' },
+        { name: '韬略', range: '-100~100' },
+        { name: '气度' },
+    ], '★维度：同名去重 · 缺 name 弃项 · 原文没给范围就不写 range 键（不落占位值）');
+    assert.equal(r.setting.frozen.compile.picked, 188, '★编译完整性读数落进 frozen（面板与账本都看得见）');
+    const checked = validate(applySettingToSsot(baseWorld(), r.setting), ssotSchema);
+    assert.equal(checked.ok, true, checked.errors.join('; '));
+    // 旧账：没有 dims、没有 compile ⇒ 一样合法
+    const legacy = assembleSetting({
+        canon: { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [] },
+        tension: { polarity: '', direction: '' }, env: {}, fingerprint: 'fnv1a_x_1', extractedAt: 't',
+    });
+    assert.equal(legacy.frozen.compile, undefined, '没给读数 ⇒ 键不出现（不是空对象）');
+    const checked2 = validate(applySettingToSsot(baseWorld(), legacy), ssotSchema);
+    assert.equal(checked2.ok, true, checked2.errors.join('; '));
+});
+
 test('K31 落账形状过 K24 schema：applySettingToSsot 后世界全量合法；空 canon 亦合法', async () => {
     const r = await extractWorldSetting({ sourceText: BOOK, extract: fakeExtract(FULL_RAW), legacyTension: 0.6 });
     const doc = applySettingToSsot(baseWorld(), r.setting);

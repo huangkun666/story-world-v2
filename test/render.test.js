@@ -11,6 +11,8 @@ import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
     renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
+    // ★leg56：分段档位条（纯展示函数——判据直接喂数字验边界，不必造世界）
+    gearBarHtml,
     ENTS_PAGE_SIZE, ENTS_DEFAULT_VIEW, makeEntsView, entsSearchTextOf, selectEntityPage, entsHitCounts,
     PANEL_BUILD,
 } from '../src/render.js';
@@ -21,6 +23,11 @@ import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS } from '../src/limits.js';
 import { PARAM_GEARS, PARAM_KEYS, PANEL_ENV_KEYS } from '../src/params.js';
 // ★leg53：「哪几格是引擎每轮算的」必须来自**生产者**（面板不许自己另写一份名单）
 import { ENGINE_DERIVED_ENV } from '../src/unrest.js';
+// ★leg55·二：「乱象」说明里的窗口数必须与**机制**同源（面板不许替机制承诺一个没写死的数）
+import { UNREST_WINDOW } from '../src/unrest.js';
+import { TENSION_WINDOW } from '../src/setting.js';
+// ★leg55：面板印的冷档阈值＝引擎轮转当缺省用的那份常量 ⇒ 判据从**真源**取，不抄字面量
+import { PROPOSED_LIMITS } from '../src/storage.js';
 import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -847,6 +854,42 @@ test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客�
     assert.ok(!html.includes('sw2-wval') && !html.includes('sw2-eweight'), '片5：分量条不再渲染');
 });
 
+// ★leg60（交接第 2/3 件）：设定页必须**真的画出**新编译出来的两样东西——维度/刻度 与 编译完整性。
+//   ⚠为什么单独立一条：我第一版只加了渲染代码、没加判据 ⇒ **那条分支一次都没被跑到**（全绿）。
+//     这是本仓反复登记的那类洞（"机制对了、线没接上"）——所以这里**真渲染一次**并逐字断言。
+test('★leg60 设定页：维度与刻度卡 + 编译完整性读数（真渲染一次，不许是空绿）', () => {
+    const w = world();
+    w.context.setting.frozen.canon.dims = [{ name: '勇武', range: '-100~100' }, { name: '韬略', range: '-100~100' }, { name: '气度' }];
+    w.context.setting.frozen.compile = {
+        entries: 827, enabled: 264, disabled: 563,
+        declared: 554, picked: 188, skipped: 366, skippedChars: 523337,
+        declaredDropped: 0, titleNames: 189, settingTitles: 12, settingCompiled: 9,
+        missedTitles: ['演义模糊地带处理准则'],
+    };
+    const html = renderSettingHtml(w);
+    assert.match(html, /维度与刻度（3 项）/, '★维度卡在位（书里的尺子要看得见）');
+    assert.match(html, /勇武<\/b><span>-100~100/, '维度名与范围逐字取自原文');
+    assert.match(html, /（原文未给范围）/, '只有维度名、原文没给范围时如实写"未给"，不编一个范围');
+    assert.match(html, /编译完整性/, '★编译完整性读数在位');
+    assert.match(html, /作者点名 554 条 ⇒ 本次进料 188 条/, '读数逐项如实');
+    assert.match(html, /未编译 366 条（523337 字，题名仍进名册）/, '未编译的那一批**如实报**（不许静默）');
+    assert.match(html, /题名面贡献名号 189 条（零调用）/, '题名面的贡献也报出来');
+    assert.match(html, /设定类条目覆盖 9\/12/, '设定类条目覆盖率如实');
+    assert.match(html, /演义模糊地带处理准则/, '未编译的设定类条目**点名列出**（"哪个体系没抽出来"要一眼看到）');
+    // 禁词扫描**只扫文本**（`textOnly` 剥标签）——否则会咬到 CSS 类名（如 `sw2-hist-tick` 里的 `tick`）。
+    //   ★这一段必须在这里扫：全局那条 BLACKLIST 判据用的是**没有 dims/compile 的夹具**，
+    //     它扫不到本棒新加的两段文案 ⇒ 不在这里扫，新文案就是禁词的无人区。
+    for (const term of BLACKLIST) assert.ok(!textOnly(html).includes(term), `含禁词「${term}」（leg60 新文案）`);
+    // 顶到体积上限时要显形（三国实测会咬到 50 万上限）
+    const over = world();
+    over.context.setting.frozen.compile = { entries: 827, enabled: 264, disabled: 563, declared: 554, picked: 180, declaredDropped: 8 };
+    assert.match(renderSettingHtml(over), /⚠顶到体积上限，声明面有 8 条未进料/, '截断不许静默');
+    // 没有读数（旧账）⇒ 那一栏不出现（旧世界零扰动）
+    const bare = world();
+    assert.ok(!renderSettingHtml(bare).includes('编译完整性'), '旧账没有 compile 读数 ⇒ 不画那一栏');
+    assert.ok(!renderSettingHtml(bare).includes('维度与刻度'), '旧账没有 dims ⇒ 不画那一栏');
+});
+
 test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指纹/时间/五件套原文全量），重抽按钮在位', () => {
     const html = renderSettingHtml(world());
     assert.match(html, /书指纹 fnv1a_9f31x_12044/);
@@ -883,6 +926,20 @@ test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表�
     assert.match(html, /data-action="init-world"/);
     assert.match(html, /data-action="advance-world"/);
     assert.match(html, /自动入卷阈值/);
+    // ★leg55：这一格的值必须**来自 config 现读**（撤掉曾经那个 `?? '500'` 死兜底）。
+    //   ★口径（第一版写成 `/777 轮 或 9MB/` 被自己判红逼出来的）：`9MB` 是 `19MB` 的子串
+    //     ⇒ 子串式断言分不清"真读了 9"还是"读了 19"。故用 `>` 闭合取值并**逐字比对整个 `<b>` 文本**。
+    const thrText = (cfg) => {
+        const m = /<b class="sw2-thr">([^<]*)<\/b>/.exec(renderSettingsHtml(world(), { config: cfg }));
+        assert.ok(m, '前置：找得到自动入卷阈值那个 <b>');
+        return m[1];
+    };
+    //   夹具给一组**不等于出厂值**的数 ⇒ 印出它们才证明"真在读 config"。
+    assert.equal(thrText({ ...CONFIG, limitsTicks: 777, limitsBytesMB: 9 }), '777 轮 或 9MB',
+        '★自动入卷阈值必须现读 config（写死 500/5 就印不出 777/9）');
+    //   缺值时印的仍是出厂数字（`render()` 被夹具/直调时真源不在手上，属**诚实兜底**而非静默）——
+    //   但"生产上必须注入"由下面 leg55 那条接线判据锁死。
+    assert.equal(thrText(CONFIG), '500 轮 或 5MB', '缺 config 时兜底印出厂数字（这条分支不再是"永远走的那条"）');
     assert.match(html, /data-action="export-world"/);
     assert.match(html, /data-action="import-world"/);
     // ★leg40b（体检 · A3/D1）：`data-action="player-desc"` 是历史残留——这个 textarea 由
@@ -1604,7 +1661,8 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ★同一条起名纪律：`leg52-params-and-tide` 里零引擎术语（下面那个循环就是扫描器）。
     // ★★★leg53 换档：**乱象有了生产者**（引擎每轮算）+ 民生撤下 + 依据那一格改口径 ⇒ 玩家可见面真变了。
     // ★★★leg54 换档：世界尺度四个框改成**数字输入框、无上限**（+ 设置页那行过期预算已修）⇒ 又变了。
-    assert.equal(PANEL_BUILD, 'leg54-unlimited-limits');
+    // ★★★leg60 换档：设定页新增「维度与刻度」与「编译完整性」两栏 ⇒ 又变了。
+    assert.equal(PANEL_BUILD, 'leg60-abstraction');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2033,6 +2091,65 @@ test('★★leg52·G：**接线面**——每一次 `renderAll` 都必须带上 
     }
 });
 
+test('★★leg55：面板上的数字必须**现算**——「自动入卷阈值」真源接线（leg54 §6.4 的第一次系统落地）', () => {
+    // 病灶（leg40b 体检**已登记未治**，本棒结掉）：`render.js` 那一行写着
+    //   `${cfg.limitsTicks ?? '500'} 轮 或 ${cfg.limitsBytesMB ?? '5'}MB`，
+    //   而 `web/index.js` 的 `renderCfg()` **从不注入这两个键** ⇒ 生产上恒 `undefined`、
+    //   兜底字面量恒生效：**"从 config 现读"是一句谎话**，印出来的其实是渲染层自己抄的一份数。
+    //   ★它为什么能活这么久：值与真源一致 ⇒ **看着永远是对的**，只有真源一改才会变成谎话
+    //     ——与 leg54 那个「4096」同一种病（那行过期了好几棒，还差点让我用错数劝住用户）。
+    // ⇒ 判据两半，缺一不可（只锁渲染层那一半＝空绿，正如它过去的状态）：
+    //   ① 渲染层那条路要**真的读 cfg**（上面 K34 那条用 777/9 锁了）；
+    //   ② 接线层要**真的注入**（本条的正文）——否则"给了就画对"跟"根本没给"是两回事。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const cfgAt = web.indexOf('function renderCfg(');
+    assert.ok(cfgAt > 0, '前置：找得到 renderCfg');
+    const cfgSeg = web.slice(cfgAt, web.indexOf('\n}', cfgAt));
+    // 这两个键必须由 `PROPOSED_LIMITS`（**真源**）现算，不许写字面量数字
+    assert.match(cfgSeg, /limitsTicks:\s*PROPOSED_LIMITS\.ticks/,
+        '★`limitsTicks` 必须从 `PROPOSED_LIMITS.ticks` 现读（写死 500 ⇒ 真源一改面板就说谎）');
+    assert.match(cfgSeg, /limitsBytesMB:\s*PROPOSED_LIMITS\.bytes\s*\/\s*1024\s*\/\s*1024/,
+        '★`limitsBytesMB` 必须从 `PROPOSED_LIMITS.bytes` 现算 MB（字节→MB 的换算只许住这一处）');
+    // 反向守门：`renderCfg()` 里不许再出现裸的阈值字面量（防"接上真源"与"写死"两条路并存）
+    assert.doesNotMatch(cfgSeg, /limitsTicks:\s*\d/, '★不许退回写死（`limitsTicks: 500`）');
+    // ③ 另一头钉住真源本身：面板印的数就是引擎轮转**当缺省**用的那份常量
+    //    （`planChronicleRotation` 不传 `limits` 时走 `PROPOSED_LIMITS` ⇒ 显示与行为同一个数）
+    assert.equal(PROPOSED_LIMITS.ticks, 500, '★出厂冷档 tick 阈值＝500（K38 报批项 #1，改这里要连带改面板）');
+    assert.equal(PROPOSED_LIMITS.bytes, 5 * 1024 * 1024, '★出厂冷档字节阈值＝5MB（同上）');
+    // ④ 渲染层源码里不许留下那对**旧兜底写法**（`?? '500'` / `?? '5'`）——它正是死路的化石
+    //   ★口径（第一版被自己判红、当场改）：整份源码直扫会**咬到解释这条病的注释本身**
+    //     （leg55 的留档注释里逐字引了旧写法）⇒ 先剥掉行注释再断言。留着"照抄一遍旧写法当反例"
+    //     的自由，同时保证**代码**里再也搜不到它（本仓的留档惯例要求注释能引用病句）。
+    const renderSrc = readFileSync(path.join(ROOT, 'src', 'render.js'), 'utf8');
+    const renderCode = renderSrc.split('\n')
+        .map((l) => l.replace(/\/\/.*$/, ''))   // 行注释剥掉（本文件无块注释）
+        .join('\n');
+    assert.ok(!/\?\?\s*'500'/.test(renderCode) && !/\?\?\s*'5'/.test(renderCode),
+        '★旧的 `?? \'500\'` / `?? \'5\'` 死兜底不得回潮（它让"读 config"那半边永远不生效）');
+});
+
+test('★★leg55·二：设定页「乱象」说明里的窗口数必须**现读 `TENSION_WINDOW`**（同类第二处）', () => {
+    // 病（与上一条同一个形状，只是换了个面）：那句说明原写死「看近 **10** 轮里"出事"铺到了几个地点」，
+    //   而**机制本身**在 `src/unrest.js`：「乱象档位 = 近 `TENSION_WINDOW` 轮里…」（`UNREST_WINDOW = TENSION_WINDOW`）
+    //   ⇒ 面板**替机制承诺了一个它没写死的数**：`TENSION_WINDOW` 一改，说明变谎话而**代码照旧对**
+    //   ——leg54 那个 4096 的同一种病（UI 比代码先过期）。
+    //   ★同文件里 `TENSION_WINDOW` 已被现读三处（张力行两处 + 设定页一处）⇒ 本处只是**漏网的那一处**，
+    //     而"漏一处"正是它当年没被现读覆盖的原因 ⇒ 判据必须**按机制口径**锁，不能只锁"某一行有字"。
+    //   ★口径修正（第一版写 `renderSettingsHtml` 被自己判红逼出来）：这句说明住在**参数页**
+    //     `renderParamsHtml`（「世界气氛与条件」卡），不在设定页 —— 两张卡容易混，故写明。
+    const html = renderParamsHtml(world(), { config: CONFIG });
+    assert.ok(html.includes(`看近 ${TENSION_WINDOW} 轮里`),
+        `★乱象说明里的窗口数必须来自 TENSION_WINDOW（现值 ${TENSION_WINDOW}）`);
+    // 反向自证：把常量当成"会被改的数"，断言这句**不是**写死的 10 ——
+    //   若将来 TENSION_WINDOW 被报批改成别的值，上面那条会跟着走，而写死的 10 不会。
+    if (TENSION_WINDOW !== 10) {
+        assert.ok(!html.includes('看近 10 轮里'), '★窗口数已改，说明句不许还印旧数（写死的化石）');
+    }
+    // 机制侧的锚：面板那句话描述的窗口，必须就是 `unrest.js` 真正在用的那个
+    assert.equal(UNREST_WINDOW, TENSION_WINDOW,
+        '★乱象窗口必须与张力窗口同源（`unrest.js` 明写"不另立窗口数"）');
+});
+
 test('★★leg52·F：BLACKLIST 漏网「派生源」—— 注释里禁的字面量，数组里必须真有', () => {
     // 病：`render.js:8` 的文件头注释从 leg26 起就写着"禁：…**派生源**…"，
     //   而 `BLACKLIST` 数组里**只有英文 `derivedFrom`** ⇒ 设定页那句「浪尖（派生源）」印了十几棒
@@ -2052,6 +2169,104 @@ test('★★leg52·F：BLACKLIST 漏网「派生源」—— 注释里禁的字�
 //   读点里**引擎一条判据都不读**；`param-hub.js:520` 那句"世界的因变量归世界自己每轮写"
 //   在此之前**是假的**（全仓无此代码）⇒ 本棒把「乱象」那句话变成真的，并把「民生」从面板撤下。
 // ═══════════════════════════════════════════════════════════════════════════════════
+
+test('★★leg56·一：分段档位条 —— 点亮格数＝该档位在**它自己那张表**里的序位（不是两态装饰）', () => {
+    // 用户令：「根据挡位渲染不同长度的进度条」+「中间太空旷了」。
+    // ★这条锁的**唯一理由**是把"新条 ≠ leg40b 撤掉的那条"钉死（否则下一任会以"两态恒真"为由再撤一次）：
+    //   撤掉的那条：`width: 0% | 100%` 两态 ⇒ 只有"有值/没值"两种长相，信息量 0。
+    //   现在这条：点亮格数 = `PARAM_GEARS[key].indexOf(value) + 1` ⇒ 真值不同则**长度不同**。
+    // 本夹具三格正好是三种不同序位（乱象 动荡=3/4 · 天时 大灾=1/4 · 时局 紧绷=4/4）——这是它能当判据的前提。
+    const html = renderInfoBandHtml(world());
+    const grab = (name) => {
+        const m = new RegExp(`sw2-env-name">${name}</span><span class="sw2-gearbar([^"]*)"[^>]*>((?:<i[^>]*></i>)*)`).exec(html);
+        assert.ok(m, `前置：${name} 那一行要画得出档位条`);
+        return { unset: m[1].includes('unset'), lit: (m[2].match(/class="on"/g) || []).length, total: (m[2].match(/<i/g) || []).length };
+    };
+    const luan = grab('乱象'); const tian = grab('天时'); const shi = grab('时局');
+    assert.equal(luan.total, 4, '档位表是 4 档 ⇒ 轨道 4 格');
+    assert.equal(luan.lit, 3, '乱象=动荡 ⇒ 表里第 3 位 ⇒ 点亮 3 格');
+    assert.equal(tian.lit, 1, '★天时=大灾 ⇒ 表里第 1 位（**第 1 档也是 1 格，不是 0 格**——0 格是"未定"的意思）');
+    assert.equal(shi.lit, 4, '时局=紧绷 ⇒ 第 4 位 ⇒ 满格');
+    // ★核心断言：三格必须画出**不止一种长度**——这一条才是"它不是恒真装饰"的机械证据
+    assert.ok(new Set([luan.lit, tian.lit, shi.lit]).size >= 2,
+        '★★三格真值不同 ⇒ 点亮格数**必须不同**（若恒等，那就退化成 leg40b 撤掉的"两态恒真"装饰）');
+    // ★不写数字、不写百分数（leg26 红线："档位是人话原话，不是数"）——玩家读到的只有原话
+    assert.ok(!/%/.test(html) && !/sw2-gearbar[^>]*>\s*\d/.test(html), '★条上不许印百分数/数字');
+});
+
+test('★★leg56·二：未定 ⇒ **空轨道**（保留「未定」文字，不点亮、不消失）', () => {
+    const bare = structuredClone(world());
+    bare.context.setting.dynamic.env = {};
+    const html = renderInfoBandHtml(bare);
+    for (const name of ['乱象', '天时', '时局']) {
+        const m = new RegExp(`sw2-env-name">${name}</span><span class="sw2-gearbar([^"]*)"[^>]*>((?:<i[^>]*></i>)*)`).exec(html);
+        assert.ok(m, `${name} 未定时**轨道仍在**（不是整条消失——那会让那几行重新变空旷）`);
+        assert.ok(m[1].includes('unset'), `${name} 未定 ⇒ 走空轨道样式`);
+        assert.equal((m[2].match(/class="on"/g) || []).length, 0, `${name} 未定 ⇒ **一格都不点亮**（不猜、不填假档）`);
+        assert.equal((m[2].match(/<i/g) || []).length, 4, `${name} 未定 ⇒ 轨道仍是 4 格（形状不变，只不点亮）`);
+    }
+    assert.match(html, /未定/, '★文字照旧写「未定」（条是视觉冗余，不许取代原话）');
+});
+
+test('★★leg56·三：异体词（旧账里有、档位表里没有）⇒ 不点亮，**不许当第一档**', () => {
+    // 病理性输入：`PARAM_GEARS` 里没有这个词（换过表 / 旧账残留）⇒ `indexOf` 返 -1。
+    //   ★若拿 -1 直接画，`i < -1` 一格不亮（对），但若写成"没找到就当第一档"就会**凭空点亮一格**——
+    //     那是面板替世界编了一个档位。这条把两种写法的区别钉死。
+    assert.equal((gearBarHtml(0, 4, false).match(/class="on"/g) || []).length, 0,
+        '★序位 0（词不在表里）⇒ 一格都不点亮');
+    assert.equal((gearBarHtml(0, 4, false).match(/<i/g) || []).length, 4, '轨道格数不随序位变');
+    // 边界：越界一律钳住（表变短、旧账序位偏大 ⇒ 不许画出第 5 格）
+    assert.equal((gearBarHtml(9, 4, false).match(/class="on"/g) || []).length, 4, '★越界钳到满格，不画第 5 格');
+    assert.equal((gearBarHtml(-3, 4, false).match(/class="on"/g) || []).length, 0, '负数钳到 0');
+    // 真正的路径：★口径修正（第一版断言写错、被自己判红逼出来）——
+    //   账上放一个**不在档位表里**的词时，它**根本到不了渲染层**：`resolveEnv` 会走 `normalizeParam`
+    //   把它归一掉，于是面板画「未定」（与"引擎不认的词不许冒充档位"同一条口径）⇒ 那才是对的。
+    //   ⇒ 所以这条要断的是"**归一后落到未定**"，而不是"原话照旧印出来"（我第一版把两者搞混了）。
+    //   `gearBarHtml(0,…)` 那三条边界锁的是**函数本身**（万一将来有别的调用方直接喂序位）。
+    const odd = structuredClone(world());
+    odd.context.setting.dynamic.env = { ...odd.context.setting.dynamic.env, 天时: '书上原话·非本表词' };
+    const html = renderInfoBandHtml(odd);
+    const oddRe = new RegExp('sw2-env-name">天时</span><span class="sw2-gearbar([^"]*)"[^>]*>((?:<i[^>]*></i>)*)</span><span class="sw2-env-val">([^<]*)');
+    const m = oddRe.exec(html);
+    assert.ok(m, '前置：天时那一行取得到');
+    assert.equal((m[2].match(/class="on"/g) || []).length, 0, '★不在表里的词 ⇒ 一格都不点亮（不冒充某一档）');
+    assert.equal(m[3], '未定',
+        '★不认的词被归一成「未定」（它到不了渲染层：`resolveEnv`→`normalizeParam`）——'
+        + '面板不许替世界认一个引擎不认的档位；★同时**轨道仍在**（未定 ≠ 整条消失）');
+    assert.ok(m[1].includes('unset'), '且走未定的空轨道样式');
+});
+
+test('★★leg56·四：「盘算」栏的上限必须读**真源**（不再印编译期常量 `AGENDA_CAPS`）', () => {
+    // 病（用户实机截图）：参数页四框写着 10/12/30/40，同一屏旁边的「盘算」栏却印 `9/20 · 顶层 9/15`
+    //   —— 因为那一栏读 `AGENDA_CAPS`（`limits.js` 的出厂常量，**永不随档位变**），而参数页读真源。
+    //   ★★不只是观感：**引擎读的是 `resolveLimits(world)`** ⇒ 真跑用 10/12/30/40，**错的是面板**。
+    const live = { 在飞大计: 88, 顶层大计: 77 };
+    const html = renderInfoBandHtml(world(), { config: { paramEnv: live } });
+    assert.match(html, /顶层 \d+\/77/, '★顶层上限必须跟着真源走（77）');
+    assert.match(html, /<small>\/88<\/small>/, '★在飞上限必须跟着真源走（88）');
+    // 反向自证：不传真源 ⇒ 退回出厂默认（20/15）——证明上面那条**真的是被 config 改动的**
+    const noCfg = renderInfoBandHtml(world());
+    assert.match(noCfg, /顶层 \d+\/15/, '不传真源 ⇒ 退回出厂默认 15（与 `LIMIT_DEFAULTS` 同源）');
+    assert.match(noCfg, /<small>\/20<\/small>/, '不传真源 ⇒ 退回出厂默认 20');
+    // ★并且它必须与参数页**读同一份**：同一个 config 喂两张面，分母不许分叉
+    const paramsHtml = renderParamsHtml(world(), { config: { paramEnv: live } });
+    assert.ok(paramsHtml.includes('77') && paramsHtml.includes('88'),
+        '★同一份真源喂参数页 ⇒ 那张面也必须画 77/88（同一把尺子，不许一面读真源一面读常量）');
+    // 非法值不许炸、也不许写进分母：退回默认（照本仓"失败零阻塞"）
+    const bad = renderInfoBandHtml(world(), { config: { paramEnv: { 顶层大计: 'abc', 在飞大计: -5 } } });
+    assert.match(bad, /顶层 \d+\/15/, '★非法真源值 ⇒ 退回默认，不许把 abc 印进分母');
+});
+
+test('★★leg56·五：「世情 · N 键」的 N 必须**现算**（不许再写死「四键」）', () => {
+    // 病：`render.js` 里写死「世情 · 四键」，而 leg53 已把民生撤下 ⇒ 实际只有 3 格
+    //   ⇒ 玩家看到「四键」下面却只有三行（用户实机截图：「还是四键」）。
+    //   ★与 leg54 那个 4096、leg55 那个 500/5MB **同一种病**：面板上的数字脱离了它的数据。
+    const html = renderInfoBandHtml(world());
+    assert.match(html, new RegExp(`世情 · ${PANEL_ENV_KEYS.length} 键`), '★键数由 PANEL_ENV_KEYS 现算');
+    assert.ok(!html.includes('四键'), '★「四键」这个写死的字面量不得回潮');
+    // 反向自证：真值是 3（不是 4）——否则这条锁在"恰好等于 4"时是空绿
+    assert.equal(PANEL_ENV_KEYS.length, 3, '前置：面板真画 3 格（民生已撤）⇒ 写死「四键」是错的');
+});
 
 test('★★★leg53·F：**民生那一格从玩家可见面彻底撤下**（用户令「拿掉」），且**旧账兼容不被破坏**', () => {
     // 病的形状（本棒取证）：`民生度` 被定义成"因变量"、面板因此不给旋钮（leg26 红线），

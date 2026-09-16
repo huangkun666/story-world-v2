@@ -80,7 +80,12 @@
 .sw2-band-block{padding:10px 14px;flex:1;min-width:0;}
 .sw2-band-block + .sw2-band-block{border-left:1px solid var(--sw2-line-soft);}
 .sw2-band-label{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:7px;}
-.sw2-env-row{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center;margin-bottom:4px;}
+/* ★★★leg56（用户令「根据挡位渲染不同长度的进度条」+「中间太空旷了」）：
+   这两行原来是 `grid-template-columns:44px 1fr` 的**两栏**，而 `.sw2-env-val` 是 `text-align:right`——
+   于是值被推到右缘、中间那整条 1fr 空着（用户截图：名字在左、值在右、中间一片死区）。
+   ⇒ 加**第三栏**（分段档位条）填那条空，三栏 = 名字 / 刻度 / 原话。
+   ★`44px` → `max-content`：档位名是两三字（乱象/天时/时局），固定 44px 本来就会把"张力推手"挤裂。 */
+.sw2-env-row{display:grid;grid-template-columns:max-content 1fr max-content;gap:8px;align-items:center;margin-bottom:5px;}
 .sw2-env-row:last-child{margin-bottom:0;}
 .sw2-env-row .sw2-env-name{font-size:11.5px;color:var(--sw2-text-dim);}
 /* leg26：`.sw2-danger`（越阈危险带）整条下架——档位没有"危险/安全"之分，引擎对参数零表态。
@@ -145,6 +150,18 @@
 .sw2-nodata-text{font-size:11.5px;color:var(--sw2-text-faint);font-style:italic;}
 .sw2-env-row.sw2-nodata .sw2-env-val{color:var(--sw2-text-faint);font-size:11px;}
 .sw2-nodata-tag{margin-left:5px;font-size:10px;padding:0 4px;border:1px dashed var(--sw2-line-soft);border-radius:7px;}
+/* ---------- ★★★leg56：分段档位条（信息带「世情」+ 设定页共用） ----------
+   它**不是** leg40b 撤掉的那条"两态恒真"装饰条（那条 `width:0%|100%`、信息量为 0）：
+   点亮格数 = 该档位在**它自己那张档位表**里的序位（`PARAM_GEARS` 有序，顺序即语义）
+   ⇒ 真值 `动荡 3/4` · `大灾 1/4` · `暗涌 3/4` 画出**三种不同长度**，承载真数据。
+   ★为什么分段而不是连续宽度：三格并排时连续条会被读成"同一把尺子上的三个量"，**而它们不是**
+     （每格只是"我在我自己那张表里的第几档"，档与档之间没有共同单位）⇒ 分段让它看起来就是刻度。
+   ★`gap:2px` + 每格圆角：让"格数"一眼可数（连续条数不出来）；不写字、不写百分数（leg26 红线）。 */
+.sw2-gearbar{display:inline-flex;gap:2px;align-items:center;justify-self:stretch;width:100%;max-width:120px;}
+.sw2-gearbar i{flex:1 1 0;height:5px;border-radius:2px;background:var(--sw2-line-soft);min-width:8px;}
+.sw2-gearbar i.on{background:var(--sw2-amber);}
+.sw2-gearbar-unset i{background:transparent;border:1px dashed var(--sw2-line-soft);}
+.sw2-env-row.sw2-nodata .sw2-gearbar{opacity:.7;}
 /* leg26：参数页的下拉（世界参数档位）——沿用面板既有观感，不新造组件 */
 .sw2-param-select{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:3px 7px;font-size:12px;font-family:inherit;min-width:96px;line-height:1.4;}
 /* 展开的原生列表：给了字号就跟着走（macOS/部分浏览器仍按系统渲染，这里只管能管的那部分） */

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runSmoke } from '../src/smoke.js';
-import { buildEvolutionPack } from '../src/pack.js';
+import { buildEvolutionPack, buildScaleAnchor, DIM_TOP, TIER_TOP, SCALE_STR_MAX } from '../src/pack.js';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import { PARAM_GEARS, PARAM_KEYS } from '../src/params.js';
@@ -57,13 +57,48 @@ test('K29/A-8：pack 大势块——有 setting 取演化层强度 + 张力三�
     assert.equal(p1.pack.tension, 0.5, '未结算前取初值 0.5（与 context.tension 同值）');
     assert.deepEqual(p1.pack.setting, { tension: { polarity: '宗门/朝廷', direction: '宗门压朝廷', intensity: 0.5 }, env: { '民生度': '艰难', '动乱度': '动荡', '天时': '平常', '张力推手': '暗涌' } });
     assert.equal(JSON.stringify(p1.pack.setting).length < 1000, true, '大势块固定小结（≤1k 字符，A-8）');
-
     const noSet = world();
     delete noSet.context.setting;
     const p2 = buildEvolutionPack(noSet, null);
     assert.equal(p2.pack.tension, 0.5, '无 setting 回退 context.tension（兼容口径）');
     assert.equal(p2.pack.setting, undefined, '无 setting 世界不出现 setting 值（undefined 不入 JSON）');
     assert.equal(JSON.stringify(p2.pack).includes('setting'), false, '文本中无 setting 键');
+});
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★leg60（交接第 2 件「让设定进包」）：**刻度块**——"书里的尺子"每轮都在，且必须是**短表**。
+//   病：抽象出来的设定只在 `render.js` 出现，`pack.setting` 只带 tension+env（A-8 冻结层不入包）
+//   ⇒ 模型每轮一个字都看不到这本书的维度与档位（真账 85 实体里 `实力` 0 条）。
+//   口径：只进"可判等的那一小块"（维度 + 范围 + 档位），散文型设定不进每轮包。
+test('★leg60 刻度块：档位表与维度进包（每轮都在）、体积有硬上界、空则键不出现', () => {
+    const withScale = world();
+    withScale.context.setting.frozen.canon.dims = [
+        { name: '勇武', range: '-100~100' },
+        { name: '韬略', range: '-100~100' },
+    ];
+    withScale.context.setting.frozen.canon.powerScale = [
+        { level: 'T0级_天下无双', note: '数值标定 勇武100' },
+        { level: 'T1级_超一流', note: '数值标定 勇武95-99' },
+    ];
+    const p = buildEvolutionPack(withScale, null);
+    assert.deepEqual(p.pack.setting.刻度.维度, [{ 名: '勇武', 范围: '-100~100' }, { 名: '韬略', 范围: '-100~100' }], '★维度 + 取值范围进包（照抄原文）');
+    assert.deepEqual(p.pack.setting.刻度.档位, [{ 档: 'T0级_天下无双', 标定: '数值标定 勇武100' }, { 档: 'T1级_超一流', 标定: '数值标定 勇武95-99' }], '★档位 + 数值标定进包');
+    // 体积硬上界（A-8 的宽口必须可复核）：维度/档位各截断，字符串逐项 ≤ SCALE_STR_MAX
+    const big = world();
+    big.context.setting.frozen.canon.dims = Array.from({ length: 40 }, (_, i) => ({ name: `维${i}`.repeat(20), range: '范'.repeat(80) }));
+    big.context.setting.frozen.canon.powerScale = Array.from({ length: 90 }, (_, i) => ({ level: `档${i}`.repeat(20), note: '标'.repeat(80) }));
+    const q = buildEvolutionPack(big, null);
+    assert.equal(q.pack.setting.刻度.维度.length, DIM_TOP, '维度条数截到 DIM_TOP');
+    assert.equal(q.pack.setting.刻度.档位.length, TIER_TOP, '档位条数截到 TIER_TOP');
+    assert.ok(q.pack.setting.刻度.维度.every((d) => d.名.length <= SCALE_STR_MAX && d.范围.length <= SCALE_STR_MAX), '逐项 ≤ SCALE_STR_MAX');
+    assert.ok(JSON.stringify(q.pack.setting).length < 3000, `刻度块整体有界（实测 ${JSON.stringify(q.pack.setting).length} 字符）`);
+    // 空则键不出现（"空着就是空着"——与 env 同一条纪律；既有世界零扰动）
+    const none = world();
+    const r0 = buildEvolutionPack(none, null);
+    assert.equal(r0.pack.setting.刻度, undefined, '本书没有成文的维度/档位 ⇒ 键不出现（不是空对象）');
+    assert.equal(buildScaleAnchor(null), null, '无 canon ⇒ null');
+    assert.equal(buildScaleAnchor({ dims: [], powerScale: [] }), null, '空表 ⇒ null');
+    assert.equal(buildScaleAnchor({ dims: [{ name: '  ' }], powerScale: [{ level: '' }] }), null, '只有空白项 ⇒ null（不发明维度）');
 });
 
 test('K29/A-5/A-6/A-8：冒烟 100t 张力/参数曲线——强度域 [0,1] 且会动、熵泵出声、挂因、预算内、零警告、确定性', async () => {

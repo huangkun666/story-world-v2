@@ -17,7 +17,7 @@ import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 //   依赖方向：render → settle（settle 不反向依赖 render）——无环，已在 import 图上核过。
 import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';
 import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
-import { LIMIT_ROWS } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）
+import { LIMIT_ROWS, LIMIT_DEFAULTS, LIMIT_KEYS, isLimitKeyOf, normalizeLimit, limitsOf } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）
 // ★★leg53：**哪几格是引擎每轮算的**——从生产者那边取（不是面板自己另写一份名单，本仓"一处口径"）。
 import { ENGINE_DERIVED_ENV } from './unrest.js';
 // ★★★leg54：单轮演算上限那行原来**把数字写死**（"120 秒 / 4096 字"），而实值是 **16384**
@@ -159,7 +159,11 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   ★★★leg54（`leg54-unlimited-limits`）：**世界尺度那四个框改成数字输入框、拿掉上限**（用户令
 //   「能自由调数，当然也能无上限」）——旧的档位白名单（顶格 9/12/30/40）撤掉；
 //   顺带修**设置页印着过期预算**那个显示 bug（写着 4096，实值 16384）。
-export const PANEL_BUILD = 'leg54-unlimited-limits';
+// ★★★leg60 换档：设定页**玩家可见面真的变了**——新增「维度与刻度」与「编译完整性」两栏
+//   （书里的尺子 + 本次编译读了多少/漏了多少）。⇒ 构建号跟批升位（本地纪律：改盘即生效，
+//   但浏览器会缓存旧面板 ⇒ 用户按 Ctrl+F5 后拿这一串对照"是不是新的"）。
+//   ★起名同一条纪律：零引擎术语（判据在 `render.test.js` 的扫描器里）。
+export const PANEL_BUILD = 'leg60-abstraction';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -214,6 +218,16 @@ export const attrText = (s) => escapeHtml(String(s ?? '').replaceAll('"', '「')
 
 export const fmtTick = (n) => `第${n}轮`;
 export const fmtPct = (n) => `${Math.round((n ?? 0) * 100)}`;
+// ★★★leg55：冷档阈值那两个数的显示口径（`src/storage.js` 的 `PROPOSED_LIMITS.bytes` 是**字节**，
+//   面板印的是 MB ⇒ 换算只许住这一处，别在公式里再写一遍 `/1024/1024`）。
+//   ① 值来自 `web/index.js` 的 `renderCfg()` 现读 `PROPOSED_LIMITS`（唯一真源）；
+//   ② **缺值照样印字面量**——但那是**诚实**的：`render()` 的夹具/直调不经过接线层，
+//      真源在那儿本来就不在手上；生产路有判据锁着必须注入（`test/render.test.js` leg55）。
+//   ③ 整数不带小数点（`5MB` 而不是 `5.0MB`），非整数才留一位——两类阈值都不该被显示层改写。
+export const fmtLimitNum = (n, fallback) => {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return String(fallback);
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+};
 
 export function entityLabel(world, id) {
     if (id === world.context?.playerId) return '你';
@@ -288,12 +302,71 @@ export function renderDigestHtml(world, { config = {} } = {}) {
 //   未定就写「未定」+ 空心点（**不填占位值**；与"空着就是空着"同源）。
 //   ★leg40b：这一行原来还画一条 `<i style="width:0%|100%">` 的"档位条"——**两态恒真**（有值就满格、
 //   没值就 0），既不是比例也不是进度，只让玩家以为这里有个数。撤掉；"无据"那个小标保留（它是真事实）。
+// ★★★leg56（用户令「根据挡位渲染不同长度的进度条」）：**分段档位条**回来了——但**不是** leg40b 撤掉的那条。
+//   为什么它这回**不是**"两态恒真"（这条区别是本处存在的全部理由，改它之前先读这三句）：
+//     · 撤掉的那条：`width: 0% | 100%` 两态 ⇒ 只有"有值/没值"两种长相，**信息量为 0**，纯装饰。
+//     · 现在这条：点亮格数 = **该档位在它自己那张档位表里的序位**（`PARAM_GEARS` 是有序的，
+//       从"最差"到"最好"排列 ⇒ 顺序本身就是语义）。三格真值 `动荡 3/4` · `大灾 1/4` · `暗涌 3/4`
+//       会画出**三种不同长度** ⇒ 它承载的是真数据。
+//   ★★为什么用**分段**而不是连续宽度（这条是设计决定，别当成审美）：三格并排时，连续条会被读成
+//     "三个在同一把尺子上的量"——**而它们不是**：每格只是"我在我自己那张表里的第几档"，
+//     档与档之间没有共同单位（"大灾"与"太平"谁更极端，**引擎不表态**）。
+//     分段（4 格）让它**看起来就是刻度**，而不是一个可以互相比较的百分比。
+//   ★不写百分数、不写数字（leg26 的红线："档位是人话原话，不是数"）——玩家读到的仍只有原话。
+//   ★未定 ⇒ **空轨道**（不是满格、也不是不画）：与"空着就是空着"同源；文字照旧「未定」。
 export function envRowHtml(key, value) {
     const v = typeof value === 'string' && value.trim() ? value.trim() : PARAM_UNSET;
     const unset = v === PARAM_UNSET;
+    // 序位 = 档位表里的下标 +1；档位表里没有这个词（旧账/异体词）⇒ 0 = 不点亮（**不猜、不当第一档**）
+    const gears = PARAM_GEARS[key] || [];
+    const rank = unset ? 0 : gears.indexOf(v) + 1;   // 找不到 ⇒ indexOf -1 ⇒ rank 0
     return `<div class="sw2-env-row${unset ? ' sw2-nodata' : ''}">`
         + `<span class="sw2-env-name">${LABELS.env[key] || escapeHtml(key)}</span>`
+        + gearBarHtml(rank, gears.length, unset)
         + `<span class="sw2-env-val">${escapeHtml(v)}${unset ? '<small class="sw2-nodata-tag">无据</small>' : ''}</span></div>`;
+}
+
+/**
+ * 分段档位条：`lit` 格点亮、共 `total` 格。**纯展示、零语义**（序位由调用方算好）。
+ * ★为什么 `total` 由调用方传（而不是在这里读 `PARAM_GEARS`）：本函数对"档位表"零知识 ⇒
+ *   换个表（上限那一栏也想画）就能复用；也让判据能直接喂数字验边界，不必造世界。
+ * ★`lit` 超出 `[0, total]` 一律**钳**（防御：旧账里的词换了表、表变短 ⇒ 不许画出 5/4 格）。
+ */
+export function gearBarHtml(lit, total, unset = false) {
+    const n = Math.max(0, Math.min(Number(total) || 0, Math.round(Number(lit) || 0)));
+    let cells = '';
+    for (let i = 0; i < (Number(total) || 0); i++) cells += `<i${i < n ? ' class="on"' : ''}></i>`;
+    // `aria-hidden`：这是**视觉冗余**（右边就有原话），读屏器读它只会念出一串空格 ⇒ 藏起来。
+    //   `title`：鼠标停上去说清它是什么——★**不写百分比、不写数字**（leg26 红线）。
+    return `<span class="sw2-gearbar${unset ? ' sw2-gearbar-unset' : ''}" aria-hidden="true"`
+        + ` title="${attrText(unset ? '还没定：这一格空着' : `档位刻度：第 ${n} 档，共 ${total} 档`)}">${cells}</span>`;
+}
+
+/**
+ * ★★★leg56：**把"这片面板该用哪几个上限"收进一处**——真源 > 账本镜像 > 出厂默认。
+ *   病（用户实机截图逼出来的，本棒修的）：参数页那四个框明明写着 `10 / 12 / 30 / 40`，
+ *   **同一个屏幕旁边**的「盘算」栏却印着 `9/20 · 顶层 9/15`——因为那一栏读的是 `AGENDA_CAPS`
+ *   那组**编译期常量**（`settle.js` 从 `limits.js` 转出的出厂值，**永不随档位变**），
+ *   而参数页读的是真源 ⇒ **同一时刻、同一屏，一个数两把尺子**（leg52 在"天时"上治过一次，这处漏了）。
+ *   ★★它不只是观感问题：**引擎自己读的是 `resolveLimits(world)`**（真源已被镜像进账）
+ *     ⇒ 真跑起来用的就是 10/12/30/40 —— **错的是面板，不是引擎**。
+ *     不修的话玩家会以为"我设的没生效"（用户原话：「参数是这样但是盘算上限怎么还是这个数」）。
+ * ★口径与 `LIMIT_ROWS` 的第二参**同一把尺子**：只有本表的键被接受，值要过 `normalizeLimit`
+ *   （非法值退回默认、**不抛错**——照本仓"失败零阻塞"）。传进来的通常是 `cfg.paramEnv`
+ *   （＝ `param-hub.displayEnv()`：真源 > 镜像 > 默认）。
+ */
+export function effectiveLimits(world, envOverride = null) {
+    const out = { ...LIMIT_DEFAULTS };
+    if (envOverride && typeof envOverride === 'object') {
+        for (const k of LIMIT_KEYS) {
+            if (!isLimitKeyOf(k)) continue;                 // 不是本表的键：不认（键白名单仍在）
+            const v = normalizeLimit(k, envOverride[k]);
+            if (v != null) out[k] = v;
+        }
+        return out;
+    }
+    // 没传真源 ⇒ 退回读**账上镜像**（与 `LIMIT_ROWS` 同一顺位：真源 > 镜像 > 默认）
+    return { ...out, ...limitsOf(world) };
 }
 
 // ★★leg52（**修"一个数两把尺子"**）：把调用方注入的**参数真源**归一成"覆盖表"。
@@ -508,7 +581,18 @@ export function renderParamsHtml(world, { config = {} } = {}) {
             + '<br>☆ 填得很大<b>不会凭空多出事情</b>：一轮里到底发生几件，是模型自己决定的'
             + '（它一次回复能写多长就是那个真天花板）。'
             + '超出它一次能写的量时，你不会看到"被拦"，只会看到<b>这一轮没长出新事</b>'
-            + '——要查就翻观棋窗口底部的「⚖ 本轮裁定」。',
+            + '——要查就翻观棋窗口底部的「⚖ 本轮裁定」。'
+            // ★★★leg57（用户令「可以」· 本句**由实测支撑**，不是推理）：把上面那句**收准**——
+            //   实测（13 次真调用，见 `docs/measure-leg57-event-cap-ceiling.md`）：
+            //     · `每轮事件` 设 12 / 30 / 50，模型都只写 **3–11 件**、`finish_reason` 全是 `stop`
+            //       ⇒ **这一格不是产量旋钮**（设大了不会变多）；
+            //     · 而固定它、只把 `每轮递线` 从 10 降到 3 ⇒ 落账从 **11 件降到 5/5/5**（三轮稳定）。
+            //   ⇒ 真正决定"一轮长几件事"的是**每轮递线**（给模型几条线要走，它就写几件事）。
+            //   ★为什么必须告诉玩家：不写这一句，玩家会以为"每轮事件"才是那个旋钮，
+            //     于是一直拧它、一直看不出变化（正是本仓反复治的那类"静默无效"体验）。
+            + '<br>☆ <b>想让一轮里多长几件事，要调的是「每轮递几条线」</b>，不是「每轮最多几件事件」——'
+            + '前者决定"给模型几条线要走"，后者只是一道上限（实测填 30、50 也一样，'
+            + '模型自己只会写几件）。',
             { summary: '改这些数要注意什么' })
         + limitRows.map(limitKnob).join('')
         + foldHint('',
@@ -559,7 +643,13 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         + `<h4>世界气氛与条件</h4>`
         + foldHint('这一栏是<b>世界的样子</b>，不是世界的开关。',
             '<b>天时 / 时局</b>是你定的条件（引擎照抄摆放，<b>不参与任何判断</b>）。'
-            + '<b>乱象</b>是<b>引擎每轮算的</b>：看近 10 轮里"出事"铺到了几个<b>不同的地点</b>——'
+            // ★★★leg55（leg54 §6.4 的第二处）：这里原写死「看近 **10** 轮里…」，而**机制本身**是
+            //   `src/unrest.js` 的「乱象档位 = 近 `TENSION_WINDOW` 轮里"出事"铺开到几个不同地点」
+            //   （`UNREST_WINDOW = TENSION_WINDOW`）⇒ 面板在**替机制承诺一个它没写死的数**：
+            //   `TENSION_WINDOW` 一改（它是"定案"值，改它要报批），这句说明就变成谎话，而**代码照旧是对的**
+            //   ——正是 leg54 那个 4096 的同一种病（**UI 比代码先过期**）。
+            //   ★同一文件里 `TENSION_WINDOW` 已被现读三处（`:649`/`:1540`/`:1541`）⇒ 本处只是漏网那处。
+            + `<b>乱象</b>是<b>引擎每轮算的</b>：看近 ${TENSION_WINDOW} 轮里"出事"铺到了几个<b>不同的地点</b>——`
             + '地点越散、档位越重；同一个地方出十件事，也只算一个地点。'
             + '它不发明事实：只从账上已经落账的事里数，一个字都不添。'
             + '世界变宽变窄是下面那张「世界尺度」的事，与这一栏无关。',
@@ -616,6 +706,10 @@ export function renderInfoBandHtml(world, { config = {} } = {}) {
         hidden: (world.agendas || []).filter((a) => !a.closed && a.visibility === 'concealed').length,
         top: (world.agendas || []).filter((a) => !a.closed && !a.parentId).length,
     };
+    // ★★★leg56：**盘算上限读真源**（不再是 `AGENDA_CAPS` 那组编译期常量）——病因见 `effectiveLimits`。
+    //   ★这里**只用 `在飞大计` / `顶层大计`** 两格：它们正是这一栏印的两个分母。
+    //     `每轮递线`/`每轮事件` 不在这栏（它们在参数页/引擎各管各的）。
+    const lim = effectiveLimits(world, config.paramEnv);
     // K46（细案 C4）+ leg21（用户指认）：大势行 = 真·天下大势一句（世情句领；无世情=未聚——张力不再混入）；
     // 张力行 = 结构性张力三件套独立成行（极/方向/强度带词全部归此行）
     // leg25 b（A1b）：原为「低/中/高烈度 + 百分比」。实测 rival 腿恒为满值 ⇒ 那个 % 实际只反映**事件密度**，
@@ -633,7 +727,7 @@ export function renderInfoBandHtml(world, { config = {} } = {}) {
     //   ★这一处撤掉**零信息损失**：被撤的两条 `tides.slice(0,2)` 是独立栏 `tides.slice(0,3)` 的前缀子集。
     const trend = sit ? `${escapeHtml(sit)}。` : '大势未聚（无主张力）。';
     return `<div class="sw2-infoband">`
-        + `<div class="sw2-band-block"><div class="sw2-band-label">世情 · 四键${baselineHint}</div><div class="sw2-env">${envRows.join('')}</div></div>`
+        + `<div class="sw2-band-block"><div class="sw2-band-label">世情 · ${PANEL_ENV_KEYS.length} 键${baselineHint}</div><div class="sw2-env">${envRows.join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">大势</div><div class="sw2-trend">${trend}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">张力 · 结构性三件套</div>`
         + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')}<small class="sw2-quiet-note">近${TENSION_WINDOW}轮事件 ${recentEvents} 件</small></div>`
@@ -641,8 +735,8 @@ export function renderInfoBandHtml(world, { config = {} } = {}) {
         + `<div class="sw2-band-block"><div class="sw2-band-label">浪尖 · 刚收尾的大动作</div><div class="sw2-tides">${tides.map((x) => `<div class="sw2-tide">${x}</div>`).join('')}</div></div>`
         + `<div class="sw2-band-block"><div class="sw2-band-label">盘算</div>`
         // ★leg32：两个分母一律读引擎真源（旧版写死 `/15` `/5` ⇒ 引擎改了面板不变，见文件头 import 注释）
-        + `<div class="sw2-big-num">${counts.active}<small>/${AGENDA_CAPS.open}</small></div>`
-        + `<div class="sw2-num-sub">${counts.hidden ? `${counts.hidden} 件在暗处 · ` : ''}顶层 ${counts.top}/${AGENDA_CAPS.topLevel}</div></div>`
+        + `<div class="sw2-big-num">${counts.active}<small>/${lim.在飞大计}</small></div>`
+        + `<div class="sw2-num-sub">${counts.hidden ? `${counts.hidden} 件在暗处 · ` : ''}顶层 ${counts.top}/${lim.顶层大计}</div></div>`
         + `</div>`;
 }
 
@@ -1511,6 +1605,18 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     const tides = (dyn?.derivedFrom || []).slice(-5).reverse().map((x) => tideLabel(world, x)).join('<br>');
     const canon = frozen.canon || {};
     const scaleRows = (canon.powerScale || []).map((p) => `<div class="sw2-sv-row"><b>${escapeHtml(p.level)}</b><span>${escapeHtml(p.note)}</span></div>`).join('');
+    // ★leg60（交接第 2 件）：**维度与刻度**——书里的尺子（照抄原文；它同时进每轮包当锚，见 pack.js 的刻度块）。
+    const dimRows = (canon.dims || []).map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.name)}</b><span>${escapeHtml(d.range || '（原文未给范围）')}</span></div>`).join('');
+    // ★leg60（交接第 3 件）：**编译完整性**——上限口径"漏了如实报"（数字全部来自初始化那一刻的探测，落账带过来）。
+    const cp = frozen.compile;
+    const compileLine = cp
+        ? `编译完整性：书里条目 ${cp.entries ?? '?'}（启用 ${cp.enabled ?? '?'} / 禁用 ${cp.disabled ?? '?'}）`
+            + ` · 作者点名 ${cp.declared ?? 0} 条 ⇒ 本次进料 ${cp.picked ?? 0} 条`
+            + (cp.skipped ? ` · 未编译 ${cp.skipped} 条（${cp.skippedChars ?? 0} 字，题名仍进名册）` : '')
+            + (cp.declaredDropped ? ` · ⚠顶到体积上限，声明面有 ${cp.declaredDropped} 条未进料` : '')
+            + (cp.titleNames ? ` · 题名面贡献名号 ${cp.titleNames} 条（零调用）` : '')
+            + (cp.settingTitles ? ` · 设定类条目覆盖 ${cp.settingCompiled ?? 0}/${cp.settingTitles}` : '')
+        : '';
     const ruleRows = (canon.rules || []).map((r) => `<div class="sw2-sv-row"><b>法则</b><span>${escapeHtml(r)}</span></div>`).join('');
     const histRows = (canon.historyNotes || []).map((h, i) => `<div class="sw2-sv-hist"><span class="sw2-hist-tick">第 ${i + 1} 条</span><span>${escapeHtml(h)}</span></div>`).join('');
     // ★★leg52（BLACKLIST 漏网）：旧措辞是 `浪尖（派生源）：…`——**「派生源」是引擎术语**，
@@ -1533,6 +1639,12 @@ export function renderSettingHtml(world, { config = {} } = {}) {
         + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div>`
         + `<div style="margin-top:10px"><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button><span class="sw2-hint">只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div></div>`
         + `<div class="sw2-set-card"><h4>力量谱系（${(canon.powerScale || []).length} 档 · 取全）</h4>${scaleRows || '<div class="sw2-sv-row"><span>（无）</span></div>'}</div>`
+        + ((canon.dims || []).length ? `<div class="sw2-set-card"><h4>维度与刻度（${canon.dims.length} 项）</h4>${dimRows}`
+            + `<div class="sw2-hint" style="margin-top:6px">这两张表（维度/范围 + 档位）<b>每轮都在模型的包里</b>当锚——它写实力/属性时按书里的尺子写，不再自造形容词。</div></div>` : '')
+        + (compileLine ? `<div class="sw2-set-card" style="grid-column:1/-1"><h4>编译完整性（初始化那一刻的读数）</h4>`
+            + `<div class="sw2-hint">${escapeHtml(compileLine)}</div>`
+            + (cp?.missedTitles?.length ? `<div class="sw2-hint" style="margin-top:4px">未编译的设定类条目（前 ${cp.missedTitles.length} 个）：${escapeHtml(cp.missedTitles.join('、'))}</div>` : '')
+            + `</div>` : '')
         + `<div class="sw2-set-card"><h4>法则（${(canon.rules || []).length} 条）</h4>${ruleRows || '<div class="sw2-sv-row"><span>（无）</span></div>'}</div>`
         + `<div class="sw2-set-card"><h4>社会格局 · 力量体系</h4><p class="sw2-sv-para">${escapeHtml(canon.society || '（无）')}</p><p class="sw2-sv-para">${escapeHtml(canon.techOrMagic || '（无）')}</p></div>`
         + `<div class="sw2-set-card"><h4>史略（${(canon.historyNotes || []).length} 条）</h4>${histRows || '<div class="sw2-sv-hist"><span>（无）</span></div>'}</div>`
@@ -1584,11 +1696,15 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         + `<div class="sw2-hint" style="margin-top:10px">每轮对话后世界自动推进（总闸开着时）；此按钮是手动补推，<b>关着总闸也能按</b>。<br>设定不用手动重抽：书变了（书指纹变化）自动重新识别，已定的设定不会自己飘。<br>演算失败时世界原样不动，状态条会报错，可重试。</div></div>`
         + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>旧卷与存储</h4>`
         + `<div class="sw2-cold-mgmt"><div class="sw2-row"><span>编年体积 · 当前</span><b>${(world.chronicle || []).length ? `${(JSON.stringify(world.chronicle).length / 1024).toFixed(1)}KB` : '0KB'}</b><em>每 100 轮约 21.7KB（实测）</em></div>`
-        // ★leg40b 体检登记（**未改行为，只留档**）：`cfg.limitsTicks` / `cfg.limitsBytesMB` 在生产上
-        //   永远是 `undefined`（`web/index.js` 的 `renderCfg()` 从不注入这两个键）⇒ 面板恒显示兜底
-        //   `500 轮 / 5MB`。值与 `src/storage.js` 的 `PROPOSED_LIMITS` 一致，所以**显示是对的**，
-        //   但"读 config"这半边是死路。要么接上真源、要么写死并去掉那半个分支——留给下一刀（改口径先报批）。
-        + `<div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">${cfg.limitsTicks ?? '500'} 轮 或 ${cfg.limitsBytesMB ?? '5'}MB</b><em>提案态 · 随本阶段报批</em></div>`
+        // ★★★leg55（结掉 leg40b 体检登记、坐实 leg54 §6.4 那条纪律）：这一行原本是
+        //   `${cfg.limitsTicks ?? '500'} 轮 或 ${cfg.limitsBytesMB ?? '5'}MB`——而 `renderCfg()`
+        //   **从不注入这两个键** ⇒ 生产上永远是 `undefined`、兜底字面量恒生效，
+        //   "从 config 现读"是**死路**：它印的其实是渲染层自己抄的一份数（值与真源一致，纯属巧合维持）。
+        //   ⇒ 两件事一起做：①`web/index.js` 的 `renderCfg()` 接上 `PROPOSED_LIMITS`（真源）；
+        //     ②判据锁死"接线层真的注入了这两键"（见 `test/render.test.js` leg55 那条）。
+        //   ★为什么这正是 leg54 那个 4096 的同一种病：**面板上的数字悄悄脱离真源**，字面量看着对，
+        //     真源一改它就变成谎话（4096 那行就是这么过期了好几棒）。
+        + `<div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">${fmtLimitNum(cfg.limitsTicks, 500)} 轮 或 ${fmtLimitNum(cfg.limitsBytesMB, 5)}MB</b><em>提案态 · 随本阶段报批</em></div>`
         + `<div class="sw2-row"><span>入卷去处</span><b>插件本地 · 可导出可导入</b><em>割断的是旧账，不是来龙去脉</em></div>`
         + `${renderVolumeListHtml(oldVolumes)}<div class="sw2-actions" style="margin-top:8px">`
         + `<button class="sw2-btn" data-action="export-world">⬇ 导出整聊天</button>`
