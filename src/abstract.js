@@ -1091,6 +1091,159 @@ export function describeProgress(events) {
     });
 }
 
+// ★★leg61（用户报「法则直接多了一大堆，但是设定的挡位有重复」）：**档位/法则的"可判等"归一**。
+//
+// 病（用户新账实测 · 大荒 103 条档位）——同一档被写了几种名字，**精确去重一条都拦不住**：
+//   `T4 金丹境 (妖:小妖境 | 鬼:鬼将境 | 魔:真魔境)` · `T4金丹` · `T4金丹境` · `T4` · `地阶(T4-T6)`
+//   `T10 天仙境` · `T10` · `T10真仙` · `天仙阶(T10)` …（`T1..T16` 每个档平均被写了 3 遍）
+// 为什么会出现（不是模型乱写）：两遍抽取 × 多块，**同一张尺子散布在好几条条目里**
+//   （境界表 / 法器品阶表 / 法术品阶表 / 战力换算表），每块模型按自己看到的那份措辞抄一遍，
+//   块间合并是"并集去重"（`mergeCanonChunks`）⇒ 措辞不同就各留一条。
+//
+// 判据（**不认任何一本书的格式**，只认两件跨书成立的事）：
+//   ① **档位核心符号**：`T`/`SSS`/`LV`/`阶` 这类"等级记号 + 数字/字母"——抽出来当键（`T4` / `SSS`）；
+//      没记号的（纯文字档位名）用"去掉括注与空白后的整串"当键；
+//   ② **引号与标点的宽度差异**一律抹平（`"…"` 与 `“…”` 用 `mergeCleaned` 同一把尺）。
+// 取值纪律（**不许因此丢原话**）：同一键下**留最长的 note**、level 留**最干净的那条**
+//   （最短且含核心记号）——最短的那个通常就是"档位名"本身，最长的 note 信息最全。
+//   ★若两条的 note 长度相近但内容不同（真·两种说法）⇒ **不合并**，两条都留（宁多勿丢）。
+const TIER_KEY_RE = /(?:^|[^A-Za-z0-9])((?:T|LV|Lv|lv|LEVEL)\s*\d{1,2}(?!\s*[-~－—至]))/;
+// 档区间/开放区间：`T1-T3` · `T9+` · `T4及以上` —— 这些**不是"某档"**（第一版把它们当成单档，当场压错了）
+const RANGE_LIKE = /(?:(?:T|LV)\s*\d{1,2}\s*[-~－—至]\s*(?:T|LV)?\s*\d{1,2})|(?:\+|及以上|以上|以下|起)/i;
+// 轴名：**结构性取法**（第一版这里用了 `境/期/阶` 这类**中文词表**——那是过拟合，已撤）。
+//   ★一个坑（踩过）：轴与键**必须是同一处算出来的**。第一版让 `tierAxisOf` 与 `tierKeyOf` 各自判括注，
+//     两套规则不一致（一个"有括号就取"、一个"只在区间里取"）⇒ `T1 感气境 (妖:聚气…)` 与 `T1感气`
+//     被分进两个轴、永远合不上。现在只有 `tierKeyOf` 一处算轴。
+function bracketPrefix(level) {
+    const m = String(level ?? '').trim().match(/^([^（(]{1,12})[（(]/);
+    return m ? m[1].trim() : '';
+}
+function tierKeyOfInner(level) {
+    const s = String(level ?? '').trim();
+    if (!s) return null;
+    const m = s.match(TIER_KEY_RE);
+    if (m && !RANGE_LIKE.test(s)) return m[1].replace(/\s+/g, '').toUpperCase();
+    // 区间或没记号的：用"去掉括注与空白后的整串"当键（同一张表里的同一行仍能对上）
+    return s.replace(/[（(][^)）]*[)）]/g, '').replace(/\s+/g, '');
+}
+/**
+ * 档位去重键（纯函数，导出以便单测）：**轴 + 档位核心记号**。
+ *   ★三条实测教训写在这里（第一版全踩过，改这一处之前先读）：
+ *     ① **不要把范围写法当记号**：`T1-T4` / `T9+` / `T4及以上` 不是"某档"，是"档区间" ⇒ 用 `(?!\s*[-~至])` 挡掉；
+ *     ② **不要回退去 note 里找记号**：那会让 `外门` 这类没记号的职阶名被卷进 `T4` 组；
+ *     ③ **必须带轴**：`地阶(T4-T6)`（法器品阶表）与 `T4 金丹境`（境界表）是两张表的两件事。
+ *   ★★第三点第一版用了 `境/期/阶` 这种**中文词表**判轴——那是过拟合（本仓明禁），现已改为结构性取法（见 `tierAxisOf`）。
+ */
+export function tierKeyOf(level, axis = '') {
+    const k = tierKeyOfInner(level);
+    if (!k) return null;
+    return `${tierAxisOf(level, axis)}:${k}`;
+}
+
+/** 轴名（**唯一一处**算轴的地方，`tierKeyOf` 与 `dedupeTiers` 都读它——见上面的踩坑注释）。 */
+export function tierAxisOf(level, axis = '') {
+    const explicit = String(axis ?? '').trim();
+    if (explicit) return explicit;
+    // 轴 = `地阶(T4-T6)` 这种**括注前缀**（书自己的写法），且只在"这一档是个**区间**"时才用它当轴；
+    //   ⚠否则 `T4 金丹境 (妖:小妖境…)` 的括注 `妖:小妖境` 会被误当轴 ⇒ 同一档因写法不同而分到不同轴。
+    if (RANGE_LIKE.test(String(level ?? ''))) {
+        const p = bracketPrefix(level);
+        if (p) return p;
+    }
+    return '';
+}
+
+// 标点与引号的"同形归一"（纯函数）：只抹**写法差异**，不动一个字的内容。
+//   为什么要它：实测同一句法则出现两次，差别只在 `"…"` 与 `“…”`、全角/半角逗号。
+export function sameShapeKey(s) {
+    return String(s ?? '')
+        .replace(/[「」『』“”"']/g, '"')
+        .replace(/[，、]/g, ',')
+        .replace(/[：]/g, ':')
+        .replace(/[；]/g, ';')
+        .replace(/[（]/g, '(')
+        .replace(/[）]/g, ')')
+        .replace(/[。．]/g, '.')
+        .replace(/\s+/g, '')
+        .trim();
+}
+
+/**
+ * 档位并集去重（纯函数 · 可测）：见上面 `tierKeyOf` 头注的口径与取值纪律。
+ *
+ * ★合并规则只有一条，而且**不看长度阈值**（第一版写"长度差 ≤25% 就算同一条"⇒ 太宽；第二版写"短注就合"
+ *   ⇒ 那个 24 字是照大荒那份表反推的，属过拟合，两版都已撤）：
+ *   **轴相同 ∧ 记号相同 ∧ 一边的 note 是另一边的子串（或抹平标点后一致）** ⇒ 同一条，留最长的 note。
+ *   其余一律**留着**（宁多勿丢）——包括"同一档的两种不同说法"。
+ */
+export function dedupeTiers(list = []) {
+    const out = [];
+    const idx = new Map();                       // key → out 里的下标
+    for (const it of (Array.isArray(list) ? list : [])) {
+        const level = String(it?.level ?? '').trim();
+        const note = String(it?.note ?? '').trim();
+        if (!level || !note) continue;
+        const key = tierKeyOf(level, tierAxisOf(it));
+        if (!key) { out.push({ level, note, ...(tierAxisOf(it) ? { axis: tierAxisOf(it) } : {}) }); continue; }
+        if (!idx.has(key)) { idx.set(key, out.length); out.push({ level, note, ...(tierAxisOf(it) ? { axis: tierAxisOf(it) } : {}) }); continue; }
+        const cur = out[idx.get(key)];
+        const curNote = String(cur.note);
+        const sameSentence = curNote.includes(note) || note.includes(curNote)
+            || (curNote.length === note.length && sameShapeKey(curNote) === sameShapeKey(note));
+        if (!sameSentence) { out.push({ level, note, ...(tierAxisOf(it) ? { axis: tierAxisOf(it) } : {}) }); continue; }
+        if (note.length > curNote.length) cur.note = note;                  // 留信息量最大的 note
+        const curLevel = String(cur.level);
+        if (level.length < curLevel.length) cur.level = level;              // level 留最干净的那条（实测 `T4` 优于 `T4 金丹境 (妖:…)`）
+    }
+    return out;
+}
+
+/** 法则并集去重（纯函数 · 可测）：按"同形键"去重（含**互为前缀**的那种近义），留最长的那条原话。 */
+export function dedupeRules(list = []) {
+    // ★写法纪律（本函数踩过两次坑，改之前先读）：
+    //   ① **不用 Map 迭代**（`for…of idx` / `idx.forEach` 在这条路上实测"一次都不迭代"⇒ 整段变死代码）；
+    //      用最笨的两层数组循环，一眼能验。
+    //   ② 前缀比较用 `startsWith`，**不拼正则**——法则原文里全是 `(`/`+`/`[`（`T1-T4(感气→金丹)跨境:…`），
+    //      拼正则会被当成捕获组/量词。
+    const out = [];          // [{ s, key }]
+    for (const r of (Array.isArray(list) ? list : [])) {
+        const s = String(r ?? '').trim();
+        if (!s) continue;
+        const key = sameShapeKey(s);
+        if (!key) continue;
+        let handled = false;
+        for (let i = 0; i < out.length; i += 1) {
+            const cur = out[i];
+            // ① 完全同形 ⇒ 留最长（信息最全）
+            if (cur.key === key) {
+                if (s.length > cur.s.length) { cur.s = s; cur.key = sameShapeKey(s); }
+                handled = true;
+                break;
+            }
+            // ② **互为前缀的近义**（实测形态：同一句法则，一处抄到"…有合"就断、一处抄全了）。
+            //    ★必须**按谁更长分两支**（第一版两支写成同一个条件，等于永远只走第二支 ⇒ 把抄全的丢了）。
+            //    长度差 ≤45% 是防"世界存在严酷的法则壁垒…"把后面所有以它开头的**另一条**法则吞掉。
+            const curLonger = cur.key.length >= key.length;
+            const near = curLonger ? cur.key.length <= key.length * 1.45 : key.length <= cur.key.length * 1.45;
+            if (near && curLonger && cur.key.startsWith(key)) {
+                if (cur.s.length < s.length) { cur.s = s; cur.key = sameShapeKey(s); }   // 旧的更全（或平分）⇒ 留旧的
+                handled = true;
+                break;
+            }
+            // ★新的更长且以旧的为前缀 ⇒ **换掉**（第一版这里写成"直接丢新的"⇒ 把抄断的留下、抄全的丢掉）
+            if (near && !curLonger && key.startsWith(cur.key)) {
+                cur.s = s;
+                cur.key = sameShapeKey(s);
+                handled = true;
+                break;
+            }
+        }
+        if (handled) continue;
+        out.push({ s, key });
+    }
+    return out.map((x) => x.s);
+}
+
 // ★leg25 g：书名录的**去重键 = 名字 ∪ 别名**（唯一一份实现，两个调用点共用——别复制，本仓吃过"两份复制品漂移"的亏）。
 //   为什么必须带别名：实体/归属都按 `name` 精确查册，书里同一个势力常有多个叫法（条目名 `人族皇朝`、
 //   key 里的 `大虞`/`大虞皇朝`）；模型分块抽取时只看得到自己那块，**跨块的别名无从归一**，
@@ -1237,7 +1390,9 @@ export function mergeCanonChunks(parts = []) {
         for (const it of (Array.isArray(c.powerScale) ? c.powerScale : [])) {
             const level = String(it?.level ?? '').trim();
             const note = String(it?.note ?? '').trim();
-            if (!level || !note || seenPs.has(level)) continue;
+            if (!level || !note) continue;
+            // ★leg61：**并集时先按"档位核心符号"归一**（见 `dedupeTiers` 头注：同一档被写了 3 种名字）。
+            //   这里不再只按 level 精确判重——那种判重在真账上"一条都拦不住"（实测 103 条里 0 条同名）。
             seenPs.add(level);
             powerScale.push({ level, note });
         }
@@ -1257,7 +1412,8 @@ export function mergeCanonChunks(parts = []) {
         }
         for (const r of (Array.isArray(c.rules) ? c.rules : [])) {
             const s = String(r ?? '').trim();
-            if (!s || seenRule.has(s)) continue;
+            if (!s) continue;
+            // ★leg61：法则也走"同形键"去重（引号/标点宽度差异；互为前缀的截断两版）——见 `dedupeRules`。
             seenRule.add(s);
             rules.push(s);
         }
@@ -1285,7 +1441,10 @@ export function mergeCanonChunks(parts = []) {
     }
     const first = list[0] || {};
     return {
-        canon: { powerScale, dims, rules, society, techOrMagic, historyNotes, situation, bookEntities, settings },
+        canon: {
+            powerScale: dedupeTiers(powerScale),        // ★leg61：并集之后**再归一次**（见 dedupeTiers 头注：同一档的三种写法）
+            dims, rules: dedupeRules(rules), society, techOrMagic, historyNotes, situation, bookEntities, settings,
+        },
         tension: first.tension || { polarity: '', direction: '' },
         env: first.env || {},
     };
