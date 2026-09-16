@@ -44,10 +44,12 @@ const newAgenda = (owner) => ({ entity: owner, goal: '起一条自己的线', vi
 test('尺度上限：出厂默认 = 参数化之前的值（与既有常量逐项相等）', () => {
     assert.equal(LIMIT_DEFAULTS.每轮递线, THREADS_TOP, '每轮递线默认 = pack.js 的 THREADS_TOP');
     assert.equal(LIMIT_DEFAULTS.每轮事件, EVENT_CAPS.perTick, '每轮事件默认 = EVENT_CAPS.perTick');
+    assert.equal(LIMIT_DEFAULTS.每轮新生, AGENDA_CAPS.perTick, '★leg63：每轮新生默认 = settle.js 的 AGENDA_CAPS.perTick');
     assert.equal(LIMIT_DEFAULTS.顶层大计, AGENDA_CAPS.topLevel, '顶层大计默认 = AGENDA_CAPS.topLevel');
     assert.equal(LIMIT_DEFAULTS.在飞大计, AGENDA_CAPS.open, '在飞大计默认 = AGENDA_CAPS.open');
     assert.equal(LIMIT_DEFAULTS.每轮递线, 3, '出厂 3（本仓历史值，改了就是行为变更，必须显式）');
     assert.equal(LIMIT_DEFAULTS.每轮事件, 6, '出厂 6');
+    assert.equal(LIMIT_DEFAULTS.每轮新生, 3, '★leg63：每轮新生出厂仍是 3（没设旋钮 ⇒ 行为零变化）');
 });
 
 test('尺度上限：账上没设 ⇒ 生效值 = 出厂默认；`usingDefaults` 如实报', () => {
@@ -142,6 +144,39 @@ test('尺度上限：已设档位覆盖默认；未设的键仍回默认（逐�
 });
 
 // ---------- ③ 档位真能改引擎判据 ----------
+// ★★★leg63（用户实机报「**我参数都这样了**」——本条判据就是照着那一屏写的）：
+//   现场：用户把「每轮递几条线」拧到 10 ⇒ 模型每轮真提 10 条新盘算 ⇒ 但引擎第一道闸
+//   `盘算大厦顶（每 tick 新生 ≤3）` 只让前 3 条落地，第 4 条起全被拒。
+//   病根：那一道**读的是出厂常量**（`AGENDA_CAPS.perTick`），不在参数表里 ⇒ 用户能看到/能拧的
+//   四个数**一个都不参与**这道判定，而且它排在两道盘算闸的最前面 ⇒ 后面 `在飞大计`/`顶层大计`
+//   连被检查的机会都没有（观棋窗口只报"被拒"、不说"是哪个数拒的"）。
+//   治法：收进 `lim.每轮新生`（第五个输入框，与其余四个同一条路）。
+test('★★★leg63：「每轮新生」（每 tick 新生）调到 6 ⇒ 一轮落 6 条（出厂 3 只落 3 条）——用户实机那一条', () => {
+    const mk = (n) => Array.from({ length: n }, () => newAgenda('e_a'));
+    // 出厂：提 6 条 ⇒ 只落 3 条（第 4 条起按"每 tick 新生 ≤3"拒）
+    const at3 = settleTick({ ssot: world(), step: stepWith({ newAgendas: mk(6) }) });
+    assert.equal(at3.ssot.agendas.filter((a) => !a.closed).length, LIMIT_DEFAULTS.每轮新生, '出厂 3 ⇒ 只落 3 条');
+    assert.equal(at3.stage.warnings.filter((w) => w.includes('每 tick 新生')).length, 6 - LIMIT_DEFAULTS.每轮新生,
+        '被拒的那几条**逐条留痕**（如实报，不许静默）');
+    // ★抬到 6 ⇒ 同一条提议应当通过（这就是"档位真的进了判据"）
+    const raised = settleTick({ ssot: world({ env: { 每轮新生: '6' } }), step: stepWith({ newAgendas: mk(6) }) });
+    assert.equal(raised.ssot.agendas.filter((a) => !a.closed).length, 6,
+        '★「每轮新生」抬到 6 ⇒ 6 条全落（这正是用户想让"每轮递几条线"生效时缺的那一格）');
+    assert.ok(!raised.stage.warnings.some((w) => w.includes('每 tick 新生')), '不再报那一条拒签');
+    // ★顺序口径（这就是"互相掩盖"的机理）：三道是**依次**判的，先顶住的那道说了算——
+    //   被第一道拦住时，后面两道**一条警告都不该报**（玩家看到的拒签理由必须是先顶住的那道）。
+    assert.ok(!at3.stage.warnings.some((w) => w.includes('在飞全局') || w.includes('顶层 ≤')),
+        '被第一道拦住时，后面两道不许报（"依次判"的机械证据）');
+    // 反面：抬了第一道 ≠ 全开——后面的账照旧各算各的，而且这时**轮到的就是后面那道**。
+    //   ★数值口径（本判据实测，不按推理写）：`每轮新生 6 + 在飞 4 + 顶层 30` ⇒ 落 **2**。
+    //     第一版我按"4 个名额该落 4 条"写，当场红了 ⇒ 按**实测值**锁，别锁我脑补的预算表。
+    const raised2 = settleTick({ ssot: world({ env: { 每轮新生: '6', 在飞大计: '4', 顶层大计: '30' } }), step: stepWith({ newAgendas: mk(6) }) });
+    assert.equal(raised2.ssot.agendas.filter((a) => !a.closed).length, 2, '抬了第一道 ⇒ 由第二道决定落几条（实测 2）');
+    assert.ok(raised2.stage.warnings.some((w) => w.includes('在飞全局') && w.includes('4')),
+        `这时才报第二道，并写出账上那个值：${raised2.stage.warnings.join('; ')}`);
+    assert.ok(!raised2.stage.warnings.some((w) => w.includes('每 tick 新生')), '第一道放行之后它就不该再报（顺序方向正确）');
+});
+
 test('★★尺度上限：把「在飞大计」调到 20 的下限之外 ⇒ 引擎按新值拒提议并留痕（参数化生效的机械判据）', () => {
     // 造一个"已经在飞 20 件"的世界：这时按出厂的 20 上限，任何新提议都该被拒。
     const w = world();

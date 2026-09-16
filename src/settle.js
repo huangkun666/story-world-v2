@@ -328,10 +328,15 @@ export function spawnAgendas(world, gstep, tick, warnings, chronicle, lim = reso
             + spawned.filter((a) => !a.parentId).length;
         // GC 上限（A-3）：超限拒建 + 警告，世界其余照常（超限不新建，§4.3 语义之一）
         // ★leg40b 续：三个上限一律走 `lim`（= `resolveLimits(world)`：账上档位优先、否则出厂默认）。
-        //   ★`每 tick 新生`（`AGENDA_CAPS.perTick`）**本轮刻意不做旋钮**——它是"一轮里最多新起几件"，
-        //     与 `每轮事件` 撞在一起调容易互相掩盖（且真账从未咬到）⇒ 留在丙档只读（见 `limits.js` 头注）。
-        if (spawned.length >= AGENDA_CAPS.perTick) {
-            warnings.push(`裁定: 盘算大厦顶（每 tick 新生 ≤${AGENDA_CAPS.perTick}）：${entityName(world, owner)} 提议「${goal}」被拒`);
+        // ★★★leg63（用户实机报「我参数都这样了」）：`每 tick 新生` 这一道**过去读的是出厂常量**
+        //   （`AGENDA_CAPS.perTick` = 3，刻意不做旋钮），于是玩家把「每轮递几条线」拧到 10、
+        //   模型真提了 10 条，第 4 条起全被这个**他看不到的数**拒掉（观棋窗口只报"被拒"，
+        //   不说"是这个数拒的"）。⇒ 本棒把它收进 `lim.每轮新生`（第五个输入框），
+        //   **与上面两道同源**：账上设了就按账上、没设就出厂 3（零行为变化，见 test/limits.test.js）。
+        //   ★口径仍是"按序判"：这一道先判（它是"这一轮里最多新开几件"），
+        //     它放行之后才轮到 `在飞大计`/`顶层大计` —— 三道都各有自己的账。
+        if (spawned.length >= lim.每轮新生) {
+            warnings.push(`裁定: 盘算大厦顶（每 tick 新生 ≤${lim.每轮新生}）：${entityName(world, owner)} 提议「${goal}」被拒`);
             continue;
         }
         if (openNow >= lim.在飞大计) {
