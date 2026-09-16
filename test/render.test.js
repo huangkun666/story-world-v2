@@ -854,10 +854,12 @@ test('leg25 c：「没查到就空着」要看得见（不填默认值冒充客�
     assert.ok(!html.includes('sw2-wval') && !html.includes('sw2-eweight'), '片5：分量条不再渲染');
 });
 
-// ★leg60（交接第 2/3 件）：设定页必须**真的画出**新编译出来的两样东西——维度/刻度 与 编译完整性。
+// ★leg60（交接第 2/3 件）：设定页必须**真的画出**新编译出来的两样东西——刻度 与 编译完整性。
 //   ⚠为什么单独立一条：我第一版只加了渲染代码、没加判据 ⇒ **那条分支一次都没被跑到**（全绿）。
 //     这是本仓反复登记的那类洞（"机制对了、线没接上"）——所以这里**真渲染一次**并逐字断言。
-test('★leg60 设定页：维度与刻度卡 + 编译完整性读数（真渲染一次，不许是空绿）', () => {
+//   ★★leg62 换口径（用户令「换成概念表」）：旧断言读的是两栏「维度与刻度（N 项）」+「力量谱系（N 档）」；
+//     现在是一栏「刻度（一概念一表 · N 张）」+ 每概念一张卡《表名》。下面按新口径重写。
+test('★leg60 + leg62 设定页：刻度按概念分栏 + 编译完整性读数（真渲染一次，不许是空绿）', () => {
     const w = world();
     w.context.setting.frozen.canon.dims = [{ name: '勇武', range: '-100~100' }, { name: '韬略', range: '-100~100' }, { name: '气度' }];
     w.context.setting.frozen.compile = {
@@ -867,9 +869,17 @@ test('★leg60 设定页：维度与刻度卡 + 编译完整性读数（真渲�
         missedTitles: ['演义模糊地带处理准则'],
     };
     const html = renderSettingHtml(w);
-    assert.match(html, /维度与刻度（3 项）/, '★维度卡在位（书里的尺子要看得见）');
+    // ① ★leg62：刻度那一栏 = 一概念一表（表名成卡；不再把两张表平铺成两栏）
+    assert.match(html, /刻度（一概念一表 · 2 张）/, '★概念表栏在位（一概念一张卡）');
+    assert.match(html, /《无记号档位》/, '★档位那半自成一表（这册的档位名都无数记号 ⇒ 合一张）');
+    assert.match(html, /《维度》/, '★维度那半自成一表（回指不到档位名的维度合一张）');
+    assert.ok(!html.includes('力量谱系'), '★旧栏名退场（它正是"制度与刻度挤一个框"的那个框）');
+    assert.ok(!html.includes('维度与刻度（'), '★旧栏名退场（维度不再与档位平铺成一栏）');
     assert.match(html, /勇武<\/b><span>-100~100/, '维度名与范围逐字取自原文');
     assert.match(html, /（原文未给范围）/, '只有维度名、原文没给范围时如实写"未给"，不编一个范围');
+    assert.match(html, /炼气<\/b><span>修士，江湖底子（原文）/, '档位名与标定逐字取自原文');
+    // ★★HTML 里不许漏 markdown 星号（本仓 leg60 为这条栽过：`**` 直接写进了 HTML）
+    assert.ok(!html.includes('**'), '★渲染产物不许含 markdown 星号（面板是 HTML，不是 markdown）');
     assert.match(html, /编译完整性/, '★编译完整性读数在位');
     assert.match(html, /作者点名 554 条 ⇒ 本次进料 188 条/, '读数逐项如实');
     assert.match(html, /未编译 366 条（523337 字，题名仍进名册）/, '未编译的那一批**如实报**（不许静默）');
@@ -879,7 +889,7 @@ test('★leg60 设定页：维度与刻度卡 + 编译完整性读数（真渲�
     // 禁词扫描**只扫文本**（`textOnly` 剥标签）——否则会咬到 CSS 类名（如 `sw2-hist-tick` 里的 `tick`）。
     //   ★这一段必须在这里扫：全局那条 BLACKLIST 判据用的是**没有 dims/compile 的夹具**，
     //     它扫不到本棒新加的两段文案 ⇒ 不在这里扫，新文案就是禁词的无人区。
-    for (const term of BLACKLIST) assert.ok(!textOnly(html).includes(term), `含禁词「${term}」（leg60 新文案）`);
+    for (const term of BLACKLIST) assert.ok(!textOnly(html).includes(term), `含禁词「${term}」（leg60/leg62 新文案）`);
     // 顶到体积上限时要显形（三国实测会咬到 50 万上限）
     const over = world();
     over.context.setting.frozen.compile = { entries: 827, enabled: 264, disabled: 563, declared: 554, picked: 180, declaredDropped: 8 };
@@ -887,14 +897,34 @@ test('★leg60 设定页：维度与刻度卡 + 编译完整性读数（真渲�
     // 没有读数（旧账）⇒ 那一栏不出现（旧世界零扰动）
     const bare = world();
     assert.ok(!renderSettingHtml(bare).includes('编译完整性'), '旧账没有 compile 读数 ⇒ 不画那一栏');
-    assert.ok(!renderSettingHtml(bare).includes('维度与刻度'), '旧账没有 dims ⇒ 不画那一栏');
+});
+
+// ★★leg62：**实教那张图的根治**——"衡量强弱的尺"与"决定资源怎么分的制度"必须分在不同的卡里。
+//   用户截图原文：`力量谱系（5 档）` 把 `S~E级` 与 `A班~D班` 摆在一起（后者是**班级分配制度**）。
+test('★leg62 设定页：制度与刻度分表（用户截图那个混排的根治）', () => {
+    const w = world();
+    // 新账形状：模型直接交概念表（`刻度`）⇒ 面板按它分栏
+    w.context.setting.frozen.canon.刻度 = [
+        { 名: '班级分配制度', 用途: '资源分配', 档位: [{ 档: 'A班', 注: '精英最高资源保障' }, { 档: 'D班', 注: '底层资源最少多隐藏实力' }] },
+        { 名: 'S~E级', 用途: '分级（决定班级分配）', 档位: [{ 档: 'S~E级' }], 维度: [{ 名: '学力', 范围: 'S~E级' }, { 名: '智力', 范围: 'S~E级' }] },
+    ];
+    const html = renderSettingHtml(w);
+    assert.match(html, /刻度（一概念一表 · 2 张）/, '两张概念表');
+    assert.match(html, /《班级分配制度》<span class="sw2-hint"> · 资源分配<\/span>/, '★制度自成一表，且**用途如实照抄**（资源分配）');
+    assert.match(html, /《S~E级》<span class="sw2-hint"> · 分级（决定班级分配）<\/span>/, '★那把尺自成一表（用途照抄原文）');
+    assert.match(html, /学力<\/b><span>S~E级/, '★挂在尺底下的维度跟着它同表（不是平铺去别的栏）');
+    // ★反面：`A班` 与 `S~E级` 不许出现在同一张卡里（卡片以 `<h4>《…》` 切分）
+    const cards = html.split('<div class="sw2-set-card"').filter((x) => x.includes('<h4>《'));
+    const mixed = cards.filter((c) => c.includes('A班') && c.includes('学力'));
+    assert.equal(mixed.length, 0, '★没有任何一张卡同时装着"制度档位"与"尺的维度"（混排已根治）');
 });
 
 test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指纹/时间/五件套原文全量），重抽按钮在位', () => {
     const html = renderSettingHtml(world());
     assert.match(html, /书指纹 fnv1a_9f31x_12044/);
     assert.match(html, /抽取于 2026-09-08T10:00:00Z/);
-    assert.match(html, /力量谱系（2 档 · 取全）/);
+    assert.match(html, /刻度（一概念一表 · 1 张）/, '★leg62：刻度按概念分栏（旧栏「力量谱系」已退场）');
+    assert.match(html, /《无记号档位》/, '★这册的档位名无数记号 ⇒ 合一张表（老账没有分组信息）');
     assert.match(html, /炼气<\/b><span>修士，江湖底子（原文）/);
     assert.match(html, /元婴<\/b><span>大宗，可开宗立派（原文）/);
     assert.match(html, /煞气须以灵脉镇压/);
@@ -1662,7 +1692,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     // ★★★leg53 换档：**乱象有了生产者**（引擎每轮算）+ 民生撤下 + 依据那一格改口径 ⇒ 玩家可见面真变了。
     // ★★★leg54 换档：世界尺度四个框改成**数字输入框、无上限**（+ 设置页那行过期预算已修）⇒ 又变了。
     // ★★★leg60 换档：设定页新增「维度与刻度」与「编译完整性」两栏 ⇒ 又变了。
-    assert.equal(PANEL_BUILD, 'leg60-abstraction');
+    assert.equal(PANEL_BUILD, 'leg62-scale-concepts');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

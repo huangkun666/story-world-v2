@@ -16,6 +16,7 @@ import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 //   玩家无法从面板判断任何变宽实验是否奏效（用户实机「一点变化都没有」追出来的真缺陷）。
 //   依赖方向：render → settle（settle 不反向依赖 render）——无环，已在 import 图上核过。
 import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';
+import { resolveScales } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）
 import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
 import { LIMIT_ROWS, LIMIT_DEFAULTS, LIMIT_KEYS, isLimitKeyOf, normalizeLimit, limitsOf } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）
 // ★★leg53：**哪几格是引擎每轮算的**——从生产者那边取（不是面板自己另写一份名单，本仓"一处口径"）。
@@ -163,7 +164,12 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   （书里的尺子 + 本次编译读了多少/漏了多少）。⇒ 构建号跟批升位（本地纪律：改盘即生效，
 //   但浏览器会缓存旧面板 ⇒ 用户按 Ctrl+F5 后拿这一串对照"是不是新的"）。
 //   ★起名同一条纪律：零引擎术语（判据在 `render.test.js` 的扫描器里）。
-export const PANEL_BUILD = 'leg60-abstraction';
+// ★★★leg62 换档：设定页**玩家可见面真的变了**——「力量谱系」+「维度与刻度」两栏
+//   **合并成一栏「刻度」并按概念分表**（一概念一张卡：衡量强弱的尺 / 分配制度 / 取值范围 / 换算表
+//   各自成表，不再挤在同一个框里）。这正是用户截图指出的那个混排（`S~E级` 与 `A班~D班` 并列）。
+//   ⇒ 构建号跟批升位（同一条本地纪律：改盘即生效，但浏览器会缓存旧面板 ⇒ Ctrl+F5 后拿这串对照）。
+//   ★起名同一条纪律：零引擎术语（判据在 `render.test.js` 的扫描器里）。
+export const PANEL_BUILD = 'leg62-scale-concepts';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -1589,6 +1595,37 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
 
 // ============ 设定档案页（A-6：展示与 setting.frozen 逐字段一致） ============
 
+// ★★leg62（用户令「之后增加一个独立抽取设定的入口方便我直抽设定快速看效果」）：**直抽刻度的结果栏**。
+//   它只画"这一次抽到什么"，**不碰账本**（草稿放在 `world.context.__scaleDraft`，是会话态、不是契约字段）。
+//   为什么必须如实画三样：① 每张表（表名 + 用途 + 档位/维度）；② **这次抽到几条**；
+//   ③ ★**被出处闸丢掉的档位**——档位名对不上原文的会被净化层丢（见 `sanitizeScales`），
+//      丢掉的不许静默，否则用户看到"怎么少了几档"却不知道是模型编的（本仓"漏了如实报"的纪律）。
+export function renderScaleDraftHtml(draft) {
+    if (!draft || typeof draft !== 'object') return '';
+    const scales = Array.isArray(draft.scales) ? draft.scales : [];
+    const nTiers = scales.reduce((n, t) => n + (t.档位 || []).length + (t.子表 || []).reduce((m, s) => m + (s.档位 || []).length, 0), 0);
+    const nDims = scales.reduce((n, t) => n + (t.维度 || []).length, 0);
+    const head = `<div class="sw2-set-card" style="grid-column:1/-1"><h4>直抽刻度 · 本次结果（未入账）</h4>`
+        + `<div class="sw2-hint">`
+        + `源：${escapeHtml(draft.source || '—')} · 本次调用 ${draft.calls ?? '?'} 次 / ${draft.secs ?? '?'} 秒 · `
+        + `抽到 <b>${scales.length}</b> 张表 · <b>${nTiers}</b> 个档位 · <b>${nDims}</b> 个维度`
+        + (draft.dropped ? ` · <b>${draft.dropped}</b> 条档位因"原文里找不到"被丢（见下）` : '')
+        + `</div>`
+        + `<div class="sw2-hint">这一栏是<b>草稿</b>：只用来直抽看一眼，账本里已冻结的设定一个字没动。`
+        + `要真正采用，走正常的初始化/重抽。</div>`
+        + (draft.errors?.length ? `<div class="sw2-hint">${escapeHtml(draft.errors.slice(0, 12).join(' ｜ '))}</div>` : '')
+        + `<div style="margin-top:8px"><button class="sw2-btn" data-action="clear-scale-draft">清掉这一栏</button></div></div>`;
+    const cards = scales.map((t) => {
+        const tierRows = (t.档位 || []).map((x) => `<div class="sw2-sv-row"><b>${escapeHtml(x.档)}</b><span>${escapeHtml(x.注 || '')}</span></div>`).join('');
+        const dimRows = (t.维度 || []).map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.名)}</b><span>${escapeHtml(d.范围 || '（原文未给范围）')}</span></div>`).join('');
+        const subRows = (t.子表 || []).map((s) => `<div class="sw2-sv-row"><b>${escapeHtml(s.名)}</b><span>${(s.档位 || []).map((y) => escapeHtml(y.档)).join(' · ')}</span></div>`).join('');
+        const bits = [(t.档位 || []).length ? `${(t.档位 || []).length} 档` : '', (t.维度 || []).length ? `${(t.维度 || []).length} 维` : ''].filter(Boolean).join(' · ');
+        return `<div class="sw2-set-card"><h4>《${escapeHtml(t.名)}》${t.用途 ? `<span class="sw2-hint"> · ${escapeHtml(t.用途)}</span>` : ''}</h4>`
+            + `<div class="sw2-hint">${escapeHtml(bits)}</div>${tierRows}${dimRows}${subRows}</div>`;
+    }).join('');
+    return head + (cards ? `<div class="sw2-sv-grid" style="grid-column:1/-1">${cards}</div>` : '');
+}
+
 export function renderSettingHtml(world, { config = {} } = {}) {
     const dyn = world.context?.setting?.dynamic;
     const frozen = world.context?.setting?.frozen;
@@ -1604,9 +1641,28 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     const envRows = PANEL_ENV_KEYS.map((k) => envRowHtml(k, env[k])).join('');
     const tides = (dyn?.derivedFrom || []).slice(-5).reverse().map((x) => tideLabel(world, x)).join('<br>');
     const canon = frozen.canon || {};
-    const scaleRows = (canon.powerScale || []).map((p) => `<div class="sw2-sv-row"><b>${escapeHtml(p.level)}</b><span>${escapeHtml(p.note)}</span></div>`).join('');
-    // ★leg60（交接第 2 件）：**维度与刻度**——书里的尺子（照抄原文；它同时进每轮包当锚，见 pack.js 的刻度块）。
-    const dimRows = (canon.dims || []).map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.name)}</b><span>${escapeHtml(d.range || '（原文未给范围）')}</span></div>`).join('');
+    // ★★★leg62（用户令「粒度不要太细了，换成概念表怎么样」）：**刻度 = 一概念一表**。
+    //   病（用户截图 · 实教账）：旧口径把两张表平铺成两栏——「力量谱系（5 档）」把 `S~E级`（一把尺）
+    //   与 `A班~D班`（**班级分配制度**）摆在一起；「维度与刻度（14 项）」把 5 个基础属性、5 个合成分、
+    //   2 个公式混成一栏。⇒ 现在按概念分栏：一个概念一张卡（表名 + 用途 + 它的档位/维度）。
+    //   分组来源：`resolveScales`（新账读 `canon.刻度`，旧账纯函数从 powerScale/dims 推导 ⇒ **零迁移**）。
+    //   ★与进包同一个读取口（`pack.js` 也读它）——两处各推一次必然漂移成"面板分了两张表、包里还是一栏"。
+    const scaleCards = resolveScales(canon).map((t) => {
+        const tierRows = (t.档位 || [])
+            .map((x) => `<div class="sw2-sv-row"><b>${escapeHtml(x.档)}</b><span>${escapeHtml(x.注 || '')}</span></div>`).join('');
+        const dimRows = (t.维度 || [])
+            .map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.名)}</b><span>${escapeHtml(d.范围 || '（原文未给范围）')}</span></div>`).join('');
+        const subRows = (t.子表 || []).map((sub) => (
+            `<div class="sw2-sv-row"><b>${escapeHtml(sub.名)}</b><span>${(sub.档位 || []).map((y) => escapeHtml(y.档)).join(' · ')}</span></div>`
+        )).join('');
+        const bits = [
+            tierRows ? `${(t.档位 || []).length} 档` : '',
+            (t.维度 || []).length ? `${(t.维度 || []).length} 维` : '',
+            (t.子表 || []).length ? `含子表 ${(t.子表 || []).length}` : '',
+        ].filter(Boolean).join(' · ');
+        return `<div class="sw2-set-card"><h4>《${escapeHtml(t.名)}》${t.用途 ? `<span class="sw2-hint"> · ${escapeHtml(t.用途)}</span>` : ''}</h4>`
+            + `<div class="sw2-hint">${escapeHtml(bits)}</div>${tierRows}${dimRows}${subRows}</div>`;
+    });
     // ★leg60（交接第 3 件）：**编译完整性**——上限口径"漏了如实报"（数字全部来自初始化那一刻的探测，落账带过来）。
     const cp = frozen.compile;
     const compileLine = cp
@@ -1629,7 +1685,15 @@ export function renderSettingHtml(world, { config = {} } = {}) {
 
     return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界设定 · ${escapeHtml(world.context?.world || '')}</div>`
         + `<div class="sw2-sv-sub">书指纹 ${escapeHtml(frozen.fingerprint)} · 抽取于 ${escapeHtml(frozen.extractedAt)} · 全部条目取自原文，未增写一句（只提取不创作）</div></div>`
-        + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ok">✓ 已冻结 · 设定未变不重抽</span></div></div>`
+        + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ok">✓ 已冻结 · 设定未变不重抽</span>`
+        // ★★leg62（用户令「之后增加一个独立抽取设定的入口方便我直抽设定快速看效果」）：
+        //   一次只抽"刻度/概念表"的独立通道——**结果只落这一栏，不碰账本**（不重抽、不覆盖已冻结的设定）。
+        //   为什么要有它：走初始化那条路要跑完名册遍 + 属性遍（多块多次调用、分钟级），
+        //   而"这把尺长什么样"只需要**一次**调用 ⇒ 想快速看效果时不必等整条管线。
+        + `<span class="sw2-hint" style="margin-left:8px">只看书里的"尺子"长什么样 ⇒ </span>`
+        + `<button class="sw2-btn" data-action="extract-scales">只抽刻度</button>`
+        + `</div></div>`
+        + (world.context?.__scaleDraft ? renderScaleDraftHtml(world.context.__scaleDraft) : '')
         + `<div class="sw2-sv-grid">`
         + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>张力现状（演变层 · 引擎算 · 每轮随动）</h4>`
         + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
@@ -1638,9 +1702,13 @@ export function renderSettingHtml(world, { config = {} } = {}) {
         + `<div class="sw2-env">${envRows}</div>`
         + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div>`
         + `<div style="margin-top:10px"><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button><span class="sw2-hint">只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div></div>`
-        + `<div class="sw2-set-card"><h4>力量谱系（${(canon.powerScale || []).length} 档 · 取全）</h4>${scaleRows || '<div class="sw2-sv-row"><span>（无）</span></div>'}</div>`
-        + ((canon.dims || []).length ? `<div class="sw2-set-card"><h4>维度与刻度（${canon.dims.length} 项）</h4>${dimRows}`
-            + `<div class="sw2-hint" style="margin-top:6px">这两张表（维度/范围 + 档位）<b>每轮都在模型的包里</b>当锚——它写实力/属性时按书里的尺子写，不再自造形容词。</div></div>` : '')
+        + (scaleCards.length
+            ? `<div class="sw2-set-card" style="grid-column:1/-1"><h4>刻度（一概念一表 · ${scaleCards.length} 张）</h4>`
+                + `<div class="sw2-hint">书里的尺子按"一个概念一张表"分栏——衡量强弱的尺、决定资源怎么分的制度、`
+                + `取值范围、换算表<b>各自成表</b>，不再挤在同一个框里。这些表每轮都在模型的包里当锚：`
+                + `写实力/属性时按书里的尺子写，不自造形容词。</div></div>`
+            : '')
+        + (scaleCards.length ? `<div class="sw2-sv-grid" style="grid-column:1/-1">${scaleCards.join('')}</div>` : '')
         + (compileLine ? `<div class="sw2-set-card" style="grid-column:1/-1"><h4>编译完整性（初始化那一刻的读数）</h4>`
             + `<div class="sw2-hint">${escapeHtml(compileLine)}</div>`
             + (cp?.missedTitles?.length ? `<div class="sw2-hint" style="margin-top:4px">未编译的设定类条目（前 ${cp.missedTitles.length} 个）：${escapeHtml(cp.missedTitles.join('、'))}</div>` : '')

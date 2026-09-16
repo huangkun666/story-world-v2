@@ -19,7 +19,7 @@ import {
     //   ⇒ 把真源接上（同一份常量既被 `planChronicleRotation` 当缺省、又被面板印出来）。
     PROPOSED_LIMITS,
 } from '../src/storage.js';
-import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer, describeProgress } from '../src/abstract.js';
+import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer, describeProgress, buildScalePrompt, sanitizeScales } from '../src/abstract.js';
 // ★leg40：从世界源起根（把书里"正在发生的事"落成账上的线头事件；幂等、可重入、失败零阻塞）
 import { seedRootsChunked, chunkBookText, SEED_ROOTS_MAX, SEED_CANDIDATES_TOP, SEED_CHUNK_CHAR } from '../src/seed-roots.js';
 // leg24 片1（停抄书）：runAttrsRound / runRelationRound / applyRosterAttrs / refineEntityAttrs 四个入口随
@@ -2816,6 +2816,67 @@ const sw2ParamBusy = new Map();   // 参数键 → true（正在处理这一格�
 if (typeof window !== 'undefined') {
     window.__sw2Actions = window.__sw2Actions || {};
     const bus = window.__sw2Actions;
+
+    // ---------- ★★leg62：**独立抽取设定**的入口（用户令「方便我直抽设定快速看效果」）----------
+    // 口径（三条，别越界）：
+    //   ① **只抽刻度（概念表）**——不走名册遍/属性遍那两轮（那要跑好几块、分钟级）；
+    //      "这把尺长什么样"一次调用就够 ⇒ 想快速看效果时不必等整条管线。
+    //   ② **结果不入账**：草稿挂在 `world.context.__scaleDraft`（会话态，不是契约字段、不写盘），
+    //      已冻结的设定一个字不动。要真采用就走正常的初始化/重抽（本按钮不当第二条写入口）。
+    //   ③ 档位名照旧过**出处闸**（`sanitizeScales` 用同一份原文滤）⇒ 模型编的档位当场丢并如实报数。
+    bus['extract-scales'] = async () => {
+        const settings = modelSettings() || {};
+        const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+        if (!resolved) { setStatus('⚠ 模型通道未配置（设置页填写服务地址/密钥/模型）'); return; }
+        setStatus('正在合订设定源（角色卡 + 世界信息）…');
+        let src;
+        try { src = await autoComposeSource(); } catch (err) { setStatus(`⚠ 合订设定源失败：${String(err?.message || err)}`); return; }
+        if (!src?.ok) { setStatus(`⚠ 设定源不可用：${src?.reason || '未知'}——请检查 ST 是否已载入角色卡/世界书`); return; }
+        setStatus(`直抽刻度中（${src.label} · ${src.usedChars} 字符${src.truncated ? ' · 已截断' : ''}）…`);
+        const t0 = Date.now();
+        let calls = 0;
+        let raw = '';
+        try {
+            raw = await diagExtract(resolved)(buildScalePrompt(src.text));
+            calls = 1;
+        } catch (err) {
+            setStatus(`⚠ 直抽失败（${((Date.now() - t0) / 1000).toFixed(1)}s）：${String(err?.message || err)}`);
+            return;
+        }
+        const secs = ((Date.now() - t0) / 1000).toFixed(1);
+        // 解析（模型偶尔把 JSON 包在别的话里：取第一对花括号）
+        let obj = null;
+        let parseErr = '';
+        try {
+            const s = String(raw || '');
+            obj = JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1));
+        } catch (err) { parseErr = String(err?.message || err); }
+        if (!obj) {
+            console.warn('[story-world-v2] 直抽刻度：输出不是 JSON（前 200 字）', String(raw || '').slice(0, 200));
+            setStatus(`⚠ 直抽返回的不是 JSON（${secs}s）——原文已打到控制台，账本未动`);
+            return;
+        }
+        const errors = [];
+        const scales = sanitizeScales(obj.刻度 ?? obj.轴 ?? obj, { sourceText: src.text }, errors);
+        // ★如实报"被出处闸丢掉的档位"条数（丢掉的不许静默）
+        const dropped = errors.filter((e) => /原文查不到/.test(e)).length;
+        const world = readHotMeta() ? loadHotAccount(readHotMeta()) : null;
+        if (!world) { setStatus('⚠ 世界还没载入，直抽结果无处可放（账本未动）'); return; }
+        world.context.__scaleDraft = {
+            at: new Date().toISOString(), source: src.label || '', secs: Number(secs), calls,
+            scales, dropped, errors: errors.slice(0, 20),
+        };
+        refreshSections(['setting']);
+        console.info(`[story-world-v2] 直抽刻度完成：${scales.length} 张表 · ${secs}s`, { scales, errors });
+        setStatus(`直抽刻度完成：${scales.length} 张概念表 · ${secs}s${dropped ? ` · ${dropped} 条档位原文里找不到（已丢）` : ''}——只落「设定」页那一栏，账本未动`);
+    };
+    bus['clear-scale-draft'] = () => {
+        const world = readHotMeta() ? loadHotAccount(readHotMeta()) : null;
+        if (!world) { setStatus('⚠ 世界还没载入'); return; }
+        delete world.context.__scaleDraft;
+        refreshSections(['setting']);
+        setStatus('已清掉直抽刻度那一栏（账本本来就没动过）');
+    };
 
     // ---------- leg26：世界参数 · 档位（参数页）----------
     // 口径（用户令「参数独开页签」+「让用户自己调挡位」）：
