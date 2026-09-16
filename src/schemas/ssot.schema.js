@@ -28,6 +28,32 @@ export const ssotSchema = {
                             props: {
                                 fingerprint: { kind: 'string', minLength: 1 },
                                 extractedAt: { kind: 'string', minLength: 1 },
+                                // ★leg60（交接第 3 件）：**编译完整性读数**——"书里有多少条设定类条目 /
+                                //   本次编译覆盖了多少 / 声明面读了多少、漏了多少"。全是数字与计数（无散文），
+                                //   落账的目的是"以后哪个体系没抽出来，不用再靠翻磁盘对账"。
+                                //   可选键（旧世界零扰动：老账没有这个键照样过校验）。
+                                compile: {
+                                    kind: 'object',
+                                    additional: false,
+                                    props: {
+                                        entries: { kind: 'number' },
+                                        enabled: { kind: 'number' },
+                                        disabled: { kind: 'number' },
+                                        disabledChars: { kind: 'number' },
+                                        shells: { kind: 'number' },
+                                        constShells: { kind: 'number' },
+                                        declared: { kind: 'number' },
+                                        declaredChars: { kind: 'number' },
+                                        picked: { kind: 'number' },
+                                        pickedChars: { kind: 'number' },
+                                        declaredDropped: { kind: 'number' },
+                                        skipped: { kind: 'number' },
+                                        skippedChars: { kind: 'number' },
+                                        titleNames: { kind: 'number' },
+                                        settingTitles: { kind: 'number' },
+                                        settingCompiled: { kind: 'number' },
+                                    },
+                                },
                                 canon: {   // 形状 = v1 abstractCanon 五件套（附录 A；无数量/长度约束，2026-08-28 口径）
                                     kind: 'object',
                                     additional: false,
@@ -42,6 +68,23 @@ export const ssotSchema = {
                                                 props: {
                                                     level: { kind: 'string' },   // 档位名（原文）
                                                     note: { kind: 'string' },    // 该档意味着什么（原文/极简）
+                                                },
+                                            },
+                                        },
+                                        // ★★leg60：**维度与刻度**（"书里的尺子"）——照抄原文，引擎不换算、不进公式。
+                                        //   来源：三国 `[mvu_update]变量更新规则` 的 `属性.${勇武|韬略|内政|统御|气度|健康}: range: -100~100`
+                                        //   与 `演义战力体系` 的 `核心属性: 勇武/统御 各 0-100`。
+                                        //   可选键（旧世界零扰动：老账没有这个键照样过校验）。
+                                        //   `range` 缺省不写（原文没给范围就是没给，不落占位值）。
+                                        dims: {
+                                            kind: 'array',
+                                            items: {
+                                                kind: 'object',
+                                                additional: false,
+                                                required: ['name'],
+                                                props: {
+                                                    name: { kind: 'string', minLength: 1 },    // 维度名（原文）
+                                                    range: { kind: 'string', minLength: 1 },   // 取值范围（原文，如 -100~100）
                                                 },
                                             },
                                         },
@@ -71,9 +114,58 @@ export const ssotSchema = {
                                                     parent: { kind: 'string', minLength: 1 },
                                                     location: { kind: 'string', minLength: 1 },   // leg21 补形状（此前 sanitizeCanon/关系轮已写、实体页已用，形状层漏登记 → 名册一律校验不过）；书中明述的所在/驻地
                                                     race: { kind: 'string', minLength: 1 },   // leg20：种族归属标签（书级出处校验后保留；可选）
+                                                    // ★★★leg60（用户真账实测抓出）：**`fields` 漏登记**——`additional:false` 之下，
+                                                    //   凡是带 `fields` 的名册条目**一律校验不过**。
+                                                    //   根因（不是本棒引入的，是本棒让它显形的）：**leg25 e** 把"照书抄属性"加回了
+                                                    //   提示词与净化层（`sanitizeBookFields` 的白名单），**契约层却忘了登记这个键**
+                                                    //   ——上面那条 leg25 c 的注释删掉了 `attrs/evidence`，而新加的 `fields` 没补上。
+                                                    //   为什么以前没人发现：三国旧账只有 43% 条目带属性（≈55 条），
+                                                    //   而本棒把"属性真的抽出来"做成常态 ⇒ 三国新账 **323 条**条目踩这一格。
+                                                    //   键表 = `sanitizeBookFields` 的白名单（按 kind 分：character 收前四项，faction 收后三项；
+                                                    //   那个"按 kind 分"的判据在代码里，契约层只登记键的形状）。
+                                                    fields: {
+                                                        kind: 'object',
+                                                        // ★★leg61：`additional:false → true`（**键开放**）。
+                                                        //   旧口径把属性空间锁死在这七个键上（见下方 props 的注释），
+                                                        //   而"该收哪些属性"每个作者写得都不一样 ⇒ 拿一张七键表当闸，
+                                                        //   等于用一本书的字段名判另一本书（用户令：「很多抽不出来」）。
+                                                        //   新闸在**净化层**：`sanitizeBookFields` 的表外键要求
+                                                        //   **值能在本书原文里逐字找到**（`fieldEvidenceOf`），找不到即丢并留痕。
+                                                        //   契约层只登记形状（string）——判据只有一处，别在两处各写一份。
+                                                        additional: true,
+                                                        props: {
+                                                            所属: { kind: 'string', minLength: 1 },   // character：所属势力（原文）
+                                                            身份: { kind: 'string', minLength: 1 },   // character：身份（原文）
+                                                            定位: { kind: 'string', minLength: 1 },   // character：定位（原文）
+                                                            实力: { kind: 'string', minLength: 1 },   // character：档位标签原话（文本，引擎不换算）
+                                                            性质: { kind: 'string', minLength: 1 },   // faction：性质（原文）
+                                                            倾向: { kind: 'string', minLength: 1 },   // faction：倾向（原文）
+                                                            规模: { kind: 'string', minLength: 1 },   // faction：规模/实力原话（≠ 角色档位）
+                                                        },
+                                                    },
                                                     // leg25 c：书名录条目的 `attrs` / `evidence`（leg20 的"从书里抄四维数值+原文依据"）
                                                     //   **整条删除**。书里这一维到底写没写数值，已无人判读——"四维不存在"了，
                                                     //   连"书里明写这一维"这个判据本身也失去了对象（见 settle.js 迁移注释）。
+                                                },
+                                            },
+                                        },
+                                        // ★★leg61：**属性+设定遍**的产出（`buildSettingPrompt`）。
+                                        //   与 `bookEntities` 同构，但**每一条都带 fields**（没属性的条目不收，那一遍不是名册）。
+                                        //   用途与分工：`bookEntities` 负责"名号一个不许漏"（瘦提示词、产量优先），
+                                        //   本键负责"属性逐字照抄"（键开放、**值必须有原文出处**）。
+                                        //   下游：`extractWorldSetting` 把它**并入名册**（同名归并 / 绝不新造实体）。
+                                        //   可选键 ⇒ 旧世界零扰动（老账没有这个键照样过校验）。
+                                        settings: {
+                                            kind: 'array',
+                                            items: {
+                                                kind: 'object',
+                                                additional: false,
+                                                required: ['name', 'fields'],
+                                                props: {
+                                                    name: { kind: 'string', minLength: 1 },
+                                                    kind: { kind: 'string', enum: ['faction', 'character', 'location'] },
+                                                    parent: { kind: 'string', minLength: 1 },
+                                                    fields: { kind: 'object', additional: true, props: {} },
                                                 },
                                             },
                                         },
@@ -171,6 +263,12 @@ export const ssotSchema = {
                     倾向: { kind: 'string', minLength: 1 },   // 势力倾向原话——文本，引擎不读
                     身份: { kind: 'string', minLength: 1 },   // 书里明述的身份（如「现任盟主」）——文本原话，引擎不读
                     定位: { kind: 'string', minLength: 1 },   // 书里明述的角色定位——文本原话，引擎不读
+                    // ★★leg61：**`所属` 落账**（此前是"抽出来了却一个都不落地"的那一格，缺登记只是它的第二重病）。
+                    //   与 `parent` 的分工写死在这里，两边都不许混：
+                    //     · `所属` = **书里的原话**（含「司徒王允府」这类不是势力的写法）——不参与势力树、不参与折叠；
+                    //     · `parent` = 引擎按证据梳理出的归属（带 `parentSource` 发票）——势力树与折叠读它。
+                    //   真账实测（leg61 三本账）：名册带 `所属` 233/482/141 条 ⇒ 旧口径实体账上 **0/0/0**。
+                    所属: { kind: 'string', minLength: 1 },
                 },
             },
         },
@@ -232,8 +330,25 @@ export const ssotSchema = {
                         additional: false,
                         required: ['type'],
                         props: {
-                            type: { kind: 'string', enum: ['plot', 'state', 'ripple'] },
-                            ref: { kind: 'string' },    // ripple→上游事件 id；plot/state→出处（可选）
+                            // ★★leg60（用户真账实测抓出）：枚举补 `seed` —— 起根种下的"世界源起的根"是**第四型**，
+                            //   而这里只登记了 plot/state/ripple ⇒ **每一条起根事件都违约**。
+                            //   （`seedRoots.js` 头部明写"★与 state/plot/ripple 并列的第四型：世界源起的根"，
+                            //     契约层漏跟。为什么以前没显形：真账三国旧账只种出 **1 条**根，本棒起出 **7 条**。）
+                            type: { kind: 'string', enum: ['plot', 'state', 'ripple', 'seed'] },
+                            ref: { kind: 'string' },    // ripple→上游事件 id；plot/state→出处（可选）；seed 无 ref
+                        },
+                    },
+                    // ★★leg60：起根事件的出处（书里那句话 + 为什么算"正在发生"）——`applySeedRoots` 一直在写，
+                    //   契约层同样漏登记。四栏全可选（旧账零扰动）。
+                    seedFrom: {
+                        kind: 'object',
+                        additional: false,
+                        props: {
+                            quote: { kind: 'string' },
+                            why: { kind: 'string' },
+                            fingerprint: { kind: 'string' },
+                            at: { kind: 'string' },
+                            tick: { kind: 'number', int: true, min: 0 },
                         },
                     },
                     position: { kind: 'string', minLength: 1 },
@@ -304,6 +419,14 @@ export const ssotSchema = {
             required: ['tick'],
             props: {
                 tick: { kind: 'number', int: true, min: 0 },
+                // ★★leg60（用户真账实测抓出）：**起根的指纹记录**——`seedRoots.js` 从 leg40 起一直在写它
+                //   （幂等闸 + 逐块读数），而契约层漏登记 ⇒ 只要种过根，整份文档就违纪。
+                //   为什么以前没显形：三国旧账只种出 1 条根（本棒 7 条）。四栏全可选（旧账零扰动）。
+                seedRoots: {
+                    kind: 'object',
+                    additional: true,        // 逐块读数（chunks/dropped/skippedParties）由引擎记账保证，这里只查"是对象"
+                    props: {},
+                },
                 dialogueBook: {   // K37/实体治理 §3.7 对话依据册：{ 对象名: {count, lastTick} }（可选；动态键 map——引擎记账保证内层形状，schema 只查整体为对象）
                     kind: 'object',
                     additional: true,

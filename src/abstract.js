@@ -46,6 +46,29 @@ export const ROSTER_CHUNK_CHAR = 60000;    // 书名录分块尺寸（字符级�
 export const ROSTER_CHUNK_DEPTH = 4;       // 块失败对半拆递归深度上限（v1 同款；条目数 ≤1 时不再拆）
 // leg24 片1：ATTRS_BATCH_MAX / ROUND_BATCH_CHAR 随属性轮、关系轮一并删除（两轮已砍——书随时可查，不抄）
 
+// ★leg60：**五件套 + 世情的形状：一处定义，两处用**。
+//   为什么必须共用（本仓吃过多次的洞）：两处各写一份 JSON 形状 ⇒ 改一处忘一处 ⇒
+//   模型按新形状交、净化层按旧形状收（或者反过来），字段静默消失且没有任何报错。
+//   现在：`buildAbstractPrompt`（留档 / `demo/diag-init-extract.js` 度量用）与
+//   `buildRosterPrompt`（leg60 起 = 每块的**合并提示词**，大小书共用）共用这一份。
+const CANON_SHAPE = {
+    powerScale: [{ level: '档位名（原文）', note: '该档意味着什么（原文措辞）' }],
+    // ★★leg60（交接第 2 件）：**维度与刻度**——"书里的量纲"，原样照抄，引擎不换算、不进公式。
+    //   为什么要单列一项（真账实证）：三国那本 `[mvu_update]变量更新规则` 写着
+    //   `主角状态.属性.{勇武|韬略|内政|统御|气度|健康}: range: -100~100`，`演义战力体系` 写着
+    //   `核心属性: 勇武/统御 各 0-100`——**这两条就是"尺子"**。旧口径下它们只落在 `render.js` 的设置页，
+    //   **模型一个字看不到** ⇒ 模型写实力/属性时没有书里的尺子可依（真账 85 实体里 `实力` 0 条）。
+    //   现在：维度/范围/档位合成"刻度"块进每轮包当锚（见 `pack.js` 的 `buildScaleAnchor`）。
+    dims: [{ name: '属性/维度名（原文）', range: '该维度的取值范围（原文，如 -100~100 / 0-100）' }],
+    rules: ['法则1（原文）'],
+    society: '社会与制度格局（原文）',
+    techOrMagic: '力量/生态体系（原文）',
+    historyNotes: ['历史要点1（原文）'],
+    situation: '当前世情：天下大势/各方态势一句（原文措辞 ≤80字；原文无全局局势则省）',
+};
+const TENSION_SHAPE = { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' };
+const ENV_SHAPE = { 民生度: '崩溃|艰难|尚可|富足（四选一，原文能判才填）', 动乱度: '太平|小乱|动荡|大乱', 天时: '大灾|失调|平常|风调雨顺', 张力推手: '沉寂|平缓|暗涌|紧绷' };
+
 export function buildAbstractPrompt(sourceText) {
     return [
         '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实，不创作、不润色、不补全、不重排。',
@@ -53,17 +76,12 @@ export function buildAbstractPrompt(sourceText) {
         '输出严格 JSON，形状如下（可省字段不写 null；intensity 不许输出——它由引擎计算）：',
         JSON.stringify(
             {
-                powerScale: [{ level: '档位名（原文）', note: '该档意味着什么（原文措辞）' }],
-                rules: ['法则1（原文）'],
-                society: '社会与制度格局（原文）',
-                techOrMagic: '力量/生态体系（原文）',
-                historyNotes: ['历史要点1（原文）'],
-                situation: '当前世情：天下大势/各方态势一句（原文措辞 ≤80字；原文无全局局势则省）',
+                ...CANON_SHAPE,
                 bookEntities: [{ name: '势力/角色/地名的名号（原文名）', kind: 'faction|character|location（可省）' }],   // K37 书名录 + 第十九棒：只收原文名，不收泛指称呼；地名（洲/山/谷等）标 location
                                                                                                                           // leg24 片1：**停抄书**——上级/所在/种族/四维属性都不再抽（书随时可查；引擎不裁胜负，数值没有使用者）
                                                                                                                           //             身份（名号+类别）是账本主键，照旧；书用标签声明的结构走照书办（零模型调用）
-                tension: { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' },
-                env: { 民生度: '崩溃|艰难|尚可|富足（四选一，原文能判才填）', 动乱度: '太平|小乱|动荡|大乱', 天时: '大灾|失调|平常|风调雨顺', 张力推手: '沉寂|平缓|暗涌|紧绷' },
+                tension: TENSION_SHAPE,
+                env: ENV_SHAPE,
             },
             null,
             2,
@@ -79,17 +97,34 @@ export function buildAbstractPrompt(sourceText) {
 // K49（词档细案 §2.1）**再瘦身到最轻形态 {name, kind}**：可选字段在名册规模压力下最易被模型省略。
 // leg24 片1（停抄书）：**隶属/所在/种族从此不再抽**——原 K49 关系轮已删；本轮的职责锁定为
 //   **名号 + 类别**（账本主键 design-core §2.3 第 1 项），纪律 3 的措辞随之改为"本轮只负责名号与类别"。
+// ★★★leg60：**`buildRosterPrompt` 不再是"名册轮"的提示词——它是「每块的合并提示词」，大小书共用。**
+//   名字保留，因为它在演示/度量脚本与历史文档里被引用；**语义以这段注释为准**：
+//   leg60 起它一次抽完"这一块里有的所有东西"（设定五件套 + 世情 + 名册 + 张力 + 环境档位）。
+//   为什么合（病根，两处实证）：
+//     ① 大书旧口径"五件套读头 3 万 + 名册读全"= **同一本书喂两遍**（一遍读全、一遍只读开头 15%）
+//        ⇒ 真档位表在窗口外，模型照抄了【声誉】十级当力量谱系（真账逐字：`里闾称善…遗臭斧钺`）；
+//     ② 小书那条路用的是**只问名号**的旧提示词 ⇒ 四本 ≤3 万的真书 **canon 恒空**（实测复现）。
+//   ⇒ 一份提示词、一条路、不同块数：小书 1 块 · 三国 4 块 · 大荒 5 块 · re0 2 块。
 export function buildRosterPrompt(sourceText, declared = []) {
     const lines = [
-        '你是世界设定的名册抽取器。只提取不创作：只从给定原文里提取名号与它自己的属性，不创作、不润色、不补全、不重排。',
-        '输出严格 JSON（只输出 bookEntities 一组，形状如下；可省字段不写 null）：',
+        '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实与名号及其属性，不创作、不润色、不补全、不重排。',
+        '原文没有提到的字段一律省略；档位名、法令、人名、措辞必须来自原文；数量没有任何限制，取全不取量。',
+        '★**这一段（本块）里有什么就抽什么**：力量谱系 / 法则 / 社会格局 / 力量体系 / 史略 / 世情，与名册（名号 + 类别 + 属性原话）**在同一份 JSON 里一起交**；原文没有的那一项就省略。',
+        '（intensity 不许输出——它由引擎计算；原文没有的字段一律省略，不许补全）',
+        '输出严格 JSON（形状如下；可省字段不写 null）：',
         JSON.stringify(
             {
+                ...CANON_SHAPE,
                 bookEntities: [
                     { name: '势力/角色/地名的名号（原文名）', aliases: ['同一实体的其他叫法（原文名，可省）'], kind: 'faction|character|location（可省）' },
-                    { name: '角色名', kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份（原文）', 定位: '定位（原文）', 实力: '紧贴名号的档位标签原话（原文）' } },
-                    { name: '势力名', kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '实力/规模原话（原文）' } },
+                    // ★leg60：三个形态**都带 `aliases`**——旧模板只在第一形态写了它，于是模型按形状办事、
+                    //   角色/势力（绝大多数条目）从不交别名 ⇒ 即使净化层收得下，也没有输入可收。
+                    //   （真账症状见 sanitizeAliases 头部注释：曹操/曹孟德 各一条、152 势力里 108 个空壳。）
+                    { name: '角色名', aliases: ['该角色的字/号/小名/别称（原文名，可省）'], kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份（原文）', 定位: '定位（原文）', 实力: '紧贴名号的档位标签原话（原文）' } },
+                    { name: '势力名', aliases: ['同一势力的其他叫法（原文名，可省）'], kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '实力/规模原话（原文）' } },
                 ],
+                tension: TENSION_SHAPE,
+                env: ENV_SHAPE,
             },
             null,
             2,
@@ -118,6 +153,8 @@ export function buildRosterPrompt(sourceText, declared = []) {
         '7. **一个实体只出一条**。书里对同一个势力的不同叫法（条目名与它的别名、带前缀的写法，如 `人族皇朝`/`大虞`/`大虞皇朝`）',
         '   **是同一个实体，只许出一条**，用**书里最完整、最正式的那个名字**；不许把同一个东西拆成多条、每条都标 faction。',
         '   同一个条目里写明了"谁是谁的别名/旧称/别称"时，**把这些别的叫法放进该条的 `aliases` 数组**（照抄原文，不要自己发明叫法）。',
+        '   ★**`aliases` 对三个形态都适用**（角色/势力/地名都要交）：同一实体的**字、号、小名、本称、旧称、别称、简称**',
+        '   一律算它的其他叫法，照抄原文原字。**不交别名，引擎就合不了重**——同一个人的两个叫法会在册上长成两条。',
         '   ⚠ 这一段原文里若**只**出现了某个叫法、而没有它所属条目的定义（比如正文里顺带提到一个势力名），',
         '   那就**按这个名字出一条**并把你知道的别名写进 `aliases` —— 引擎会按"名字 + 别名"把跨段的重复合到一起。',
         '8. **规则 2 是硬性要求**：纯种族/族群的群体名（人族、妖族、鬼族、魔族、灵族、仙族、神族、半妖、龙族、兽族、巫族等）',
@@ -130,6 +167,110 @@ export function buildRosterPrompt(sourceText, declared = []) {
     if (declared.length) {
         lines.push(
             '9. 本段原文里被标签直接标出来的名号（如上界势力_／幽冥势力_／某帝麾下_ 后的名字）一个都不能漏，必须全部出现在输出里：',
+            declared.map((d) => d.name).join('、'),
+        );
+    }
+    lines.push('———— 设定原文如下 ————', sourceText);
+    return lines.join('\n');
+}
+
+/**
+ * ★★leg61：**属性+设定遍**（第二遍）——名册遍（`buildRosterPrompt`）的搭档。
+ *
+ * 为什么要把一份提示词拆成两份（实测，不是推理；装置 `F:\deepseek\tmp\leg61-live-roster-ab.js`）：
+ *   同一本书、同一批 5 块、同一个模型，两个口径的**输出总量几乎相同**（77.6k vs 71k 字符），
+ *   但**每个名号的成本差 3.3 倍**（现在生产口径 ~188 字符/名号 vs 只报名号 ~57 字符/名号）：
+ *     · 只报名号：去重 **1022** 个名号；
+ *     · 七样一起问（现状）：去重 **364** 个。
+ *   ⇒ 名册的产量不是被"输出装不下"卡住的（预算还有 4,000 token 余量），而是被**每个条目要写多少字段**摊薄的。
+ *   而名册与属性**都不是可省的**（用户令：「我要的是模拟的必要属性，实力，归属等等」）
+ *   ⇒ 唯一的出路是**给名册一份只干一件事的提示词**（leg60 之前那份"名册轮"正是如此，它交 239~308 个/块）。
+ *
+ * 为什么第二遍**不要名号**：`bookEntities` 从形状里去掉 ⇒ 输出全花在内容上；
+ *   属性仍按 kind 分（角色/势力），键**开放**（见 `sanitizeBookFields`：键可自由命名，**值必须有原文出处**）。
+ */
+export function buildSettingPrompt(sourceText, declared = []) {
+    const lines = [
+        '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实与属性原话，不创作、不润色、不补全、不重排。',
+        '原文没有提到的字段一律省略；档位名、法令、措辞必须来自原文；数量没有任何限制，取全不取量。',
+        '★**本遍只干两件事**（名号已经由另一遍收过了，这一遍**不要**再列名册）：',
+        '  ① 设定：力量谱系 / 法则 / 社会格局 / 力量体系 / 史略 / 世情 / 维度与量表；',
+        '  ② 属性：本节原文里**明写了属性的人与势力**，把属性原话抄下来。',
+        '★★**属性的键你可以按本书自己的写法起名**（如 所属/身份/实力/境界/体质/兵力/性质/倾向/规模/领地/寿元…），',
+        '   但有一条铁律：**值必须是本节原文里能逐字找到的原话**——原文没写这一项就不写这个键，**一个字都不许推测**。',
+        '输出严格 JSON（形状如下；可省字段不写 null）。**形状里没有名册那一项**——名号由另一遍负责收，本遍一个字都不要列名：',
+        JSON.stringify(
+            {
+                ...CANON_SHAPE,
+                entities: [
+                    { name: '角色名（原文名）', kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份/官职（原文）', 实力: '紧贴名号的档位或数值原话（原文，如 勇武99/统御95）', '其他属性名（按本书写法）': '该属性的原文原话' } },
+                    { name: '势力名（原文名）', kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '规模/兵力原话（原文）' } },
+                ],
+                tension: TENSION_SHAPE,
+                env: ENV_SHAPE,
+            },
+            null,
+            2,
+        ),
+        '纪律：',
+        '1. 属性值**逐字照抄**：紧贴名号的括号/冒号里的档位、数值、官职、规模都算；不允许改写、不允许概括成一句话。',
+        '2. 原文写了数值就抄数值（`勇武99`），写了档位就抄档位（`T8破妄`）——**不许把档位换算成数、也不许把数换算成档位**。',
+        '3. 一个人**只出一条**（同名合并）；同一个人的属性写在同一个 `fields` 里，**别拆成多条**。',
+        '4. 势力的「规模」= 原文写明的兵力/规模/底蕴原话；**势力的实力不写角色的档位**（那是两回事）。',
+        '5. 每个属性值 ≤ 40 字，**不要写解释**（输出太长会被截断导致整块作废）。',
+        '6. 原文没写属性的人**根本不要列**——本遍不是名册，宁可少一个人，也不许编一个字段。',
+    ];
+    if (declared.length) {
+        lines.push(
+            '7. 以下名号在本段里出现过，若原文给了他们的属性，请一并抄下来：',
+            declared.map((d) => d.name).join('、'),
+        );
+    }
+    lines.push('———— 设定原文如下 ————', sourceText);
+    return lines.join('\n');
+}
+
+/**
+ * ★★leg61：**只问属性**（属性遍的第 2..N 块用这一份）。
+ *
+ * 为什么需要第二个变体（踩坑留档，改这里之前先读）：
+ *   属性遍原本一块一份提示词（既问设定又问属性）+ 一条"本块交了设定就收兵"的止损判据。
+ *   实测结果是**属性一个都没进来**——因为止损把整遍关掉了，而**设定与属性在同一遍里**：
+ *   书里法则/档位表常常集中在头一两块 ⇒ 那一块之后每一块都被止损跳过，属性跟着一起没。
+ *   而且"止损"这个动作本身就把两个不同粒度的问题捆在了一起：
+ *     · 设定 = 全书级的一两句/几张表 ⇒ **问一块就够**（块间本来就是并集去重）；
+ *     · 属性 = 每人一条、散在各块（三国 340 人横跨 1~7 块）⇒ **必须每块都问**。
+ *   ⇒ 定稿：**第一块问"设定 + 属性"，其后每块只问属性**。调用数与"每块都问"完全相同，
+ *     省下的只是"重复问设定"那份输出，而属性一块不落（`present` 里也就不再需要 'setting' 那条判据）。
+ */
+export function buildAttrsOnlyPrompt(sourceText, declared = []) {
+    const lines = [
+        '你是世界属性的抽取器。只提取不创作：只从给定的设定原文里提取属性原话，不创作、不润色、不补全、不重排。',
+        '原文没有提到的字段一律省略；属性值必须来自原文；数量没有任何限制，取全不取量。',
+        '★**本遍只干一件事**：把本节原文里**明写了属性的人与势力**，连同属性原话抄下来。',
+        '★设定（力量谱系/法则/社会格局/史略）**本遍不要**——那些已经由前面几遍收过了，重复输出只会挤掉属性。',
+        '★★**属性的键你可以按本书自己的写法起名**（如 所属/身份/实力/境界/体质/兵力/性质/倾向/规模/领地/寿元…），',
+        '   但有一条铁律：**值必须是本节原文里能逐字找到的原话**——原文没写这一项就不写这个键，**一个字都不许推测**。',
+        '输出严格 JSON（形状如下；可省字段不写 null）。**形状里没有名册那一项**——名号由另一遍负责收：',
+        JSON.stringify(
+            {
+                entities: [
+                    { name: '角色名（原文名）', kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份/官职（原文）', 实力: '紧贴名号的档位或数值原话（原文）', '其他属性名（按本书写法）': '该属性的原文原话' } },
+                    { name: '势力名（原文名）', kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '规模/兵力原话（原文）' } },
+                ],
+            },
+            null,
+            2,
+        ),
+        '纪律：',
+        '1. 属性值**逐字照抄**：紧贴名号的括号/冒号里的档位、数值、官职、规模都算；不许改写、不许概括成一句话。',
+        '2. 原文写了数值就抄数值（`勇武99`），写了档位就抄档位（`T8破妄`）——**不许换算**。',
+        '3. 一个人**只出一条**（同名合并）；同一人的属性写在同一个 `fields` 里，**别拆成多条**。',
+        '4. 原文没写属性的人**根本不要列**——宁可少一个人，也不许编一个字段。',
+    ];
+    if (declared.length) {
+        lines.push(
+            '5. 以下名号在本段里出现过，若原文给了他们的属性，请一并抄下来：',
             declared.map((d) => d.name).join('、'),
         );
     }
@@ -190,8 +331,127 @@ export function scanBookDeclarations(src) {
     return { declares, usesLabelTerms: [] };
 }
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★leg58：**体系条目优先取样**——修「五件套只读书列表开头」的取样病灶。
+//
+// ── 病（真账实证，见 `docs/measure-leg58-canon-sampling.md`）───────────────────────────────
+//   `canonSrc = 全书前 CANON_SRC_CHAR(30000) 字符`。三国那本：启用 264 条、
+//   而窗口只覆盖**前 12 条**（列表开头是《备用审查》《音乐》《演义说书》这类工具条目）。
+//   那 12 条里唯一的"成等级表"是题名就叫【声誉】的那条 ⇒ 模型被问 `powerScale`，
+//   **照抄了声誉十级**（清名/恶名各五级），而真正的战力体系（T0_天下无双 / 勇武·统御）
+//   在窗口**之外**，模型**从未见过它**。★**模型没抽错——是取样错**。
+//
+// ── 修法（泛用，零新增数字）──────────────────────────────────────────────────────────
+//   不按"这本书叫什么"挑，按**形态**挑：**体系条目长得像"字段：值 的清单"**——
+//   `范围: 0-100` · `T0级_天下无双:` · `属性联动机制:` · `核心属性:`。
+//   正文条目（人物档案、事件记录）不长这样。⇒ 在**窗口内**（`CANON_SRC_CHAR`）优先装
+//   「清单形态」的条目，余量再按书序填。★**总量恒等于 `CANON_SRC_CHAR`**（`abstract-chunk.test.js`
+//   锁着"五件套段 = 头 3 万字符"）⇒ 本函数只改**挑哪 3 万**，不改**多少 3 万**。
+//   ★**零 LLM、纯函数、逐字节可复现**——与同文件的 `scanBookDeclarations` 同一条手法。
+//
+// ── 为什么不在提示词里让模型"自己去找体系条目"────────────────────────────────────────
+//   模型看不见窗口外的东西，问它也没用（它只能照抄给它看的）。**取样发生在模型之前**，
+//   所以这一刀必须切在取样上。
+const ENTRY_START_RE = /^【[^】]*】/;                       // `init-source.js` 的条目边界：`【题名】正文`
+const FIELD_LINE_RE = /^\s*[^\s:：]{1,24}\s*[:：]\s*\S/;      // `核心属性:` / `范围: 0-100`
+const RANGE_RE = /[-−–~至]\s*\d/;                            // `0-100` / `95-99` / `1~5`
+// 标题里的"分类/体系"词（**是结构词，不是题材词**——换任何书都成立；不写演义/战力这类本书专名）
+const TITLE_MARK_RE = /(体系|系统|规则|设定|总纲|机制|属性|数值|档位|等级|品级|境界|谱系|世界观)/;
+
+/** 把一个条目块切出「题名 + 首段」（判形态只看开头——正文条目往往后面也长得像正文）。 */
+function entryShapeOf(block) {
+    const text = String(block || '');
+    const m = ENTRY_START_RE.exec(text);
+    const title = m ? text.slice(0, m[0].length) : '';
+    const body = m ? text.slice(m[0].length) : text;
+    return { title, head: body.split('\n').slice(0, 6).join('\n'), len: text.length };
+}
+
+/**
+ * 「体系条目」形态分（**越高越像"定义世界怎么运转"的条目**）。0 = 不像。
+ * ★口径是"清单形态 + 分类词"，两条都**与题材无关**：换一本书、换一套体系名，判据照旧成立。
+ */
+export function systemEntryScore(block) {
+    const { title, head } = entryShapeOf(block);
+    let score = 0;
+    // ① 标题带分类词（最强信号：作者就是这么标"这是设定"的）
+    if (TITLE_MARK_RE.test(title)) score += 4;
+    // ② 正文开头是"字段：值"清单
+    const fieldLines = head.split('\n').filter((l) => FIELD_LINE_RE.test(l)).length;
+    if (fieldLines >= 4) score += 3;
+    else if (fieldLines >= 2) score += 1;
+    // ③ 出现数值区间（`勇武 0-100` 这种"定标"的形态）
+    if (RANGE_RE.test(head)) score += 2;
+    // ④ 同一段里"短标签行"密集（`勇气:` `范围:` …）——体系条目的骨架
+    const shortLabels = head.split('\n').filter((l) => /^\s*[^\s:：]{1,12}\s*[:：]\s*$/.test(l)).length;
+    if (shortLabels >= 2) score += 1;
+    return score;
+}
+
+/**
+ * ★★★leg58：**一个"已量过、未接线"的候选** —— 用之前先读 `docs/measure-leg58-canon-sampling.md`。
+ *
+ * 它想修的病（真账实证）：`canonSrc = 全书前 CANON_SRC_CHAR` ⇒ 三国那本启用 264 条里只覆盖 12–13 条，
+ *   而那 13 条里唯一的等级表是【声誉】⇒ 模型被问 `powerScale` 就照抄了声誉十级，
+ *   真正的战力体系（T0_天下无双 / 勇武·统御）**在窗口外**。★**模型没错，是取样错。**
+ *
+ * ★但它**没解决问题**（我接上去之前先出了数，出数把它否掉了，故**接线已撤**）：
+ *   ① **根因不在取样，在"条目被禁用"**：`演义战力体系` 是 `disable=true` ⇒ 输入集合里根本没它，
+ *      任何"挑得更准"的策略都变不出来（`composeInitSource` 在本棒实测收 264 条，里面无它）；
+ *   ② **形态判据分不开「分类定义」与「分类的实例」**：人物档案的 `基本信息:/姓名:`
+ *      与体系条目的 `核心属性:/范围:` **同形**（都是"字段:值"清单）⇒ 本函数在真书上
+ *      挑出的是**人物档案**，不是体系条目；
+ *   ③ 启用集合里 264 条有 **220 条是 JS 脚本条目**（`<%_`，题面却叫"演义说书/正史记载"）——
+ *      它们在题名与正文两层都伪装成"体系"。
+ *
+ * ⇒ **接它的前置条件**：先让体系条目进入输入集（在 ST 里启用），**那时才第一次有正样本**
+ *   可以校准判据。在那之前接它，只是把一条**没过验证的 heuristic** 装上生产。
+ *
+ * 设计（留着，别推翻）：在窗口内**优先装体系条目**、余量按书序，**总量恒 = `CANON_SRC_CHAR`**
+ *   （`abstract-chunk.test.js` 锁着"五件套段 = 头 3 万字符"——它锁的是**多少**，本函数只改**挑哪**）；
+ *   判据用**形态**不用题材词（换任何书都成立）；**零 LLM、纯函数、逐字节可复现**（同 `scanBookDeclarations`）。
+ */
+export function pickCanonSource(src, budget = CANON_SRC_CHAR) {
+    const text = String(src ?? '');
+    // 按 `【题名】` 行首切块（切不出来 ⇒ 整段当一块，行为与旧版一致）
+    const blocks = [];
+    let cur = null;
+    for (const line of text.split('\n')) {
+        if (ENTRY_START_RE.test(line)) { if (cur !== null) blocks.push(cur.join('\n')); cur = [line]; }
+        else if (cur !== null) cur.push(line);
+        else cur = [line];
+    }
+    if (cur !== null) blocks.push(cur.join('\n'));
+
+    const scored = blocks.map((b, i) => ({ b, i, s: systemEntryScore(b) }));
+    // 体系条目（分高者先），其余按书序 —— 稳定排序，逐字节可复现
+    const ranked = scored.filter((x) => x.s > 0).sort((a, b) => (b.s - a.s) || (a.i - b.i));
+    const rest = scored.filter((x) => x.s === 0);
+
+    const chosen = new Set();
+    const picked = [];
+    let used = 0;
+    const take = (x, { force = false } = {}) => {
+        const len = x.b.length + (used ? 1 : 0);            // 拼接用的换行也算
+        if (!force && used + len > budget) return false;
+        chosen.add(x.i); used += len;
+        if (x.s > 0) picked.push(entryShapeOf(x.b).title || `(第 ${x.i + 1} 块)`);
+        return true;
+    };
+    for (const x of ranked) take(x);                       // ① 体系条目优先
+    for (const x of rest) { if (used >= budget) break; take(x); }   // ② 余量按书序
+    // 兜底：一条都没装下（单个巨块 > budget）⇒ 退回"头 budget 字符"，与旧版逐字节一致
+    if (!used) return { text: Array.from(text).slice(0, budget).join(''), picked: [], pickedChars: budget, scanned: blocks.length, total: text.length };
+
+    // 按**书序**还原（模型看到的顺序仍与书一致——不乱序，免得影响它对"先说什么"的判断）
+    const out = blocks.filter((_, i) => chosen.has(i)).join('\n');
+    return { text: out, picked, pickedChars: out.length, scanned: blocks.length, total: text.length };
+}
+
 // leg24 片1 删除位（原 leg21 属性轮 prompt `buildAttrsPrompt`）：四维数值不再从书里抄——书随时可查，
 // 数值由 LLM 每轮提议（主调用既有通道），引擎不裁胜负也就不需要它。整个函数已删（不是停用）。
+
+
 
 // leg24 片1 删除位（原 K49 关系轮 prompt `buildRelationPrompt`）：隶属/所在/种族不再从书里抄。
 // 书里真写着的结构走「照书办」（零模型调用）；位置与归属按 design-core §2.3 改为用得着时查书（片2）。
@@ -208,34 +468,186 @@ export function normalizeParentName(raw) {
     return String(raw ?? '').trim().replace(/^[/／\\>·>\-—–\s]+/, '').trim();
 }
 
-// 照书抄的属性字段白名单（第二十五棒 e）：键名按 kind 分开，别的键一律不收。
+/**
+ * ★★leg61：**势力树的甲类边**（纯函数 · 零 token · 零词表）——"名字里就写着它的上级"。
+ *
+ * 判据（三步，全部机械可复核）：
+ *   ① `parent.name` 是 `child.name` 的**连续子串**，且**严格更长**（`曹魏远征军` ⊂ 不含 `曹魏军`… 反例见下）
+ *      ⇒ 与**同类别**（都 `kind === 'faction'`）的在册条目比对；
+ *   ② 命中**多条**（`曹魏` 与 `曹魏军` 都包含于 `曹魏远征军`）⇒ 取**最长的那条**当直接上级
+ *      （于是 `曹魏远征军 → 曹魏军 → 曹魏` 自然成链，不需要额外做链顶解析）；
+ *   ③ 命中**多条且等长**（真歧义，如同时存在 `曹魏军` 与 `曹魏部`）⇒ **不连**，进 warnings。
+ *
+ * ★为什么这条判据值得信（与"同段共现"那条被否掉的判据对比，两者差别是本函数存在的全部理由）：
+ *   · 名字包含 = **书自己起的名字里写着归属**（作者给它起名时就把上级带上了）；
+ *   · 同段共现 = 只是"这两句话在附近"，实测抓到的全是"诸葛亮是琅琊诸葛氏的人""两军交战"
+ *     甚至"万法阁叛徒 ⇒ 万法阁 ∈ 天机阁"（三国 91 处 / 大荒 217 处全不可用）。
+ * ⇒ 宁可只连少数几条**名字本身就写明**的边，也不连一堆"看着像"的边（宁缺勿造）。
+ *
+ * @returns `{links: [{child, parent, names}], warnings: string[]}`
+ */
+export function linkContainedFactions(entities = [], byName = new Map()) {
+    const links = [];
+    const warnings = [];
+    const facs = (Array.isArray(entities) ? entities : []).filter((e) => e && e.kind === 'faction' && typeof e.name === 'string' && e.name.trim());
+    for (const child of facs) {
+        const cn = String(child.name).trim();
+        // ⚠长度方向：**候选(父)必须更短**——`cn.includes(pn)` 与 `pn.length < cn.length` 是**一对**，
+        //   第一版把长度写成 `>`（读起来像"更长的那个是父"）⇒ 一条边都连不出来（实测当场抓到：三国 0 条）。
+        const cands = facs.filter((p) => {
+            const pn = String(p.name).trim();
+            return p !== child && pn.length < cn.length && cn.includes(pn) && byName.get(pn);
+        });
+        if (!cands.length) continue;
+        const maxLen = Math.max(...cands.map((p) => String(p.name).trim().length));
+        const top = cands.filter((p) => String(p.name).trim().length === maxLen);
+        if (top.length > 1) {
+            warnings.push(`势力树: 「${cn}」可能属于 ${top.map((p) => `「${p.name}」`).join('/')}（名字包含并列）——不硬选，保持平级`);
+            continue;
+        }
+        links.push({ child, parent: top[0], names: [String(top[0].name).trim()] });
+    }
+    return { links, warnings };
+}
+
+// 照书抄的属性字段键表（第二十五棒 e 引入；**leg61 起由"白名单"改为"常用键"**）。
 //   character：所属（= 所属势力，兼作 parent 的兜底来源）/ 身份 / 定位 / 实力（档位原话）
 //   faction  ：性质 / 倾向 / 规模（势力自己的规模原话——**不是**角色档位）
-// 纪律：全部 trim；空串丢弃；每项 ≤30 字符（超长截断而非丢弃：截断后的仍是原文片段，丢弃会白丢信息）。
+// ★★leg61（用户令「我要的是模拟的必要属性，实力，归属等等，但是现在就是有很多抽不出来」）：
+//   **这张表不再是闸门**。旧口径下不在表里的键一律不收（模型交了"体质/境界/兵力/宗门/寿命"全丢），
+//   而"该收哪些属性"这件事**每个作者写得都不一样** —— 拿一张七键表当闸，等于用一本书的字段名判另一本书。
+//   新口径：**键开放，闸门换成"出处"**（见 `BOOK_FIELD_EVIDENCE` 与 `sanitizeBookFields`）：
+//     · 本书常用键（下表）：沿用 ≤`BOOK_FIELD_MAX` 字的旧上限；
+//     · 表外新键：收，但**值必须在本书原文里找得到**，且 ≤`BOOK_FIELD_MAX_OPEN` 字。
+//   ⇒ 判据从"我认这个键名"变成"书里说没说这句话"——后者与题材无关（换任何书都成立）。
 export const BOOK_FIELD_KEYS = {
     character: ['所属', '身份', '定位', '实力'],
     faction: ['性质', '倾向', '规模'],
     location: [],
 };
-export const BOOK_FIELD_MAX = 30;
+export const BOOK_FIELD_MAX = 30;          // 常用键的旧上限（不改，保持既有账面形态）
+export const BOOK_FIELD_MAX_OPEN = 60;     // leg61 表外键：能装一句话，但仍不许写成散文
+export const BOOK_FIELD_TOP = 24;          // leg61：每条实体的属性项数上限（防模型灌一长串撑裂账本）
+export const BOOK_FIELD_EVIDENCE = true;   // leg61：出处闸总开关（判据要能单独测，故做成常量）
 
-export function sanitizeBookFields(rawFields, kind) {
+// 键名形态闸（leg61）：只收**像属性名的短键**——排除模型把整句话当键、或把 `{}`/`<>` 这类占位符当键
+//   （占位符那一条与 §D 的 `<user>` 同族：它真的在原文里，所以出处闸抓不住它）。
+const FIELD_KEY_RE = /^[\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z0-9_·\-]{0,9}$/;
+
+/**
+ * 出处闸（leg61）：值能不能在本书原文里找回它自己。
+ * ★这不是"格式校验"——它是"只提取不创作"这条不可违的**可判等化**：
+ *   模型可以自由命名新属性（键开放），但**值必须来自这本书**；对不上 ⇒ 标「（推）」，绝不静默丢。
+ * 判据三步（全部纯函数、零词表、零模型）：
+ *   ① 整串出现 ⇒ 原文；
+ *   ② 原文里有 `维度 + 数值` 这种连续片段（`勇武99` / `内功105`）⇒ 数值出现即算原文；
+ *   ③ 其余 ⇒ 推断（`source:'模型推断'`，显示时带「（推）」，与 `parentSource` 的既有口径同尺）。
+ */
+export function fieldEvidenceOf(value, sourceText) {
+    const v = String(value ?? '').trim();
+    const src = String(sourceText ?? '');
+    if (!v) return 'inferred';
+    if (!src) return 'inferred';                       // 没给原文 ⇒ 一律按推断处理（不许默默当原文）
+    if (src.includes(v)) return 'verbatim';
+    const nums = v.match(/\d+(?:\.\d+)?/g);
+    if (nums && nums.length) {
+        const parts = v.split(/[\s/|·、,，]+/).map((s) => s.trim()).filter(Boolean);
+        let hit = 0;
+        for (const p of parts) {
+            if (p.length < 2) continue;
+            if (src.includes(p)) { hit += 1; continue; }
+            const stem = p.replace(/\d+(?:\.\d+)?/g, '').trim();
+            const num = p.match(/\d+(?:\.\d+)?/);
+            if (stem && num) {
+                const re = new RegExp(`${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[:：]?\\s*${num[0]}`);
+                if (re.test(src)) { hit += 1; continue; }
+            }
+        }
+        if (hit > 0 && hit >= Math.ceil(parts.length / 2)) return 'verbatim';
+    }
+    return 'inferred';
+}
+
+// ★★leg60（用户令「把抽象这件事做好了，泛用化设计」）：**别名通道修活**——本棒最贵的一处。
+//   病灶（两条实证，不是推理）：
+//     ① 夹具 `test/fixtures/extract-samples.json:6` 录着**真模型输出** `{name:'白小娥',aliases:['小娥']}`
+//        ⇒ 模型**一直在交别名**；
+//     ② `ssot.schema.js:69` 登记了 `aliases` 这个**契约键**，`dedupeRoster` 整条并查集（leg25 g）
+//        就是靠"名字 ∪ 别名"做跨块归一的。
+//   而 `sanitizeCanon` 的名册项**只收 `{name, kind}`** ⇒ 别名在**净化层被静默丢弃**（无声、无 error、无 warning）
+//     ⇒ leg25 g 那整套"跨块归一"**从 leg24 片1 起一次都没生效过**。
+//   ★这是本仓反复登记过的"**删字段只删一半**"（同款留档见 `settle.js:112`：attrs/hurtWindow 两处摘除）。
+//     判据为什么没咬到：`test/roster-merge.test.js` 全程**直接喂 `dedupeRoster`** 手工对象
+//     ⇒ 锁住了**机制**，没锁住**接线**（"给了就合对"全绿，而"根本没给"没人锁）。
+//   症状（真账，两本各一条）：三国 85 实体里 `曹操` 与 `曹孟德` 各占一条、`大汉/汉室/东汉` 三条并列；
+//     大荒 152 个势力里 108 个空壳——**正是 leg25 g 当初要治的病**：治了，线没接上。
+//   纪律与 `sanitizeBookFields` 同尺：只收字符串 · trim · 空串丢 · 与正名相同者丢 · 去重 ·
+//     每项 ≤ BOOK_ALIAS_CHAR · 每条 ≤ BOOK_ALIAS_MAX（防模型灌一长串撑裂账本）。
+export const BOOK_ALIAS_MAX = 8;
+export const BOOK_ALIAS_CHAR = 30;
+// ★leg60：维度/刻度每项的长度上限（与 `BOOK_FIELD_MAX` 同尺——防模型把"取值范围"写成一段散文）
+export const BOOK_DIM_MAX = 30;
+export function sanitizeAliases(rawAliases, name) {
+    if (!Array.isArray(rawAliases)) return null;
+    const self = String(name ?? '').trim();
+    const out = [];
+    for (const a of rawAliases) {
+        if (typeof a !== 'string') continue;            // 数字/对象不是"叫法"
+        const s = a.trim();
+        if (!s || s === self || out.includes(s)) continue;
+        out.push(s.length > BOOK_ALIAS_CHAR ? s.slice(0, BOOK_ALIAS_CHAR) : s);
+        if (out.length >= BOOK_ALIAS_MAX) break;
+    }
+    return out.length ? out : null;
+}
+
+/**
+ * 属性净化（leg61 改口径：**键开放 · 值过出处闸**）。
+ *   旧口径（第二十五棒 e）：只收 `BOOK_FIELD_KEYS` 白名单里的键，别的键一律丢。
+ *   新口径：常用键照旧；**表外键也收**，但要过 `fieldEvidenceOf`（值必须能在本书原文里找到）。
+ * 纪律：只收字符串（数值/对象不是"属性原话"，引擎不换算）· trim · 空串丢 · 与正名相同的丢 ·
+ *   键过名号形态闸 · 每条实体 ≤ `BOOK_FIELD_TOP` 项 · 超长截断（截断留痕由调用方汇总）。
+ * 返回 `{ fields, inferred, unknown, truncated }`；`inferred` = 值对不上原文的键名（调用方标「（推）」并留痕）。
+ */
+export function sanitizeBookFields(rawFields, kind, { sourceText = '' } = {}) {
     const allow = BOOK_FIELD_KEYS[kind] || [];
-    if (!allow.length || !rawFields || typeof rawFields !== 'object') return null;
+    if (!rawFields || typeof rawFields !== 'object' || Array.isArray(rawFields)) return null;
     const out = {};
-    for (const k of allow) {
-        const v = rawFields[k];
-        if (typeof v !== 'string') continue;               // 非字符串（数字/数组/对象）一律不收——不许把档位换算成数
-        const s = v.trim();
-        if (!s) continue;
-        out[k] = s.length > BOOK_FIELD_MAX ? s.slice(0, BOOK_FIELD_MAX) : s;
+    const known = new Set(allow);
+    const inferred = [];
+    const unknown = [];
+    let truncated = 0;
+    const addKey = (key, val, { isKnown }) => {
+        if (typeof val !== 'string') return;               // 非字符串（数字/数组/对象）一律不收——不许把档位换算成数
+        const v = val.trim();
+        if (!v || v === key) return;
+        if (isKnown) {
+            out[key] = v.length > BOOK_FIELD_MAX ? v.slice(0, BOOK_FIELD_MAX) : v;
+            if (v.length > BOOK_FIELD_MAX) truncated += 1;
+            return;
+        }
+        if (!FIELD_KEY_RE.test(key)) return;               // 键名形态闸（挡占位符与整句话当键）
+        if (BOOK_FIELD_EVIDENCE && fieldEvidenceOf(v, sourceText) !== 'verbatim') {
+            inferred.push(key);
+            return;                                        // 表外键 + 值对不上原文 ⇒ 不收（不许靠一条新键偷偷创作）
+        }
+        out[key] = v.length > BOOK_FIELD_MAX_OPEN ? v.slice(0, BOOK_FIELD_MAX_OPEN) : v;
+        if (v.length > BOOK_FIELD_MAX_OPEN) truncated += 1;
+        unknown.push(key);
+    };
+    for (const k of allow) addKey(k, rawFields[k], { isKnown: true });              // 常用键优先（顺序稳定）
+    for (const k of Object.keys(rawFields)) {
+        if (known.has(k)) continue;
+        if (Object.keys(out).length >= BOOK_FIELD_TOP) break;
+        addKey(k, rawFields[k], { isKnown: false });
     }
     // 所属要过同一把尺（书里的层级路径 `/太素帝` 在此收口）
     if (out['所属']) {
         const p = normalizeParentName(out['所属']);
         if (p) out['所属'] = p; else delete out['所属'];
     }
-    return Object.keys(out).length ? out : null;
+    if (!Object.keys(out).length) return { fields: null, inferred, unknown, truncated };
+    return { fields: out, inferred, unknown, truncated };
 }
 
 // leg23 照书办②：书声明的名号**强制并册** + 照标签定类别 + 照标签落上级（一处定义，大书/小书共用）。
@@ -250,7 +662,12 @@ export function applyDeclaredToRoster(bookEntities, declared) {
         const parent = normalizeParentName(d.parent);
         const mine = list.find((b) => b.name === d.name);
         if (!mine) {
-            const item = { name: d.name, kind: d.kind };
+            const item = { name: d.name };
+            // ★leg60：kind **只在书真给了类别时才写**——题名面（"题名即名册"，见 init-source 的
+            //   `deriveTitleRoster`）剥出来的名号**判不出类别**，写一个 `undefined` 进册会让
+            //   `ssot.schema` 的 enum 校验面对一个"有键无值"的字段（本仓"键在值为空"那条口径的反面）。
+            //   不写 = 下游按既有缺省（character）走，与 `sanitizeCanon` 的缺省口径一致。
+            if (d.kind) item.kind = d.kind;
             if (parent) item.parent = parent;
             list.push(item);
             added += 1;
@@ -267,12 +684,33 @@ async function callOnceWithDeclared(extract, text, declared) {
 }
 
 // 净化：形状合法为止（逐项取好弃坏，errors 记录坏项）；硬失败仅"输出非对象"。
-export function sanitizeCanon(raw) {
+// ★leg60：把"照书办"的两路声明合起来——① 正文里的结构标签（带类别/上级）② **题名面**
+//   （`init-source.deriveTitleRoster` 剥出来的名号，零 token；不带类别）。
+//   为什么题名面也算"照书办"：书名本身就是书的一部分——**作者把 cast 写在题名里**
+//   （三国 `控制器_张辽`×187 / `张辽正史`×184 / `甄宓人设控制`×32），而模型只抽到 127 条。
+//   纪律：标签先（它带类别与上级），题名面只补缺、**绝不改判已有条目的类别**。
+function mergeDeclared(tags = [], titled = []) {
+    const out = [...tags];
+    const seen = new Set(tags.map((d) => d.name));
+    for (const d of (Array.isArray(titled) ? titled : [])) {
+        const n = String(d?.name ?? '').trim();
+        if (!n || seen.has(n)) continue;
+        seen.add(n);
+        out.push({ name: n });
+    }
+    return out;
+}
+
+export function sanitizeCanon(raw, { sourceText = '' } = {}) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         return { ok: false, errors: ['抽取输出非对象（真形状净化：不可靠即拒绝）'] };
     }
     const errors = [];
-    const canon = { powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], situation: '', bookEntities: [] };
+    const canon = { powerScale: [], dims: [], rules: [], society: '', techOrMagic: '', historyNotes: [], situation: '', bookEntities: [], settings: [] };
+    // ★leg61：`present` = **模型这一块真的交了哪几项**（"设定" / "属性"）。
+    //   为什么必须有它：净化层把 canon 每一项都**预置成空值**（空数组/空串），于是"有没有值"与
+    //   "有没有这个键"在下游分不开——`present` 就是那条分界线（属性遍的止损判据读它）。
+    const present = [];
 
     if (Array.isArray(raw.powerScale)) {
         for (const it of raw.powerScale) {
@@ -283,6 +721,26 @@ export function sanitizeCanon(raw) {
             canon.powerScale.push({ level, note });
         }
     } else if (raw.powerScale !== undefined) errors.push('powerScale 非数组（已弃）');
+
+    // ★leg60：维度与刻度（`[{name, range}]`）——**照抄原文**，同名去重，逐项 ≤ BOOK_DIM_MAX 字。
+    //   纪律与 `sanitizeBookFields` 同尺：只收字符串（数值/对象不是"维度名"）· trim · 空串丢 ·
+    //   `range` 原文没写就**不写这个键**（"键在值为空"那条口径的反面：没有就是没有，不落占位）。
+    if (raw.dims === undefined) {
+        // 省略合法（本书没有成文的维度/刻度）
+    } else if (Array.isArray(raw.dims)) {
+        const seenDim = new Set();
+        for (const it of raw.dims) {
+            if (!it || typeof it !== 'object') { errors.push('dims 含非对象项（已弃）'); continue; }
+            const name = String(it.name ?? '').trim();
+            if (!name) { errors.push('dims 项缺 name（已弃）'); continue; }
+            if (seenDim.has(name)) continue;
+            seenDim.add(name);
+            const range = String(it.range ?? '').trim();
+            const item = { name: name.length > BOOK_DIM_MAX ? name.slice(0, BOOK_DIM_MAX) : name };
+            if (range) item.range = range.length > BOOK_DIM_MAX ? range.slice(0, BOOK_DIM_MAX) : range;
+            canon.dims.push(item);
+        }
+    } else errors.push('dims 非数组（已弃）');
 
     if (Array.isArray(raw.rules)) {
         for (const r of raw.rules) { const s = String(r ?? '').trim(); if (s) canon.rules.push(s); }
@@ -319,26 +777,71 @@ export function sanitizeCanon(raw) {
     //   `seedBookEntities` 判"上级不在册 → 弃隶属"，界面 623 行「归属空着」。去斜杠后 9/9 名号都在册。
     if (Array.isArray(raw.bookEntities)) {
         const seen = new Set();
+        const byName = new Map();
         for (const it of raw.bookEntities) {
             if (!it || typeof it !== 'object') { errors.push('bookEntities 含非对象项（已弃）'); continue; }
             const name = String(it.name ?? '').trim();
             if (!name) { errors.push('bookEntities 项缺 name（已弃）'); continue; }
-            if (seen.has(name)) continue;
+            // ★leg60：同名重复不再"整条丢"——**别名并进已收的那条**（"缺什么补什么"同款）。
+            //   旧法只 `continue`：模型在同一块里把 `曹操` 出两次、别名各带一半（孟德 / 阿瞒）时，
+            //   第二条被整条丢弃 ⇒ 半个别名表消失（而别名正是跨块归一的唯一输入）。
+            if (seen.has(name)) {
+                const kept = byName.get(name);
+                const more = sanitizeAliases(it.aliases, name);
+                if (kept && more) {
+                    const merged = [...(kept.aliases || [])];
+                    for (const a of more) if (!merged.includes(a) && merged.length < BOOK_ALIAS_MAX) merged.push(a);
+                    if (merged.length) kept.aliases = merged;
+                }
+                continue;
+            }
             seen.add(name);
             const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : 'character';
             const parent = normalizeParentName(it.parent);
             const item = { name, kind };
+            // ★leg60 别名通道（见 sanitizeAliases 头部注释：这一行此前缺失 ⇒ 跨块归一从未生效）
+            const aliases = sanitizeAliases(it.aliases, name);
+            if (aliases) item.aliases = aliases;
             if (parent) item.parent = parent;
             // 第二十五棒 e（用户令「按 v1 那样把所有的东西都初步建立好」）：**照书抄属性**回到初始化。
             //   v1 的名册层就抽 affiliation（所属）/ power（紧贴名号的档位原话），v2 的 leg24「停抄书」把它们
             //   一起砍了、替代通道（用到时查书）只接回实力/位置 ⇒ 归属永远 0/623（真账实测）。
             //   纪律：**照抄成文本**（实力=「T9渡劫巅峰」这类原话，引擎不换算、不进公式——START-HERE §2 第 1 条）；
             //   字段按 kind 白名单收，逐项 trim + 上限 30 字符（防模型写长句撑裂账本）。
-            const fields = sanitizeBookFields(it.fields, kind);
-            if (fields) item.fields = fields;
+            // ★★leg61：白名单 → **键开放 + 出处闸**（见 `sanitizeBookFields` 头注）。
+            //   判据：`inferred`（值对不上原文的表外键）**丢弃并留痕**——留痕而不是静默，
+            //   所以这里把每个被丢的键写进 `errors`（会汇总进 `setting.frozen.errors`）。
+            const f = sanitizeBookFields(it.fields, kind, { sourceText });
+            if (f) {
+                if (f.fields) item.fields = f.fields;
+                if (f.inferred.length) errors.push(`「${name}」的属性 ${f.inferred.join('/')}：值在原文里找不到 ⇒ 已丢（键开放但值必须有出处）`);
+                if (f.unknown.length) errors.push(`「${name}」带表外属性 ${f.unknown.join('/')}（值有原文出处，已收）`);
+            }
             canon.bookEntities.push(item);
+            byName.set(name, item);          // ★leg60：同名再出现时用于并别名（见上方注释）
         }
     } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
+
+    // ★leg61：**属性+设定遍**交的条目（`entities`，键开放、值过出处闸）——形状与名册条目同构，多了 fields。
+    //   为什么不复用 `bookEntities`：那一遍的职责是"名号一个不许漏"，这一遍是"属性逐字照抄"；
+    //   分成两个键 ⇒ ①名册的产量不被属性摊薄 ②合并端能分别记账（哪一遍交的、交了多少）。
+    //   下游（`extractWorldSetting`）把它**并入名册**：同名归并、**绝不新造实体**。
+    const rawEnts = Array.isArray(raw.entities) ? raw.entities : (raw.entities !== undefined ? (errors.push('entities 非数组（已弃）'), []) : []);
+    for (const it of rawEnts) {
+        if (!it || typeof it !== 'object') { errors.push('entities 含非对象项（已弃）'); continue; }
+        const name = String(it.name ?? '').trim();
+        if (!name) { errors.push('entities 项缺 name（已弃）'); continue; }
+        const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : 'character';
+        const item = { name, kind };
+        const parent = normalizeParentName(it.parent);
+        if (parent) item.parent = parent;
+        const f = sanitizeBookFields(it.fields, kind, { sourceText });
+        if (f) {
+            if (f.fields) item.fields = f.fields;
+            if (f.inferred.length) errors.push(`「${name}」（属性遍）的属性 ${f.inferred.join('/')}：值在原文里找不到 ⇒ 已丢`);
+        }
+        if (item.fields && Object.keys(item.fields).length) canon.settings.push(item);   // 没属性的条目不收：这一遍不是名册（见 buildSettingPrompt 纪律 6）
+    }
 
     // 张力三件：极/方向取原文措辞；模型侧 intensity 一律丢弃（引擎算，K29）
     const tension = {
@@ -363,13 +866,23 @@ export function sanitizeCanon(raw) {
     }
     // leg24 片5（留痕收口）：净化层的坏项（非法 env/坏 bookEntities 项等）**上报到调用方的 errors**——
     // 旧法只在 callOnce 内部消化，`ok` 时静默丢弃：账面上少了东西却没有任何提示（"每条变更留痕"的反面）。
+    // ★leg61：登记"模型真的交了哪几项"（见 `present` 的声明处：净化层预置空值 ⇒ 下游分不开有无）
+    for (const k of ['powerScale', 'dims', 'rules', 'society', 'techOrMagic', 'historyNotes', 'situation']) {
+        if (raw[k] !== undefined) present.push('setting');
+    }
+    if (raw.entities !== undefined) present.push('attributes');
+    if (Array.isArray(raw.bookEntities)) present.push('roster');
     const shapeWarnings = errors.slice();
-    return { ok: true, canon, tension, env, errors, shapeWarnings };
+    return { ok: true, canon, tension, env, errors, shapeWarnings, present };
 }
 
-export function assembleSetting({ canon, tension, env, legacyTension, fingerprint, extractedAt }) {
+// ★leg60（交接第 3 件）：`compile` = **编译完整性读数**（来自 `init-source` 的声明面探测与自检）。
+//   为什么要落进账本、而不是只打一行控制台：这是**用户口径**里那句"以后哪个体系没抽出来，
+//   不用再靠翻磁盘对账"——读数必须跟账走（换聊天、换机器都还在），否则下一个人又得回磁盘翻书。
+//   全部是**数字与短题名**（形态固定、无散文）⇒ 不违反"账里不存原值"那条纪律（这里存的是**覆盖率**，不是原文）。
+export function assembleSetting({ canon, tension, env, legacyTension, fingerprint, extractedAt, compile = null }) {
     return {
-        frozen: { fingerprint, extractedAt, canon },
+        frozen: { fingerprint, extractedAt, canon, ...(compile ? { compile } : {}) },
         dynamic: {
             tension: {
                 // 极性必填（K24 schema：≥1 字符）；书里没有可引的极时，落引擎状态词「未聚」
@@ -387,20 +900,55 @@ export function assembleSetting({ canon, tension, env, legacyTension, fingerprin
     };
 }
 
-const EMPTY_CANON = () => ({ powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], situation: '', bookEntities: [] });
+// ★leg60：`EMPTY_CANON` 已删（零引用）——它唯一的用处是"五件套轮失败时降级空 canon"，
+//   而 leg60 起设定与名册在**同一批调用**里同生共死，那个"降级空 canon"的失败面不存在了；
+//   块间合并的空态由 `mergeCanonChunks([])` 直接给出（同一个形状，一处定义）。
 
 // 单发小包装：prompt → 调用 → JSON 解析 → 净化；失败返回 {callError}
 // buildPrompt 可传函数(t)→prompt（leg23：名册轮按块带书声明清单，故需闭包而非固定函数）
+// ★★leg61：**瞬时失败重试**（用户真机实测：10 次调用里 2 次被网关 524 掐断，靠重试救回）。
+//   为什么必须与"超时"分开（这是本处的全部理由，改它之前先读这三句）：
+//     · `sw2Timeout`（我们自己的 AbortController 到点）= **超时 = 止损**，旧法已定"不重试"（见 tryRosterChunk 头注）；
+//     · 而 524 / fetch failed / socket hang up 是**网关或链路**在 300 秒前把请求掐了，模型那边什么都不知道
+//       ⇒ 这种错误重试**有救**，且不重试就是白丢一块（真账实证：块 3/块 4 各丢一次）。
+//   重试次数有界（`EXTRACT_RETRY_TIMES`），且只对"瞬时"那一类重试，不放大 401/403 这类配置错的代价。
+export const EXTRACT_RETRY_TIMES = 2;
+export const EXTRACT_RETRY_WAIT_MS = 3000;
+// 瞬时错判据（形态判据，不是"看心情"）：网关 5xx/524/522 · 链路断 · 无响应。
+//   ★反向判据同样重要：401/403/404/429 与"超时"一律不重试（前三个是配置错、429 是限流、超时是止损）。
+export function isTransientCallError(err) {
+    if (!err) return false;
+    if (err.sw2Timeout === true) return false;                       // 超时 = 止损，不重试
+    const s = `${err.message || err}`;
+    if (/\b(401|403|404|429)\b/.test(s)) return false;               // 配置错 / 限流：重试只会白烧
+    if (/sw2Timeout|abort/i.test(s)) return false;
+    return /\b(522|523|524|500|502|503|504)\b/.test(s) || /fetch failed|socket hang up|ECONNRESET|ETIMEDOUT|network/i.test(s);
+}
+const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
+
 async function callOnce(extract, text, buildPrompt = buildAbstractPrompt) {
     let rawText;
-    try {
-        rawText = await extract(buildPrompt(text));
-    } catch (err) {
-        // leg27：**超时与瞬时错必须分开**（旧法一律并成一句"抽取调用失败"⇒ 白烧 62 分钟/块，见 transport-http 文件头）
-        //   `timeout: true` 是给 `tryRosterChunk` 的判据：超时不许对半拆、不许重试。
+    let lastErr = null;
+    for (let attempt = 1; attempt <= EXTRACT_RETRY_TIMES; attempt += 1) {
+        try {
+            rawText = await extract(buildPrompt(text));
+            lastErr = null;
+            break;
+        } catch (err) {
+            lastErr = err;
+            // leg27：**超时与瞬时错必须分开**（旧法一律并成一句"抽取调用失败"⇒ 白烧 62 分钟/块，见 transport-http 文件头）
+            //   `timeout: true` 是给 `tryRosterChunk` 的判据：超时不许对半拆、不许重试。
+            if (attempt < EXTRACT_RETRY_TIMES && isTransientCallError(err)) {
+                await sleep(EXTRACT_RETRY_WAIT_MS * attempt);
+                continue;
+            }
+            break;
+        }
+    }
+    if (lastErr) {
         return {
-            callError: `抽取调用失败: ${err?.message || err}`,
-            timeout: err?.sw2Timeout === true,
+            callError: `抽取调用失败${EXTRACT_RETRY_TIMES > 1 ? `（已试 ${EXTRACT_RETRY_TIMES} 次）` : ''}: ${lastErr?.message || lastErr}`,
+            timeout: lastErr?.sw2Timeout === true,
         };
     }
     if (typeof rawText !== 'string' || !rawText.trim()) return { callError: '抽取输出为空' };
@@ -410,7 +958,7 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt) {
     } catch {
         return { callError: '抽取输出非法 JSON（真形状净化：不可靠即拒绝）' };
     }
-    const cleaned = sanitizeCanon(raw);
+    const cleaned = sanitizeCanon(raw, { sourceText: text });     // ★leg61：出处闸要用本块的原文
     if (!cleaned.ok) return { callError: cleaned.errors.join('; ') };
     return { cleaned, shapeWarnings: cleaned.shapeWarnings || [] };   // 净化坏项上报（leg24 片5 留痕收口）
 }
@@ -473,9 +1021,11 @@ function makeProgressLog(onProgress) {
 }
 
 // 诊断/ UI 用的一行摘要（纯函数 · 零副作用）：把 progress 事件串成人看的实施清单。
+// ★leg60 改口：**一段里同时抽设定与名册**了（旧文案把 'chunk' 段叫"名册第 x/N 块"——那句话现在是假的：
+//   块里既出设定也出名册）。'canon' 这个段名保留识别（旧账/旧事件串仍可读），但新跑不会再产生它。
 export function describeProgress(events) {
     return (Array.isArray(events) ? events : []).filter((e) => e && e.phase === 'finish').map((e) => {
-        const label = e.step === 'canon' ? '设定五件套' : `名册第 ${e.index}/${e.count} 块`;
+        const label = e.step === 'canon' ? '设定与名册' : `第 ${e.index}/${e.count} 块（设定与名册）`;
         if (!e.ok) return `${label}：失败（${e.chars} 字符，${Math.round((e.ms || 0) / 1000)}s）——${e.error || '未知原因'}`;
         return `${label}：${e.chars} 字符，${((e.ms || 0) / 1000).toFixed(1)}s`;
     });
@@ -588,18 +1138,103 @@ export function dedupeRoster(entities = []) {
 }
 
 // 拆半递归（v1 tryChunk 同款精神）：块首试无效 → 对半拆（保内容，不空等重试）→ 拆不动保底重试一次 → 仍无效跳过降级。
-// 返回 cleaned | null；两半合并只取 bookEntities 并集（块级只收书名录，v1 同款）。
+// 返回 cleaned | null；两半合并走 mergeCanonChunks（leg60 起：**五件套与名册一起合**——旧法只并 bookEntities，
+// 拆半会让"设定"那半边静默消失，而设定正是这一棒要抽的东西）。
 // leg27 改（用户令「二十多分钟很慢，你做吧」）：**超时不再走拆半/重试，直接止损跳过**。
 //   为什么必须有这条分支（实测真书算出来的，不是修辞）：拆半拆小的是**输入**，而超时主因是**生成时间**
 //     （每次输出预算 16,384 tokens 固定，reasoning 还占盘）⇒ 对半拆等于"用两倍时间再赌一次"：
 //     旧法单块最坏 1(原) + 2 + 4 + 8 + 16(拆到 depth=4) + 1(保底重试) = **31 次调用 × 120 秒 ≈ 62 分钟**，
 //     而这 62 分钟之后**结果还是跳过**——纯烧时间不长数据。现在：一次 300 秒超时即跳过，把时间还给其余块。
 //   "拆半"的原始理由（v1）仍然成立、仍然保留：那是治**输出被截断/网关空回复**（瞬时错，重试有救）。
+// ★★leg60：**块间合并（纯函数 · 零模型 · 绝不摘要）**——大书"一遍抽完"的另一半。
+//   口径（用户拍的，不是提案）：
+//     · `powerScale`/`rules`/`historyNotes` ⇒ **并集去重**（同一本书的档位表可能分几处写，一条都不许丢）；
+//     · `society`/`techOrMagic`/`situation` 这种"一句话"⇒ **取信息量最大的那块**（最长者胜，并列取先出现）；
+//     · ★**绝不合成一句**——把两块的句子合成一句 = 让模型做摘要 = 创作，违背"只提取不创作"。
+//       宁可只留一块的原话，也不许出现一句书里没有的话。
+//     · `bookEntities` ⇒ **原样全堆**（跨块归一是 `dedupeRoster` 的职责，只做一次；这里不去重，
+//       否则"先到先得"会把后出现的正名当重复丢掉——leg25 g 的教训）。
+//     · `tension`/`env` ⇒ **首块为准**（首块 = 旧窗口头 3 万所在的那块 ⇒ 与旧行为连续；
+//       env 是四个档位词，不是越长越对，所以这里不用"最长者胜"）。
+//   为什么单独成函数、还导出：块间合并是一条**可以脱离模型复核**的纯函数（判据直接喂它）。
+export function mergeCanonChunks(parts = []) {
+    const list = (Array.isArray(parts) ? parts : []).filter((p) => p && typeof p === 'object');
+    const powerScale = [];
+    const dims = [];
+    const rules = [];
+    const historyNotes = [];
+    const bookEntities = [];
+    const settings = [];                    // ★leg61：属性+设定遍的条目（同名归并、不新造实体；见 sanitizeCanon）
+    const seenPs = new Set();
+    const seenDim = new Map();          // name → 已收的那条（range 缺什么补什么，同实体不重复）
+    const seenRule = new Set();
+    const seenHist = new Set();
+    let society = '';
+    let techOrMagic = '';
+    let situation = '';
+    for (const p of list) {
+        const c = p.canon && typeof p.canon === 'object' ? p.canon : {};
+        for (const it of (Array.isArray(c.powerScale) ? c.powerScale : [])) {
+            const level = String(it?.level ?? '').trim();
+            const note = String(it?.note ?? '').trim();
+            if (!level || !note || seenPs.has(level)) continue;
+            seenPs.add(level);
+            powerScale.push({ level, note });
+        }
+        // ★leg60：维度并集（同名去重；后块只补 `range` 的空缺，绝不覆盖已有原话）
+        for (const it of (Array.isArray(c.dims) ? c.dims : [])) {
+            const name = String(it?.name ?? '').trim();
+            if (!name) continue;
+            const range = String(it?.range ?? '').trim();
+            if (!seenDim.has(name)) {
+                const item = { name };
+                if (range) item.range = range;
+                seenDim.set(name, item);
+                dims.push(item);
+            } else if (range && !seenDim.get(name).range) {
+                seenDim.get(name).range = range;
+            }
+        }
+        for (const r of (Array.isArray(c.rules) ? c.rules : [])) {
+            const s = String(r ?? '').trim();
+            if (!s || seenRule.has(s)) continue;
+            seenRule.add(s);
+            rules.push(s);
+        }
+        for (const h of (Array.isArray(c.historyNotes) ? c.historyNotes : [])) {
+            const s = String(h ?? '').trim();
+            if (!s || seenHist.has(s)) continue;
+            seenHist.add(s);
+            historyNotes.push(s);
+        }
+        const soc = String(c.society ?? '').trim();
+        if (soc.length > society.length) society = soc;                 // 信息量最大那块（最长者胜）
+        const tom = String(c.techOrMagic ?? '').trim();
+        if (tom.length > techOrMagic.length) techOrMagic = tom;
+        const sit = String(c.situation ?? '').trim();
+        if (sit.length > situation.length) situation = sit;
+        for (const b of (Array.isArray(c.bookEntities) ? c.bookEntities : [])) bookEntities.push(b);
+        // ★leg61：属性遍条目按"名 + fields"并集去重（同一人在多块出现 ⇒ 合字段，不重复计）
+        for (const b of (Array.isArray(c.settings) ? c.settings : [])) {
+            const nm = String(b?.name ?? '').trim();
+            if (!nm) continue;
+            const prev = settings.find((x) => x.name === nm);
+            if (!prev) { settings.push(b); continue; }
+            prev.fields = { ...(b.fields || {}), ...(prev.fields || {}) };   // 已有键优先（先出现的那块的原话）
+        }
+    }
+    const first = list[0] || {};
+    return {
+        canon: { powerScale, dims, rules, society, techOrMagic, historyNotes, situation, bookEntities, settings },
+        tension: first.tension || { polarity: '', direction: '' },
+        env: first.env || {},
+    };
+}
+
 function mergeCleaned(a, b) {
     if (!a) return b;
     if (!b) return a;
-    const bookEntities = dedupeRoster([...a.canon.bookEntities, ...b.canon.bookEntities]);
-    return { canon: { ...a.canon, bookEntities }, tension: a.tension, env: a.env };
+    return mergeCanonChunks([a, b]);
 }
 
 // leg24 片1 删除位（原 leg20/leg21 `validateRosterDetails`）：属性/种族/所在的"书级出处校验"整块删除——
@@ -608,10 +1243,14 @@ function mergeCleaned(a, b) {
 
 // onProgress（leg27 新增）：注入式进度上报——编排层不许 console 硬编码（测试注入"fake ctx 真跑"同治法）。
 //   上报时机：**每块开始**（"正在抽第 x/N 块"）+ **每块结束**（耗时/结果/错误）。失败细节进 `progressLog`。
-async function tryRosterChunk(extract, text, depth, probeState, { declared = [], onProgress = null, progressLog = null } = {}) {
-    const rosterPrompt = (t) => buildRosterPrompt(t, declared);   // leg23：本块内按书声明给召回清单
+async function tryRosterChunk(extract, text, depth, probeState, { declared = [], onProgress = null, progressLog = null, buildPrompt = null, stopWhen = null } = {}) {
+    const rosterPrompt = buildPrompt || ((t) => buildRosterPrompt(t, declared));   // leg23：本块内按书声明给召回清单
     const r = await callOnce(extract, text, rosterPrompt);        // leg21：名册轮专用瘦身 prompt
-    if (!r.callError) return { cleaned: r.cleaned };
+    // ★leg61：`stopWhen(cleaned)` —— **已收够就止损**（属性遍专用：与名册遍共用 ROSTER_CHUNK_DEPTH 语义）。
+    //   为什么需要：属性遍要连跑 5~7 块，而设定/档位表常常在头两块就抽全了；
+    //   不给止损就等于"用 4 次多余调用去问一块已经没有新东西的书文"，而 524 超时正随调用数放大。
+    //   判据由调用方注入（形态判据，不是"看心情"）：见 extractWorldSetting 里那条。
+    if (!r.callError) return stopWhen && stopWhen(r.cleaned) ? { cleaned: null, satisficed: true } : { cleaned: r.cleaned };
     probeState.failures += 1;
     // ★leg27：**超时 = 止损**（不拆半、不重试）——理由见上方注释；失败如实进 progressLog，供界面显形。
     if (r.timeout) {
@@ -649,10 +1288,18 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
 // 留档：两条路线都实测过并各自有硬数据——属性轮=leg21 拆轮（名册 504→106 的回归修法）、
 // 关系轮=K49（真机势力→势力 parent 仅 3%）；它们的产出全属"书的副本"，故一并退场。
 
-// 执行器：{sourceText, extract, cache?, force?, extractedAt?, legacyTension?} → {ok, setting, cached, fingerprint, errors}
-// 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量（与历史行为零差异）；大书分段多调用——
-// 五件套=头 CANON_SRC_CHAR 单发；书名录=全条目分块多调用（拆半自适应 + 降级 + 全书级出处校验）。
-export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null }) {
+// 执行器：{sourceText, extract, cache?, force?, extractedAt?, legacyTension?, extraDeclared?, compileInfo?}
+//   → {ok, setting, cached, fingerprint, errors}
+// ★leg60 `extraDeclared`：**题名面**（`init-source.deriveTitleRoster` 剥出来的名号：零 token、纯函数）。
+//   它走"照书办"同一条通道——强制并册（模型漏了也不丢）+ 参与全书级出处判定（**题名也是这本书的一部分**）。
+// ★leg60 `compileInfo`：**编译完整性读数**（声明面探测结果）——落进 `setting.frozen.compile`（见 assembleSetting）。
+// 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量；大书=**全条目分块多调用、一遍抽完**
+//   （leg60 起五件套与名册在同一批块里同生共死——旧法"五件套只读头 3 万"那一次已整条删除）。
+export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null }) {
+    const titled = (Array.isArray(extraDeclared) ? extraDeclared : [])
+        .map((d) => ({ name: String(d?.name ?? '').trim() }))
+        .filter((d) => d.name);
+    const titledNames = new Set(titled.map((d) => d.name));
     const src = String(sourceText ?? '');
     const fp = bookFingerprint(src);
     const stamp = extractedAt || new Date().toISOString();
@@ -696,11 +1343,11 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
             };
         }
         errors.push(...(r.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
-        const applied = applyDeclaredToRoster(r.cleaned.canon.bookEntities, smallDeclared);
-        if (smallDeclared.length) {
-            errors.push(`照书办: 本书标签声明 ${smallDeclared.length} 个名号（补入册 ${applied.added} / 改判类别 ${applied.fixed}）`);
+        const applied = applyDeclaredToRoster(r.cleaned.canon.bookEntities, mergeDeclared(smallDeclared, titled));
+        if (smallDeclared.length || titled.length) {
+            errors.push(`照书办: 声明面 ${smallDeclared.length + titled.length} 个名号（标签 ${smallDeclared.length} / 题名 ${titled.length}；补入册 ${applied.added} / 改判类别 ${applied.fixed}）`);
         }
-        const setting = assembleSetting({ canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp });
+        const setting = assembleSetting({ canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp, compile: compileInfo });
         if (cache) cache.set(fp, { canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env }, stamp);
         return {
             ok: true, cached: false, fingerprint: fp, setting, errors,
@@ -708,31 +1355,54 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         };
     }
 
-    // 大书：五件套=头 CANON_SRC_CHAR 单发（失败降级=空 canon，不阻塞书名录）；空/失败自动重试一次
-    const canonSrc = Array.from(src).slice(0, CANON_SRC_CHAR).join('');
-    progress.start('canon', 1, 1, Array.from(canonSrc).length);
-    let canonR = await callOnce(extract, canonSrc);
-    if (canonR.callError) canonR = await callOnce(extract, canonSrc);
-    progress.finish('canon', 1, 1, Array.from(canonSrc).length, !canonR.callError, canonR.callError);
-    if (canonR.callError) {
-        errors.push(`设定五件套抽取失败（已降级空 canon）：${canonR.callError}`);
-    }
-    errors.push(...(canonR.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
-    const canonBase = canonR.cleaned ?? { canon: EMPTY_CANON(), tension: { polarity: '', direction: '' }, env: {} };
-
+    // ★★★leg60（用户令「把抽象这件事做好了，泛用化设计」）：**大书不再"五件套读头 3 万 + 名册读全"**。
+    //   旧口径把**同一本书喂了两遍**：名册轮读全（`ROSTER_CHUNK_CHAR`=60000/块），五件套轮只读开头
+    //   （`Array.from(src).slice(0, CANON_SRC_CHAR)`）——一遍读全、一遍只读头 15%。
+    //   真账代价（三国那本）：真正的档位表 `演义战力体系`（`T0级_天下无双 数值标定 勇武100`…）在窗口外，
+    //   模型从没见过 ⇒ 它照着窗口里唯一那张表（【声誉】清名五级+恶名五级）填了 `powerScale`
+    //   （真账逐字：`里闾称善…遗臭斧钺`）。**不是模型错，是取样错。**
+    //   现在：**同一批块、一遍抽完**——块里有什么就抽什么（这一块的名号 + 档位表/法则/体系/史略 + 属性原话）。
+    //   ★块数与名册轮**逐字相同**（同一把 60000 的尺子）：不新增机制，总输入反而更小
+    //     （旧法 30000 + 198063 = 228063 字 → 新法 198063 字）。三国 4 块 · 大荒 5 块 · re0 2 块。
+    //   ★★同时取消**大小书的分叉**：小书那条路（`srcLen <= CANON_SRC_CHAR`）此前用的是"只问名号"的
+    //     提示词 ⇒ 四本 ≤3 万的真书（Eldoria 4168 / Global 438 / 实教 9158 / 综漫 14557）**canon 恒空**
+    //     （`powerScale`/`rules`/`society` 一个值都没有，实测复现）。同一件事两个尺寸两条路，就是这个洞的根。
+    //     现在**大小书共用同一份合并提示词**，小书 = 1 块（调用次数不变）。
+    //   ★块间合并的纪律（用户口径）：`powerScale`/`rules`/`historyNotes` **并集去重**；
+    //     `society`/`techOrMagic`/`situation` 这种"一句话"取**信息量最大的那块**——**绝不合成一句**
+    //     （合成 = 让模型做摘要 = 创作，违背"只提取不创作"）。见 `mergeCanonChunks`。
+    // ★★★leg58 留档（"挑得更准的取样"这条路已量过、已否，别再走回来）：
+    //   本棒做了 `pickCanonSource`（体系条目优先），接上去之前先出了数，结果是**它没解决问题**
+    //   （`docs/measure-leg58-canon-sampling.md`）：
+    //     · 三国启用 264 条里 `演义战力体系` 是 `disable=true` ⇒ **根本不在输入集合里**，
+    //       任何"挑得更准"的取样都变不出这条（★这条正是 leg60 要治的真病：见 init-source 的禁用仓储问题）；
+    //     · 剩下的体系类信号**挑不出真体系条目**：264 条里 220 条是 JS 脚本，人物档案（`基本信息: / 姓名:`）
+    //       长得和体系条目一样（都是"字段:值"清单）⇒ 形态判据分不开「分类定义」与「分类的实例」。
+    //   ⇒ leg60 起 `canonSrc`/`slice` 整条退场（换成"读全"），`pickCanonSource` 仍在文件里当**已量过、未接线**的候选。
+    const rawCanons = [];   // 每块的净化结果（含五件套 + 该块名号）：块收齐后由 mergeCanonChunks 纯函数合并
     // 书名录：全条目分块多调用（全量覆盖，v1 教训：人名藏在条目深处，不许头截断）
     const rows = src.split('\n').map((s) => s.trim()).filter(Boolean);
     const chunks = chunkRows(rows, ROSTER_CHUNK_CHAR);
     // leg23 照书办①：先把书本段「结构声明」扫出来（纯函数零调用）——按块给召回清单，块后再强制并册
-    const { declares: declared, usesLabelTerms } = scanBookDeclarations(src);
+    // ★leg60：再并上**题名面**（零 token 的 cast：作者把名册写在题名里，模型在 JS 里捞不全）。
+    const { declares: tagDeclared, usesLabelTerms } = scanBookDeclarations(src);
     if (usesLabelTerms.length) errors.push('照书办: 检测到词表判据参与声明扫描（应为形态判据，请核查）');
-    // ★leg25 g：头 30k 内先抽到的名号与各块结果**先原样堆在一起**（`rawBookNames`），
+    const declared = mergeDeclared(tagDeclared, titled);
+    if (titled.length) errors.push(`照书办: 题名面 ${titled.length} 个名号（零调用；名称取自本书题名，类别留给正文/模型判）`);
+    // ★leg25 g：各块抽到的名号**先原样堆在一起**（`rawBookNames`），
     //   等块全部跑完再**一次性**去重——不能在循环里就去重：那时后面块的别名还没出现，
     //   先到先得会把"正名条目"当重复丢掉（块顺序只是书序，不代表哪个是正名）。
-    const rawBookNames = [...canonBase.canon.bookEntities];
+    const rawBookNames = [];
     const probeState = { failures: 0 };
     let okChunks = 0;
     const failLog = [];                     // leg27：失败明细（给界面显形用，不是只报一个数字）
+    let settingChunks = 0;                  // leg61：属性+设定遍成功的块数
+    let settingEarlyStop = 0;               // leg61：属性遍"已收够就止损"跳过的块数
+    const rawSettingEnts = [];              // leg61：属性遍交的 {name, kind, fields} —— 并入名册（不新造实体）
+    // ★★★leg61：**同一批块、跑两遍**——名册一遍（只报名号），属性+设定一遍（不问名号）。
+    //   口径与代价（实测见 `buildSettingPrompt` 头注）：调用数从 每块 1 次 → 每块 2 次，
+    //   换来名册产量 ~2.8 倍（大荒去重 364 → 1022）与"属性不再和名册抢输出"。
+    //   ★`declared`（书标签 + 题名面）只喂名册遍：那一遍才是"一个名号都不许漏"的责任方。
     for (const [ci, chunk] of chunks.entries()) {
         const chunkChars = Array.from(chunk).length;
         progress.start('chunk', ci + 1, chunks.length, chunkChars);   // ★"正在抽第 x/N 块"——进入即出声
@@ -744,18 +1414,57 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
             const last = failLog[failLog.length - 1];
             const why = last?.kind === 'timeout' ? '调用超时（已止损跳过，不再拆半/重试）' : (last?.error || '未知原因');
             progress.finish('chunk', ci + 1, chunks.length, chunkChars, false, why);
-            errors.push(`书名录第 ${ci + 1}/${chunks.length} 块抽取失败（${chunkChars} 字符，已跳过降级，其余块照常）：${why}——该块名号本次缺失，网络/模型恢复后「重新抽取」可补回`);
+            // ★leg60：文案改口——这一块丢的**不只是名号**，还有这一块的设定（档位表/体系/史略）
+            errors.push(`第 ${ci + 1}/${chunks.length} 块抽取失败（${chunkChars} 字符，已跳过降级，其余块照常）：${why}——该块的名号与设定本次缺失，网络/模型恢复后「重新抽取」可补回`);
             continue;
         }
         okChunks += 1;
         progress.finish('chunk', ci + 1, chunks.length, chunkChars, true);
+        errors.push(...(cleaned.shapeWarnings || []));   // leg24 片5：块级净化坏项上报（如 env 非法值弃键）
+        rawCanons.push(cleaned);                          // ★leg60：五件套也在块里（见上方 leg60 头注）
         for (const b of cleaned.canon.bookEntities) rawBookNames.push(b);
     }
+    // ★★★leg61 第二遍：**属性 + 设定**（不问名号）。
+    //   ★定稿形态（踩过两次坑之后，见 `buildAttrsOnlyPrompt` 头注）：
+    //     **第一块问"设定 + 属性"，其后每块只问属性**——设定只值得问一块（块间并集去重），
+    //     属性必须每块都问（三国 340 人横跨 1~7 块）。调用数与"每块都问"完全相同。
+    for (const [ci, chunk] of chunks.entries()) {
+        const chunkChars = Array.from(chunk).length;
+        const first = ci === 0;
+        progress.start('canon', ci + 1, chunks.length, chunkChars);
+        const r2 = await tryRosterChunk(extract, chunk, 0, probeState, {
+            declared, onProgress, progressLog: failLog,
+            buildPrompt: first ? (t) => buildSettingPrompt(t, declared) : (t) => buildAttrsOnlyPrompt(t, declared),
+        });
+        if (!r2.cleaned) {
+            const last = failLog[failLog.length - 1];
+            const why = last?.kind === 'timeout' ? '调用超时（已止损跳过）' : (last?.error || '未知原因');
+            progress.finish('canon', ci + 1, chunks.length, chunkChars, false, why);
+            errors.push(`第 ${ci + 1}/${chunks.length} 块**属性+设定遍**失败（${chunkChars} 字符，名册遍不受影响）：${why}`);
+            continue;
+        }
+        settingChunks += 1;
+        progress.finish('canon', ci + 1, chunks.length, chunkChars, true);
+        errors.push(...(r2.cleaned.shapeWarnings || []));
+        // ★leg61：属性遍交的条目**并入名册**（同名归并、不新造实体）——它们的 fields 正是这一遍的产出。
+        for (const b of (r2.cleaned.canon.settings || [])) rawSettingEnts.push(b);
+        rawCanons.push(r2.cleaned);
+    }
+    if (settingChunks || settingEarlyStop) {
+        errors.push(`属性+设定遍：成功 ${settingChunks} 块${settingEarlyStop ? ` · 已收够止损跳过 ${settingEarlyStop} 块` : ''}`);
+    }
+    // ★leg60：块收齐后合并设定（**纯函数、绝不摘要**）——并集去重 + 一句话取信息量最大那块。
+    //   首块优先的只有 `tension`/`env`（张力与四个环境档位）：首块 = 旧窗口（头 3 万）所在的那块
+    //   ⇒ 与旧行为连续（旧法只问头 3 万，env 的档位词只在那一轮定下来）。
+    const canonBase = mergeCanonChunks(rawCanons);
     // ★leg25 g：块收齐后**一次性**按「名字 ∪ 别名」去重。
     //   三件事同时做：①同一实体的别名不再长成第二条（治碎块）；
     //   ②块之间的碰撞由"自带别名者胜"裁决（不是先到先得——块顺序只是书序）；
     //   ③拼字段（kind/parent/location/fields/aliases）一律"缺什么补什么"。
-    const bookNames = dedupeRoster(rawBookNames);
+    const bookNames = dedupeRoster([...rawBookNames, ...rawSettingEnts]);
+    if (rawSettingEnts.length) {
+        errors.push(`属性+设定遍：带属性的条目 ${rawSettingEnts.length} 条（已并入名册；重名按"缺什么补什么"合，不新造实体）`);
+    }
 
     // leg23 照书办②：书声明的名号**强制并册**（模型漏了也不丢）+ 照标签定类别、照标签落上级。
     // 类别覆盖只认「书声明的势力」——修正实证的 7 例误判（蟠桃园/瑶池/太昊仙洲…被判 location）；
@@ -764,26 +1473,31 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const declaredAdded = applied.added;
     const declaredFixed = applied.fixed;
     if (declared.length) {
-        errors.push(`照书办: 书本段标签声明 ${declared.length} 个名号（补入册 ${declaredAdded} / 改判类别 ${declaredFixed}）`);
+        errors.push(`照书办: 声明面 ${declared.length} 个名号（标签 ${tagDeclared.length} / 题名 ${titled.length}；补入册 ${declaredAdded} / 改判类别 ${declaredFixed}）`);
     }
 
     // 全书级出处判定（v1 同款：块级只洗结构，出处全书级判一次；纯编造才丢）
+    // ★leg60：**"全书"要把题名面算进去**——书的正文明面上没提到某个名号、而**它就是一条条目的题名**时，
+    //   它仍然是"书里有据"的（三国实测：`控制器_张辽`/`张辽正史` 里的 `张辽` 正是以此入册的）。
+    //   这不是放宽：能进 `titledNames` 的名字，判据是"**它被作者当名字用过**（是某条条目的 key）"。
     const before = bookNames.length;
-    const finalNames = bookNames.filter((b) => src.includes(b.name));
+    const finalNames = bookNames.filter((b) => src.includes(b.name) || titledNames.has(b.name));
     if (finalNames.length < before) {
         errors.push(`书名录全书级出处校验：${before - finalNames.length} 个名号原文未出现（疑似编造，已弃）`);
     }
 
     // leg24 片1（停抄书）：关系轮/属性轮/出处细节校验三处调用点一并删除——名册定稿即为交付态。
     const canon = { ...canonBase.canon, bookEntities: finalNames };
-    if (canonR.callError && okChunks === 0 && !finalNames.length) {
+    // ★leg60：大小书合并后**没有"设定轮"这个独立失败面**了——设定与名册同一批调用同生共死，
+    //   所以判据从「canonR 失败 ∧ 一块都没成 ∧ 一个名号都没有」收成「一块都没成 ∧ 一个名号都没有」。
+    if (okChunks === 0 && !finalNames.length) {
         return {
             ok: false,
             errors: ['设定与书名录抽取全部失败（世界未动，可重试）'],
             timing: timingOf('big', progress.events.filter((e) => e.phase === 'finish').length, srcLen),
         };
     }
-    const setting = assembleSetting({ canon, tension: canonBase.tension, env: canonBase.env, legacyTension, fingerprint: fp, extractedAt: stamp });
+    const setting = assembleSetting({ canon, tension: canonBase.tension, env: canonBase.env, legacyTension, fingerprint: fp, extractedAt: stamp, compile: compileInfo });
     if (cache) cache.set(fp, { canon, tension: canonBase.tension, env: canonBase.env }, stamp);
     return {
         ok: true, cached: false, fingerprint: fp, setting, errors,
@@ -1140,10 +1854,24 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
             setIfEmpty('实力', f['实力']);
             setIfEmpty('身份', f['身份']);
             setIfEmpty('定位', f['定位']);
+            // ★★leg61（用户令「我要的是模拟的必要属性，实力，归属等等，但是现在就是有很多抽不出来」）：
+            //   **`所属` 落账**——此前这里是全仓唯一一处"抽出来了却一个都不落地"的字段：
+            //   真账实测（三本）：名册带 `所属` 233 / 482 / 141 条，实体账上 **0 / 0 / 0**。
+            //   为什么以前没被发现：它在中途被 `verifyClaimedParent` 用了一次（当 `parent` 的来源），
+            //   看着"有人用"，而**实体自身的那一格从来没写过**（上面这份名单里没有它）。
+            //   两格的分工（别混）：`parent` = 引擎梳理出的归属（带 parentSource 发票、参与势力树与折叠）；
+            //   `所属` = **书里的原话**（作者怎么写就怎么存，含「司徒王允府」这类不是势力的写法）。二者可以不一致。
+            setIfEmpty('所属', f['所属']);
         } else if (ent.kind === 'faction') {
             setIfEmpty('规模', f['规模']);
             setIfEmpty('性质', f['性质']);
             setIfEmpty('倾向', f['倾向']);
+        }
+        // ★leg61：**键开放**——名册里带的其余属性（键可自由命名，值已过出处闸）一律落账，不再按 kind 挑。
+        //   旧口径只抄上面那七个键，模型交的"境界/体质/兵力/领地/寿元"全丢（这正是"很多抽不出来"的来路）。
+        for (const k of Object.keys(f)) {
+            if (k === '所属' && ent.kind !== 'character') { setIfEmpty(k, f[k]); continue; }
+            setIfEmpty(k, f[k]);
         }
         if (Object.keys(f).length) {
             ent.fieldSource = ent.fieldSource || {};
@@ -1234,6 +1962,39 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
             e.parentSourceFrom = tagged ? 'tag' : 'sub-faction-role';
             parentVerified += 1;
         }
+    }
+    // ★★leg61：**势力树甲类边**（用户令「势力树呢，总是会有一个部门成为一个势力的情况」）。
+    //
+    // 病（真账实测）：势力→势力 parent **0/57**（三国）· 0/65（大荒）⇒ 9 个"曹/魏"全是平级兄弟。
+    //   「部门被当成势力」里有一族**名字里就带着所属**，本来可以零成本连上：
+    //     `曹魏 ⊃ 曹魏军 / 曹魏西线军 / 曹魏远征军` · `蜀汉 ⊃ 蜀汉军 / 蜀汉南征军` · `天庭 ⊃ 天庭百官`。
+    //   它们不是猜的——**子名的字符串里就写着父名**，且两端都是这本书自己抽出来的条目。
+    //
+    // 位置很要紧（这一处放在**第三遍之前**，不是随手放的）：
+    //   ① 势力的入账在第一/二遍 ⇒ 走到这里时 `byName` 里势力已经齐了；
+    //   ② 第二遍的折叠只处理"册里带 `parent` 的势力"（`foldedNames`）——**甲类边是在它之后才定下来的**
+    //      ⇒ 这里写上的 `parent` **不会**被折进 `branches`，实体照旧独立保留（那正是我们要的：
+    //      面板要能看见"曹魏军属于曹魏"，而不是把它从账上抹掉）。
+    //   ③ 必须在第三遍（角色）之前：角色的 `setParent` 会用 `resolveSeedTarget` 上溯到链顶，
+    //      势力这层先连好，角色的归属才会聚到同一个链顶（否则又是"关羽在刘备军、张飞在蜀汉"那种分裂）。
+    {
+        const { links, warnings: linkWarnings } = linkContainedFactions(ssot.entities || [], byName);
+        for (const { child, parent, names } of links) {
+            if (child.parent) continue;                      // 明述优先：已有上级（书里写的/模型抽的）一律不动
+            // 成环防线：沿父链上溯，撞到自己就不连（上界给足 = 势力数 + 2）
+            let cur = parent; let hoop = 0; let cyclic = false;
+            while (cur && hoop < (ssot.entities || []).length + 2) {
+                if (cur === child) { cyclic = true; break; }
+                cur = byName.get(String(cur.parent || '')) || null;
+                hoop += 1;
+            }
+            if (cyclic) { warnings.push(`势力树: 「${child.name}」→「${parent.name}」会成环——不连（保持平级）`); continue; }
+            child.parent = parent.name;
+            child.parentSource = '名字包含';
+            child.parentSourceFrom = `名字包含@${names.join('/')}`;
+            parentVerified += 1;
+        }
+        for (const w of linkWarnings) warnings.push(w);
     }
     // 第三遍：角色整量入账 + parent（所属势力）解析
     // leg23 修正：**册里明述为势力的上级一律认**——旧口径要求"上级实体此刻已在账"，而势力的入账在第一/二遍，
@@ -1353,6 +2114,8 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
             fieldsAttached += 1;
         }
     }
+    // ★★leg61：甲类边已在**第三遍之前**连好（见那里的长注释：位置不是随手放的）——
+    //   故这里不再重复一趟；`linkContainedFactions` 是纯函数，单独可测。
     // 名下机构落账（leg23）：写回名义势力的 organs（如 渡虚帝.organs = [界渊长城, 须弥界域]）
     let organsAttached = 0;
     for (const { owner, name: n } of organs) {
