@@ -69,7 +69,9 @@ test('K45: parent 防御——不在册/非势力/已灭 一律弃关系+警告�
 
 test('K45: 无池顶——批次 300 实体全量 seed 后仍可自由入局（seed 全量 + settle 无拒）', () => {
     const book = [];
-    for (let i = 0; i < 300; i += 1) book.push({ name: `名号${i}`, kind: i % 3 === 0 ? 'faction' : 'character' });
+    // ★leg61：名字**等长**（`名号001`）——`名号1` 是 `名号10…299` 的连续子串，会被"势力树甲类边"
+    //   正确地折进 `名号1`（实测 seeded 300 → 264）。判据是对的，夹具的编号前缀是坑。
+    for (let i = 0; i < 300; i += 1) book.push({ name: `名号${String(i).padStart(3, '0')}`, kind: i % 3 === 0 ? 'faction' : 'character' });
     const w = baseWorld();
     w.context.setting = { frozen: { canon: { bookEntities: book } }, dynamic: { tension: { polarity: '正邪', direction: '', intensity: 0.5 }, env: {} } };
     const rSeed = seedBookEntities(w);

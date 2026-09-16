@@ -510,6 +510,48 @@ export function linkContainedFactions(entities = [], byName = new Map()) {
     return { links, warnings };
 }
 
+/**
+ * ★★leg61：**势力树的落点解析**（纯函数）——把"名字里写着上级"的边，解析成**链顶名**。
+ *
+ * 与 `linkContainedFactions` 的分工（两者都要，别合并）：
+ *   · `linkContainedFactions` 只回答"**谁包含谁**"（直接父，用于展示与留痕）；
+ *   · 本函数回答"**这条边该把 parent 写成谁**"——沿已解析的祖先链上溯到**链顶**
+ *     （与 `resolveSeedTarget` 同一口径：势力链顶 / 在册角色）。
+ *
+ * ★为什么必须一次解析到链顶（实测抓出的不一致）：甲类边是"先天的"（从名字就能看出来），
+ *   它可能与书里声明的上级链**接在一起**。若只写直接父，就会出现**同一棵树两套答案**：
+ *   势力树上是 `昆仑道宫 ∈ 昆仑`，而角色的归属仍写成 `昆仑道宫`（`resolveSeedTarget` 上溯时
+ *   看不到"后来才写上的"那条边）。真机端到端判据实测：改前 `玄一道祖.parent = 昆仑道宫`，改后 = `昆仑`。
+ *
+ * @returns `Map<childName, {parent: 链顶名, parentSource: '名字包含'|'照书办', parentSourceFrom: 证据}>`
+ */
+export function computeContainmentParents(book = []) {
+    const items = (Array.isArray(book) ? book : []).filter((b) => b && typeof b.name === 'string' && b.name.trim());
+    const byName = new Map(items.map((b) => [b.name, b]));
+    const resolved = new Map();
+    const { links } = linkContainedFactions(items.filter((b) => b.kind === 'faction'), byName);
+    for (const { child, parent } of links) {
+        // 沿"已解析的祖先链"上溯：甲类边是一批一批定的，顺序不定 ⇒ 用已解析的那条当参照，
+        //   遇到还没解析的就退回**直接父**（下次再来也不会错，只是浅一层）。
+        let cur = parent;
+        const guard = new Set();
+        while (cur && !guard.has(cur.name)) {
+            guard.add(cur.name);
+            const anc = resolved.get(cur.name);
+            if (!anc) break;
+            const next = byName.get(anc.parent);
+            if (!next || next === cur) break;
+            cur = next;
+        }
+        resolved.set(child.name, {
+            parent: cur.name,
+            parentSource: parent.parent ? '照书办' : '名字包含',   // 直接父本身有书里声明的上级 ⇒ 这条边的来路是"书"
+            parentSourceFrom: `名字包含@${parent.name}`,
+        });
+    }
+    return resolved;
+}
+
 // 照书抄的属性字段键表（第二十五棒 e 引入；**leg61 起由"白名单"改为"常用键"**）。
 //   character：所属（= 所属势力，兼作 parent 的兜底来源）/ 身份 / 定位 / 实力（档位原话）
 //   faction  ：性质 / 倾向 / 规模（势力自己的规模原话——**不是**角色档位）
@@ -1739,6 +1781,19 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
 
     // 名册索引（sanitize 已按 name 去重）
     const idx = new Map(book.map((b) => [b.name, b]));
+    // ★★leg61：**势力树甲类边要在建索引之前定下来**（这里就是那一处——位置不是随手放的）。
+    //   为什么必须这么早：`idx` 里的条目对象**就是**后面写进账的那批对象，`resolveSeedTarget` 沿
+    //   `idx.get(name).parent` 上溯求链顶。甲类边若晚一步写，就会出现"势力树上是
+    //   `昆仑道宫 ∈ 昆仑`，而角色的归属仍指向 `昆仑道宫`"——**同一棵树两套答案**（本仓最贵的那类病）。
+    //   实测（端到端判据抓出）：改前 `玄一道祖.parent = 昆仑道宫`，改后 = `昆仑`。
+    const containmentLinks = computeContainmentParents(book);
+    for (const [childName, edge] of containmentLinks) {
+        const item = idx.get(childName);
+        if (!item || item.parent) continue;        // 明述优先：书里/模型已经给了上级的一律不动
+        item.parent = edge.parent;
+        item.parentSource = '名字包含';
+        item.parentSourceFrom = `名字包含@${edge.parent}`;
+    }
     const byName = new Map();                   // 已入账实体名 → 实体
     for (const e of ssot.entities || []) byName.set(e.name, e);
 
@@ -2122,8 +2177,8 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
             fieldsAttached += 1;
         }
     }
-    // ★★leg61：甲类边已在**第三遍之前**连好（见那里的长注释：位置不是随手放的）——
-    //   故这里不再重复一趟；`linkContainedFactions` 是纯函数，单独可测。
+    // ★★leg61：**势力树甲类边已在建索引之前连好**（见 `idx` 上方那一处的长注释：
+    //   位置不是随手放的——晚一步写就会出现"同一棵树两套答案"）。这里不重复一趟。
     // 名下机构落账（leg23）：写回名义势力的 organs（如 渡虚帝.organs = [界渊长城, 须弥界域]）
     let organsAttached = 0;
     for (const { owner, name: n } of organs) {

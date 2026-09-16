@@ -190,7 +190,35 @@ test('★leg61 键表仍登记七个常用键（旧账形态不动，开放的�
     assert.deepEqual(BOOK_FIELD_KEYS.location, []);
 });
 
-// —— ④ 势力树甲类边（"部门被当成势力"的那一族）——
+test('★leg61 势力树端到端：`seedBookEntities` 真入账时把"名字里写着上级"的边连上', () => {
+    // 这一条锁的是**接线**（纯函数测过了，但纯函数绿 ≠ 真入账路径上有人调它——
+    //   leg60 的别名通道就是这么绿的：机制在、线断了）。
+    const book = [
+        { name: '昆仑', kind: 'faction' },
+        { name: '昆仑道宫', kind: 'faction' },
+        { name: '万法阁', kind: 'faction' },        // 名字里没写上级 ⇒ 一个字都不许连
+        { name: '玄一道祖', kind: 'character', fields: { 所属: '昆仑道宫' } },
+    ];
+    const w = { context: { tension: 0.5, positions: ['未明'], setting: { frozen: { canon: { bookEntities: book } } } }, entities: [], weights: {} };
+    const r = seedBookEntities(w);
+    const byName = new Map(w.entities.map((e) => [e.name, e]));
+    // ★甲类边会**触发既有折叠**：这条边让"曹魏军式"的条目从独立棋子变成链顶的 `branches` 成员
+    //   （那正是"部门别当势力"想要的效果——它不再是一个平级棋手，而是父势力名下的一支）。
+    //   实测（本夹具）：`昆仑道宫` 折进 `昆仑.branches`，`folded = 1`。
+    assert.equal(r.folded, 1, '甲类边把子势力折进父的 branches（部门不再是平级棋手）');
+    const kunlun = byName.get('昆仑');
+    assert.ok(kunlun.branches.includes('昆仑道宫'), '★真入账路径上连上了（纯函数 + 接线两处都对才可能）');
+    assert.ok(!byName.has('昆仑道宫'), '已折叠 ⇒ 不再是独立实体（旧法：0/57 边、9 个"曹/魏"平级并列）');
+    assert.equal(byName.get('万法阁').parent, undefined, '名字里没有上级的势力不许被猜着连边');
+    // ★连锁反应（这一条是端到端判据抓出来的不一致）：角色的 parent 上溯到**链顶**
+    //   —— 若甲类边晚一步写，这里会是 `昆仑道宫`，于是"势力树上是昆仑 ⊃ 昆仑道宫、角色归属却指昆仑道宫"
+    //   （同一棵树两套答案）。
+    assert.equal(byName.get('玄一道祖').parent, '昆仑', '势力先连好 ⇒ 角色归属上溯到链顶');
+    assert.equal(byName.get('玄一道祖')['所属'], '昆仑道宫', '而 `所属` 照旧存书里的原话（两格分工）');
+    assert.ok(r.parentVerified >= 1, `计数如实上报（实际 ${r.parentVerified}）`);
+});
+
+// —— ⑤ 起根候选池（另见 test/seed-pool.test.js）——
 test('★leg61 势力树甲类边：名字里写着上级的连边 · 多候选取最长 ⇒ 直接上级是"最近的那一层"', () => {
     const mk = (names) => names.map((n) => ({ id: `f-${n}`, kind: 'faction', name: n }));
     const ents = mk(['曹魏', '曹魏军', '曹魏西线军', '曹魏远征军', '蜀汉军', '关羽军', '袁绍军']);

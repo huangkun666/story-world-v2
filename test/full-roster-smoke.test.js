@@ -12,10 +12,14 @@ import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 
 // 全量棋盘世界：345 名号（117 势力/228 角色，含 13 location 与 8 个隶属子势力——实机量级同构）
+// ★leg61：势力名**必须等长**（`势力001` 而不是 `势力1`）——否则 `势力1` 是 `势力10`…`势力116`
+//   的**连续子串**，会被新上线的"势力树甲类边"判据（名字包含 + 两端在册 + 同类别）正确地折进 `势力1`，
+//   于是 seeded 从 346 变成 239（实测抓出：差 107 = 被折的那一批）。
+//   **判据是对的、夹具是坑**：真书里的势力名不会有这种"编号前缀"关系（这一版是造出来的量级夹具）。
 function fullRosterWorld() {
     const book = [];
     for (let i = 0; i < 228; i += 1) book.push({ name: `角色${i}`, kind: 'character' });
-    for (let i = 0; i < 117; i += 1) book.push({ name: `势力${i}`, kind: 'faction' });
+    for (let i = 0; i < 117; i += 1) book.push({ name: `势力${String(i).padStart(3, '0')}`, kind: 'faction' });
     for (let i = 0; i < 13; i += 1) book.push({ name: `地界${i}`, kind: 'location' });
     book.push({ name: '总盟', kind: 'faction' }, { name: '分堂一', kind: 'faction', parent: '总盟' }, { name: '分堂二', kind: 'faction', parent: '总盟' });
     const w = {
