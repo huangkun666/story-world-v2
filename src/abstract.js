@@ -527,6 +527,12 @@ export const BOOK_FIELD_KEYS = {
 };
 export const BOOK_FIELD_MAX = 30;          // 常用键的旧上限（不改，保持既有账面形态）
 export const BOOK_FIELD_MAX_OPEN = 60;     // leg61 表外键：能装一句话，但仍不许写成散文
+// ★leg61：**`定位` 的上限单独放宽**（实测依据）：真机验收里 `定位` 有 211/339 条，其中不少是
+//   `定位: 金刚霸体，憨厚神力`（26 字）/`定位: 圣心悟性机关天才` 这种"体质+性情"的组合原话——
+//   30 字会把长的那一批从中间砍掉，而这一栏恰恰是模型最没处放、最常被塞东西的一格。
+//   ★放宽上限**不解决"串栏"**（那是提示词口径的事）；它只保证"不因为截断而丢原文"。
+export const BOOK_FIELD_MAX_WIDE = 60;
+const WIDE_FIELD_KEYS = new Set(['定位', '身份']);   // 这两个键真书里常写成一句话
 export const BOOK_FIELD_TOP = 24;          // leg61：每条实体的属性项数上限（防模型灌一长串撑裂账本）
 export const BOOK_FIELD_EVIDENCE = true;   // leg61：出处闸总开关（判据要能单独测，故做成常量）
 
@@ -622,8 +628,10 @@ export function sanitizeBookFields(rawFields, kind, { sourceText = '' } = {}) {
         const v = val.trim();
         if (!v || v === key) return;
         if (isKnown) {
-            out[key] = v.length > BOOK_FIELD_MAX ? v.slice(0, BOOK_FIELD_MAX) : v;
-            if (v.length > BOOK_FIELD_MAX) truncated += 1;
+            // 常用键：`定位`/`身份` 走宽档（真书里常是一句话），其余保持旧上限 30
+            const cap = WIDE_FIELD_KEYS.has(key) ? BOOK_FIELD_MAX_WIDE : BOOK_FIELD_MAX;
+            out[key] = v.length > cap ? v.slice(0, cap) : v;
+            if (v.length > cap) truncated += 1;
             return;
         }
         if (!FIELD_KEY_RE.test(key)) return;               // 键名形态闸（挡占位符与整句话当键）

@@ -23,7 +23,9 @@ import {
     assembleSetting,
     linkContainedFactions,
     BOOK_FIELD_KEYS,
+    BOOK_FIELD_MAX,
     BOOK_FIELD_MAX_OPEN,
+    BOOK_FIELD_MAX_WIDE,
 } from '../src/abstract.js';
 
 // —— ① 出处闸（纯函数）——
@@ -56,6 +58,13 @@ test('★leg61 属性净化：常用键照旧 · 表外键"值有出处才收" �
     const long = '甲'.repeat(BOOK_FIELD_MAX_OPEN + 20);
     const d = sanitizeBookFields({ 长属性: long }, 'character', { sourceText: long });
     assert.equal(d.fields['长属性'].length, BOOK_FIELD_MAX_OPEN, `表外键上限 ${BOOK_FIELD_MAX_OPEN} 字（截断而非丢弃）`);
+    // ★leg61：`定位`/`身份` 走**宽档**（真机验收发现这一栏常是"体质+性情"一句话，30 字会砍掉长的那批）
+    const wide = '甲'.repeat(BOOK_FIELD_MAX_WIDE + 10);
+    const e1 = sanitizeBookFields({ 定位: wide }, 'character', { sourceText: src });
+    assert.equal(e1.fields['定位'].length, BOOK_FIELD_MAX_WIDE, `定位上限放宽到 ${BOOK_FIELD_MAX_WIDE} 字`);
+    assert.equal(e1.truncated, 1, '截断要计数（调用方汇总 · 不是静默）');
+    const e2 = sanitizeBookFields({ 性质: wide }, 'faction', { sourceText: src });
+    assert.equal(e2.fields['性质'].length, BOOK_FIELD_MAX, '其余常用键仍是旧上限 30（账面形态不变）');
 });
 
 test('★leg61 净化层：`entities`（属性遍）并入 canon.settings，没属性的条目不收', () => {
