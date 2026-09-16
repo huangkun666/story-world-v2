@@ -987,7 +987,12 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt) {
         } catch (err) {
             lastErr = err;
             // leg27：**超时与瞬时错必须分开**（旧法一律并成一句"抽取调用失败"⇒ 白烧 62 分钟/块，见 transport-http 文件头）
-            //   `timeout: true` 是给 `tryRosterChunk` 的判据：超时不许对半拆、不许重试。
+            //   `timeout: true` 是给 `tryRosterChunk` 的判据：超时不许对半拆、不许重试——**这条对重试同样成立**。
+            // ★★leg61 修（真机实测抓出，代价很大）：原判据只挡了"瞬时错类的重试"，**没挡"超时时的重试"** ⇒
+            //   超时后先重试一次（**又等满一个 600 秒**），再交给 `tryRosterChunk` 拆半 ⇒ 每块白烧 10 分钟起。
+            //   实测后果：三国（7 块）跑了 2.5 小时仍未收尾。
+            //   定稿：**超时 = 立刻交给拆半逻辑**（拆小才是对症的降级：输出长度随块变小而变短，
+            //   而"再问一次同样大的块"只是把同一个超时重演一遍）。
             if (attempt < EXTRACT_RETRY_TIMES && isTransientCallError(err)) {
                 await sleep(EXTRACT_RETRY_WAIT_MS * attempt);
                 continue;
