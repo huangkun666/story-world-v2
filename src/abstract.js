@@ -114,11 +114,17 @@ export function buildRosterPrompt(sourceText, declared = []) {
     const lines = [
         '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实与名号及其属性，不创作、不润色、不补全、不重排。',
         '原文没有提到的字段一律省略；档位名、法令、人名、措辞必须来自原文；数量没有任何限制，取全不取量。',
-        '★**这一段（本块）里有什么就抽什么**：力量谱系 / 法则 / 社会格局 / 力量体系 / 史略 / 世情，与名册（名号 + 类别 + 属性原话）**在同一份 JSON 里一起交**；原文没有的那一项就省略。',
+        '★**这一段（本块）里有什么就抽什么**：刻度 / 法则 / 社会格局 / 力量体系 / 史略 / 世情，与名册（名号 + 类别 + 属性原话）**在同一份 JSON 里一起交**；原文没有的那一项就省略。',
         '（intensity 不许输出——它由引擎计算；原文没有的字段一律省略，不许补全）',
+        // ★★leg62：**刻度走概念表**（`刻度`），输出必须紧凑——`powerScale`/`dims` 那两列由引擎**派生**，
+        //   不许模型再交一遍（交两遍 = 同一档存两份 = 迟早漂移，且白烧输出预算：大荒实测 103 档）。
+        '★★**刻度（书里的尺子）一律交进 `刻度` 字段**（模板在下面那段 JSON 里；**紧凑：不要缩进、不要换行**）。',
+        '  · **不要**另外交 `powerScale` / `dims`——那两列由引擎从 `刻度` 派生，交重了只会白烧输出预算、还会导致同一档存两份。',
+        ...SCALE_RULES,
         '输出严格 JSON（形状如下；可省字段不写 null）：',
         JSON.stringify(
             {
+                刻度: SCALE_SHAPE_OBJ.刻度,
                 ...CANON_SHAPE,
                 bookEntities: [
                     { name: '势力/角色/地名的名号（原文名）', aliases: ['同一实体的其他叫法（原文名，可省）'], kind: 'faction|character|location（可省）' },
@@ -756,6 +762,268 @@ function mergeDeclared(tags = [], titled = []) {
     return out;
 }
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★leg62（用户令「粒度不要太细了，换成概念表怎么样」）：**刻度 · 概念表**。
+//
+// 病（用户截图 · 实教账实测，逐条对得上）：
+//   面板「力量谱系（5 档）」= `S~E级 / A班 / B班 / C班 / D班` —— 其中只有 `S~E级` 是把尺，
+//     `A班~D班` 是**班级分配制度**（`A班=精英最高资源保障`/`D班=底层资源最少多隐藏实力`）；
+//   面板「维度与刻度（14 项）」= 5 个基础属性（同一把 `S~E级`）+ 5 个**合成分**（`身体/思考/社会/贡献/综合`）
+//     + 2 个**公式**（`S系统评分`=`学力/智力/判断力/体育/团队5项S~E级`、`S点数`=`CP班级点数+PP个人点数`）。
+//   ⇒ 三处错位**同一个根**：**值没有"它是什么类"的字段**。
+//
+// 形状（**表头承载标签，条目不再逐条挂标签**——这是"粗粒度"的落点）：
+//   `{ 名, 用途, 档位: [{档,注}], 子表: [{名,档位}], 维度: [{名,范围}] }`
+//
+// 为什么**不**用交接 §3.2 的原提案（给每条档位挂 `axis`/`usage`/`kind`）——两条实测依据：
+//   ① 细：大荒 103 档 ⇒ 309 个字段；概念表只要 51 个表头（真机实测大荒 = 51 张表 / 311 档）；
+//   ② 判不出：机械判据分不出**条目级**的轴——实教 5 档纯形态聚类只得 **1 族**；
+//      三国 `T0级_天下无双`/`T0级_绝世奇才`/`T0级_王佐之才` 是**三个不同轴、同一个记号前缀**。
+//
+// 纪律（三条都真机实测过，见 `docs/measure-leg62-scales-concept-table.md`）：
+//   ① `档`/`注` **照抄原文**：档位名逐字必中（两次真机实测 **0 条落空**）⇒ 这道闸成立，见 `sanitizeScales` 的出处闸；
+//   ② `名` = 这把尺叫什么，**允许是描述性标题**（实测 2/26 不在原文——原文没给标题）。
+//      ★不许把"必须在原文里"加到 `名` 上：那会把"这把尺叫什么"逼成从原文捡词，反而丢信息。
+//   ③ `用途` = **自由文字**，不设枚举：实测三个枚举（评级/分配/换算）**盖不住**——
+//      大荒还出现「叙事尺度」（`T1-T4 低武`）·「资质潜力」·「入阶条件」。开得越多越是这几本书的方言。
+//
+// ★与 `tierKeyOf`/`tierAxisOf` 的 `axis` **不是一回事**：那是 leg61 的**档位去重键**（同名不同写法归一），
+//   语义完全不同，故本结构一个 `axis` 字段都不用，免得两套语义缠在一起。
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+export const SCALE_NAME_MAX = 40;      // 表名上限（"这把尺叫什么"，可以是短语，比档位名宽）
+export const SCALE_USE_MAX = 60;       // 用途上限（自由文字）
+export const SCALE_TIER_TOP = 400;     // 单张表的档位数上限（防模型灌爆；大荒最大一张 64 档）
+export const SCALE_TABLE_TOP = 200;    // 概念表张数上限（大荒实测 51 张）
+
+/** 紧凑档位串 → `{档, 注}`：形如 `"感气境|眉心生光…"`（用户令「紧凑序列化」；真机实测输出短 44%）。 */
+export function parseScaleTier(v) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const t = String(v.档 ?? v.level ?? '').trim();
+        return t ? { 档: t, 注: String(v.注 ?? v.note ?? '').trim() } : null;
+    }
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    if (!s) return null;
+    // 分隔符：`|` 为主（提示词指定）；全角 `｜` 一并吃（模型偶尔吐全角）。
+    //   ⚠只在**第一个**分隔符处切：注里自己带 `|` 时不该被当成分隔符。
+    const i = s.search(/[|｜]/);
+    if (i < 0) return { 档: s, 注: '' };
+    const head = s.slice(0, i).trim();
+    const tail = s.slice(i + 1).trim();
+    return head ? { 档: head, 注: tail } : null;
+}
+
+/** 档位数组净化（`[{档,注}]` / `["档|注"]` 两形状都收）。 */
+function sanitizeTierList(rawList, errors, where) {
+    const out = [];
+    const seen = new Set();
+    for (const raw of (Array.isArray(rawList) ? rawList : [])) {
+        const t = parseScaleTier(raw);
+        if (!t) continue;
+        const level = t.档.length > BOOK_DIM_MAX ? t.档.slice(0, BOOK_DIM_MAX) : t.档;
+        if (seen.has(level)) continue;              // 同名档位只留第一条（原文里的顺序第一条）
+        seen.add(level);
+        const item = { 档: level };
+        if (t.注) item.注 = t.注;
+        out.push(item);
+        if (out.length >= SCALE_TIER_TOP) { errors.push(`${where} 档位超过 ${SCALE_TIER_TOP} 条（已截）`); break; }
+    }
+    return out;
+}
+
+/**
+ * 刻度/概念表净化（纯函数 · 导出以便单测）。
+ * 纪律：`名` 必填（缺则整张表弃并留痕）· `用途` 可选 · 空表弃 ·
+ *   同名表**合并**（块间同表不许拆成两张——真机实测同一把尺散布在书里几处）·
+ *   `档` 逐字过**出处闸**（对不上原文的档位丢并留痕，与 `sanitizeBookFields` 同尺）。
+ * ★`名` **不过**出处闸（允许描述性标题，见文件头纪律②）。
+ */
+export function sanitizeScales(rawScales, { sourceText = '' } = {}, errors = []) {
+    if (rawScales === undefined) return [];
+    if (!Array.isArray(rawScales)) { errors.push('刻度 非数组（已弃）'); return []; }
+    const src = String(sourceText || '').replace(/\s+/g, '');
+    const byName = new Map();                 // 表名 → 表（同名合并）
+    const order = [];
+    for (const raw of rawScales) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { errors.push('刻度 含非对象项（已弃）'); continue; }
+        const name = String(raw.名 ?? raw.轴 ?? '').trim();       // `轴` 兼容真机试算那版形状
+        if (!name) { errors.push('刻度 项缺 名（已弃）'); continue; }
+        const cutName = name.length > SCALE_NAME_MAX ? name.slice(0, SCALE_NAME_MAX) : name;
+        let table = byName.get(cutName);
+        if (!table) {
+            table = { 名: cutName };
+            const use = String(raw.用途 ?? '').trim();
+            if (use) table.用途 = use.length > SCALE_USE_MAX ? use.slice(0, SCALE_USE_MAX) : use;
+            byName.set(cutName, table);
+            order.push(cutName);
+        } else if (!table.用途) {
+            const use = String(raw.用途 ?? '').trim();
+            if (use) table.用途 = use.length > SCALE_USE_MAX ? use.slice(0, SCALE_USE_MAX) : use;
+        }
+        // 档位（含 `档`/`档位`/`档位表` 三种叫法，都吃）
+        let tiers = sanitizeTierList(raw.档位 ?? raw.档 ?? raw.档位表, errors, `刻度《${cutName}》`);
+        // ★出处闸：档位名必须能在本书原文里找到（逐字）。
+        //   ★为什么这条闸能立住：两次真机实测**0 条落空**（大荒 143+187 档全中、实教 9 档全中）。
+        //   为什么必须有：模型在"这把尺"上最容易做的是**补全一个它认识的档位**（书里没写）。
+        if (src) {
+            const kept = [];
+            for (const t of tiers) {
+                if (src.includes(t.档.replace(/\s+/g, ''))) kept.push(t);
+                else errors.push(`刻度《${cutName}》档位「${t.档}」原文查不到（已弃）`);
+            }
+            tiers = kept;
+        }
+        if (tiers.length) {
+            table.档位 = table.档位 || [];
+            const have = new Set(table.档位.map((x) => x.档));
+            for (const t of tiers) if (!have.has(t.档)) { have.add(t.档); table.档位.push(t); }
+        }
+        // 子表（用户拍「当子表」：对"大境界"的细分不另立一张表）
+        for (const sub of (Array.isArray(raw.子表) ? raw.子表 : [])) {
+            if (!sub || typeof sub !== 'object') continue;
+            const sn = String(sub.名 ?? sub.轴 ?? '').trim();
+            if (!sn) continue;
+            const cutSn = sn.length > SCALE_NAME_MAX ? sn.slice(0, SCALE_NAME_MAX) : sn;
+            let st = (table.子表 || []).find((x) => x.名 === cutSn);
+            if (!st) { st = { 名: cutSn }; table.子表 = table.子表 || []; table.子表.push(st); }
+            const stiers = sanitizeTierList(sub.档位 ?? sub.档, errors, `刻度《${cutName}》子表《${cutSn}》`);
+            const keep = src ? stiers.filter((t) => src.includes(t.档.replace(/\s+/g, ''))) : stiers;
+            if (keep.length) st.档位 = (st.档位 || []).concat(keep.filter((t) => !(st.档位 || []).some((x) => x.档 === t.档)));
+        }
+        // 维度那一半：某些刻度自身就是一把尺（实教 `S~E级` 下的 5 个属性维度）
+        for (const d of (Array.isArray(raw.维度) ? raw.维度 : [])) {
+            if (!d || typeof d !== 'object') continue;
+            const dn = String(d.名 ?? d.name ?? '').trim();
+            if (!dn) continue;
+            const item = { 名: dn.length > BOOK_DIM_MAX ? dn.slice(0, BOOK_DIM_MAX) : dn };
+            const rg = String(d.范围 ?? d.range ?? '').trim();
+            if (rg) item.范围 = rg.length > BOOK_DIM_MAX ? rg.slice(0, BOOK_DIM_MAX) : rg;
+            table.维度 = table.维度 || [];
+            if (!table.维度.some((x) => x.名 === item.名)) table.维度.push(item);
+        }
+    }
+    const out = order.map((n) => byName.get(n)).filter((t) => t.档位?.length || t.子表?.length || t.维度?.length);
+    if (out.length > SCALE_TABLE_TOP) { errors.push(`刻度 表数超过 ${SCALE_TABLE_TOP} 张（已截）`); return out.slice(0, SCALE_TABLE_TOP); }
+    return out;
+}
+
+/**
+ * 概念表 → 旧两列（`powerScale` / `dims`）。
+ *   为什么还产出旧两列：下游（`dedupeTiers` 的校验词、`buildScaleAnchor`、`render` 的其余栏、
+ *   `deriveFieldFromTier` 的校验词）都读它们 ⇒ **一拍两散会让既有 834 条判据全红**。
+ *   ⇒ 口径定为：**概念表是源，旧两列是派生视图**，一处生产、两处消费（本仓"别写两份"的纪律）。
+ */
+export function scalesToFlat(scales) {
+    const powerScale = [];
+    const dims = [];
+    const seenTier = new Set();
+    const seenDim = new Set();
+    for (const s of (Array.isArray(scales) ? scales : [])) {
+        for (const t of (s.档位 || []).concat(...(s.子表 || []).map((x) => x.档位 || []))) {
+            const level = String(t?.档 ?? '').trim();
+            if (!level || seenTier.has(level)) continue;
+            seenTier.add(level);
+            powerScale.push({ level, note: String(t?.注 ?? '').trim() || level });
+        }
+        for (const d of (s.维度 || [])) {
+            const name = String(d?.名 ?? '').trim();
+            if (!name || seenDim.has(name)) continue;
+            seenDim.add(name);
+            const item = { name };
+            if (d?.范围) item.range = String(d.范围).trim();
+            dims.push(item);
+        }
+    }
+    return { powerScale, dims };
+}
+
+/**
+ * 旧两列 → 概念表（**零迁移**：老账打开面板就能看到分组，不重抽、不写盘）。
+ * 判据（纯函数 · 零词表）：按 `dims` 的 `range` 与 `powerScale` 的档位名**互相回指**归组——
+ *   `学力` 的 range = `S~E级`，而 `S~E级` 正是一个档位名 ⇒ 它们属于同一把尺。
+ *   认不出的各自成表（`名` = `维度` / `档位`），**绝不猜**（"空就是空"）。
+ */
+export function scalesFromFlat(canon) {
+    const c = canon && typeof canon === 'object' ? canon : {};
+    const ps = Array.isArray(c.powerScale) ? c.powerScale : [];
+    const dims = Array.isArray(c.dims) ? c.dims : [];
+    const norm = (s) => String(s ?? '').replace(/\s+/g, '');
+    const tables = [];
+    const byName = new Map();
+    const at = (name) => {
+        if (byName.has(name)) return byName.get(name);
+        const t = { 名: name };
+        byName.set(name, t);
+        tables.push(t);
+        return t;
+    };
+    // ① 先把每个档位挂到"以自己命名的表"上
+    for (const p of ps) {
+        const level = String(p?.level ?? '').trim();
+        if (!level) continue;
+        const t = at(level);
+        t.档位 = t.档位 || [];
+        t.档位.push({ 档: level, ...(String(p?.note ?? '').trim() ? { 注: String(p.note).trim() } : {}) });
+    }
+    // ② 维度：range 能对上某个档位名（回指）⇒ 并进那张表；否则自成一张（名 = 该维度名）
+    for (const d of dims) {
+        const name = String(d?.name ?? '').trim();
+        if (!name) continue;
+        const range = String(d?.range ?? '').trim();
+        const host = range && ps.find((p) => norm(p?.level) === norm(range));
+        const t = host ? at(String(host.level).trim()) : at(name);
+        t.维度 = t.维度 || [];
+        t.维度.push({ 名: name, ...(range ? { 范围: range } : {}) });
+    }
+    // ③ 一张表里既没档位也没维度 ⇒ 丢（空表不画）
+    return tables.filter((t) => t.档位?.length || t.维度?.length);
+}
+
+/**
+ * ★用户令「独立的抽取设定的入口」用的：**自成一体**的概念表提示词（不掺名册、不掺张力/环境）。
+ *   与生产两遍抽取的关系：生产那份（`buildRosterPrompt`）是"名册+设定一起交"；
+ *   这份是**只抽设定**，好处是快（不必等名册那几遍）且输出全给概念表用。
+ *   ★形状口径与生产**逐字同一份**（`SCALE_SHAPE_JSON`）——两处各写一份形状，本仓吃过多次亏。
+ */
+export function buildScalePrompt(sourceText) {
+    return [
+        '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实，不创作、不润色、不补全、不重排。',
+        '任务：把这本书里**所有的"刻度/尺子"**抽出来，**一把尺 = 一张表**。',
+        ...SCALE_RULES,
+        '输出严格 JSON（紧凑：不要缩进、不要换行美化），形状如下：',
+        SCALE_SHAPE_JSON,
+        '———— 设定原文如下 ————',
+        sourceText,
+    ].join('\n');
+}
+
+// 概念表提示词的**唯一一份口径**（生产 `buildRosterPrompt` 与直抽 `buildScalePrompt` 共用）。
+//   ★为什么共用：两处各写一份形状 ⇒ 改一处忘一处 ⇒ 模型按新形状交、净化层按旧形状收，字段静默消失
+//     （本仓 leg60 为这条吃过亏，见 `CANON_SHAPE` 头注）。
+export const SCALE_RULES = [
+    '★什么叫"一张表"：**同一套等级记号、用来描述同一个概念**的一组档位。',
+    '  · 不同的概念**必须分开成不同的表**——例如"衡量一个人强弱"的尺，与"决定班级/资源怎么分"的制度，哪怕它们出现在同一段里，也是**两张表**。',
+    '  · 同一把尺分散在书里几处写，**合成一张表**（不许因为出处不同就拆成两张）。',
+    '  · 对"大境界"的细分（第一阶/第二阶…）**不另立一张表**，放进它所细分的那个刻度里，写在 `子表` 里。',
+    '  · `档` = 档位名（**原文逐字**，不许改写、不许翻译、不许补全；写不进去就省，不要凑）；`注` = 这一档意味着什么（**原文措辞**，可省）。',
+    '  · `名` = 这张表叫什么（**照抄原文的表头/标题**；原文没给标题就用原文里最贴近的说法）。',
+    '  · `用途` = 这张尺在书里**用来干什么**（用原文的说法，如：分级 / 资源分配 / 换算 / 入阶条件 …；自由写，不要凑词）。',
+    '  · 如果某个刻度**本身是一把尺、底下挂着一组属性**（例：同一套等级下并列若干项属性），把这些属性写进那张表的 `维度`。',
+];
+// 紧凑形状（用户令「紧凑序列化」；真机实测：@原预算下就 finish=stop，且表/档/表名准度三项全胜）。
+//   ★两处（生产 `buildRosterPrompt` 与直抽 `buildScalePrompt`）**共用这一个对象**——
+//     各写一份 ⇒ 改一处忘一处 ⇒ 模型按新形状交、净化层按旧形状收（本仓吃过多次）。
+export const SCALE_SHAPE_OBJ = {
+    刻度: [{
+        名: '这张表叫什么（原文表头）',
+        用途: '这张尺用来干什么（原文说法）',
+        档位: ['档位名|该档意味着什么（都照抄原文；| 后没有就省）'],
+        子表: [{ 名: '对上面某个档位的细分尺（原文有才写）', 档位: ['档位名|说明'] }],
+        维度: [{ 名: '属性/维度名（原文）', 范围: '取值范围（原文）' }],
+    }],
+};
+export const SCALE_SHAPE_JSON = JSON.stringify(SCALE_SHAPE_OBJ);
+
 export function sanitizeCanon(raw, { sourceText = '' } = {}) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         return { ok: false, errors: ['抽取输出非对象（真形状净化：不可靠即拒绝）'] };
@@ -767,7 +1035,20 @@ export function sanitizeCanon(raw, { sourceText = '' } = {}) {
     //   "有没有这个键"在下游分不开——`present` 就是那条分界线（属性遍的止损判据读它）。
     const present = [];
 
-    if (Array.isArray(raw.powerScale)) {
+    // ★★★leg62：**概念表（刻度）优先**——它一旦交了就当源，旧两列由它派生（见 `scalesToFlat`）。
+    //   为什么"派生"而不是"两处各收一份"：两处各收 ⇒ 同一个档位在两张表里各存一份 ⇒ 迟早漂移，
+    //   而下游（`dedupeTiers` 校验词 / `buildScaleAnchor` / 面板其余栏）读的是旧两列，
+    //   ⇒ 漂移会以"面板上和包里不一样"这种最难查的形态出现。**一处生产、两处消费**。
+    const scales = sanitizeScales(raw.刻度, { sourceText }, errors);
+    if (scales.length) {
+        canon.刻度 = scales;
+        present.push('刻度');
+        const flat = scalesToFlat(scales);
+        canon.powerScale = flat.powerScale;
+        canon.dims = flat.dims;
+    }
+
+    if (!scales.length && Array.isArray(raw.powerScale)) {
         for (const it of raw.powerScale) {
             if (!it || typeof it !== 'object') { errors.push('powerScale 含非对象项（已弃）'); continue; }
             const level = String(it.level ?? '').trim();
@@ -775,12 +1056,15 @@ export function sanitizeCanon(raw, { sourceText = '' } = {}) {
             if (!level || !note) { errors.push('powerScale 项缺 level/note（已弃）'); continue; }
             canon.powerScale.push({ level, note });
         }
-    } else if (raw.powerScale !== undefined) errors.push('powerScale 非数组（已弃）');
+    } else if (!scales.length && raw.powerScale !== undefined) errors.push('powerScale 非数组（已弃）');
 
     // ★leg60：维度与刻度（`[{name, range}]`）——**照抄原文**，同名去重，逐项 ≤ BOOK_DIM_MAX 字。
     //   纪律与 `sanitizeBookFields` 同尺：只收字符串（数值/对象不是"维度名"）· trim · 空串丢 ·
     //   `range` 原文没写就**不写这个键**（"键在值为空"那条口径的反面：没有就是没有，不落占位）。
-    if (raw.dims === undefined) {
+    //   ★leg62：概念表已交时这一段**整段跳过**（dims 已由 `scalesToFlat` 派生，再收一遍会变成第二份真相）。
+    if (scales.length) {
+        // 概念表已把 dims 派生了（含"维度挂在哪把尺上"这层信息，比平铺的 dims 更全）
+    } else if (raw.dims === undefined) {
         // 省略合法（本书没有成文的维度/刻度）
     } else if (Array.isArray(raw.dims)) {
         const seenDim = new Set();
@@ -922,7 +1206,8 @@ export function sanitizeCanon(raw, { sourceText = '' } = {}) {
     // leg24 片5（留痕收口）：净化层的坏项（非法 env/坏 bookEntities 项等）**上报到调用方的 errors**——
     // 旧法只在 callOnce 内部消化，`ok` 时静默丢弃：账面上少了东西却没有任何提示（"每条变更留痕"的反面）。
     // ★leg61：登记"模型真的交了哪几项"（见 `present` 的声明处：净化层预置空值 ⇒ 下游分不开有无）
-    for (const k of ['powerScale', 'dims', 'rules', 'society', 'techOrMagic', 'historyNotes', 'situation']) {
+    // ★leg62：`刻度` 也算设定遍（它是概念表；属性遍只问 fields，不会交它）。
+    for (const k of ['powerScale', 'dims', '刻度', 'rules', 'society', 'techOrMagic', 'historyNotes', 'situation']) {
         if (raw[k] !== undefined) present.push('setting');
     }
     if (raw.entities !== undefined) present.push('attributes');
@@ -1378,6 +1663,42 @@ export function mergeCanonChunks(parts = []) {
     const historyNotes = [];
     const bookEntities = [];
     const settings = [];                    // ★leg61：属性+设定遍的条目（同名归并、不新造实体；见 sanitizeCanon）
+    // ★★leg62：**概念表也跨块合并**（同一把尺散布在书里几处写，块间不许拆成两张）。
+    //   合并口径：按 `名` 认同一张表；`用途` 取先有值的那块（不合成、不拼接 —— 合成=创作）；
+    //   `档位` 按 `档` 并集去重（后块只补前块没有的档）；`子表`/`维度` 同款。
+    const scales = [];
+    const scaleByName = new Map();
+    const mergeScales = (list) => {
+        for (const s of (Array.isArray(list) ? list : [])) {
+            const nm = String(s?.名 ?? '').trim();
+            if (!nm) continue;
+            let t = scaleByName.get(nm);
+            if (!t) { t = { 名: nm }; scaleByName.set(nm, t); scales.push(t); }
+            if (!t.用途 && s.用途) t.用途 = String(s.用途);
+            const addTiers = (dst, src2) => {
+                if (!Array.isArray(src2) || !src2.length) return dst;
+                const out = Array.isArray(dst) ? dst : [];
+                const have = new Set(out.map((x) => String(x?.档 ?? '')));
+                for (const x of src2) { const k = String(x?.档 ?? ''); if (k && !have.has(k)) { have.add(k); out.push(x); } }
+                return out;
+            };
+            t.档位 = addTiers(t.档位, s.档位);
+            for (const sub of (Array.isArray(s.子表) ? s.子表 : [])) {
+                const sn = String(sub?.名 ?? '').trim();
+                if (!sn) continue;
+                t.子表 = t.子表 || [];
+                let st = t.子表.find((x) => x.名 === sn);
+                if (!st) { st = { 名: sn }; t.子表.push(st); }
+                st.档位 = addTiers(st.档位, sub.档位);
+            }
+            for (const d of (Array.isArray(s.维度) ? s.维度 : [])) {
+                const dn = String(d?.名 ?? '').trim();
+                if (!dn) continue;
+                t.维度 = t.维度 || [];
+                if (!t.维度.some((x) => x.名 === dn)) t.维度.push(d);
+            }
+        }
+    };
     const seenPs = new Set();
     const seenDim = new Map();          // name → 已收的那条（range 缺什么补什么，同实体不重复）
     const seenRule = new Set();
@@ -1430,6 +1751,8 @@ export function mergeCanonChunks(parts = []) {
         const sit = String(c.situation ?? '').trim();
         if (sit.length > situation.length) situation = sit;
         for (const b of (Array.isArray(c.bookEntities) ? c.bookEntities : [])) bookEntities.push(b);
+        // ★leg62：概念表按 `名` 跨块合并（同一把尺散布在书里几处写 ⇒ 不拆成两张）
+        mergeScales(c.刻度);
         // ★leg61：属性遍条目按"名 + fields"并集去重（同一人在多块出现 ⇒ 合字段，不重复计）
         for (const b of (Array.isArray(c.settings) ? c.settings : [])) {
             const nm = String(b?.name ?? '').trim();
@@ -1440,10 +1763,15 @@ export function mergeCanonChunks(parts = []) {
         }
     }
     const first = list[0] || {};
+    // ★leg62：概念表并完之后，**旧两列从它派生**（避免"同一档位在两张表里各存一份"的漂移）。
+    //   没交概念表的块（老提示词/老账）⇒ `scales` 为空 ⇒ 旧两列照旧走下面的原路，零扰动。
+    const flatFromScales = scales.length ? scalesToFlat(scales) : null;
     return {
         canon: {
-            powerScale: dedupeTiers(powerScale),        // ★leg61：并集之后**再归一次**（见 dedupeTiers 头注：同一档的三种写法）
-            dims, rules: dedupeRules(rules), society, techOrMagic, historyNotes, situation, bookEntities, settings,
+            ...(scales.length ? { 刻度: scales } : {}),
+            powerScale: flatFromScales ? flatFromScales.powerScale : dedupeTiers(powerScale), // ★leg61：并集之后再归一次
+            dims: flatFromScales ? flatFromScales.dims : dims,
+            rules: dedupeRules(rules), society, techOrMagic, historyNotes, situation, bookEntities, settings,
         },
         tension: first.tension || { polarity: '', direction: '' },
         env: first.env || {},

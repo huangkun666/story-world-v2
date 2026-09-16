@@ -35,14 +35,16 @@ test('K30 设置链：缺任一字段 → null（不建传输、不抛）', () =
     assert.equal(resolveBrowserTransport(undefined), null);
 });
 
-test('第十八棒 + E3：抽取预算透传——maxTokens 参数进请求体；默认（主调用）同为 16384，两侧统一', async () => {
+// ★leg62：抽取预算独立抬到 32,768（**不再与主调用同值**）——本锁原口径是"两侧统一 16384"，
+//   那个前提（两侧输出量同量级）已被 leg62 的设定面打破，详见 transport-http.test.js 那条长注释。
+test('第十八棒 + E3 + leg62：抽取预算透传——maxTokens 参数进请求体；主调用默认仍 16384', async () => {
     let captured;
     const opts = { baseUrl: 'https://gw.example', apiKey: 'k', model: 'm', fetchImpl: async (url, o) => { captured = o; return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; } };
-    assert.equal(EXTRACTION_MAX_TOKENS, 16384, '抽取预算');
+    assert.equal(EXTRACTION_MAX_TOKENS, 32768, '★抽取预算 32,768（leg62：@16384 实测 finish_reason=length 截断）');
     await resolveBrowserTransport(opts, { maxTokens: EXTRACTION_MAX_TOKENS }).transport('p');
-    assert.equal(captured.body.includes('"max_tokens":16384'), true, '抽取预算透传进请求体');
+    assert.equal(captured.body.includes('"max_tokens":32768'), true, '抽取预算透传进请求体');
     await resolveBrowserTransport(opts).transport('p');
-    assert.equal(JSON.parse(captured.body).max_tokens, 16384, '审计修复 E3：默认=主调用 16384（旧断言 4096 是漏改的实现，定案文档三处均为 16384）');
+    assert.equal(JSON.parse(captured.body).max_tokens, 16384, '主调用默认**不动**：仍是 16384（leg62 没牵连它）');
 });
 
 test('K30 浏览器安全守卫：createEnvTransport 无参调用不抛（浏览器无 process）', () => {
@@ -61,17 +63,29 @@ test('K30 浏览器安全守卫：createEnvTransport 无参调用不抛（浏览
 //   实现：把 hang 的 fetch 做成"120 s 处自杀"的探针不可行（单测不许等 2 分钟）⇒
 //     诚实做法：只锁"契约存在 + 请求体不变"，**并把"抽取档确实传到了 timeoutMs"交给 transport-http
 //     的 EXTRACTION_TIMEOUT_MS 锁（那条已直接断言 300_000）**。这里不写假判据。
-test('★leg27：抽取档只改超时预算，不改请求体形状（主调用档不受带偏）', async () => {
+//   ★★leg62 修正（改这条之前先读）：原文写的是"抽取档**请求体逐字节不变**"——那个前提只在
+//     "两侧同预算"时成立，而 leg62 把抽取侧抬到 32,768（主调用仍 16,384）⇒ `max_tokens` **本来就在请求体里**
+//     ⇒ `captured.body` 必然不同，旧判据当场变红（这正是它该做的事：口径变了，锁必须跟着换）。
+//     新判据把 `max_tokens` **控制住**（两条都显式传同一个值），再断言其余字段逐字节相同——
+//     锁的仍是 leg27 那条真事："抽取档**只**改超时预算，不夹带别的改动"。
+test('★leg27 + leg62：抽取档只改超时预算（**同一预算下**请求体逐字节不变），主调用档不受带偏', async () => {
     let captured = null;
     const opts = {
         baseUrl: 'https://gw.example', apiKey: 'k', model: 'm',
         fetchImpl: async (url, o) => { captured = o; return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; },
     };
-    await resolveBrowserTransport(opts).transport('p');
+    // 控制变量：两条都用**同一个显式预算**（否则比的是预算差异，不是"抽取档夹带私货"）
+    const BUDGET = 16384;
+    await resolveBrowserTransport(opts, { maxTokens: BUDGET }).transport('p');
     const mainBody = captured.body;
     captured = null;
+    await resolveBrowserTransport(opts, { maxTokens: BUDGET, extraction: true }).transport('p');
+    assert.equal(captured.body, mainBody, '同一预算下：抽取档只改超时预算，**不改请求体形状**（同模型同通道）');
+    // ★反面对照（自证判据不是恒真）：真换了预算时，请求体**必须**跟着变——否则说明 max_tokens 根本没接线
+    captured = null;
     await resolveBrowserTransport(opts, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true }).transport('p');
-    assert.equal(captured.body, mainBody, '抽取档只改超时预算，**不改请求体形状**（同模型同通道同一份实证）');
+    assert.notEqual(captured.body, mainBody, '换预算必须反映进请求体（防"锁恒真"：接线断了这条会绿）');
+    assert.equal(JSON.parse(captured.body).max_tokens, EXTRACTION_MAX_TOKENS, '抽取档预算如实进请求体');
     // 对照：两个档都必须建出可用传输（extraction 选项不认识时不许把它变成 null）
     assert.ok(resolveBrowserTransport(opts, { extraction: true }), 'extraction 选项不许破坏配置解析');
 });

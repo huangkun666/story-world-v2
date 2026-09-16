@@ -5,9 +5,11 @@
 // 密钥纪律：settings 为运行时读取（用户本机输入），不落日志、不打印、不进代码。
 import { createHttpTransport, EXTRACTION_MAX_TOKENS, EXTRACTION_TIMEOUT_MS } from './transport-http.js';
 
-// 第十八棒：抽取预算透传（init-world/force-abstract 用 16384）。
+// 第十八棒：抽取预算透传（init-world/force-abstract 用 EXTRACTION_MAX_TOKENS）。
 // 审计修复 E3：主调用缺省同步改为 16384（同模型同通道同一份 finish=length 实证）——
-//   两侧不再分档；本行注释旧口径「主调用保持 4096」已随修复作废。
+//   本行注释旧口径「主调用保持 4096」已随修复作废。
+// ★leg62：抽取侧独立抬到 **32,768**（主调用仍 16384）——"两侧同值"的前提（输出量同量级）
+//   被设定面的概念表打破；依据与实测见 `transport-http.js` 的 EXTRACTION_MAX_TOKENS 注释。
 export { EXTRACTION_MAX_TOKENS };
 
 // leg27：`extraction` 选项 = 抽取侧专用档（独立超时，不再蹭主调用的 120 s）。

@@ -68,16 +68,31 @@ test('K36/A-5 max_tokens 上限：默认带定案值 16384；显式传参可覆�
     assert.equal(bodies[2].max_tokens, undefined); // 0=不写
 });
 
-test('E3 主调用与抽取调用同预算：默认 maxTokens 与 EXTRACTION_MAX_TOKENS 均为 16384（同一份实证）', async () => {
-    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, 16384, '主调用默认=定案 16384');
-    assert.equal(EXTRACTION_MAX_TOKENS, 16384, '抽取侧 16384（第十八棒实证，未变）');
-    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, EXTRACTION_MAX_TOKENS, '两侧统一到同一值（不再 4096/16384 分档）');
+// ★★leg62（用户令「嗯嗯预算还是增大的好」）：本锁**换过口径**，改之前先读这段。
+//   旧口径（E3，本笔之前）=「主调用与抽取调用**同预算**，两侧统一到 16384」。
+//   该前提是"两侧输出量同量级"；leg62 的设定面（概念表）输出量是名册侧的几倍，**前提不成立** ⇒ 拆开取值。
+//   判据落成三条**新的、可判等的**事（不是把数字改大就完）：
+//     ① 主调用默认**不动**（它没被本笔牵连，谁改它谁举证）；
+//     ② 抽取侧**必须更大**——依据是真机实测（`F:/deepseek/tmp/leg62-live-budget.js`）：
+//        同一本大荒 @16384 → `finish_reason=length`（JSON 写一半断死）；@32768 → `stop`、完整解析；
+//     ③ ★**驱动这条判据的机理必须成立**：抬预算的理由是"推理与输出共享预算"，
+//        而三次成功调用的 completion 只有 5,521 / 5,184（**远低于 16,384**）——
+//        即"截断不是因为输出装不下"。⇒ 本锁**同时断言"实测输出远低于预算"这件事**，
+//        防的下一手是：有人看到"16k 就够写了"又把预算降回去（那会让推理重新饿死）。
+test('★leg62 抽取预算独立抬到 32,768（真机 finish=length→stop）：主调用不动、抽取侧更大', async () => {
+    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, 16384, '主调用默认不动（本笔没牵连它）');
+    assert.equal(EXTRACTION_MAX_TOKENS, 32768, '★抽取侧 32,768：@16384 实测 finish_reason=length 截断，@32768 stop');
+    assert.ok(EXTRACTION_MAX_TOKENS > PROPOSED_CALL_LIMITS.maxTokens, '抽取侧必须比主调用大（leg62 拆档的依据）');
+    // ★真机实测的 completion 峰值（leg62 三次成功调用：5,521 / 5,184）远低于旧预算 16,384
+    const MEASURED_PEAK_COMPLETION = 5521;
+    assert.ok(MEASURED_PEAK_COMPLETION < PROPOSED_CALL_LIMITS.maxTokens,
+        '实测正文远低于旧预算 ⇒ 截断的真因是推理吃预算，不是输出装不下（别据此把预算降回 16k）');
 
     const seen = [];
     const capture = async (url, opts) => { seen.push(JSON.parse(opts.body).max_tokens); return { ok: true, text: async () => '', json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
     await createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture })('主调用');
     await createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture, maxTokens: EXTRACTION_MAX_TOKENS })('抽取调用');
-    assert.deepEqual(seen, [16384, 16384], '两次真实请求体的 max_tokens 都是 16384');
+    assert.deepEqual(seen, [16384, 32768], '两次真实请求体各自带上自己的预算（拆档不再同值）');
 });
 
 test('HTTP 传输：env 齐备时可用，缺配置返回 null', () => {

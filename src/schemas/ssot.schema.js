@@ -88,6 +88,90 @@ export const ssotSchema = {
                                                 },
                                             },
                                         },
+                                        // ★★★leg62（用户令「粒度不要太细了，换成概念表怎么样」）：**刻度 · 概念表**。
+                                        //   病（用户截图 · 实教账实测）：`powerScale` 与 `dims` 把
+                                        //   "制度规则 / 强度刻度 / 基础属性 / 合成分 / 公式"**平铺进了同一个框**——
+                                        //   面板上「力量谱系（5 档）」把 `S~E级`（一把尺）与 `A班~D班`（班级分配制度）
+                                        //   摆在一起；「维度与刻度（14 项）」把 5 个基础属性、5 个合成分、2 个公式
+                                        //   混成一栏。⇒ 三处错位同一个根：**值没有"它是什么类"的字段**。
+                                        //   形状（**表头承载标签，条目不再逐条挂标签** —— 这是"粗粒度"的落点）：
+                                        //     `[{ 名, 用途, 档位: [{档,注}], 子表: [{名,档位}], 维度: [{名,范围}] }]`
+                                        //   为什么不是给每条档位挂 `axis/usage/kind`（交接 §3.2 的原提案）：
+                                        //     ① 大荒 103 档 ⇒ 要挂 309 个字段（细）；概念表只要 51 个表头；
+                                        //     ② 机械判据实测分不出条目级的轴（实教 5 档只聚成 1 族；
+                                        //        三国 `T0级_天下无双`/`T0级_绝世奇才`/`T0级_王佐之才` 是**三个不同轴、同一记号前缀**）。
+                                        //   纪律（三条都实测过，见 docs/measure-leg62-scales-concept-table.md）：
+                                        //     ① `档`/`注` **照抄原文**（档位名逐字必中：两次真机实测 0 条落空）；
+                                        //     ② `名` = 这把尺叫什么（**允许是描述性标题** —— 实测 2/26 不在原文，
+                                        //        因为原文没给标题；硬要求逐字会把"这把尺叫什么"逼成捡词，反而丢信息）；
+                                        //     ③ `用途` = **自由文字**（"分级/资源分配/换算/入阶条件…"）——
+                                        //        实测三个枚举**盖不住**（大荒还出现"叙事尺度/资质潜力/入阶条件"），
+                                        //        故不设枚举，改由一道纯函数闸兜底（同一用途名下不许混形态不同的档位）。
+                                        //   可选键 ⇒ 旧世界零扰动（老账没这个键照样过校验）；
+                                        //   老账的 `powerScale`/`dims` 由纯函数 `deriveScales` **推导**出概念表给面板用（零迁移）。
+                                        //   ★与 `tierKeyOf`/`tierAxisOf` 的 `axis` **不是一回事**：那是 leg61 的**档位去重键**。
+                                        刻度: {
+                                            kind: 'array',
+                                            items: {
+                                                kind: 'object',
+                                                additional: false,
+                                                required: ['名'],
+                                                props: {
+                                                    名: { kind: 'string', minLength: 1 },     // 这把尺叫什么（原文表头；允许描述性标题）
+                                                    用途: { kind: 'string', minLength: 1 },   // 用来干什么（自由文字；缺省不写）
+                                                    档位: {
+                                                        kind: 'array',
+                                                        items: {
+                                                            kind: 'object',
+                                                            additional: false,
+                                                            required: ['档'],
+                                                            props: {
+                                                                档: { kind: 'string', minLength: 1 },   // 档位名（原文逐字）
+                                                                注: { kind: 'string', minLength: 1 },   // 该档意味着什么（原文措辞；原文没写就不写）
+                                                            },
+                                                        },
+                                                    },
+                                                    // 对"大境界"的细分（初期/中期/后期/巅峰）——用户拍「当子表」，不另立一张表。
+                                                    子表: {
+                                                        kind: 'array',
+                                                        items: {
+                                                            kind: 'object',
+                                                            additional: false,
+                                                            required: ['名'],
+                                                            props: {
+                                                                名: { kind: 'string', minLength: 1 },
+                                                                档位: {
+                                                                    kind: 'array',
+                                                                    items: {
+                                                                        kind: 'object',
+                                                                        additional: false,
+                                                                        required: ['档'],
+                                                                        props: {
+                                                                            档: { kind: 'string', minLength: 1 },
+                                                                            注: { kind: 'string', minLength: 1 },
+                                                                        },
+                                                                    },
+                                                                },
+                                                            },
+                                                        },
+                                                    },
+                                                    // 维度那一半：某些刻度**自身就是一把尺**（实教 `S~E级` 下有
+                                                    // `学力/智力/判断力/体育/团队` 五个维度都用它）⇒ 挂在同一张概念表上。
+                                                    维度: {
+                                                        kind: 'array',
+                                                        items: {
+                                                            kind: 'object',
+                                                            additional: false,
+                                                            required: ['名'],
+                                                            props: {
+                                                                名: { kind: 'string', minLength: 1 },
+                                                                范围: { kind: 'string', minLength: 1 },
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
                                         rules: { kind: 'array', items: { kind: 'string' } },
                                         society: { kind: 'string' },
                                         techOrMagic: { kind: 'string' },

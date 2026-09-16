@@ -198,8 +198,19 @@ test('★leg60 一块里名册与设定同轮抽（旧"名册轮只问 name/kind
     assert.match(p, /不许套用别的书的档位体系/, '挡"套档位"的那句纪律在位');
     // ④ 设定那一段的形状与名册**同在一份 JSON**（一处定义：CANON_SHAPE，两个 builder 共用）
     //    ★leg60 起多一项 `dims`（维度/刻度）——它是"书里的尺子"，进包当锚（`pack.js` 的 buildScaleAnchor）
-    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'rules', 'situation', 'society', 'techOrMagic', 'tension'],
-        '★一份 JSON 里同时有设定（含维度/刻度）与名册（leg60 的"一遍抽完"）');
+    //    ★★leg62 起多一项 `刻度`（**概念表**）：书里的尺子按"一把尺 = 一张表"交，
+    //       `powerScale`/`dims` 两列保留在形状里（老账与 `buildAbstractPrompt` 的兼容面），
+    //       但**生产提示词明确要求模型不要再交它们**（净化层以 `刻度` 为源、旧两列由它派生）。
+    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'rules', 'situation', 'society', 'techOrMagic', 'tension', '刻度'],
+        '★一份 JSON 里同时有设定（含维度/刻度/概念表）与名册（leg60 的"一遍抽完"）');
+    // ★★leg62：概念表必须是**第一项**（模型按形状办事，先看到的那一项最容易被交出来）
+    assert.equal(Object.keys(tpl)[0], '刻度', '★概念表排在最前（形状的第一项就是它）');
+    assert.match(p, /一律交进 `刻度` 字段/, '★写明刻度一律交进 `刻度`（概念表口径）');
+    assert.match(p, /不要\*\*另外交 `powerScale` \/ `dims`/, '★写明不要另交 powerScale/dims（防同一档存两份 + 白烧输出预算）');
+    assert.match(p, /一把尺 = 一张表|同一套等级记号、用来描述同一个概念/, '★概念表的定义在位（"一张表"=同一套记号描述同一个概念）');
+    assert.match(p, /不同的概念\*\*必须分开成不同的表/, '★"制度与刻度必须分表"在位（用户截图那个混排的根治）');
+    assert.match(p, /对"大境界"的细分（第一阶\/第二阶…）\*\*不另立一张表\*\*/, '★小阶当子表（用户拍：「当子表」）');
+    assert.match(p, /紧凑：不要缩进、不要换行/, '★紧凑序列化（真机实测：原预算下就 finish=stop，输出短 44%）');
     assert.match(p, /"dims"/, '★维度/刻度要抽（真账：三国的 `勇武|韬略|内政|统御|气度|健康: range: -100~100`）');
 });
 
