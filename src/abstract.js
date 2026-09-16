@@ -1973,6 +1973,18 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
         if (progressLog) progressLog.push({ step: `chunk@depth${depth}`, kind: 'timeout', chars: Array.from(text).length, error: r.callError });
         return { cleaned: null };
     }
+    // ★★leg62c（用户实机日志逼出来的）：**传输层失败也不拆半**——它压根不是"输入太大"那个病。
+    //   现场（用户控制台，本棒留档）：一次真超时（31739 字符 / 177.7s）之后，是对半拆的瀑布——
+    //     `21576 字符 · 0.3s` → `13175 · 0.3s` → `8835 · 0.3s` → `6548 · 0.3s` → `6401 · 0.3s` → 保底重试，
+    //     **全部 0.3 秒失败（Failed to fetch）、该块一次都没成功**，而总表停在"已 0 段"跑了 1600+ 秒。
+    //   判据（只看形态，不问是哪家网关）：`Failed to fetch` / `NetworkError` / `ERR_` 这类
+    //     **请求根本没送达**的错 ⇒ 把输入切一半**不会**让它送达（切的是负载，病在通路）。
+    //   拆半真正治的是"**模型吐不完**"（输出超预算 ⇒ JSON 截断）；那种错进不到这一支。
+    //   ⇒ 遇到传输层失败：**如实记一笔就放弃这一块**（不递归、不重试），把调用预算留给别的块。
+    if (/Failed to fetch|NetworkError|network error|ERR_|fetch failed|Load failed/i.test(String(r.callError || ''))) {
+        if (progressLog) progressLog.push({ step: `chunk@depth${depth}`, kind: 'transport', chars: Array.from(text).length, error: r.callError });
+        return { cleaned: null };
+    }
     if (depth < ROSTER_CHUNK_DEPTH) {
         const lines = text.split('\n').filter(Boolean);
         if (lines.length > 1) {
@@ -2011,7 +2023,7 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
 // ★leg60 `compileInfo`：**编译完整性读数**（声明面探测结果）——落进 `setting.frozen.compile`（见 assembleSetting）。
 // 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量；大书=**全条目分块多调用、一遍抽完**
 //   （leg60 起五件套与名册在同一批块里同生共死——旧法"五件套只读头 3 万"那一次已整条删除）。
-export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null }) {
+export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null, skipRoster = false }) {
     const titled = (Array.isArray(extraDeclared) ? extraDeclared : [])
         .map((d) => ({ name: String(d?.name ?? '').trim() }))
         .filter((d) => d.name);
@@ -2129,7 +2141,13 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     //   口径与代价（实测见 `buildSettingPrompt` 头注）：调用数从 每块 1 次 → 每块 2 次，
     //   换来名册产量 ~2.8 倍（大荒去重 364 → 1022）与"属性不再和名册抢输出"。
     //   ★`declared`（书标签 + 题名面）只喂名册遍：那一遍才是"一个名号都不许漏"的责任方。
-    for (const [ci, chunk] of chunks.entries()) {
+    //   ★★leg62c（用户令「重抽时跳过名册遍」）：`skipRoster` ⇒ **整遍不跑**。
+    //     为什么可以跳（这是"只重抽设定"的正当性）：名册遍的产物是 `bookEntities`（名号/别名/类别），
+    //     它的消费者只有 `seedBookEntities`（名册→实体账），而**实体已经在账上了**
+    //     ⇒ 重抽设定时再抽一遍名册 = 把 N 次调用烧在一个**无人消费**的产物上。
+    //     代价（如实说）：`bookEntities` 这次不更新 ⇒ 书里**新增**的名号不会入册；要补名册就走「初始化」。
+    //     调用数：每块 2 次 → **每块 1 次**（大荒 9 块：18 次 → 9 次）。
+    for (const [ci, chunk] of (skipRoster ? [] : chunks).entries()) {
         const chunkChars = Array.from(chunk).length;
         progress.start('chunk', ci + 1, chunks.length, chunkChars);   // ★"正在抽第 x/N 块"——进入即出声
         const { cleaned } = await tryRosterChunk(extract, chunk, 0, probeState, { declared, onProgress, progressLog: failLog });
@@ -2213,13 +2231,25 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     }
 
     // leg24 片1（停抄书）：关系轮/属性轮/出处细节校验三处调用点一并删除——名册定稿即为交付态。
+    //   ★leg62c：`skipRoster` 时名册遍没跑 ⇒ `finalNames` 为空 ⇒ 这里就是**空名册**
+    //     （接线层必须保住账上那份，否则一换设定就把名册抹空——见 web 的 reextract-setting）。
     const canon = { ...canonBase.canon, bookEntities: finalNames };
     // ★leg60：大小书合并后**没有"设定轮"这个独立失败面**了——设定与名册同一批调用同生共死，
     //   所以判据从「canonR 失败 ∧ 一块都没成 ∧ 一个名号都没有」收成「一块都没成 ∧ 一个名号都没有」。
-    if (okChunks === 0 && !finalNames.length) {
+    // ★★leg62c：`skipRoster` 时**名册遍整遍不跑** ⇒ `okChunks` 恒为 0、`finalNames` 恒为空
+    //   ⇒ 上面那条判据会把"设定明明抽到了"误判成"全部失败"（实测：`ok=false` + 2/2 块都成功）。
+    //   改判据：跳了名册遍 ⇒ 看**设定遍**的成败（`settingChunks`）与它是否真的产出了设定。
+    //   为什么不能一律"只要有设定就算成"：那会把"设定遍也全失败"放行成 ok（静默丢设定）。
+    const hasSetting = !!(canonBase && canonBase.canon
+        && ((canonBase.canon.刻度 || []).length || (canonBase.canon.powerScale || []).length
+            || (canonBase.canon.rules || []).length || (canonBase.canon.dims || []).length));
+    const nothingAtAll = skipRoster ? (settingChunks === 0 && !hasSetting) : (okChunks === 0 && !finalNames.length);
+    if (nothingAtAll) {
         return {
             ok: false,
-            errors: ['设定与书名录抽取全部失败（世界未动，可重试）'],
+            errors: [skipRoster
+                ? '设定抽取全部失败（名册遍按你的要求已跳过；世界未动，可重试）'
+                : '设定与书名录抽取全部失败（世界未动，可重试）'],
             timing: timingOf('big', progress.events.filter((e) => e.phase === 'finish').length, srcLen),
         };
     }

@@ -2923,6 +2923,11 @@ if (typeof window !== 'undefined') {
                 onProgress: progress.onEvent,
                 extraDeclared: src.titleRoster,
                 compileInfo: compileSummary(src.catalog, src.titleRoster),
+                // ★★leg62c（用户令「重抽时跳过名册遍」）：名册遍的产物（`bookEntities`）只喂
+                //   `seedBookEntities`，而实体已经全在账上了 ⇒ 那一遍是把调用烧在**无人消费**的产物上。
+                //   ⇒ 每块 2 次调用降到 **1 次**（大荒 9 块：18 → 9 次）——用户实机一轮 >20 分钟的主因之一。
+                //   代价：书里**新增**的名号这次不入册（要补名册就走「初始化」）——状态条如实报。
+                skipRoster: true,
             });
         } catch (err) {
             progress.stop();
@@ -2934,25 +2939,34 @@ if (typeof window !== 'undefined') {
             setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}——设定一个字没动`);
             return;
         }
+        // ★★必须保住 `bookEntities`：跳了名册遍 ⇒ 这次的 canon 里**没有名册**
+        //   ⇒ 直接换上去会把账上的名册抹成空（★这正是本仓"删字段只删一半"的老病，别踩）。
+        //   口径：名册照旧用**账上那一份**（本次没重抽它），其余设定用新的。
+        const keptBook = before.bookEntities || [];
+        if (keptBook.length) r.setting.frozen.canon.bookEntities = keptBook;
         // ★只换 setting：走唯一那条换设定的路径（其余字段原样带过）
         const next = applySettingToSsot(world, r.setting);
         writeHotMeta(hotAccountShape(next));
         const flushed = await flushHotMeta();
         const after = r.setting?.frozen?.canon || {};
         console.info('[story-world-v2] 只重抽设定完成', {
-            世界: src.worldName, 调用: r.timing?.calls, 毫秒: r.timing?.ms,
+            世界: src.worldName, 调用: r.timing?.calls, 毫秒: r.timing?.ms, 名册遍: '已跳过',
             新: {
                 档位: (after.powerScale || []).length, 维度: (after.dims || []).length,
                 刻度表: (after.刻度 || []).length, 法则: (after.rules || []).length,
                 史略: (after.historyNotes || []).length,
             },
+            名册: `${keptBook.length} 条（本次未重抽，照旧保留）`,
             实体账: (next.entities || []).length, 轮次: next.meta?.tick, 落盘: flushed,
+            errors: (r.errors || []).slice(0, 6),
         });
         refreshWorld(next, { oldVolumes: LISTED_VOLUMES });
         refreshSections(['setting']);
         const secs = r.timing?.ms == null ? '' : ` · ${Math.round(r.timing.ms / 1000)}s`;
-        setStatus(`设定已重抽（${(after.刻度 || []).length} 张刻度表 / ${(after.powerScale || []).length} 档 / ${(after.rules || []).length} 条法则${secs}）`
+        setStatus(`设定已重抽（${(after.刻度 || []).length} 张刻度表 / ${(after.powerScale || []).length} 档 / ${(after.rules || []).length} 条法则${secs}`
+            + ` · 调用 ${r.timing?.calls ?? '?'} 次 · 名册遍已跳过）`
             + `——名册 ${(next.entities || []).length} 个实体与第 ${next.meta?.tick ?? 0} 轮进度一个字没动`
+            + (keptBook.length ? `；账上 ${keptBook.length} 条名册照旧保留（本次没重抽名册）` : '')
             + (flushed.ok ? '' : '（⚠ 落盘没确认，见控制台）'));
     };
 
