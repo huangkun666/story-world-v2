@@ -792,6 +792,7 @@ function mergeDeclared(tags = [], titled = []) {
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 export const SCALE_NAME_MAX = 40;      // 表名上限（"这把尺叫什么"，可以是短语，比档位名宽）
 export const SCALE_USE_MAX = 60;       // 用途上限（自由文字）
+export const SCALE_SRC_MAX = 40;       // ★leg63：`源`（出自原文哪一条条目）上限——与表名同尺
 export const SCALE_TIER_TOP = 400;     // 单张表的档位数上限（防模型灌爆；大荒最大一张 64 档）
 export const SCALE_TABLE_TOP = 200;    // 概念表张数上限（大荒实测 51 张）
 
@@ -852,11 +853,19 @@ export function sanitizeScales(rawScales, { sourceText = '' } = {}, errors = [])
         let table = byName.get(cutName);
         if (!table) {
             table = { 名: cutName };
+            // ★leg63：`源`（出自原文哪一条条目）——可选，不过出处闸（与 `名` 同尺，见 SCALE_RULES 那条）。
+            const srcName = String(raw.源 ?? raw.出处 ?? '').trim();
+            if (srcName) table.源 = srcName.length > SCALE_SRC_MAX ? srcName.slice(0, SCALE_SRC_MAX) : srcName;
             const use = String(raw.用途 ?? '').trim();
             if (use) table.用途 = use.length > SCALE_USE_MAX ? use.slice(0, SCALE_USE_MAX) : use;
             byName.set(cutName, table);
             order.push(cutName);
         } else if (!table.用途) {
+            // ★leg63：同名合表时 `源` 也补空位（与 `用途` 同一条口径：先有的那个值胜）
+            if (!table.源) {
+                const srcName = String(raw.源 ?? raw.出处 ?? '').trim();
+                if (srcName) table.源 = srcName.length > SCALE_SRC_MAX ? srcName.slice(0, SCALE_SRC_MAX) : srcName;
+            }
             const use = String(raw.用途 ?? '').trim();
             if (use) table.用途 = use.length > SCALE_USE_MAX ? use.slice(0, SCALE_USE_MAX) : use;
         }
@@ -1064,6 +1073,54 @@ export function resolveScales(canon) {
 }
 
 /**
+ * ★★★leg63（用户现场拍板：「66 张表平铺在面板上，读不完、不成体系」）：**刻度按"原文条目"分节**。
+ *
+ * 病与本设计的来路（都是实测，不是推理）：
+ *   · leg62 解决了**条目级**的粒度（标签从每条档位挪到表头）⇒ 大荒从"103 档平铺"变成"66 张表"；
+ *     但**表与表之间仍是平级** ⇒ 面板照实画就是 66 个兄弟一字排开（真账实测：66 张 / 425 档）。
+ *   · 能不能机械分节？**不能**：50/66 张表**没有记号**（纯形态聚类只剩"无记号"一族）、
+ *     "档位原话序列完全相同"的只有 5 组 11 张 ⇒ 机械合并吃不掉这一堵墙。
+ *   · 书有"节"吗？**没有**：大荒的世界书是 **235 条平级条目**（`【小宅仙】`/`【小御仙】` 各算一条），
+ *     实测 66 张表里 53 张上溯不到任何 `【…】` 标题。
+ *   · 但**表名就是原文题名**（实测 55/66 逐字在原文里）⇒ 模型读原文时本来就知道这张表出自哪一条
+ *     ⇒ 契约加一格 `源`（原文题名逐字），分节就成了**零编造**的一件事。
+ *
+ * 口径（三条）：
+ *   ① **`源` 有 ⇒ 按它分节**，节名原样照抄（不加工、不改写）；
+ *   ② **`源` 没有 ⇒ 全部落进一节「未标条目」**——老账零迁移（与 `刻度` 键同一条纪律：
+ *      没有这个键就是没有，面板退回"不分节"，**不猜也不重抽**）；
+ *   ③ 节与节内表的顺序都取**账本里的出现序**（新账 = 模型读原文的顺序；老账 = `scalesFromFlat` 的序）。
+ *
+ * ★与 `resolveScales` 的分工：那个是"表从哪来"（新账/旧账两条来源），本函数是"表怎么归堆"。
+ *   两者都是**读取口**，面板与进包共用，别在别处再写一份推导（本仓"两份复制品漂移"的亏吃过多次）。
+ */
+const _scaleGroupsCache = new WeakMap();
+export function groupScales(tables, { 未标 = '未标条目' } = {}) {
+    const list = Array.isArray(tables) ? tables : [];
+    if (!list.length) return [];
+    // 缓存：渲染是每帧的事，而分节是纯函数 ⇒ 同一份表数组不重复算（键 = 传入的那个数组对象）
+    const cached = _scaleGroupsCache.get(list);
+    if (cached) return cached;
+    const bySrc = new Map();
+    const order = [];
+    for (const t of list) {
+        const src = String(t?.源 ?? '').trim() || 未标;
+        if (!bySrc.has(src)) { bySrc.set(src, []); order.push(src); }
+        bySrc.get(src).push(t);
+    }
+    const out = order.map((src) => {
+        const ts = bySrc.get(src);
+        const nTier = ts.reduce((n, t) => n + (t.档位 || []).length + (t.子表 || []).reduce((m, s) => m + (s.档位 || []).length, 0), 0);
+        const nDim = ts.reduce((n, t) => n + (t.维度 || []).length, 0);
+        return { 源: src, 表: ts, 档: nTier, 维: nDim, 未标: src === 未标 };
+    });
+    // 排序：**有出处的节在前**（那才是成体系的那一层），未标条目殿后
+    out.sort((a, b) => Number(a.未标) - Number(b.未标));
+    _scaleGroupsCache.set(list, out);
+    return out;
+}
+
+/**
  * ★用户令「独立的抽取设定的入口」用的：**自成一体**的概念表提示词（不掺名册、不掺张力/环境）。
  *   与生产两遍抽取的关系：生产那份（`buildRosterPrompt`）是"名册+设定一起交"；
  *   这份是**只抽设定**，好处是快（不必等名册那几遍）且输出全给概念表用。
@@ -1091,6 +1148,13 @@ export const SCALE_RULES = [
     '  · 对"大境界"的细分（第一阶/第二阶…）**不另立一张表**，放进它所细分的那个刻度里，写在 `子表` 里。',
     '  · `档` = 档位名（**原文逐字**，不许改写、不许翻译、不许补全；写不进去就省，不要凑）；`注` = 这一档意味着什么（**原文措辞**，可省）。',
     '  · `名` = 这张表叫什么（**照抄原文的表头/标题**；原文没给标题就用原文里最贴近的说法）。',
+    // ★★★leg63（用户现场拍板：「66 张表平铺在面板上，读不完、不成体系」）：
+    //   病：leg62 把"标签从条目挪到表头"（粒度粗了一档），但**表与表之间仍是平级** ⇒ 大荒真账 66 个兄弟。
+    //   而书自己的结构是 **235 条平级条目**（`【小宅仙】`/`【小御仙】` 是两条）⇒ 面板要成体系，
+    //   唯一**不必编造**的一层就是"这张尺出自原文哪一条条目"（条目名是原文题名，逐字可查）。
+    //   ★为什么让模型交而不是机械反查：模型读的那一遍**本来就知道**这张表出自哪一条；
+    //     而机械反查实测只能定 45/66（21 张表名在原文里出现但不在任何条目正文里）。
+    '  · `源` = 这张表**出自原文哪一条条目**（照抄那条条目的题名，逐字；例如某条叫「灵族本体与灵体」，那张表就写它）。原文没给条目名就省。',
     '  · `用途` = 这张尺在书里**用来干什么**（用原文的说法，如：分级 / 资源分配 / 换算 / 入阶条件 …；自由写，不要凑词）。',
     '  · 如果某个刻度**本身是一把尺、底下挂着一组属性**（例：同一套等级下并列若干项属性），把这些属性写进那张表的 `维度`。',
 ];
@@ -1100,6 +1164,7 @@ export const SCALE_RULES = [
 export const SCALE_SHAPE_OBJ = {
     刻度: [{
         名: '这张表叫什么（原文表头）',
+        源: '这张表出自原文哪一条条目（照抄题名；原文没有就省）',
         用途: '这张尺用来干什么（原文说法）',
         档位: ['档位名|该档意味着什么（都照抄原文；| 后没有就省）'],
         子表: [{ 名: '对上面某个档位的细分尺（原文有才写）', 档位: ['档位名|说明'] }],
@@ -1844,6 +1909,8 @@ export function mergeCanonChunks(parts = []) {
             let t = scaleByName.get(nm);
             if (!t) { t = { 名: nm }; scaleByName.set(nm, t); scales.push(t); }
             if (!t.用途 && s.用途) t.用途 = String(s.用途);
+            // ★leg63：`源` 同样"补空位"（同一把尺散布在几块里，哪块给了出处就用哪块）
+            if (!t.源 && s.源) t.源 = String(s.源);
             const addTiers = (dst, src2) => {
                 if (!Array.isArray(src2) || !src2.length) return dst;
                 const out = Array.isArray(dst) ? dst : [];

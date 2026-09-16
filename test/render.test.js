@@ -870,7 +870,12 @@ test('★leg60 + leg62 设定页：刻度按概念分栏 + 编译完整性读数
     };
     const html = renderSettingHtml(w);
     // ① ★leg62：刻度那一栏 = 一概念一表（表名成卡；不再把两张表平铺成两栏）
+    //   ★★leg63 改口径：这一栏**按原文条目分节**（节数写进表头），且**进包读数如实**。
+    //     旧断言锁的是 `刻度（一概念一表 · 2 张）`——那张老形状正是"66 张表平铺成一堵墙"的那一版。
     assert.match(html, /刻度（一概念一表 · 2 张）/, '★概念表栏在位（一概念一张卡）');
+    // 老账（夹具没有 `源`）⇒ 全部落进「未标条目」一节，**零迁移**（不猜、不重抽）
+    assert.match(html, /<summary><b>未标条目<\/b>/, '★老账没有 `源` ⇒ 归入「未标条目」一节（零迁移，不假装分对了）');
+    assert.match(html, /其中 <b>2<\/b> 张表 \/ <b>2<\/b> 档 \/ <b>3<\/b> 维每轮进模型的包当锚/, '★进包读数如实（读真源 buildScaleAnchor，不另算一份）');
     assert.match(html, /《无记号档位》/, '★档位那半自成一表（这册的档位名都无数记号 ⇒ 合一张）');
     assert.match(html, /《维度》/, '★维度那半自成一表（回指不到档位名的维度合一张）');
     assert.ok(!html.includes('力量谱系'), '★旧栏名退场（它正是"制度与刻度挤一个框"的那个框）');
@@ -910,13 +915,15 @@ test('★leg62 设定页：制度与刻度分表（用户截图那个混排的�
     ];
     const html = renderSettingHtml(w);
     assert.match(html, /刻度（一概念一表 · 2 张）/, '两张概念表');
-    assert.match(html, /《班级分配制度》<span class="sw2-hint"> · 资源分配<\/span>/, '★制度自成一表，且**用途如实照抄**（资源分配）');
-    assert.match(html, /《S~E级》<span class="sw2-hint"> · 分级（决定班级分配）<\/span>/, '★那把尺自成一表（用途照抄原文）');
+    // ★★leg63 换壳：表名从 `<h4>` 挪进 `<summary>`（表与档位都折起来了——66 张表平铺正是用户点的那一堵墙）。
+    //   锁的是"名字 + 档数 + 用途"三样都还在，只是换了位置；口径没变。
+    assert.match(html, /<summary><b>《班级分配制度》<\/b><span class="sw2-hint"> · 2 档<\/span><span class="sw2-hint"> · 资源分配<\/span><\/summary>/, '★制度自成一表，且**用途如实照抄**（资源分配）');
+    assert.match(html, /《S~E级》<\/b><span class="sw2-hint"> · 1 档 · 2 维<\/span><span class="sw2-hint"> · 分级（决定班级分配）<\/span>/, '★那把尺自成一表（用途照抄原文）');
     assert.match(html, /学力<\/b><span>S~E级/, '★挂在尺底下的维度跟着它同表（不是平铺去别的栏）');
-    // ★反面：`A班` 与 `S~E级` 不许出现在同一张卡里（卡片以 `<h4>《…》` 切分）
-    const cards = html.split('<div class="sw2-set-card"').filter((x) => x.includes('<h4>《'));
+    // ★反面：`A班` 与 `S~E级` 不许出现在同一张卡里（卡片以 `<details class="sw2-fold">` 切分）
+    const cards = html.split('<details class="sw2-fold"').filter((x) => x.includes('<summary><b>《'));
     const mixed = cards.filter((c) => c.includes('A班') && c.includes('学力'));
-    assert.equal(mixed.length, 0, '★没有任何一张卡同时装着"制度档位"与"尺的维度"（混排已根治）');
+    assert.equal(mixed.length, 0, '★没有任何一张表同时装着"制度档位"与"尺的维度"（混排已根治）');
 });
 
 test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指纹/时间/五件套原文全量），重抽按钮在位', () => {
@@ -1692,7 +1699,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     // ★★★leg53 换档：**乱象有了生产者**（引擎每轮算）+ 民生撤下 + 依据那一格改口径 ⇒ 玩家可见面真变了。
     // ★★★leg54 换档：世界尺度四个框改成**数字输入框、无上限**（+ 设置页那行过期预算已修）⇒ 又变了。
     // ★★★leg60 换档：设定页新增「维度与刻度」与「编译完整性」两栏 ⇒ 又变了。
-    assert.equal(PANEL_BUILD, 'leg62-scale-concepts-3');
+    assert.equal(PANEL_BUILD, 'leg63-scale-index-1');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

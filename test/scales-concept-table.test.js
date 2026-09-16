@@ -16,7 +16,7 @@ import path from 'node:path';
 import {
     sanitizeScales, scalesToFlat, scalesFromFlat, resolveScales, parseScaleTier,
     buildScalePrompt, SCALE_SHAPE_OBJ, sanitizeCanon, mergeCanonChunks,
-    mergeSameTierEntries, tierWordsOf,
+    mergeSameTierEntries, tierWordsOf, groupScales,
 } from '../src/abstract.js';
 import { renderSettingHtml } from '../src/render.js';
 
@@ -332,4 +332,110 @@ test('★leg62 提示词：直抽通道的提示词带概念表形状，且与�
     assert.match(p, /设定原文如下/, '原文分隔线与生产同款');
     // ★形状**一处定义**：直抽提示词里的形状必须就是 SCALE_SHAPE_OBJ 那一个（各写一份 ⇒ 改一处忘一处）
     assert.ok(p.includes(JSON.stringify(SCALE_SHAPE_OBJ)), '★形状与 SCALE_SHAPE_OBJ 逐字一致（两处共用一份定义）');
+});
+
+// ─────────────── ② ★★★leg63：**刻度按原文条目分节**（用户现场拍板"66 张表读不完、不成体系"）───────────────
+//
+// 这一棒治的病（大荒真账实测，读数都在 `docs/measure-leg63-*.md`）：
+//   leg62 把标签从**条目**挪到**表头**（粒度粗了一档）⇒ 大荒从"103 档平铺"变成"66 张表"；
+//   但**表与表之间仍是平级** ⇒ 面板照实画就是 66 个兄弟一字排开（66 张 / 425 档，一屏读不完）。
+//   治法：契约加一格 `源`（这张尺出自原文哪一条条目），面板按它分节。
+//
+// ★夹具纪律照本文件头注：**自造记号、自造条目名**，不抄大荒/三国/实教任何一个词
+//   （这样"换一本书照样成立"才算锁住）。
+test('★★leg63 分节：`源` 有 ⇒ 按原文条目分节；没有 ⇒ 归「未标条目」（老账零迁移，不猜）', () => {
+    const tables = [
+        { 名: '甲尺', 源: '条目一', 档位: [{ 档: 'X1 甲境' }, { 档: 'X2 乙境' }] },
+        { 名: '乙尺', 源: '条目一', 档位: [{ 档: 'Y1 丙境' }], 维度: [{ 名: '属性甲', 范围: 'X1~X2' }] },
+        { 名: '丙尺', 源: '条目二', 档位: [{ 档: 'Z1 丁境' }] },
+        { 名: '丁尺', 档位: [{ 档: 'W1 戊境' }] },                 // ★没有 `源`
+        { 名: '戊尺', 源: '   ', 档位: [{ 档: 'V1 己境' }] },        // ★空白 `源` 视为没有
+    ];
+    const g = groupScales(tables);
+    assert.deepEqual(g.map((x) => x.源), ['条目一', '条目二', '未标条目'], '★有出处的节在前、未标殿后');
+    assert.deepEqual(g[0].表.map((t) => t.名), ['甲尺', '乙尺'], '★同一出处的表归到那一节（节内保持账本序）');
+    assert.equal(g[0].档, 3, '节内档位计数（含子表档）');
+    assert.equal(g[0].维, 1, '节内维度计数');
+    assert.equal(g[2].表.length, 2, '★没有 `源` 的**全部**落进「未标条目」（不分节，也不猜）');
+    assert.equal(g[2].未标, true, '未标那一节有标记（面板据此不写"条目："前缀）');
+    assert.equal(g[0].未标, false, '有出处的节不算未标');
+    assert.deepEqual(groupScales([]), [], '空 ⇒ 空（零扰动）');
+    assert.deepEqual(groupScales(null), [], '非数组 ⇒ 空（不发明节）');
+});
+
+test('★★leg63 `源` 进账：净化层收下、不过出处闸、同名表之间"补空位"', () => {
+    // ① 收下（术语 `源` 与 `出处` 两种叫法都吃——模型两版形状都交过）
+    const r1 = sanitizeCanon({ 刻度: [{ 名: '甲尺', 源: '条目甲', 档位: [{ 档: 'X1' }] }] }, {});
+    assert.equal(r1.canon.刻度[0].源, '条目甲', '★`源` 收进账');
+    const r2 = sanitizeCanon({ 刻度: [{ 名: '甲尺', 出处: '条目乙', 档位: [{ 档: 'X1' }] }] }, {});
+    assert.equal(r2.canon.刻度[0].源, '条目乙', '★`出处` 是同一个键的另一种叫法（兼容）');
+    // ② ★**不过出处闸**：原文里找不到"条目甲"这三个字，`源` 仍要留住
+    //    （为什么：题名是"书名录"那份材料，块内文本不一定含它；硬卡会把"这张表出自哪"逼成编造）
+    const r3 = sanitizeCanon({ 刻度: [{ 名: '甲尺', 源: '原文里没有的题名', 档位: [{ 档: 'X1' }] }] }, { sourceText: 'X1 甲境' });
+    assert.equal(r3.canon.刻度[0].源, '原文里没有的题名', '★`源` 不过出处闸（与 `名` 同尺）');
+    // ③ 同名合表：先有值的那条胜，空位才补（与 `用途` 同一条口径）
+    const r4 = sanitizeCanon({ 刻度: [
+        { 名: '甲尺', 档位: [{ 档: 'X1' }] },
+        { 名: '甲尺', 源: '条目甲', 档位: [{ 档: 'X2' }] },
+    ] }, {});
+    assert.equal(r4.canon.刻度.length, 1, '同名 ⇒ 一张表');
+    assert.equal(r4.canon.刻度[0].源, '条目甲', '★空位被后来的补上');
+    const r5 = sanitizeCanon({ 刻度: [
+        { 名: '甲尺', 源: '先到的', 档位: [{ 档: 'X1' }] },
+        { 名: '甲尺', 源: '后到的', 档位: [{ 档: 'X2' }] },
+    ] }, {});
+    assert.equal(r5.canon.刻度[0].源, '先到的', '★已有值不被覆盖（先到的胜）');
+    // ④ 没交 `源` ⇒ 键不出现（空就是空，不写占位）
+    const r6 = sanitizeCanon({ 刻度: [{ 名: '甲尺', 档位: [{ 档: 'X1' }] }] }, {});
+    assert.ok(!('源' in r6.canon.刻度[0]), '★没给 `源` ⇒ 键不出现（不写空串占位）');
+});
+
+test('★★leg63 块间合并：同一把尺在不同块里各给一半出处 ⇒ 合成一条且 `源` 不丢', () => {
+    const merged = mergeCanonChunks([
+        { canon: { 刻度: [{ 名: '同一把尺', 档位: [{ 档: 'X1', 注: '一' }] }], powerScale: [], dims: [] } },
+        { canon: { 刻度: [{ 名: '同一把尺', 源: '条目甲', 档位: [{ 档: 'X2', 注: '二' }] }], powerScale: [], dims: [] } },
+    ]);
+    assert.equal(merged.canon.刻度.length, 1, '★跨块同名 ⇒ 一张表');
+    assert.equal(merged.canon.刻度[0].源, '条目甲', '★跨块合并时 `源` 补空位（补在"哪块给了出处"上）');
+    assert.deepEqual(merged.canon.刻度[0].档位.map((x) => x.档), ['X1', 'X2'], '档位并集');
+});
+
+test('★★leg63 提示词 + 形状：`源` 在两处共用的一份定义里（改一处忘一处就是静默丢字段）', () => {
+    const p = buildScalePrompt('【条目甲】X1 甲境。');
+    assert.match(p, /`源` = 这张表\*\*出自原文哪一条条目/, '★提示词要求交"出自哪一条条目"（成体系那一层的数据来源）');
+    assert.ok(JSON.stringify(SCALE_SHAPE_OBJ).includes('"源"'), '★形状里真有 `源` 这一格');
+    // 生产提示词与直抽共用同一份 SCALE_RULES/SCALE_SHAPE_OBJ ⇒ 生产那条路也带上了
+    const prod = readFileSync(new URL('../src/abstract.js', import.meta.url), 'utf8');
+    assert.match(prod, /\.\.\.SCALE_RULES/, '★生产提示词共用 SCALE_RULES（两处一份口径）');
+    assert.match(prod, /SCALE_SHAPE_OBJ\.刻度/, '★生产提示词共用 SCALE_SHAPE_OBJ（形状只有一份）');
+    // 契约层必须同步登记（律 3：生产端每加一个键，契约表同步——不然校验器永远绿而条目不过）
+    const schema = readFileSync(new URL('../src/schemas/ssot.schema.js', import.meta.url), 'utf8');
+    assert.match(schema, /源: \{ kind: 'string', minLength: 1 \}/, '★契约表登记了 `源`（律 3）');
+});
+
+test('★★leg63 面板：分节成"目录"（节名 + 每节几张几档），档位折进 details（不是一堵墙）', () => {
+    const w = world();
+    w.context.setting.frozen.canon.刻度 = [
+        { 名: '甲尺', 源: '条目甲', 用途: '分级', 档位: [{ 档: 'X1 甲境', 注: '一' }, { 档: 'X2 乙境', 注: '二' }] },
+        { 名: '乙尺', 源: '条目乙', 用途: '换算', 档位: [{ 档: 'Y1 丙境', 注: '三' }] },
+        { 名: '丙尺', 档位: [{ 档: 'Z1 丁境', 注: '四' }] },
+    ];
+    const html = renderSettingHtml(w);
+    // ① 表头报节数（读者一眼知道"分成几节"，而不是"几张表"）
+    assert.match(html, /刻度（一概念一表 · 3 张 · 按原文条目分 2 节）/, '★表头报节数（2 节有出处）');
+    // ② 每一节一个 `<details>`，节名是原文条目名照抄
+    assert.match(html, /<summary><b>条目：条目甲<\/b><span class="sw2-hint"> · 1 张 · 2 档<\/span><\/summary>/, '★第一节：条目甲 · 1 张 · 2 档');
+    assert.match(html, /<summary><b>条目：条目乙<\/b><span class="sw2-hint"> · 1 张 · 1 档<\/span><\/summary>/, '★第二节：条目乙');
+    assert.match(html, /<summary><b>未标条目<\/b><span class="sw2-hint"> · 1 张 · 1 档<\/span><\/summary>/, '★老账那部分（没有出处）归"未标条目"');
+    // ③ ★档位**折起来**（默认不铺开）——这正是"一堵墙"的治法：默认只看到节
+    const folds = html.split('<details class="sw2-fold"').length - 1;
+    assert.ok(folds >= 6, `★节与表都折（3 张表 + 3 节 ≥ 6 个 details，实测 ${folds}）`);
+    // ④ 折起来但**不许把内容藏掉**：档位名仍在产物里（要看时点得开）
+    for (const t of ['X1 甲境', 'X2 乙境', 'Y1 丙境', 'Z1 丁境']) assert.ok(html.includes(t), `★档位「${t}」在产物里（折≠丢）`);
+    // ⑤ 老账（没有 `源`）⇒ 不分节、不写"条目："前缀，行为与 leg62 之后一致（零迁移）
+    const legacy = world();
+    legacy.context.setting.frozen.canon.刻度 = [{ 名: '甲尺', 档位: [{ 档: 'X1 甲境' }] }];
+    const lh = renderSettingHtml(legacy);
+    assert.ok(!lh.includes('按原文条目分'), '★老账不报节数（没有 `源` 就没有这一层）');
+    assert.ok(!lh.includes('条目：'), '★老账不写"条目："前缀（不假装分对了）');
 });

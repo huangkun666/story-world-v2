@@ -16,8 +16,12 @@ import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 //   玩家无法从面板判断任何变宽实验是否奏效（用户实机「一点变化都没有」追出来的真缺陷）。
 //   依赖方向：render → settle（settle 不反向依赖 render）——无环，已在 import 图上核过。
 import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';
-import { resolveScales } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）
+import { resolveScales, groupScales } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）；★leg63：按原文条目分节
 import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
+// ★★leg63：进包读数**必须读真源**（`buildScaleAnchor` 就是进包用的那一个函数）。
+//   为什么不能在这里自己按 `TIER_TOP` 另算一份：本仓"两份复制品漂移"的亏吃过多次，
+//   而这一格是**给玩家看的数字**——面板说"这些表每轮都在包里"，就得是包里真的那些（见下面那段如实报）。
+import { buildScaleAnchor } from './pack.js';
 import { LIMIT_ROWS, LIMIT_DEFAULTS, LIMIT_KEYS, isLimitKeyOf, normalizeLimit, limitsOf } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）
 // ★★leg53：**哪几格是引擎每轮算的**——从生产者那边取（不是面板自己另写一份名单，本仓"一处口径"）。
 import { ENGINE_DERIVED_ENV } from './unrest.js';
@@ -174,7 +178,7 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   "下面那一部分是已冻结的设定，一个字没动"）。玩家可见面又变了 ⇒ 构建号同批再升一格。
 //   ★形状纪律（`render.test.js` 锁着）：必须是 `leg<数字>-…`（升位链条要能一眼看出来）⇒
 //     同一棒内的第二次升位写成 `leg62-…-2`，**不许**用 `leg62b` 这种（不合形状、当时被锁当场抓住）。
-export const PANEL_BUILD = 'leg62-scale-concepts-3';
+export const PANEL_BUILD = 'leg63-scale-index-1';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -1662,22 +1666,55 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     //   2 个公式混成一栏。⇒ 现在按概念分栏：一个概念一张卡（表名 + 用途 + 它的档位/维度）。
     //   分组来源：`resolveScales`（新账读 `canon.刻度`，旧账纯函数从 powerScale/dims 推导 ⇒ **零迁移**）。
     //   ★与进包同一个读取口（`pack.js` 也读它）——两处各推一次必然漂移成"面板分了两张表、包里还是一栏"。
-    const scaleCards = resolveScales(canon).map((t) => {
-        const tierRows = (t.档位 || [])
-            .map((x) => `<div class="sw2-sv-row"><b>${escapeHtml(x.档)}</b><span>${escapeHtml(x.注 || '')}</span></div>`).join('');
-        const dimRows = (t.维度 || [])
-            .map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.名)}</b><span>${escapeHtml(d.范围 || '（原文未给范围）')}</span></div>`).join('');
-        const subRows = (t.子表 || []).map((sub) => (
-            `<div class="sw2-sv-row"><b>${escapeHtml(sub.名)}</b><span>${(sub.档位 || []).map((y) => escapeHtml(y.档)).join(' · ')}</span></div>`
-        )).join('');
-        const bits = [
-            tierRows ? `${(t.档位 || []).length} 档` : '',
-            (t.维度 || []).length ? `${(t.维度 || []).length} 维` : '',
-            (t.子表 || []).length ? `含子表 ${(t.子表 || []).length}` : '',
-        ].filter(Boolean).join(' · ');
-        return `<div class="sw2-set-card"><h4>《${escapeHtml(t.名)}》${t.用途 ? `<span class="sw2-hint"> · ${escapeHtml(t.用途)}</span>` : ''}</h4>`
-            + `<div class="sw2-hint">${escapeHtml(bits)}</div>${tierRows}${dimRows}${subRows}</div>`;
-    });
+    // ★★★leg63（用户现场拍板：「66 张表平铺在面板上，读不完、不成体系」）：**刻度按原文条目分节**。
+    //   病（大荒真账实测）：66 张表 **425 档**全部平铺成一堵墙，一屏之内读不完；
+    //     leg62 只解决了"条目级"的粒度（标签从每条档位挪到表头），**表与表之间仍是平级**。
+    //   治法（口径三条，见 `groupScales` 头注）：① `源` 有 ⇒ 按原文条目分节；② 没有 ⇒ 落「未标条目」
+    //     （老账零迁移，**不猜也不重抽**）；③ 顺序取账本出现序。
+    //   呈现（沿用本仓既有口径，零 JS、零新动作）：**节上一层 `<details>` + 节内每张表再折一层**
+    //     ⇒ 默认看到的是"这本书的尺子分成哪几节"（一屏读完），要看档位再逐节展开。
+    //   ★为什么表也要折：66 张表若各自展开档位，分节之后**仍是 425 行**（分节治不了量）。
+    const scaleCards = resolveScales(canon);
+    const scaleGroups = groupScales(scaleCards);
+    // ★leg63：**进包的真实读数**（读真源 `buildScaleAnchor`，不是在面板里另算一份）——
+    //   下面那句提示要写"其中几张表几档进包"，这必须与引擎实际做的事逐个对上。
+    const scaleAnchor = buildScaleAnchor(canon) || [];
+    const scaleFit = scaleAnchor.length
+        ? {
+            表: scaleAnchor.length,
+            档: scaleAnchor.reduce((n, t) => n + (t.档位 || []).length, 0),
+            维: scaleAnchor.reduce((n, t) => n + (t.维度 || []).length, 0),
+        }
+        : null;
+    const groupsHtml = scaleGroups.map((g, gi) => {
+        const names = g.表.map((t) => t.名).join(' · ');
+        const showNames = g.表.length <= 6 ? names : `${g.表.slice(0, 6).map((t) => t.名).join(' · ')} 等 ${g.表.length} 张`;
+        const inner = g.表.map((t, ti) => {
+            const tierRows = (t.档位 || [])
+                .map((x) => `<div class="sw2-sv-row"><b>${escapeHtml(x.档)}</b><span>${escapeHtml(x.注 || '')}</span></div>`).join('');
+            const dimRows = (t.维度 || [])
+                .map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.名)}</b><span>${escapeHtml(d.范围 || '（原文未给范围）')}</span></div>`).join('');
+            const subRows = (t.子表 || []).map((sub) => (
+                `<div class="sw2-sv-row"><b>${escapeHtml(sub.名)}</b><span>${(sub.档位 || []).map((y) => escapeHtml(y.档)).join(' · ')}</span></div>`
+            )).join('');
+            const bits = [
+                tierRows ? `${(t.档位 || []).length} 档` : '',
+                (t.维度 || []).length ? `${(t.维度 || []).length} 维` : '',
+                (t.子表 || []).length ? `含子表 ${(t.子表 || []).length}` : '',
+            ].filter(Boolean).join(' · ');
+            return `<details class="sw2-fold"${ti === 0 && gi === 0 ? ' open' : ''}><summary><b>《${escapeHtml(t.名)}》</b>`
+                + (bits ? `<span class="sw2-hint"> · ${escapeHtml(bits)}</span>` : '')
+                + (t.用途 ? `<span class="sw2-hint"> · ${escapeHtml(t.用途)}</span>` : '') + `</summary>`
+                + (tierRows || dimRows || subRows
+                    ? `<div class="sw2-hint sw2-fold-body">${tierRows}${dimRows}${subRows}</div>`
+                    : `<div class="sw2-hint sw2-fold-body">（这张表没有档位）</div>`)
+                + `</details>`;
+        }).join('');
+        return `<details class="sw2-fold" style="margin-bottom:6px"><summary><b>${g.未标 ? '' : '条目：'}${escapeHtml(g.源)}</b>`
+            + `<span class="sw2-hint"> · ${g.表.length} 张 · ${g.档} 档${g.维 ? ` · ${g.维} 维` : ''}</span></summary>`
+            + `<div class="sw2-hint sw2-fold-body"><div class="sw2-hint" style="margin-bottom:6px">${escapeHtml(showNames)}</div>${inner}</div></details>`;
+    }).join('');
+    const nSect = scaleGroups.filter((g) => !g.未标).length;
     // ★leg60（交接第 3 件）：**编译完整性**——上限口径"漏了如实报"（数字全部来自初始化那一刻的探测，落账带过来）。
     const cp = frozen.compile;
     const compileLine = cp
@@ -1721,12 +1758,23 @@ export function renderSettingHtml(world, { config = {} } = {}) {
         + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div>`
         + `<div style="margin-top:10px"><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button><span class="sw2-hint">只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div></div>`
         + (scaleCards.length
-            ? `<div class="sw2-set-card" style="grid-column:1/-1"><h4>刻度（一概念一表 · ${scaleCards.length} 张）</h4>`
+            ? `<div class="sw2-set-card" style="grid-column:1/-1"><h4>刻度（一概念一表 · ${scaleCards.length} 张${nSect ? ` · 按原文条目分 ${nSect} 节` : ''}）</h4>`
                 + `<div class="sw2-hint">书里的尺子按"一个概念一张表"分栏——衡量强弱的尺、决定资源怎么分的制度、`
-                + `取值范围、换算表<b>各自成表</b>，不再挤在同一个框里。这些表每轮都在模型的包里当锚：`
-                + `写实力/属性时按书里的尺子写，不自造形容词。</div></div>`
+                + `取值范围、换算表<b>各自成表</b>，不再挤在同一个框里。`
+                + (nSect ? `表多时按<b>原文条目</b>分节（这张尺出自书里哪一条，就归到那一条下），先看"分成哪几节"，再逐节点开看档位。` : '')
+                + `</div>`
+                // ★★leg63：**同一句里两个数必须都是真的**（如实报，不许给假成绩）。
+                //   过去这里写的是"这些表每轮都在模型的包里当锚"——而进包有体积上界
+                //   （表 ≤16 · 档 ≤24 · 维 ≤8，见 `buildScaleAnchor`），大荒真账 66 张表 425 档
+                //   只有 4 张表 24 档进得去 ⇒ **那句话当年就是不准确的**。现在按账上的真实读数分开说。
+                + (scaleFit
+                    ? `<div class="sw2-hint">其中 <b>${scaleFit.表}</b> 张表 / <b>${scaleFit.档}</b> 档 / <b>${scaleFit.维}</b> 维每轮进模型的包当锚`
+                        + `（写实力/属性时按书里的尺子写，不自造形容词）；表与档太多时按账本顺序取前面那些，`
+                        + `其余留在本页与账本里，不进每轮包。</div>`
+                    : '')
+                + `</div>`
             : '')
-        + (scaleCards.length ? `<div class="sw2-sv-grid" style="grid-column:1/-1">${scaleCards.join('')}</div>` : '')
+        + (scaleCards.length ? `<div class="sw2-sv-grid" style="grid-column:1/-1"><div style="grid-column:1/-1">${groupsHtml}</div></div>` : '')
         + (compileLine ? `<div class="sw2-set-card" style="grid-column:1/-1"><h4>编译完整性（初始化那一刻的读数）</h4>`
             + `<div class="sw2-hint">${escapeHtml(compileLine)}</div>`
             + (cp?.missedTitles?.length ? `<div class="sw2-hint" style="margin-top:4px">未编译的设定类条目（前 ${cp.missedTitles.length} 个）：${escapeHtml(cp.missedTitles.join('、'))}</div>` : '')
