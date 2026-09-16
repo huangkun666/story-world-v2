@@ -23,6 +23,7 @@ import {
     assembleSetting,
     linkContainedFactions,
     isTransientCallError,
+    SETTING_CHUNK_CHAR,
     BOOK_FIELD_KEYS,
     BOOK_FIELD_MAX,
     BOOK_FIELD_MAX_OPEN,
@@ -235,14 +236,15 @@ test('★leg61 重试判据：瞬时错（524/fetch failed）重试 · 超时与
     assert.equal(isTransientCallError(to), false, '★超时 = 止损 ⇒ **不重试**（立刻交给拆半降级）');
     assert.equal(isTransientCallError(new Error('HTTP 401')), false, '配置错 ⇒ 重试只是白烧');
     assert.equal(isTransientCallError(new Error('HTTP 429')), false, '限流 ⇒ 立刻加重限流是错的');
-    // 端到端：超时的 extract ⇒ 只调 1 次（不重试）
+    // 端到端：超时的 extract ⇒ 只调 1 次/块（不重试）
     const filler = Array.from({ length: 50 }, () => '字'.repeat(1500)).join('\n');
+    const chunkCount = Math.ceil(Array.from(filler).length / SETTING_CHUNK_CHAR);
     let n = 0;
     const alwaysTimeout = async () => { n += 1; const e = new Error('抽取超时'); e.sw2Timeout = true; throw e; };
     const r = await extractWorldSetting({ sourceText: filler, extract: alwaysTimeout, cache: null });
     assert.equal(r.ok, false, '全块超时 ⇒ 如实失败（不假装成功）');
-    // 每块只试 1 次：块数 = ceil(75000/60000) = 2 ⇒ 名册遍 + 属性遍 = 4 次（若超时被重试则是 8 次）
-    assert.ok(n <= 4, `★超时不许重试（实际 ${n} 次调用；重试的话会是 8 次）`);
+    // 每块只试 1 次、每块两遍（名册 + 属性）⇒ 恰好 2×块数；若超时被重试则是 4×块数
+    assert.equal(n, chunkCount * 2, `★超时不许重试（实际 ${n} 次 / 块数 ${chunkCount} ⇒ 应为 ${chunkCount * 2}；重试的话是 ${chunkCount * 4}）`);
 });test('★leg61 势力树甲类边：名字里写着上级的连边 · 多候选取最长 ⇒ 直接上级是"最近的那一层"', () => {
     const mk = (names) => names.map((n) => ({ id: `f-${n}`, kind: 'faction', name: n }));
     const ents = mk(['曹魏', '曹魏军', '曹魏西线军', '曹魏远征军', '蜀汉军', '关羽军', '袁绍军']);

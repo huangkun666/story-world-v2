@@ -43,6 +43,11 @@ export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时�
 // 第十八棒（v1 拍板值同款 · 提案态，随报批）：
 export const CANON_SRC_CHAR = 30000;       // 设定五件套抽取：书文前 3 万字符单发（v1 实测 16k-30k 稳定）
 export const ROSTER_CHUNK_CHAR = 60000;    // 书名录分块尺寸（字符级累计；v1 参数翻烧饼史终值）
+// ★leg61：**大书抽取的实际块尺寸**（见 `extractWorldSetting` 里那段实测注释）。
+//   为什么从 60000 降到 30000：leg21 那个 6 万是给"只报名号"的瘦提示词定的；两遍抽取之后
+//   **每次调用要吐的输出量翻了几倍**，6 万的块在 600 秒网关限下**必然超时** ⇒ 触发"对半拆"级联
+//   （实测：大荒 22 次调用/1909 秒；三国 7 块 >2.5 小时）。3 万的块每次 ≈90 秒，不再烧满超时。
+export const SETTING_CHUNK_CHAR = 30000;
 export const ROSTER_CHUNK_DEPTH = 4;       // 块失败对半拆递归深度上限（v1 同款；条目数 ≤1 时不再拆）
 // leg24 片1：ATTRS_BATCH_MAX / ROUND_BATCH_CHAR 随属性轮、关系轮一并删除（两轮已砍——书随时可查，不抄）
 
@@ -1437,7 +1442,17 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const rawCanons = [];   // 每块的净化结果（含五件套 + 该块名号）：块收齐后由 mergeCanonChunks 纯函数合并
     // 书名录：全条目分块多调用（全量覆盖，v1 教训：人名藏在条目深处，不许头截断）
     const rows = src.split('\n').map((s) => s.trim()).filter(Boolean);
-    const chunks = chunkRows(rows, ROSTER_CHUNK_CHAR);
+    // ★★★leg61：**块尺寸**（真机实测逼出来的数，不是拍的）。
+    //   旧值 `ROSTER_CHUNK_CHAR = 60000` 是 leg21 为**只报名号**的瘦提示词定的；leg60 把它当成了
+    //   "每块的合并提示词"的块尺寸，leg61 又拆成两遍（两遍都要吐长 JSON）⇒ 单次输出量翻了几倍。
+    //   实测（真模型 · 三国 · 600 秒网关限）：
+    //     · 6 万字符的块 ⇒ **超时**（524/超时），于是走"对半拆" ⇒ 拆出来的 3 万块还是要几分钟，
+    //       再超时再拆 ⇒ **级联**。整本跑：大荒 22 次调用 / 1909 秒；三国 7 块跑 >2.5 小时仍未收尾。
+    //     · 5.9 万字符 × 2 块的实测：**374 秒跑完 4 次调用、0 失败**（每次 ≈90 秒）。
+    //   ⇒ 定稿：大书把块切到 `SETTING_CHUNK_CHAR`（30000）。块数变多（三国 7 → 14），
+    //     但**每次调用都短**、不再有"烧满超时再拆"的浪费；总调用数与"级联拆半"同量级或更少。
+    //   ★口径不变：仍是"读全 + 块间纯函数合并"，只是块更小（`chunkRows` 同一把行级尺子）。
+    const chunks = chunkRows(rows, srcLen > CANON_SRC_CHAR ? SETTING_CHUNK_CHAR : ROSTER_CHUNK_CHAR);
     // leg23 照书办①：先把书本段「结构声明」扫出来（纯函数零调用）——按块给召回清单，块后再强制并册
     // ★leg60：再并上**题名面**（零 token 的 cast：作者把名册写在题名里，模型在 JS 里捞不全）。
     const { declares: tagDeclared, usesLabelTerms } = scanBookDeclarations(src);

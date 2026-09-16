@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows, buildAbstractPrompt, buildRosterPrompt, dedupeRoster } from '../src/abstract.js';
+import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, SETTING_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows, buildAbstractPrompt, buildRosterPrompt, dedupeRoster } from '../src/abstract.js';
 
 // 测试书：k0..k(n-1) 条目行（约 210 字符/条）；名号藏在条目深处（第 3 个词）
 function makeBook(n) {
@@ -41,6 +41,9 @@ function makeExtract({ maxOk = Infinity, calls = null } = {}) {
             techOrMagic: '力量体系（原文）',
             historyNotes: ['史略一（原文）'],
             bookEntities,
+            // ★leg61：**属性遍**（`buildSettingPrompt` 问的是 `entities`）——mock 照形状回一条：
+            //   值必须是"本段原文里逐字能找到的"（出处闸），所以这里抄原文里真实存在的填充串。
+            entities: [{ name: '书内无名的世界', kind: 'character', fields: { 表外属性名: '字'.repeat(50) } }],
             tension: { polarity: '正邪', direction: '邪压正' },
             env: {},
         });
@@ -50,31 +53,67 @@ function makeExtract({ maxOk = Infinity, calls = null } = {}) {
 
 const EMPTY_CACHE = () => ({ map: new Map(), get(k) { return this.map.get(k) ?? null; }, set(k, v) { this.map.set(k, v); } });
 
+// ★leg60：**题名面**（零 token 的 cast）在大书路径上也要过——并册 + 全书级出处判定放行。
+//   为什么单独一条：大书路径有一道"全书级出处校验"（`src.includes(name)`，纯编造才丢），
+//   而题名面剥出来的名号**可能只出现在题名里、正文一个字都没有**（三国 `张辽正史` 这类条目是禁用的）。
+//   ⇒ 出处判定的口径扩成"src ∪ 题名面"：**题名也是这本书的一部分**（判据不是"我们觉得像名字"，
+//   而是"它被作者当名字用过"——是某条条目的 key）。
+test('★leg60 题名面：大书路径下模型漏掉的名号也强制并册，且过全书级出处判定', async () => {
+    const filler = Array.from({ length: 700 }, (_, i) => `【f${i}】` + '字'.repeat(200)).join('\n');
+    const src = `${filler}\n【控制器_A】与名号无关的正文。`;
+    assert.ok(Array.from(src).length > CANON_SRC_CHAR, '前置：确为大书');
+    const extract = async () => JSON.stringify({ bookEntities: [{ name: 'f0', kind: 'character' }] });
+    const r = await extractWorldSetting({
+        sourceText: src, extract, cache: null,
+        extraDeclared: [{ name: '只在题名里出现过的名号' }],
+    });
+    assert.equal(r.ok, true);
+    const names = r.setting.frozen.canon.bookEntities.map((b) => b.name);
+    assert.ok(names.includes('只在题名里出现过的名号'), '★题名面并册（src 正文里根本没有它，仍算"书里有据"）');
+    assert.ok(names.includes('f0'), '模型抽到的名号照旧入册（题名面不挤掉任何人）');
+    const only = r.setting.frozen.canon.bookEntities.find((b) => b.name === '只在题名里出现过的名号');
+    assert.equal(only.kind, undefined, '★题名面判不出类别 ⇒ 不写 kind（不猜；下游按既有缺省走）');
+});
+
 test('chunkRows：行级分块按累计字符，超长单行自成一块', () => {
     const rows = ['a'.repeat(10), 'b'.repeat(10), 'c'.repeat(30)];
     assert.deepEqual(chunkRows(rows, 25), ['a'.repeat(10) + '\n' + 'b'.repeat(10), 'c'.repeat(30)]);
     assert.deepEqual(chunkRows(rows, 100), [rows.join('\n')]);
 });
 
-test('大书分块多调用：调用 = 1 次五件套 + 每块 1 次，全量覆盖（尾部名号不丢）', async () => {
+test('★leg60 大书分块：调用 = **每块 1 次**（五件套与名册同轮一遍抽完），全量覆盖（尾部名号不丢）', async () => {
     const src = makeBook(2000); // ≈ 42 万字符（含尾部 字 填充）——超 3 万触发分块
     const lenA = Array.from(src).length;
     assert.ok(lenA > CANON_SRC_CHAR, '前置：确为大书');
     const calls = [];
     const r = await extractWorldSetting({ sourceText: src, extract: makeExtract({ calls }), cache: null });
     assert.equal(r.ok, true);
-    // 1 次 canon（头 3 万）+ ceil(全量/块) 次名册块调用（leg24 片1：关系轮/属性轮已删，不再有额外调用）
-    assert.ok(calls.length >= 2, `应多次调用（实际 ${calls.length} 次）`);
-    const expectChunks = Math.ceil(lenA / ROSTER_CHUNK_CHAR);
-    assert.equal(calls.length, 1 + expectChunks, `1 次五件套 + ${expectChunks} 块（停抄书后无关系轮/属性轮）`);
-    // 五件套来源 = 头 3 万单发：首个 prompt 的原文段 ≤ 3 万
+    // ★leg60 改口径：**不再有"五件套单发"那一次**——五件套与名册在同一批块里一遍抽完。
+    //   旧法 = 1 次（头 3 万，只抽设定）+ N 次（读全，只抽名册）= 同一本书喂两遍；
+    //   真账代价：三国真档位表在 3 万之外 ⇒ 模型照抄了窗口里的【声誉】十级当力量谱系。
+    // ★leg61：块尺寸改由 `SETTING_CHUNK_CHAR`（30000）决定——那个 60000 是 leg21 给"只报名号"定的，
+    //   两遍抽取之后 6 万的块在 600 秒网关限下必然超时（实测级联拆半：大荒 22 次调用/1909 秒）。
+    const expectChunks = Math.ceil(lenA / SETTING_CHUNK_CHAR);
+    // ★★★leg61 改口径：**每块调用 1 次 → 每块 2 次**（名册遍 + 属性/设定遍）。
+    //   依据（真机实测，装置 `F:\deepseek\tmp\leg61-live-roster-ab.js`）：同一批块、同一模型，
+    //   "只报名号"去重 1022 个名号 vs "七样一起问"去重 364 个——差的是**每个名号的输出成本**
+    //   （~57 字符 vs ~188 字符），不是输出装不下（预算还余 4,000 token）。
+    //   ⇒ 名册与属性各拿一份只干一件事的提示词；**代价写在锁里**（调用数上界 2×块数），不许悄悄变。
+    const upper = expectChunks * 2;
+    assert.ok(calls.length >= expectChunks && calls.length <= upper,
+        `每块 1~2 次调用（名册遍 + 属性遍；实际 ${calls.length} 次 / 块数 ${expectChunks}）`);
+    assert.ok(calls.length > expectChunks, '★两遍抽取真的跑了（属性遍不是空转）');
     const names = r.setting.frozen.canon.bookEntities.map((b) => b.name);
     assert.ok(names.includes('名号1999'), '尾部条目名号全量覆盖（v1 教训：名字密集段不许头截断）');
     assert.equal(new Set(names).size, names.length, '合并去重');
     // 名号顺序 = 书序（k0 在前，k1999 在后）
     assert.equal(names[0], '名号0');
     assert.equal(names[names.length - 1], '名号1999');
-    assert.ok(r.setting.frozen.canon.powerScale.length === 1, '五件套仍出自 canon 单发');
+    // ★leg60 新锁：mock 每块都交**同一条** powerScale/rules ⇒ 块间**并集去重**后必须只剩 1 条（不是 N 条）
+    assert.equal(r.setting.frozen.canon.powerScale.length, 1, '块间并集去重（N 块交同一条 ⇒ 最终 1 条，且 note 不丢）');
+    assert.equal(r.setting.frozen.canon.powerScale[0].note, '主宰一方。', 'note 随 level 一起留下');
+    assert.deepEqual(r.setting.frozen.canon.rules, ['法则一（原文）'], 'rules 同样并集去重');
+    assert.equal(r.setting.frozen.canon.society, '社会格局（原文）', '一句话型字段取到值（不是空）');
 });
 
 test('leg25 g：跨块别名合并——去重键 = 名字 ∪ 别名，先见到的当正名，叫法一个不丢', () => {
@@ -118,47 +157,50 @@ test('leg25 g：跨块别名合并——去重键 = 名字 ∪ 别名，先见�
     assert.equal(dedupeRoster([{ aliases: ['x'] }, null, { name: '  ' }]).length, 0, '缺 name 的条目丢弃');
 });
 
-test('leg24 片1 停抄书：名册轮只问 {name,kind}，抽象轮也不过问书里的上级/所在/属性', async () => {
+test('★leg60 一块里名册与设定同轮抽（旧"名册轮只问 name/kind / 不许问 powerScale"按新口径改写）', async () => {
     const src = makeBook(200);
-    const rosterPrompts = [];
-    const canonPrompts = [];
+    const prompts = [];
     const extract = async (prompt) => {
-        if (prompt.includes('名册抽取器')) rosterPrompts.push(prompt);
-        else canonPrompts.push(prompt);
+        prompts.push(prompt);
         const header = '———— 设定原文如下 ————';
         const part = prompt.includes(header) ? prompt.slice(prompt.indexOf(header) + header.length) : '';
         return JSON.stringify({ bookEntities: parseNames(part) });
     };
     const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
     assert.equal(r.ok, true);
-    assert.ok(rosterPrompts.length >= 1, '名册轮确实发起块调用');
-    const p = rosterPrompts[0];
+    assert.ok(prompts.length >= 1, '确实发起块调用');
+    const p = prompts[0];
+    // ① 停抄书口径**整条不倒退**（leg24 片1 的守门原样留着——合并提示词最容易顺手把它带回来）
+    assert.ok(!/hardPower|softPower|intel|"attrs"|"race"|"依据"/.test(p), '仍不问四维属性/种族/原文依据（停抄书）');
+    // ② ★leg60 新口径：同一块里**必须**问设定（旧锁是"名册轮不许问 powerScale/situation"——
+    //    合并成一份提示词后那条锁的语义反了：现在**不问才是 bug**，所以正反两面都锁）
+    assert.match(p, /"powerScale"/, '★合并轮必须抽力量谱系（旧口径：名册轮不许问——已按 leg60 改写）');
+    assert.match(p, /"situation"/, '★世情句必须抽（真账：三国把它抽成了"天下大势发生重大变故（如黄巾起义…）"）');
+    assert.match(p, /"rules"/, '法则必须抽');
+    assert.match(p, /"society"/, '社会格局必须抽');
+    assert.match(p, /"techOrMagic"/, '力量/生态体系必须抽');
+    assert.match(p, /"historyNotes"/, '史略必须抽');
+    assert.match(p, /这一段（本块）里有什么就抽什么/, '★写明"一块里有什么就抽什么"（分块按书序，不按数据类型切）');
+    // ③ 名册纪律原样在位（这些锁沿用旧测试，一条不删）
     assert.match(p, /不要给它们标 faction/, '种族禁令名单式强化在位（人族/妖族/鬼族…不算势力）');
-    // 名册轮形状锁（第二十五棒 e 改判据）：v1 的「所属/实力」回归——模板 = 名号+类别 **+ fields 属性组**。
-    //   旧锁的漏洞（如实记录）：它只 JSON.parse 模板里**第一个对象**，且只禁 `"parent"` 字面键
-    //   ⇒ 新加的 `fields:{所属,实力}` 从缝里漏过，闸门形同没锁。现在按中文锚点切段整段解析、逐键锁死。
     const tplText = p.slice(p.indexOf('形状如下；可省字段不写 null）：') + '形状如下；可省字段不写 null）：'.length, p.indexOf('\n纪律：'));
     const tpl = JSON.parse(tplText);
-    // leg25 g 改判据（用户点单「治碎块只能尽量做提示词约束吧？」）：第一形态由 `{name,kind}` 改为
-    //   **`{name,aliases,kind}`** —— `aliases` 是新增的**契约键**（`ssot.schema.js` 的 bookEntities 同步登记），
-    //   用途是让"同名多叫法"能跨块归一（模型分块抽取时看不到全书，旧法只按 name 判重 ⇒ 同一势力被收成多条空壳）。
-    //   仍**不过问**书里的上级/所在/属性（停抄书口径不倒退）。
     assert.deepEqual(Object.keys(tpl.bookEntities[0]), ['name', 'aliases', 'kind'], '第一形态：名号 + 别名 + 类别');
     const charTpl = tpl.bookEntities.find((x) => x.kind === 'character');
-    assert.deepEqual(Object.keys(charTpl.fields), ['所属', '身份', '定位', '实力'], '★角色属性组 = 所属/身份/定位/实力（v1 的 affiliation + power）');
+    assert.deepEqual(Object.keys(charTpl.fields), ['所属', '身份', '定位', '实力'], '★角色属性组 = 所属/身份/定位/实力');
     const facTpl = tpl.bookEntities.find((x) => x.kind === 'faction');
     assert.deepEqual(Object.keys(facTpl.fields), ['性质', '倾向', '规模'], '★势力属性组 = 性质/倾向/规模（规模≠角色档位）');
+    // ★leg60 新增：三个形态都要带 aliases（旧模板只在第一形态写了它 ⇒ 模型从不给角色/势力交别名）
+    assert.deepEqual(Object.keys(charTpl).sort(), ['aliases', 'fields', 'kind', 'name'], '角色形态也带 aliases');
+    assert.deepEqual(Object.keys(facTpl).sort(), ['aliases', 'fields', 'kind', 'name'], '势力形态也带 aliases');
     assert.match(p, /所属（角色的所属势力）= 必抄项/, '★所属是必抄项，写明"不许推测、不许按常识分配"');
     assert.match(p, /实力（角色的档位）= 必抄项/, '★实力是必抄项（照抄原话、不套别书档位）');
     assert.match(p, /不许套用别的书的档位体系/, '挡"套档位"的那句纪律在位');
-    // 仍然不问的东西：四维属性/种族/所在（停抄书口径不倒退——只有「所属/身份/定位/实力」这一组回归）
-    assert.ok(!/hardPower|softPower|intel|"attrs"|"race"|"依据"|powerScale|situation|intensity/.test(p), '名册轮仍不问四维属性/种族/力量谱系/世情/张力');
-    // leg24 片1 新增锁：抽象轮（五件套轮）同样不许问书里的上级/所在/属性
-    assert.equal(canonPrompts.length, 1, '五件套 = 头 3 万单发一次');
-    const cp = canonPrompts[0];
-    assert.ok(!/"parent"|"race"|"attrs"|"依据"|hardPower|office|"intel"/.test(cp), '抽象轮不问上级/种族/四维属性（停抄书）');
-    assert.match(cp, /powerScale/, '力量谱系仍要（它是"查数值时照表取"的原料，不是抄实体）');
-    assert.match(cp, /"situation"/, '世情句仍要（当前天下大势一句）');
+    // ④ 设定那一段的形状与名册**同在一份 JSON**（一处定义：CANON_SHAPE，两个 builder 共用）
+    //    ★leg60 起多一项 `dims`（维度/刻度）——它是"书里的尺子"，进包当锚（`pack.js` 的 buildScaleAnchor）
+    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'rules', 'situation', 'society', 'techOrMagic', 'tension'],
+        '★一份 JSON 里同时有设定（含维度/刻度）与名册（leg60 的"一遍抽完"）');
+    assert.match(p, /"dims"/, '★维度/刻度要抽（真账：三国的 `勇武|韬略|内政|统御|气度|健康: range: -100~100`）');
 });
 
 test('leg24 片1：抄书流水线的函数与常量整条退场（删除位锁——防无声复活）', async () => {
@@ -356,13 +398,21 @@ test('★leg27：进度上报按"段"成对出现（start/finish 配对）+ 带�
         assert.ok(f.ms >= 0, 'ms 非负');
         assert.equal(typeof f.ok, 'boolean', '成败是布尔事实，不是文案');
     }
-    // 五件套那一段的 chars = 头 CANON_SRC_CHAR（读数可复核）
-    const canon = finishes.find((e) => e.step === 'canon');
-    assert.equal(canon.chars, CANON_SRC_CHAR, '五件套段 = 头 3 万字符（可复核）');
-    // 各块的 chars 之和 ≈ 全书去掉头 3 万后的量级（块是行级分块 ⇒ 只验"覆盖了剩余全部"这个量级）
+    // ★★★leg61 改口径（这一条的来历值得留着）：leg60 曾把"五件套段"取消（设定与名册同一批块一遍抽完），
+    //   本棒又把它**请回来了**——因为实测发现"一遍抽完"的代价是**名册产量掉 2.8 倍**
+    //   （同一批块：只报名号 1022 个 vs 七样一起问 364 个；每个名号的输出成本 ~57 vs ~188 字符）。
+    //   ⇒ 现在 `canon` 段 = **属性+设定遍**（`buildSettingPrompt`），`chunk` 段 = 名册遍。
+    //   ★旧锁"不许有 canon 段"因此**按设计作废**（不是回归）：它锁的是 leg60 的合并口径，那个口径已被实测否掉。
+    //   现在锁的是**新的两遍口径**：两段一一配对、且属性遍覆盖全书（不是只读头 3 万）。
+    assert.ok(finishes.some((e) => e.step === 'canon'), '★leg61：属性+设定遍必须在进度面出声（回归 leg27 的"全程可见"）');
     const chunkChars = finishes.filter((e) => e.step === 'chunk').reduce((n, e) => n + e.chars, 0);
     const allChars = Array.from(src).length;
-    assert.ok(chunkChars > allChars - CANON_SRC_CHAR - 100, `块覆盖剩余全书（块 ${chunkChars} vs 全书 ${allChars}）`);
+    const expectChunkChars = Array.from(src.split('\n').map((s) => s.trim()).filter(Boolean).join('\n')).length;
+    // 块是"行级分块"：块**内部**的行间换行保留，块与块**之间**那一个换行不出现（join 的边界）
+    //   ⇒ 块字符数之和 = 全书 − (块数 − 1)。这不是丢内容，是分块本身的算术。
+    const chunkCount = finishes.filter((e) => e.step === 'chunk').length;
+    assert.equal(chunkChars + (chunkCount - 1), expectChunkChars,
+        `块覆盖**整本书**（块 ${chunkChars} + 边界换行 ${chunkCount - 1} vs 全书 ${allChars}）`);
     // 返回值里带得走（界面/诊断要能复述"这次多少段、多少耗时"）
     assert.equal(r.timing.mode, 'big');
     assert.equal(r.timing.calls, finishes.length, 'timing.calls = 实际完成段数');
