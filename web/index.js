@@ -13,6 +13,11 @@ import { migrateLegacyAttrs } from '../src/settle.js';   // leg24 片4：旧账�
 import {
     hotAccountShape, loadHotAccount, planChronicleRotation, countLedgerEntries,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
+    // ★★★leg55（leg54 §6.4「凡是面板上印出来的数字，都要问一句它是现算的还是写死的」）：
+    //   冷档阈值那两个数（`500 轮 / 5MB`）此前是**渲染层写死的兜底**，而设置页那行写着"读 config"——
+    //   实际 `renderCfg()` 从不注入这两键 ⇒ 那半个分支是**死路**，"现算"是假的。
+    //   ⇒ 把真源接上（同一份常量既被 `planChronicleRotation` 当缺省、又被面板印出来）。
+    PROPOSED_LIMITS,
 } from '../src/storage.js';
 import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer, describeProgress } from '../src/abstract.js';
 // ★leg40：从世界源起根（把书里"正在发生的事"落成账上的线头事件；幂等、可重入、失败零阻塞）
@@ -25,7 +30,7 @@ import { describeSnapshots, planStep, planRetention, restoreFrom } from '../src/
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
-import { composeInitSource, normalizeEntryKey } from '../src/init-source.js';
+import { composeInitSource, normalizeEntryKey, compileSummary, slimLegacyCompile } from '../src/init-source.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
 // ★leg46：档位/开关/上限三张表**不再在本文件里判**（归一与白名单都在 `src/param-hub.js` 一处）
@@ -92,7 +97,7 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 // ★★★leg54 同批升位：世界尺度那四个框从 `<select>` 换成 `<input type="number">`
 //   ⇒ `style.css` 增了 `.sw2-param-input` 一族规则（定宽/右对齐/去箭头）⇒ **CSS 版本号必须跟着升**。
 //   ★禁词纪律同前：`leg54-unlimited-limits` 零引擎术语（limits 是玩家词面）。
-const CSS_VERSION = '20260917-leg54-unlimited-limits';
+const CSS_VERSION = '20260917-leg56-gear-bar-live-caps';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -1720,6 +1725,12 @@ function renderCfg(extra = {}) {
         // ★★leg46 续：自检卡要的读数（世界名/桶键 · 真源 · 引擎镜像 · 主路能不能写）——
         //   渲染层不持状态，一律由本层注入（照本仓既有纪律）。
         paramDiag: gatherParamEvidence(),
+        // ★★★leg55（leg54 §6.4）：**面板上印出来的数字必须现算**——旧卷卡那行「自动入卷阈值」原本
+        //   靠 `?? '500'` / `?? '5'` 兜底，`renderCfg()` 从不注入这两键 ⇒ "读 config"是死路，
+        //   印出来的其实是渲染层抄的一份字面量（正是 leg54 那个 4096 的同一种病）。
+        //   ⇒ 从真源现读：这两值就是 `planChronicleRotation` 本笔在上面走的那条缺省（同一份常量）。
+        limitsTicks: PROPOSED_LIMITS.ticks,
+        limitsBytesMB: PROPOSED_LIMITS.bytes / 1024 / 1024,
         ...extra,
     };
 }
@@ -2015,7 +2026,7 @@ export function extractionProgressHandler(events, { setText = setStatus, interva
                 heartbeatAt = now();
                 const cur = (events || []).filter((e) => e && e.phase === 'start').slice(-1)[0] || null;
                 const done = (events || []).filter((e) => e && e.phase === 'finish' && e.ok).length;
-                const label = cur ? (cur.step === 'canon' ? '设定' : `名册第 ${cur.index}/${cur.count} 块`) : '（准备中）';
+                const label = cur ? (cur.step === 'canon' ? '设定与名册' : `第 ${cur.index}/${cur.count} 块（设定与名册）`) : '（准备中）';
                 try {
                     log(`[story-world-v2] 抽取仍在跑：${label} · 已 ${done} 段 · 已花 ${Math.round((startedAt == null ? 0 : now() - startedAt) / 1000)} 秒（这一段还没返回属正常，单块是分钟级）`);
                 } catch (_) {}
@@ -2030,7 +2041,7 @@ export function extractionProgressHandler(events, { setText = setStatus, interva
     return {
         onEvent: (ev) => {
             try {
-                const label = ev.step === 'canon' ? '设定' : `名册第 ${ev.index}/${ev.count} 块`;
+                const label = ev.step === 'canon' ? '设定与名册' : `第 ${ev.index}/${ev.count} 块（设定与名册）`;
                 if (ev.phase === 'start') {
                     if (startedAt == null) {
                         startedAt = now();
@@ -2319,6 +2330,40 @@ export function seedAndBackfill(hotWorld, { entries = [] } = {}) {
  * 纪律：**幂等**（同一本书只种一次，`meta.seedRoots` 记指纹）· **失败零阻塞** · **不碰世界进度**（当事人必须是账上真有的实体名）。
  * 提成导出是为了**能被真测**（注入真 extract 真跑），与 `seedAndBackfill` 同治法。
  */
+/**
+ * ★★leg61：**起根候选池**（导出是为了**能真测**——本仓铁律：判据要能被独立喂进去跑）。
+ *
+ * 口径（三件事，全是机械判据）：
+ *   ① 未上过台：`active` ∧ 从未出现在任何事件的 `ripples` 里 ∧ 不是玩家棋子（既有口径，不动）；
+ *   ② 名号形态闸：名字 2–12 字 ∧ **不含 `<>{}`**（`<user>` 这类占位符真的在原文里，不上闸它会占掉名额）；
+ *   ③ ★排序键 = **这个名字在本书原文里出现多少次**（零 token、零词表、纯函数）。
+ *
+ * 为什么必须换排序键（真账实测，见上面那段注释）：旧法按**账本顺序**取前 60，于是引导指向了
+ * "账本里排前面的人"（三国是 `大汉/大魏/大吴/中山无极甄氏…`），而书里戏最多的诸葛亮(111 次)、
+ * 姜维(81)、司马懿(74)、关羽(56) 全被挤在名单外——**385 个合格候选里出现 ≥10 次的 114 个
+ * （占 90%）一个都没进名单**。名单不是硬闸（模型确实会用名单外的名字：大荒 4/13、三国 3/14 人次），
+ * 但把引导对准"书里真有事的人"是纯赚的。
+ */
+export function buildSeedCandidatePool(hotWorld, src = '', top = SEED_CANDIDATES_TOP) {
+    const named = new Set();
+    for (const e of hotWorld?.events || []) for (const r of e.ripples || []) named.add(r);
+    const text = String(src ?? '');
+    const occ = (n) => {
+        let c = 0;
+        let i = text.indexOf(n);
+        while (i !== -1 && c < 50) { c += 1; i = text.indexOf(n, i + n.length); }   // 上界 50：只为排序，不必精确
+        return c;
+    };
+    return (hotWorld?.entities || [])
+        .filter((e) => (e.status || 'active') === 'active' && !named.has(e.id) && e.id !== hotWorld?.context?.playerId)
+        .filter((e) => typeof e.name === 'string' && e.name.length >= 2 && e.name.length <= 12)
+        .filter((e) => !/[<>{}]/.test(e.name))
+        .map((e) => ({ name: e.name, n: occ(e.name) }))
+        .sort((a, b) => b.n - a.n || (a.name < b.name ? -1 : 1))                   // 出现次数降序；并列按名字（确定性）
+        .slice(0, top)
+        .map((x) => x.name);
+}
+
 export async function seedRootsForWorld(hotWorld, { sourceText = '', extract = null, fresh = false, minRoots = 3, chunkChars = SEED_CHUNK_CHAR, candidates = null, onProgress = null } = {}) {
     if (typeof extract !== 'function') return { ok: false, skipped: true, reason: '没有可用的抽取通道' };
     const src = String(sourceText ?? '');
@@ -2329,15 +2374,16 @@ export async function seedRootsForWorld(hotWorld, { sourceText = '', extract = n
     for (let i = 0; i < src.length; i += 1) h = (Math.imul(31, h) + src.charCodeAt(i)) | 0;
     const fp = `seed:${src.length}:${chunkChars}:${(h >>> 0).toString(36)}`;
     // 候选人名单：缺省 = 账上"从没被任何事件点过名的 active 实体名"（机械，零语义）
-    const pool = Array.isArray(candidates) ? candidates : (() => {
-        const named = new Set();
-        for (const e of hotWorld.events || []) for (const r of e.ripples || []) named.add(r);
-        return (hotWorld.entities || [])
-            .filter((e) => (e.status || 'active') === 'active' && !named.has(e.id) && e.id !== hotWorld.context?.playerId)
-            .filter((e) => typeof e.name === 'string' && e.name.length >= 2 && e.name.length <= 12)
-            .map((e) => e.name)
-            .slice(0, SEED_CANDIDATES_TOP);
-    })();
+    // ★★leg61（跨书实测后改的排序，用户令「做种的候选只有 60 个吗？但是我是把所有实体都放进上下文了啊」）：
+    //   名单**不是硬闸**（提示词里那句"名单里没有的，才用书里别处明述的名号"是真的会被用的——
+    //   真账实测：大荒 13 人次里 4 个、三国 14 人次里 3 个都是**名单外**的名字，位次能到 #346）。
+    //   但它是一份"优先挑这些"的**引导**，而旧法按**账本顺序**取前 60 ⇒ 引导指向了错误的人：
+    //     三国进池的是 `大汉/大魏/大吴/中山无极甄氏…`（按 kind 排序后国号与氏族在前面），
+    //     而**书里戏最多的那批人被挤在外面**：诸葛亮(出现 111 次) · 姜维(81) · 司马懿(74) · 关羽(56)…
+    //     ——三国 385 个合格候选里，出现 ≥10 次的 **114 个**（占 90%）一个都没进名单。
+    //   ⇒ 排序键换成"**这个名字在本书原文里出现多少次**"（零 token、零词表、纯函数）：
+    //     引导于是对准"书里真有事的人"，而不是"账本里排前面的人"。`<user>` 这类占位符靠名号形态闸挡。
+    const pool = Array.isArray(candidates) ? candidates : buildSeedCandidatePool(hotWorld, src, SEED_CANDIDATES_TOP);
     const chunks = chunkBookText(src, chunkChars);
     const r = await seedRootsChunked({
         ssot: hotWorld, chunks, extract, candidates: pool, fingerprint: fp, at: new Date().toISOString(),
@@ -2421,7 +2467,11 @@ export async function loadWorld() {
         return;
     }
     const hot = rot.hot;
-    const migrated = migrateLegacyAttrs(hot);   // leg24 片4：旧账一次性清理（幂等）
+    const migrated0 = migrateLegacyAttrs(hot);   // leg24 片4：旧账一次性清理（幂等）
+    // ★leg60：**第二处旧账清理**——把第一版写胖的 `frozen.compile`（含 189 条名号明细 + 未登记的键）
+    //   在载入时收成标量摘要（幂等、不可变；无可摘则原对象返回）。与上面同一治法，同一位置。
+    const migrated = slimLegacyCompile(migrated0);
+    if (migrated !== migrated0) console.info('[story-world-v2] 编译读数旧账已收成标量摘要（诊断明细不再进账本）');
     const hotWorld = migrated;   // 旧账清理后的世界（下面所有落账都基于它）
     // 名册落账（可重入）+ 位置继承：共用同一份条目，一次落盘
     const bookEntriesForSeed = await bookEntriesForInherit();
@@ -3193,6 +3243,16 @@ if (typeof window !== 'undefined') {
                 extract: diagExtract(resolved), // 双形取法：字符串/JSON 都吃
                 force: false,
                 onProgress: progress.onEvent,
+                // ★leg60：**题名面**（零 token 的 cast）走"照书办"通道强制并册——
+                //   作者把名册写在题名里（三国 `控制器_张辽`×187 / `张辽正史`×184），模型只抽到 127 条。
+                extraDeclared: src.titleRoster,
+                // ★leg60（第 3 件）：**编译完整性读数**落进 `setting.frozen.compile`——面板与账本都看得见
+                //   "书里有多少条设定类条目 / 本次编译覆盖了多少 / 声明面漏了多少"。
+                //   ⚠★**只落摘要标量**（用户真账实测抓出的自己那一刀）：第一版我把整个 `src.catalog`
+                //     铺进去了，于是 `titleRoster`（189 条带 `why` 的名号明细）**整块进账**——
+                //     13,679 字符 = 账本的 **11.4%**，而且契约层没登记它（`additional:false` ⇒ 违约）。
+                //     明细属于**控制台诊断面**（`logInitDiagnostics` 已有），账本只留计数。
+                compileInfo: compileSummary(src.catalog, src.titleRoster),
             });
             progress.stop();
             // 抽取耗时与逐段读数（成功也要出声——"慢"必须有据可查）
