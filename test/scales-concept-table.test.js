@@ -16,6 +16,7 @@ import path from 'node:path';
 import {
     sanitizeScales, scalesToFlat, scalesFromFlat, resolveScales, parseScaleTier,
     buildScalePrompt, SCALE_SHAPE_OBJ, sanitizeCanon, mergeCanonChunks,
+    mergeSameTierEntries, tierWordsOf,
 } from '../src/abstract.js';
 import { renderSettingHtml } from '../src/render.js';
 
@@ -184,7 +185,92 @@ test('★leg62 mergeCanonChunks：跨块同一把尺**合成一张表**（不许
     assert.deepEqual(legacy.canon.powerScale.map((x) => x.level), ['X1']);
 });
 
-// ───────────────────────── ⑤ 新入口：直抽刻度的按钮与接线（防"按钮画了没人接"） ─────────────────────────
+// ───────────────────────── ⑥ 重复（用户令「之前不就说了重复问题啊」） ─────────────────────────
+//   病（本棒量准）：`dedupeTiers(103) → 95` 只吃掉 8 条，同一档在面板上出现 4~5 次——
+//   大荒 **16 组同记号 / 多出 54 条**（`T1 感气境 (妖:…)` / `T1感气` / `T1` / `T1 感气境`）。
+//   真因：leg61 那条判据留了"note 差别大就两条都留"的口子，而同一档的几种写法恰恰 note 不同。
+test('★leg62b mergeSameTierEntries：同记号的几种写法合**一条**，且原话一条不丢', () => {
+    const merged = mergeSameTierEntries([
+        { level: 'X1 甲境 (甲支:某叫法)', note: '（甲支的叫法）' },
+        { level: 'X1甲', note: '第一境的说明，写得最长的一条原话。' },
+        { level: 'X1', note: '简写' },
+        { level: 'X1 甲境', note: '另一种说法，完全不同的原话。' },
+    ]);
+    assert.equal(merged.length, 1, '★同记号 ⇒ 合成一条（不是 4 条）');
+    assert.equal(merged[0].level, 'X1 甲境', '档名取最完整的那条（不含括注优先）');
+    assert.match(merged[0].note, /第一境的说明/, '注取最像说明的那条');
+    assert.match(merged[0].note, /另一种说法/, '★真·另一种说法用 ｜ 接在后面（一条不丢）');
+    assert.ok(!merged[0].note.includes('（甲支的叫法）'), '把"它属于哪张表的括注"当注的那条被剔掉（那正是误判来源）');
+    // 不同记号不许被合掉
+    const keep = mergeSameTierEntries([{ level: 'X1', note: '一' }, { level: 'Y1', note: '二' }]);
+    assert.deepEqual(keep.map((x) => x.level), ['X1', 'Y1'], '不同记号各自留着');
+    // 单条不动
+    assert.deepEqual(mergeSameTierEntries([{ level: 'X1', note: '唯一' }]), [{ level: 'X1', note: '唯一', axis: '' }]);
+    assert.deepEqual(mergeSameTierEntries([]), [], '空表 ⇒ 空');
+});
+
+test('★leg62b 呈现层收口：旧账推概念表时**先合并再分组**（面板上的档位数必须降下来）', () => {
+    // 三个记号相同、写法不同的档位 ⇒ 面板只该画 1 档
+    const tables = scalesFromFlat({
+        powerScale: [
+            { level: 'X1 甲境', note: '完整说明原话，最长的那条。' },
+            { level: 'X1甲', note: '较短' },
+            { level: 'X1', note: 'X1' },
+            { level: 'Y1 乙境', note: '另一档的说明原话在这里。' },
+        ],
+        dims: [],
+    });
+    const all = tables.flatMap((t) => t.档位 || []);
+    assert.equal(all.length, 2, `★4 条同/异记号混着 ⇒ 面板只画 2 档（实测 ${all.length}）`);
+    assert.deepEqual(all.map((x) => x.档), ['X1 甲境', 'Y1 乙境']);
+    // scalesToFlat 也收口（旧两列是下游读的那一份）
+    const flat = scalesToFlat([{ 名: 'T', 档位: [{ 档: 'X1 甲境', 注: 'a' }, { 档: 'X1甲', 注: 'b' }] }]);
+    assert.equal(flat.powerScale.length, 1, '★scalesToFlat 也要合（否则账本里换一套名字，旧列仍 4~5 条同档）');
+});
+
+test('★leg62b tierWordsOf：档位校验词**唯一来源**（概念表账上读 powerScale 会拿到空表）', () => {
+    const concept = { 刻度: [{ 名: 'T', 档位: [{ 档: 'X1 甲境', 注: 'a' }, { 档: 'X1甲', 注: 'b' }] }], powerScale: [] };
+    assert.deepEqual(tierWordsOf(concept), ['X1 甲境'], '★新账：从 `刻度` 取（且已合并同记号）——直接读 powerScale 会是空的');
+    const legacy = { powerScale: [{ level: 'X1 甲境', note: 'a' }, { level: 'X1甲', note: 'b' }] };
+    assert.deepEqual(tierWordsOf(legacy), ['X1 甲境'], '老账：从 powerScale 取（同样合并）');
+    assert.deepEqual(tierWordsOf(null), [], '空 ⇒ 空（不发明）');
+});
+
+// ───────────────────────── ⑦ 只重抽设定（用户令「我只想重抽设定」） ─────────────────────────
+//   用户原话：「这个设定我抽得不满意，而且我只想重抽设定」——
+//   走「初始化」会把世界重新开局（实体账清空重种、棋子重建、轮次归零）。
+test('★leg62b 只重抽设定：按钮在位 + 处理器注册 + **接线里不许调 seedBookEntities**', async () => {
+    const savedW = globalThis.window;
+    const savedD = globalThis.document;
+    globalThis.window = { addEventListener() {}, removeEventListener() {} };
+    globalThis.document = { readyState: 'complete', addEventListener() {}, getElementById: () => null };
+    try {
+        await import('../web/index.js?wirereextract');
+        const bus = globalThis.window.__sw2Actions || {};
+        assert.equal(typeof bus['reextract-setting'], 'function', '★只重抽设定的处理器注册在动作总线上');
+    } finally {
+        globalThis.window = savedW;
+        globalThis.document = savedD;
+    }
+    const html = renderSettingHtml(world());
+    assert.match(html, /data-action="reextract-setting"/, '★按钮在设定页');
+    assert.match(html, /只重抽设定/, '按钮文案是人话');
+    assert.match(html, /名册\/进度不动/, '★按钮旁就写明"名册/进度不动"（用户要一眼看出按哪个不会把世界重开）');
+    assert.match(html, /data-action="extract-scales"/, '瞄一眼那条通道还在（两条通道不是互相替换）');
+    // ★核心：接线里必须**只换 setting**，不许把名册种进实体账（那就是"重开世界"了）
+    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const start = web.indexOf("bus['reextract-setting']");
+    // ★切片必须**以"下一个 bus[...] 声明"为界**——用 `bus['extract-scales']` 当右界会划过头，
+    //   把文件顶部的 import 行也包进来（那里正好有 `seedBookEntities`，于是判据假红）。实测踩过。
+    const nextBus = web.indexOf('bus[', web.indexOf('};', start));
+    const body = web.slice(start, nextBus > start ? nextBus : undefined);
+    assert.ok(body.length > 200, '取到了 reextract-setting 的函数体');
+    assert.ok(!/bus\['/.test(body.slice(30)), '★切片到函数体结束为止（没有划进下一个动作）');
+    assert.match(body, /applySettingToSsot\(/, '★走唯一那条换设定的路径');
+    assert.ok(!/seedBookEntities\(/.test(body), '★接线里**不许**调 seedBookEntities（那一步会把名册种进实体账 = 重开世界）');
+    assert.match(body, /force: true/, '★必须 force（书没变也要重抽——本动作的存在意义）');
+    assert.match(body, /名册.*没动|一个字没动|实体账/, '★状态条要如实报"名册/进度没动"');
+});
 //   ★这一条是本仓最贵的那类洞的病历（leg25 f：机制建好了、接线从没生效、测试全绿）⇒ 必须锁**接线**，
 //     不是锁"函数写好了"。三面各锁一条：按钮在位 / 处理器注册在总线 / 生产源码真的绑上了那两样。
 test('★leg62 直抽刻度（用户令「独立抽取设定的入口」）：按钮在位 + 处理器注册在总线 + 生产源码接线在位', async () => {
@@ -216,12 +302,16 @@ test('★leg62 直抽刻度（用户令「独立抽取设定的入口」）：�
         dropped: 2, errors: ['刻度《甲表》档位「编的」原文查不到（已弃）'],
     };
     const dHtml = renderSettingHtml(withDraft);
-    assert.match(dHtml, /直抽刻度 · 本次结果（未入账）/, '★草稿栏在位');
-    assert.match(dHtml, /《甲表》<span class="sw2-hint"> · 分级<\/span>/, '草稿按概念表分栏');
+    assert.match(dHtml, /只抽刻度 · 本次结果<span class="sw2-hint"> · 草稿（没入账）<\/span>/, '★草稿栏在位，且标题就写明"草稿（没入账）"');
+    assert.match(dHtml, /《甲表》/, '草稿按概念表分栏');
+    assert.match(dHtml, / · 分级 · 草稿<\/span>/, '★每张草稿卡都带「草稿」标（与账本里那批卡一眼可分）');
+    assert.match(dHtml, /border-left:3px solid #b26a00/, '★草稿卡描橙边（视觉上与已冻结的分开）');
+    assert.match(dHtml, /下面那一部分是账本里已冻结的设定，一个字没动/, '★明说没动账本（用户现场问"原本的内容还在"就是缺这句）');
+    assert.match(dHtml, /↓ 以下是你已冻结的设定（草稿没动它）/, '★草稿与已冻结内容之间有一道分隔标题');
     assert.match(dHtml, /<b>2<\/b> 条档位因"原文里找不到"被丢/, '★被出处闸丢掉的不许静默（如实报数）');
     assert.match(dHtml, /data-action="clear-scale-draft"/, '草稿栏带清除按钮');
     assert.ok(!dHtml.includes('**'), '★渲染产物不许含 markdown 星号（面板是 HTML）');
-    assert.ok(!renderSettingHtml(world()).includes('直抽刻度 · 本次结果'), '没有草稿 ⇒ 不画那一栏（零扰动）');
+    assert.ok(!renderSettingHtml(world()).includes('只抽刻度 · 本次结果'), '没有草稿 ⇒ 不画那一栏（零扰动）');
 });
 
 test('★leg62 直抽通道的提示词在生产源码里真的被用上（防"函数写好了、没人调"）', () => {

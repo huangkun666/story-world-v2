@@ -1692,7 +1692,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     // ★★★leg53 换档：**乱象有了生产者**（引擎每轮算）+ 民生撤下 + 依据那一格改口径 ⇒ 玩家可见面真变了。
     // ★★★leg54 换档：世界尺度四个框改成**数字输入框、无上限**（+ 设置页那行过期预算已修）⇒ 又变了。
     // ★★★leg60 换档：设定页新增「维度与刻度」与「编译完整性」两栏 ⇒ 又变了。
-    assert.equal(PANEL_BUILD, 'leg62-scale-concepts');
+    assert.equal(PANEL_BUILD, 'leg62-scale-concepts-3');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

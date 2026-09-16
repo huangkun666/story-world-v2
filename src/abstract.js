@@ -934,7 +934,9 @@ export function scalesToFlat(scales) {
             dims.push(item);
         }
     }
-    return { powerScale, dims };
+    // ★leg62b：旧两列是下游（校验词/刻度块/旧面板）读的那一份，同一档的几种写法在这一层就合掉
+    //   （否则账本里换一套名字抽出来的新账，旧列里还是 4~5 条同档）。
+    return { powerScale: mergeSameTierEntries(powerScale), dims };
 }
 
 /**
@@ -952,7 +954,12 @@ export function scalesToFlat(scales) {
  */
 export function scalesFromFlat(canon) {
     const c = canon && typeof canon === 'object' ? canon : {};
-    const ps = Array.isArray(c.powerScale) ? c.powerScale : [];
+    // ★★leg62b（用户令「之前不就说了重复问题啊」）：旧账里同一档被写了几种名字（大荒实测 16 组/多出 54 条）
+    //   ⇒ **推概念表之前先合并**（`T1` / `T1感气` / `T1 感气境` / `T1 感气境 (妖:…)` 合成一条）。
+    //   为什么必须在这之前合：分组用的也是"档位名"，不先合就会把同一档分进不同的组。
+    //   为什么收在这一层（而不是改 `dedupeTiers`）：那是块间并集去重的口径，动了会牵连抽取链；
+    //   而"面板上看着重复"是**呈现**问题，收在呈现这一层最安全。
+    const ps = mergeSameTierEntries(Array.isArray(c.powerScale) ? c.powerScale : []);
     const dims = Array.isArray(c.dims) ? c.dims : [];
     const norm = (s) => String(s ?? '').replace(/\s+/g, '');
     /** 形态前缀：字母记号 + 数字/数词 ⇒ `T#`；无数字记号 ⇒ 用档位名自己（各自成组）。 */
@@ -1480,6 +1487,10 @@ function bracketPrefix(level) {
     const m = String(level ?? '').trim().match(/^([^（(]{1,12})[（(]/);
     return m ? m[1].trim() : '';
 }
+/** 去掉括注与首尾空白（★leg62b：`T1 感气境 (妖:聚气 | 鬼:游魂)` ⇒ `T1 感气境`）。 */
+function stripBrackets(s) {
+    return String(s ?? '').replace(/[（(][^)）]*[)）]/g, '').trim();
+}
 function tierKeyOfInner(level) {
     const s = String(level ?? '').trim();
     if (!s) return null;
@@ -1531,12 +1542,93 @@ export function sameShapeKey(s) {
 }
 
 /**
+ * ★leg62b：**同记号判定用的分组键**（与 `tierKeyOf` 分开，这里只要"能不能认出是同一档"）。
+ *   为什么不复用 `tierKeyOf`：那个是 leg61 的**去重键**，只认 `T/LV/LEVEL` 这几种字母记号
+ *   （`TIER_KEY_RE`）。换个记号体系（`X1` / `R2` / 别的书自己的写法）它就退化成"整串当键"，
+ *   于是一组同档永远合不上——本棒的判据如果建在它上面，**就只对大荒那一套记号成立**（过拟合，
+ *   本仓明禁）。本函数改成**结构性取法**：
+ *     · **区间记号**（`X1-X3` / `X9+` / `X4及以上`）**不是某一档** ⇒ 给个唯一键，各自独立（不参与合并）；
+ *     · 名首有"字母+数字"记号（`X1` / `T4` / `SSS2`）⇒ 用那个记号当键（`X1 甲境`、`X1甲`、`X1` 同键）；
+ *     · 没有数字记号的（`甲级` / `黄阶` / `A班`）⇒ 用"去掉括注与空白后的整串"当键（只有写法完全相同才合）。
+ */
+export function tierGroupKeyOf(level) {
+    const s = String(level ?? '').trim();
+    if (!s) return '';
+    if (RANGE_LIKE.test(s)) return `·range·${s}`;                    // 区间/开放区间不参与合并
+    const m = s.match(/^([A-Za-z]{1,6}\s*\d{1,3})/);
+    if (m) return m[1].replace(/\s+/g, '').toUpperCase();
+    return stripBrackets(s).replace(/\s+/g, '');
+}
+
+/**
+ * ★★leg62b（用户令「之前不就说了重复问题啊」）：**同一档的几种写法合并成一条**。
+ *
+ * 病（本棒量准的账）：`dedupeTiers(103) → 95` 只吃掉 8 条，面板上同一档仍出现 4~5 次——
+ *   大荒 **16 组同记号 / 多出 54 条**：`T1 感气境 (妖:聚气 | 鬼:游魂 | 魔:凝血)` · `T1感气` · `T1` · `T1 感气境`。
+ * 为什么下面那条判据治不住：它留了个"宁可多不可丢"的口子——
+ *   **note 差别大就两条都留**。而"同一档的两种写法"恰恰 note 经常不同
+ *   （`T1` 的注是"凡界修行区域底层境界"、`T1感气` 的注是"眉心生光…"）⇒ 一条都合不上。
+ *   ★真因（本棒的判断，可复核）：`note` 不全是"原文里对这一档的说明"，
+ *     **有一半是"它属于哪张表"的括注**（`(妖:聚气 | 鬼:游魂)` 是妖族那一支的叫法，
+ *     不是"这一档意味着什么"）。拿这种注当"两种说法"的判据，必然判成"两条不同的档位"。
+ *
+ * 判据（纯函数 · 零词表，用 `tierGroupKeyOf`）：
+ *   同键 ⇒ **就是同一档** ⇒ 合成一条：
+ *     · `档` 取**名字最完整**的那条（不含括注优先，然后取最长）
+ *     · `注` 取**最像说明**的那条（不含括注、最长者）；
+ *       ★组里还有**别的、互不包含的**说明（真·两种说法）⇒ 用 `｜` 接在后面，**一条不丢**
+ *         （"只提取不创作"仍守住：拼的是各条原话，不是新写的句子）。
+ *   为什么优于"都留"：面板是以"档"为单位看的，同记号出现 5 次对读者毫无信息量；
+ *     合并后**信息量不变**（原话都还在），**行数**才是读者真正要的东西。
+ */
+export function mergeSameTierEntries(list = []) {
+    const items = (Array.isArray(list) ? list : [])
+        .map((x) => ({ level: String(x?.level ?? '').trim(), note: String(x?.note ?? '').trim(), axis: String(x?.axis ?? '').trim() }))
+        .filter((x) => x.level);
+    const groups = new Map();
+    const order = [];
+    for (const it of items) {
+        const key = tierGroupKeyOf(it.level) || `·${it.level}`;
+        if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+        groups.get(key).push(it);
+    }
+    const bracketCount = (s) => (String(s).match(/[（(]/g) || []).length;
+    /** "像说明的注"：去掉括注后仍有 ≥4 字，且不是把档位名重复一遍 */
+    const informative = (note, level) => {
+        const n = stripBrackets(note);
+        return n.length >= 4 && !n.includes(level) && !level.includes(n);
+    };
+    const out = [];
+    for (const key of order) {
+        const g = groups.get(key);
+        if (g.length === 1) { out.push(g[0]); continue; }
+        const best = [...g].sort((a, b) => (bracketCount(a.level) - bracketCount(b.level)) || (stripBrackets(b.level).length - stripBrackets(a.level).length))[0];
+        const notes = [...new Set(g.map((x) => x.note).filter((n) => n && n !== best.level))]
+            .filter((n) => informative(n, stripBrackets(best.level)))
+            .sort((a, b) => b.length - a.length);
+        const kept = [];
+        for (const n of notes) {
+            if (kept.some((k) => k.includes(n))) continue;
+            for (let i = kept.length - 1; i >= 0; i -= 1) if (n.includes(kept[i])) kept.splice(i, 1);
+            kept.push(n);
+        }
+        out.push({ level: best.level, note: kept.join('｜') || best.note, ...(best.axis ? { axis: best.axis } : {}) });
+    }
+    return out;
+}
+
+/**
  * 档位并集去重（纯函数 · 可测）：见上面 `tierKeyOf` 头注的口径与取值纪律。
  *
  * ★合并规则只有一条，而且**不看长度阈值**（第一版写"长度差 ≤25% 就算同一条"⇒ 太宽；第二版写"短注就合"
  *   ⇒ 那个 24 字是照大荒那份表反推的，属过拟合，两版都已撤）：
  *   **轴相同 ∧ 记号相同 ∧ 一边的 note 是另一边的子串（或抹平标点后一致）** ⇒ 同一条，留最长的 note。
  *   其余一律**留着**（宁多勿丢）——包括"同一档的两种不同说法"。
+ *   ★leg62b：那条"宁可多不可丢"的口子**在面板上就是用户看到的重复**（同记号 4~5 条）⇒
+ *     现在由 `mergeSameTierEntries` 在**更靠下游**的两处收口：
+ *     `scalesToFlat`（概念表→旧两列）与 `scalesFromFlat`（旧账推导）。
+ *     ★为什么不在本函数里改：本函数是"并集去重"（块间合并用），口径一变会动到抽取链；
+ *       而"读者看到的重复"是**呈现问题**，收在呈现那一层更安全（也不影响既有真账读数）。
  */
 export function dedupeTiers(list = []) {
     const out = [];
@@ -2330,6 +2422,23 @@ export function factionScaleFromEntry(content, name) {
  *   ⇒ 初始化链路与**存量世界补齐**共用这一条路径：传了 entries 就有兜底，不传则只有模型抽来的字段。
  *   纯函数纪律：只读 entries，不改它；调用方传入自己的副本。
  */
+/**
+ * ★★leg62：**"档位校验词"的唯一来源**（零 token 的档位标签识别用它）。
+ *   为什么单提一个函数（这不是为了好看，是 leg62 的一个真坑）：
+ *   过去两处各写一份 `canon.powerScale.map(p => p.level)`——而 leg62 起新账的档位在 `刻度` 里
+ *   （`powerScale` 只是**派生视图**，且老账推导那条路上甚至可能为空）
+ *   ⇒ 各写一份必然出现"新账抽完，档位校验词是空的"（模型紧贴名号的档位标签就没人认了）。
+ *   口径：`刻度` 优先（按表拆平 + **同一档的几种写法合并**），退回 `powerScale`（老账）。
+ */
+export function tierWordsOf(canon) {
+    const c = canon && typeof canon === 'object' ? canon : {};
+    if (Array.isArray(c.刻度) && c.刻度.length) {
+        const flat = scalesToFlat(c.刻度);
+        return flat.powerScale.map((x) => x.level).filter(Boolean);
+    }
+    return mergeSameTierEntries(Array.isArray(c.powerScale) ? c.powerScale : []).map((x) => x.level).filter(Boolean);
+}
+
 export function seedBookEntities(ssot, { entries = null } = {}) {
     const rawEntries = Array.isArray(entries) ? entries.filter((e) => e && typeof e === 'object') : [];
     const contentOfBookName = new Map();
@@ -2709,7 +2818,9 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
         addText(b.name, content);
         for (const nm of rosterOfOrg({ content })) addText(nm, content);
     }
-    const tierWords = (ssot.context?.setting?.frozen?.canon?.powerScale || []).map((p) => String(p?.level ?? '')).filter(Boolean);
+    // ★★leg62：档位校验词走 `tierWordsOf`（唯一来源）——新账的档位在 `刻度` 里，
+    //   直接读 `powerScale` 在"概念表账"上会拿到空表（见该函数头注）。
+    const tierWords = tierWordsOf(ssot.context?.setting?.frozen?.canon);
 
     // 第四遍（第二十五棒 e）：**结构兜底**——模型没给、但组织条目的成员行里确实列了该名号 ⇒ 补上（零 token）。
     //   只对**在册角色**、**只填空位**、且**归属目标必须是 kind=faction 的条目**（泛称/标题不得当势力）。

@@ -169,7 +169,12 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   各自成表，不再挤在同一个框里）。这正是用户截图指出的那个混排（`S~E级` 与 `A班~D班` 并列）。
 //   ⇒ 构建号跟批升位（同一条本地纪律：改盘即生效，但浏览器会缓存旧面板 ⇒ Ctrl+F5 后拿这串对照）。
 //   ★起名同一条纪律：零引擎术语（判据在 `render.test.js` 的扫描器里）。
-export const PANEL_BUILD = 'leg62-scale-concepts';
+// ★★★leg62b（用户现场反馈：「只抽刻度啥意思，我刚刚抽了有很多表，但是原本的内容还在」）：
+//   口径没错、呈现没交代清楚 ⇒ 草稿那一段加了三道区分（标题写明草稿 / 每卡橙边+「草稿」标 /
+//   "下面那一部分是已冻结的设定，一个字没动"）。玩家可见面又变了 ⇒ 构建号同批再升一格。
+//   ★形状纪律（`render.test.js` 锁着）：必须是 `leg<数字>-…`（升位链条要能一眼看出来）⇒
+//     同一棒内的第二次升位写成 `leg62-…-2`，**不许**用 `leg62b` 这种（不合形状、当时被锁当场抓住）。
+export const PANEL_BUILD = 'leg62-scale-concepts-3';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -1605,14 +1610,21 @@ export function renderScaleDraftHtml(draft) {
     const scales = Array.isArray(draft.scales) ? draft.scales : [];
     const nTiers = scales.reduce((n, t) => n + (t.档位 || []).length + (t.子表 || []).reduce((m, s) => m + (s.档位 || []).length, 0), 0);
     const nDims = scales.reduce((n, t) => n + (t.维度 || []).length, 0);
-    const head = `<div class="sw2-set-card" style="grid-column:1/-1"><h4>直抽刻度 · 本次结果（未入账）</h4>`
+    // ★★leg62b（用户现场反馈「只抽刻度啥意思，我刚刚抽了有很多表，但是原本的内容还在」）：
+    //   口径没错，是**呈现**没交代清楚——草稿和"已冻结的设定"在同一页长得一模一样，
+    //   于是用户看不出哪些是刚抽的、哪些是账本里的（而且草稿的表名与旧账不同 ⇒ 更像"重复了"）。
+    //   ⇒ 三道区分：① 标题写明这是草稿、② 每张草稿卡描橙色边 + 打「草稿」标、
+    //     ③ 明说**下面那一部分是你已冻结的设定（一个字没动）**。
+    //   为什么不做成"抽完替换掉下面那一栏"：那会让人以为**账本被改了**——恰恰是这条通道要避免的误会。
+    const head = `<div class="sw2-set-card" style="grid-column:1/-1;border:1px solid #b26a00"><h4>只抽刻度 · 本次结果<span class="sw2-hint"> · 草稿（没入账）</span></h4>`
         + `<div class="sw2-hint">`
         + `源：${escapeHtml(draft.source || '—')} · 本次调用 ${draft.calls ?? '?'} 次 / ${draft.secs ?? '?'} 秒 · `
         + `抽到 <b>${scales.length}</b> 张表 · <b>${nTiers}</b> 个档位 · <b>${nDims}</b> 个维度`
         + (draft.dropped ? ` · <b>${draft.dropped}</b> 条档位因"原文里找不到"被丢（见下）` : '')
         + `</div>`
-        + `<div class="sw2-hint">这一栏是<b>草稿</b>：只用来直抽看一眼，账本里已冻结的设定一个字没动。`
-        + `要真正采用，走正常的初始化/重抽。</div>`
+        + `<div class="sw2-hint"><b>这是草稿</b>：只是拿一次调用瞄一眼书里的尺子，<b>下面那一部分是账本里已冻结的设定，一个字没动</b>`
+        + `（两边的表名不一样很正常——草稿是刚抽的，账本是上一版抽的）。`
+        + `要用草稿取代账本，走正常的初始化/重抽。</div>`
         + (draft.errors?.length ? `<div class="sw2-hint">${escapeHtml(draft.errors.slice(0, 12).join(' ｜ '))}</div>` : '')
         + `<div style="margin-top:8px"><button class="sw2-btn" data-action="clear-scale-draft">清掉这一栏</button></div></div>`;
     const cards = scales.map((t) => {
@@ -1620,10 +1632,13 @@ export function renderScaleDraftHtml(draft) {
         const dimRows = (t.维度 || []).map((d) => `<div class="sw2-sv-row"><b>${escapeHtml(d.名)}</b><span>${escapeHtml(d.范围 || '（原文未给范围）')}</span></div>`).join('');
         const subRows = (t.子表 || []).map((s) => `<div class="sw2-sv-row"><b>${escapeHtml(s.名)}</b><span>${(s.档位 || []).map((y) => escapeHtml(y.档)).join(' · ')}</span></div>`).join('');
         const bits = [(t.档位 || []).length ? `${(t.档位 || []).length} 档` : '', (t.维度 || []).length ? `${(t.维度 || []).length} 维` : ''].filter(Boolean).join(' · ');
-        return `<div class="sw2-set-card"><h4>《${escapeHtml(t.名)}》${t.用途 ? `<span class="sw2-hint"> · ${escapeHtml(t.用途)}</span>` : ''}</h4>`
+        // ★每张草稿卡：橙色左边框 + 「草稿」标（与账本里那批卡一眼可分）
+        return `<div class="sw2-set-card" style="border-left:3px solid #b26a00"><h4>《${escapeHtml(t.名)}》`
+            + `<span class="sw2-hint"> · ${escapeHtml(t.用途 || '（原文未给用途）')} · 草稿</span></h4>`
             + `<div class="sw2-hint">${escapeHtml(bits)}</div>${tierRows}${dimRows}${subRows}</div>`;
     }).join('');
-    return head + (cards ? `<div class="sw2-sv-grid" style="grid-column:1/-1">${cards}</div>` : '');
+    return head + (cards ? `<div class="sw2-sv-grid" style="grid-column:1/-1">${cards}</div>` : '')
+        + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>↓ 以下是你已冻结的设定（草稿没动它）</h4></div>`;
 }
 
 export function renderSettingHtml(world, { config = {} } = {}) {
@@ -1686,11 +1701,14 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界设定 · ${escapeHtml(world.context?.world || '')}</div>`
         + `<div class="sw2-sv-sub">书指纹 ${escapeHtml(frozen.fingerprint)} · 抽取于 ${escapeHtml(frozen.extractedAt)} · 全部条目取自原文，未增写一句（只提取不创作）</div></div>`
         + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ok">✓ 已冻结 · 设定未变不重抽</span>`
-        // ★★leg62（用户令「之后增加一个独立抽取设定的入口方便我直抽设定快速看效果」）：
-        //   一次只抽"刻度/概念表"的独立通道——**结果只落这一栏，不碰账本**（不重抽、不覆盖已冻结的设定）。
-        //   为什么要有它：走初始化那条路要跑完名册遍 + 属性遍（多块多次调用、分钟级），
-        //   而"这把尺长什么样"只需要**一次**调用 ⇒ 想快速看效果时不必等整条管线。
-        + `<span class="sw2-hint" style="margin-left:8px">只看书里的"尺子"长什么样 ⇒ </span>`
+        // ★★leg62b（用户令「我只想重抽设定」）：**只换设定、名册与进度一个字不动**。
+        //   与「初始化」的区别写在这里（用户要能一眼看出按哪个不会把世界重开）：
+        //   初始化 = 世界重新开局（实体账清空重种、棋子重建、轮次归零）；本按钮**只覆盖设定那一块**。
+        + `<span class="sw2-hint" style="margin-left:8px">对设定不满意 ⇒ </span>`
+        + `<button class="sw2-btn" data-action="reextract-setting">只重抽设定</button>`
+        + `<span class="sw2-hint">（名册/进度不动）</span>`
+        // ★leg62（用户令「独立抽取设定的入口方便我直抽设定快速看效果」）：草稿通道——只瞄一眼，不入账
+        + `<span class="sw2-hint" style="margin-left:8px">只瞄一眼书里的"尺子" ⇒ </span>`
         + `<button class="sw2-btn" data-action="extract-scales">只抽刻度</button>`
         + `</div></div>`
         + (world.context?.__scaleDraft ? renderScaleDraftHtml(world.context.__scaleDraft) : '')

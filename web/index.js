@@ -2878,6 +2878,84 @@ if (typeof window !== 'undefined') {
         setStatus('已清掉直抽刻度那一栏（账本本来就没动过）');
     };
 
+    // ---------- ★★leg62b：**只重抽设定**（用户令「我只想重抽设定」）----------
+    // 病（用户原话）：「这个设定我抽得不满意，而且我只想重抽设定」——
+    //   走「初始化」会把整个世界重新开局（实体账清空重种、棋子重建、进度归零），
+    //   而用户只是对**设定那一块**不满意 ⇒ 必须有一条"**只换设定、名册与进度一个字不动**"的通道。
+    //
+    // 口径（三条）：
+    //   ① **只换 `context.setting`**（走 `applySettingToSsot` = 唯一那条换设定的路径），
+    //      **实体账 / 事件 / 编年 / 里程 / 棋子 / 轮次 一律不碰**（这就是"只重抽设定"的字面意思）。
+    //   ② 抽取走的还是**生产那条管线**（`extractWorldSetting`：名册遍 + 属性遍 + 概念表），
+    //      与初始化同一串函数 ⇒ 抽出来的东西与初始化口径一致，不是第二套。
+    //      ★但不调 `seedBookEntities` —— 那一步是"把名册种进实体账"，正是本动作要避免的。
+    //   ③ **旧设定先备份到控制台**（`console.info` 打旧 canon 的读数）：覆盖是不可回的，
+    //      至少让"上一次抽的是什么"在控制台留一份（本仓"改一次留一次痕"的口径）。
+    bus['reextract-setting'] = async () => {
+        const meta = readHotMeta();
+        const world = meta ? loadHotAccount(meta) : null;
+        if (!world) { setStatus('⚠ 世界还没载入——先打开/载入一个世界再重抽设定'); return; }
+        const settings = modelSettings() || {};
+        const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+        if (!resolved) { setStatus('⚠ 模型通道未配置（设置页填写服务地址/密钥/模型）'); return; }
+        const before = world.context?.setting?.frozen?.canon || {};
+        console.info('[story-world-v2] 只重抽设定：即将覆盖旧设定（读数备份，旧账不再可回）', {
+            世界: world.context?.world, 指纹: world.context?.setting?.frozen?.fingerprint,
+            旧: {
+                档位: (before.powerScale || []).length, 维度: (before.dims || []).length,
+                刻度表: (before.刻度 || []).length, 法则: (before.rules || []).length,
+                史略: (before.historyNotes || []).length,
+            },
+        });
+        setStatus('正在合订设定源（角色卡 + 世界信息）…');
+        let src;
+        try { src = await autoComposeSource(); } catch (err) { setStatus(`⚠ 合订设定源失败：${String(err?.message || err)}`); return; }
+        if (!src?.ok) { setStatus(`⚠ 设定源不可用：${src?.reason || '未知'}——请检查 ST 是否已载入角色卡/世界书`); return; }
+        setStatus(`只重抽设定中（${src.label} · ${src.usedChars} 字符${src.truncated ? ' · 已截断' : ''}）…名册与进度不会动`);
+        const progressEvents = [];
+        const progress = extractionProgressHandler(progressEvents);
+        let r;
+        try {
+            r = await extractWorldSetting({
+                sourceText: src.text,
+                extract: diagExtract(resolved),
+                force: true,                      // ★强制重抽：本动作的存在意义就是"书没变我也要重抽"
+                onProgress: progress.onEvent,
+                extraDeclared: src.titleRoster,
+                compileInfo: compileSummary(src.catalog, src.titleRoster),
+            });
+        } catch (err) {
+            progress.stop();
+            setStatus(`⚠ 重抽失败：${String(err?.message || err)}——设定一个字没动`);
+            return;
+        }
+        progress.stop();
+        if (!r.ok) {
+            setStatus(`⚠ 重抽失败：${(r.errors || []).join('; ')}——设定一个字没动`);
+            return;
+        }
+        // ★只换 setting：走唯一那条换设定的路径（其余字段原样带过）
+        const next = applySettingToSsot(world, r.setting);
+        writeHotMeta(hotAccountShape(next));
+        const flushed = await flushHotMeta();
+        const after = r.setting?.frozen?.canon || {};
+        console.info('[story-world-v2] 只重抽设定完成', {
+            世界: src.worldName, 调用: r.timing?.calls, 毫秒: r.timing?.ms,
+            新: {
+                档位: (after.powerScale || []).length, 维度: (after.dims || []).length,
+                刻度表: (after.刻度 || []).length, 法则: (after.rules || []).length,
+                史略: (after.historyNotes || []).length,
+            },
+            实体账: (next.entities || []).length, 轮次: next.meta?.tick, 落盘: flushed,
+        });
+        refreshWorld(next, { oldVolumes: LISTED_VOLUMES });
+        refreshSections(['setting']);
+        const secs = r.timing?.ms == null ? '' : ` · ${Math.round(r.timing.ms / 1000)}s`;
+        setStatus(`设定已重抽（${(after.刻度 || []).length} 张刻度表 / ${(after.powerScale || []).length} 档 / ${(after.rules || []).length} 条法则${secs}）`
+            + `——名册 ${(next.entities || []).length} 个实体与第 ${next.meta?.tick ?? 0} 轮进度一个字没动`
+            + (flushed.ok ? '' : '（⚠ 落盘没确认，见控制台）'));
+    };
+
     // ---------- leg26：世界参数 · 档位（参数页）----------
     // 口径（用户令「参数独开页签」+「让用户自己调挡位」）：
     //   · 这些是**玩家对世界的输入**，不是引擎算出来的判断、也不是书里的原稿 ⇒ 独立一页。
