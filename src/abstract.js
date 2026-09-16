@@ -939,15 +939,30 @@ export function scalesToFlat(scales) {
 
 /**
  * 旧两列 → 概念表（**零迁移**：老账打开面板就能看到分组，不重抽、不写盘）。
- * 判据（纯函数 · 零词表）：按 `dims` 的 `range` 与 `powerScale` 的档位名**互相回指**归组——
- *   `学力` 的 range = `S~E级`，而 `S~E级` 正是一个档位名 ⇒ 它们属于同一把尺。
- *   认不出的各自成表（`名` = `维度` / `档位`），**绝不猜**（"空就是空"）。
+ * 判据（纯函数 · 零词表）：
+ *   ① **档位按"记号前缀"归组**：老账里没有任何分组信息，若"一档一表"那概念表会碎成上百张
+ *      （实测：大荒 103 档 ⇒ 碎表；夹具 31 档 ⇒ 31 张表把包的表数名额占光，档位只剩 15/24）。
+ *      故按**形态前缀**归组：`T1/T2/T3…` ⇒ 一组（前缀 `T#`）；`A班/B班…` ⇒ 一组；无数字的各自一组
+ *      （无数字的档位名往往是互不相关的概念词，如 `里闾称善`/`黄阶`，不该硬并）。
+ *      ★这不等于"判出真轴"（那必须模型标注，见文件头 §为什么不用原提案）——它只是**老账的兜底**，
+ *        目标是"别碎成上百张表"，不是"分得对"。新账走 `canon.刻度`，不经过这里。
+ *   ② **维度 range 回指某个档位名 ⇒ 并进那张表**（实教 `学力` 的 range = `S~E级`）；
+ *      回指不到 ⇒ 自成一表（名 = 该维度名）。
+ *   ③ 组名取该组的**第一条档位名**（`T1 感气境`）——老账没有表名，这是最不失真的兜底。
  */
 export function scalesFromFlat(canon) {
     const c = canon && typeof canon === 'object' ? canon : {};
     const ps = Array.isArray(c.powerScale) ? c.powerScale : [];
     const dims = Array.isArray(c.dims) ? c.dims : [];
     const norm = (s) => String(s ?? '').replace(/\s+/g, '');
+    /** 形态前缀：字母记号 + 数字/数词 ⇒ `T#`；无数字记号 ⇒ 用档位名自己（各自成组）。 */
+    const prefixOf = (level) => {
+        const s = String(level ?? '').trim();
+        const m = s.match(/^([A-Za-z]{1,4})\s*\d/);
+        if (m) return `${m[1].toUpperCase()}#`;
+        if (/[0-9]/.test(s)) return '(数字档)';
+        return null;
+    };
     const tables = [];
     const byName = new Map();
     const at = (name) => {
@@ -957,26 +972,88 @@ export function scalesFromFlat(canon) {
         tables.push(t);
         return t;
     };
-    // ① 先把每个档位挂到"以自己命名的表"上
+    // ① 档位：按形态前缀归组，组名取该组第一条档位名
+    //   ★"无记号"的档位（`杂役`/`内门`/`黄阶`/`A班`…）**合进同一张表**，不各自成表。
+    //     为什么（真账实测）：|无记号档位| 在大荒是 33 条、实教 4 条 ⇒ 各自成表会让老账碎成
+    //     89 张表（大荒）/ 14 张（实教），面板根本没法看。老账本来就**没有任何分组信息**
+    //     （分组信息是 leg62 才让模型标的）⇒ 这里的选择只有"碎成 N 张"与"合一张"，
+    //     合一张更接近旧口径（旧口径就是把它们平铺在一个框里），且**不假装分对了**。
+    //     ★新账不走这条：模型会交 `刻度`，分组是它读原文标的。
+    const unmarked = [];
+    const groupOf = new Map();      // 记号前缀 → 表
     for (const p of ps) {
         const level = String(p?.level ?? '').trim();
         if (!level) continue;
-        const t = at(level);
+        const key = prefixOf(level);
+        if (key === null) { unmarked.push(p); continue; }
+        if (!groupOf.has(key)) groupOf.set(key, at(level));
+        const t = groupOf.get(key);
         t.档位 = t.档位 || [];
-        t.档位.push({ 档: level, ...(String(p?.note ?? '').trim() ? { 注: String(p.note).trim() } : {}) });
+        if (!t.档位.some((x) => x.档 === level)) {
+            t.档位.push({ 档: level, ...(String(p?.note ?? '').trim() ? { 注: String(p.note).trim() } : {}) });
+        }
     }
-    // ② 维度：range 能对上某个档位名（回指）⇒ 并进那张表；否则自成一张（名 = 该维度名）
+    if (unmarked.length) {
+        const t = at('无记号档位');
+        t.档位 = unmarked.map((p) => ({ 档: String(p.level).trim(), ...(String(p?.note ?? '').trim() ? { 注: String(p.note).trim() } : {}) }));
+    }
+    // ② 维度：range 能对上某个档位名（回指）⇒ 并进那张表；回指不到的**合进一张"维度"表**。
+    //   ★为什么回指不到的也要合（真账实测）：大荒 65 个维度里 **54 个**回指不到任何档位名
+    //     （`道心`/`黄金`/`身高`…）⇒ 各自成表就是 54 张单维度表，面板画不出来、进包也全是空气表。
+    //     旧口径本来就把它们平铺在「维度与刻度」一栏里 ⇒ 合成一张表 = **保住旧口径的可读性**，
+    //     同时不假装它们分对了（表名就叫 `维度`，不编概念名）。
+    //   ★新账不走这条：模型会把 `维度` 挂到它所属的那把尺上（实教 `S~E级` 下挂 5 个属性）。
+    const hostOf = new Map();          // 档位名 → 它所在的表
+    for (const t of tables) for (const x of (t.档位 || [])) hostOf.set(x.档, t);
+    const looseDims = [];
     for (const d of dims) {
         const name = String(d?.name ?? '').trim();
         if (!name) continue;
         const range = String(d?.range ?? '').trim();
-        const host = range && ps.find((p) => norm(p?.level) === norm(range));
-        const t = host ? at(String(host.level).trim()) : at(name);
-        t.维度 = t.维度 || [];
-        t.维度.push({ 名: name, ...(range ? { 范围: range } : {}) });
+        const item = { 名: name, ...(range ? { 范围: range } : {}) };
+        // range 回指某个档位名（逐字，抹空白）⇒ 并进那个档位所在的表
+        const host = range ? hostOf.get(range) || [...hostOf.entries()].find(([k]) => norm(k) === norm(range))?.[1] : null;
+        if (host) {
+            host.维度 = host.维度 || [];
+            if (!host.维度.some((x) => x.名 === name)) host.维度.push(item);
+        } else {
+            looseDims.push(item);
+        }
     }
+    if (looseDims.length) { const t = at('维度'); t.维度 = looseDims; }
     // ③ 一张表里既没档位也没维度 ⇒ 丢（空表不画）
-    return tables.filter((t) => t.档位?.length || t.维度?.length);
+    // ④ ★★顺序（下游进包靠它，改之前先读 `pack.js` 的 `buildScaleAnchor` 定稿注释）：
+    //    **带档位的表在前，只有维度的表在后**；组内保持原顺序（书里的先后）。
+    //    为什么必须在这里定（而不是让进包那边两趟扫）：进包是"顺次截断"（表数/维度/档位三条上界），
+    //    顺序在这里最自然——这里才知道每个档位在**原文里出现过几次**（`ps` 的先后就是书序）。
+    //    ★不排的后果（实测）：实教夹具里"无记号档位"那张表会排在第一把尺前面 ⇒ 它先占掉表数名额，
+    //      第一把尺反而进不来；而档位预算也会被"最后才轮到的尺"整段吃掉。
+    //    ★这条**只影响旧账推导**：新账的 `canon.刻度` 由模型给出，顺序即模型读原文的顺序。
+    const firstSeen = new Map();       // 档位名 → 它在 powerScale 里的下标（书序）
+    ps.forEach((p, i) => { const lv = String(p?.level ?? '').trim(); if (lv && !firstSeen.has(lv)) firstSeen.set(lv, i); });
+    const rankOf = (t) => {
+        let best = Number.MAX_SAFE_INTEGER;
+        for (const x of (t.档位 || [])) { const i = firstSeen.get(x.档); if (i !== undefined && i < best) best = i; }
+        return best;
+    };
+    return tables
+        .filter((t) => t.档位?.length || t.维度?.length)
+        .map((t, i) => ({ t, i, rank: rankOf(t) }))
+        .sort((a, b) => (a.rank - b.rank) || (a.i - b.i))
+        .map((x) => x.t);
+}
+
+// ★★leg62：**概念表的唯一读取口**（面板与进包都读它，别各写一份推导——本仓"两份复制品漂移"的亏吃过多次）。
+//   两条来源，优先级明确：
+//     ① canon.刻度 有 ⇒ **新账**，直接用（它才带 `用途`/`子表`/`维度` 这层信息）；
+//     ② canon.刻度 没有 ⇒ **旧账**，由 `scalesFromFlat` 从 powerScale/dims 纯函数推导（零迁移、零重抽）。
+//   为什么口径要收在一处：面板画的是它、进包带的也是它 ⇒ 两处各推一次，迟早出现
+//   "面板上分了两张表、包里还是一栏"这种最难查的形态（leg60 的 titleRoster 接错层就是这么来的）。
+export function resolveScales(canon) {
+    const c = canon && typeof canon === 'object' ? canon : null;
+    if (!c) return [];
+    if (Array.isArray(c.刻度) && c.刻度.length) return c.刻度;
+    return scalesFromFlat(c);
 }
 
 /**

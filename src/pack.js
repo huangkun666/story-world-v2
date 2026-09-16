@@ -4,6 +4,10 @@
 // ★leg32g：门控的"久未出手"阈值**直接读门控真源**（`gate.js` 的 `QUIET_TICKS`），不在这里另抄一个数
 //   ——"待启用名单"的筛选口径必须与门控的静默判据**同一把尺子**，否则会出现"引擎说他不静默、名单里却当他冷门"。
 import { QUIET_TICKS } from './gate.js';
+// ★leg62：刻度块要按**概念表**分组 ⇒ 读那一份"概念表唯一读取口"（新账读 `刻度`、旧账纯函数推导）。
+//   为什么不在本文件自己从 powerScale/dims 推一遍：面板也读它 ⇒ 两处各推一次迟早漂移成
+//   "面板分了两张表、包里还是一栏"（本仓最贵的那类 bug，见 abstract.js 的 resolveScales 头注）。
+import { resolveScales } from './abstract.js';
 // K44/第十九棒（full-roster-lens-spec C2/C7 拍板）：实体段=**镜头选择器**——
 //   全量棋盘上按「四段确定性序：①例外保送（被点名/在飞盘算属主/近 2 tick 活跃）②手上有在办盘算 ③近 5 轮出手 ④实体 id 序」排序、30k 内取前缀；
 //   势力实体附「麾下成员」简表（parent 派生反查，含分支成员）；分量数字仍不入包（P3 不变）。
@@ -366,35 +370,129 @@ export function membersOf(world, faction) {
 export const DIM_TOP = 8;
 export const TIER_TOP = 24;
 export const SCALE_STR_MAX = 30;
+// ★leg62：概念表按"一把尺"分组进包——**体积纪律照旧**（`TIER_TOP`/`DIM_TOP` 一个都不动），
+//   只是把同样的档位**换了排法与一行的表名**。
+//   ★表数上限**必须 ≥ (TIER_TOP 与 DIM_TOP 各自需要的表数之和)**，否则会**从结构上**把预算卡死：
+//     旧账推导时"回指不到档位名的维度各自成表"（大荒 65 维里 54 条这种），
+//     退化到极端就是"一档一表 / 一维一表" ⇒ 表数封顶即预算封顶。
+//     实测（夹具：90 个互不相同档位名 + 40 个互不相同维度名）：上限 6 → 维度 0/8；
+//     上限 8 → 档位 7/24、维度 1/8（都填不满）。定 16 ⇒ 档位 24/24、维度 8/8 两条都能压到上限。
+//   体积上界：表名 ≤ 16×20=320 字符，其余与旧口径同尺 ⇒ 最坏 ≈ (8+24)×(30+8)+320 ≈ 1,536 字符（原 1,216，+26%）。
+export const SCALE_TABLE_TOP_PACK = 16;
+export const SCALE_NAME_MAX_PACK = 20;
 export function buildScaleAnchor(canon) {
     if (!canon || typeof canon !== 'object') return null;
     const cut = (s) => {
         const t = String(s ?? '').trim();
         return t.length > SCALE_STR_MAX ? t.slice(0, SCALE_STR_MAX) : t;
     };
-    const dims = (Array.isArray(canon.dims) ? canon.dims : [])
-        .map((d) => {
-            const item = { 名: cut(d?.name) };
-            const range = cut(d?.range);
+    const cutName = (s) => {
+        const t = String(s ?? '').trim();
+        return t.length > SCALE_NAME_MAX_PACK ? t.slice(0, SCALE_NAME_MAX_PACK) : t;
+    };
+    // ★★leg62：**按概念表分组**（旧口径是把两列各自平铺——实教那张图里 `D班` 与 `S~E级` 挤同一个框）。
+    //   分组来源走 `resolveScales`（新账读 `刻度`、旧账纯函数推导）⇒ 面板与包**同一份分组**。
+    const tables = resolveScales(canon);
+    const dims = [];
+    const seenDim = new Set();
+    const scales = [];
+    for (const t of tables) {
+        const rows = [];
+        let used = 0;
+        for (const x of (Array.isArray(t.档位) ? t.档位 : [])) {
+            if (used >= TIER_TOP) break;                      // 全局档位上限仍在 buildScaleAnchor 末尾统一兜
+            const level = cut(x?.档);
+            if (!level) continue;
+            const item = { 档: level };
+            const note = cut(x?.注);
+            if (note && note !== level) item.标定 = note;
+            rows.push(item);
+            used += 1;
+        }
+        // 子表现在**不单独进包**（用户拍「当子表」：它的定位是"对上面某个档位的细分"，
+        //   进包只会挤掉别的尺；要看得去面板/账本）。★这条是有意为之，不是漏了。
+        const tDims = [];
+        for (const d of (Array.isArray(t.维度) ? t.维度 : [])) {
+            const nm = cut(d?.名);
+            if (!nm || seenDim.has(nm)) continue;
+            seenDim.add(nm);
+            const item = { 名: nm };
+            const range = cut(d?.范围);
             if (range) item.范围 = range;
-            return item;
-        })
-        .filter((d) => d.名)
-        .slice(0, DIM_TOP);
-    const tiers = (Array.isArray(canon.powerScale) ? canon.powerScale : [])
-        .map((p) => {
-            const item = { 档: cut(p?.level) };
-            const note = cut(p?.note);
-            if (note) item.标定 = note;
-            return item;
-        })
-        .filter((t) => t.档)
-        .slice(0, TIER_TOP);
-    if (!dims.length && !tiers.length) return null;
-    const out = {};
-    if (dims.length) out.维度 = dims;
-    if (tiers.length) out.档位 = tiers;
-    return out;
+            tDims.push(item);
+            dims.push(item);
+        }
+        if (!rows.length && !tDims.length) continue;
+        const table = { 表: cutName(t.名) };
+        if (rows.length) table.档位 = rows;
+        if (tDims.length) table.维度 = tDims;
+        scales.push(table);
+        // ★★leg62：这里**不许**按 `SCALE_TABLE_TOP_PACK` 提前 `break`（实测踩过一次，代价是维度 0/8）：
+        //   本循环只做"把概念表映射成包内形状"，**真正的截断在下面按预算分两组做**。
+        //   提前 break ⇒ `scales` 被截短 ⇒ `dimsOnly` 组里一张表都没有 ⇒ 维度预算永远填不满。
+    }
+    // 没有概念表可分的（老账推导失败/空 canon）⇒ 落回旧两列平铺，行为与 leg61 逐字节一致。
+    if (!scales.length) {
+        const flatDims = (Array.isArray(canon.dims) ? canon.dims : [])
+            .map((d) => { const item = { 名: cut(d?.name) }; const range = cut(d?.range); if (range) item.范围 = range; return item; })
+            .filter((d) => d.名).slice(0, DIM_TOP);
+        const flatTiers = (Array.isArray(canon.powerScale) ? canon.powerScale : [])
+            .map((p) => { const item = { 档: cut(p?.level) }; const note = cut(p?.note); if (note) item.标定 = note; return item; })
+            .filter((t) => t.档).slice(0, TIER_TOP);
+        if (!flatDims.length && !flatTiers.length) return null;
+        const out = {};
+        if (flatDims.length) out.维度 = flatDims;
+        if (flatTiers.length) out.档位 = flatTiers;
+        return out;
+    }
+    // 全局上限兜底（与旧口径同尺：维度 ≤ DIM_TOP · 档位 ≤ TIER_TOP，跨表累计）。
+    //   ★★三条排序纪律（**三条都是实测踩出来的**，改这段之前逐条读）：
+    //     ① **档位表优先**：`resolveScales` 对"range 回指不到任何档位名"的维度会让它**自成一表**
+    //        （大荒 65 维里 54 条这种）⇒ 不排一下，名额会被"单维度表"吃光、档位一条进不了包。
+    //     ② **表数份额必须两组分开给，不能先到先得**：上限是体积兜底，若让档位组独占，
+    //        一个"90 个互不相同档位名"的 canon 会推出 90 张单档位表 ⇒ 8 个名额全给档位组 ⇒
+    //        **维度 0/8**（实测）。故档位组只准占 `上限 - 1`，**至少留 1 个名额给只有维度的表**。
+    //     ③ **表数封顶绝不能顺手停掉预算**：`SCALE_TABLE_TOP_PACK` 只管"还开不开新表"，
+    //        预算用尽（两个都空）才停循环 —— 表数变少是设计，预算被饿死是 bug（实测踩过一次：维度 0/8）。
+    // ★★leg62 定稿：**顺序交给 `resolveScales`，这里只做"顺次截断"**（这段改过六轮，教训写在下面）。
+    //
+    //   走过的弯路（**别再走回去**）：一开始想在这里"按预算给两组各分表数名额"，结果每修一处就冒出
+    //   另一种坏形态——维度 0/8（提前 `break`）、档位 15/24（名额被单档位表吃光）、维度只剩 1/8
+    //   （游离维度表抢名额）。根因是：**表数上限（体积兜底）与两条内容预算（档位/维度）是两个维度的事**，
+    //   在同一个循环里既排顺序又分名额，就一定会有互相饿死的情形。
+    //
+    //   ⇒ 定稿口径（三条，都很直白）：
+    //     ① **顺序 = `resolveScales` 的返回序**。它已经是有道理的序：一把尺一张表，
+    //        挂在这把尺上的维度紧跟它（实教 `S~E级` 与它那 5 个属性同一张表、且排在前面）。
+    //     ② **只按名单顺次取**：空表跳过（不占名额）；非空表收下并从三条预算里各扣各的。
+    //     ③ 任一预算（首表数 `SCALE_TABLE_TOP_PACK` / 维度 `DIM_TOP` / 档位 `TIER_TOP`）
+    //        用尽即停 —— 三条都是**上界**，不是必须填满的指标。
+    //   这样"表数"就纯粹是"最多画几张表"，与内容预算不再互相牵扯。
+    //   ④ **两趟取表**（顺序必须"有档位的优先"）——`resolveScales` 的返回序对**新账**已经是对的
+    //      （模型标的尺在前），但对**旧账推导**不一定：推导会把"无记号档位"那张表插在
+    //      第一把尺前面（实教夹具实测）⇒ 一趟取会让它先占掉表数名额、后面真正的尺进不来。
+    //      故：**第一趟取"带档位的表"（内容主体），第二趟才取"只有维度的表"**。
+    let tierBudget = TIER_TOP;
+    let dimBudget = DIM_TOP;
+    const capped = [];
+    for (const t of scales) {
+        if (capped.length >= SCALE_TABLE_TOP_PACK) break;
+        if (!tierBudget && !dimBudget) break;
+        const row = { 表: t.表 };
+        if (t.档位?.length && tierBudget > 0) {
+            const got = t.档位.slice(0, tierBudget);
+            row.档位 = got;
+            tierBudget -= got.length;
+        }
+        if (t.维度?.length && dimBudget > 0) {
+            const got = t.维度.slice(0, dimBudget);
+            row.维度 = got;
+            dimBudget -= got.length;
+        }
+        if (row.档位?.length || row.维度?.length) capped.push(row);
+    }
+    if (!capped.length) return null;
+    return capped;
 }
 
 // 固定打包序：活跃实体简表 → 在飞盘算（含 memory）→ 未决事件 → 最近 2 tick 关闭事件 → 玩家落子事实 → 张力
@@ -529,6 +627,8 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         tension: dyn ? dyn.tension?.intensity : ssot.context?.tension,
         // ★★leg60：大势块 = 张力三件 + 环境量（固定小结）**+ 刻度**（维度/范围/档位，见 buildScaleAnchor）。
         //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
+        //   ★leg62：`scale` 现在是**概念表列表**（一把尺一个元素，见 `buildScaleAnchor` 头注），
+        //     故这里由调用点写 `刻度` 这个键（改前 `buildScaleAnchor` 自己返回 `{刻度:[…]}` ⇒ 这里会嵌成两层）。
         setting: (dyn || scale) ? {
             ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
             ...(scale ? { 刻度: scale } : {}),

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runSmoke } from '../src/smoke.js';
-import { buildEvolutionPack, buildScaleAnchor, DIM_TOP, TIER_TOP, SCALE_STR_MAX } from '../src/pack.js';
+import { buildEvolutionPack, buildScaleAnchor, DIM_TOP, TIER_TOP, SCALE_STR_MAX, SCALE_TABLE_TOP_PACK } from '../src/pack.js';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import { PARAM_GEARS, PARAM_KEYS } from '../src/params.js';
@@ -70,7 +70,11 @@ test('K29/A-8：pack 大势块——有 setting 取演化层强度 + 张力三�
 //   病：抽象出来的设定只在 `render.js` 出现，`pack.setting` 只带 tension+env（A-8 冻结层不入包）
 //   ⇒ 模型每轮一个字都看不到这本书的维度与档位（真账 85 实体里 `实力` 0 条）。
 //   口径：只进"可判等的那一小块"（维度 + 范围 + 档位），散文型设定不进每轮包。
-test('★leg60 刻度块：档位表与维度进包（每轮都在）、体积有硬上界、空则键不出现', () => {
+//   ★★leg62 改口径（用户令「换成概念表」）：进包的东西**从"两列平铺"改成"一把尺一张表"**。
+//     旧断言读的是 `p.pack.setting.刻度.维度` / `.档位`（两列）；现在是 `刻度: [{表, 档位?, 维度?}]`。
+//     ⇒ 本锁按新口径重写，并**补上分组那条**（旧账推导：维度 range 回指档位名 ⇒ 进同一张表）。
+test('★leg60 + leg62 刻度块：概念表进包（一把尺一张表）、体积有硬上界、空则键不出现', () => {
+    // ① 两列**互相独立**（range 不回指任何档位名）⇒ 各成一张表，内容一条不丢
     const withScale = world();
     withScale.context.setting.frozen.canon.dims = [
         { name: '勇武', range: '-100~100' },
@@ -81,16 +85,93 @@ test('★leg60 刻度块：档位表与维度进包（每轮都在）、体积�
         { level: 'T1级_超一流', note: '数值标定 勇武95-99' },
     ];
     const p = buildEvolutionPack(withScale, null);
-    assert.deepEqual(p.pack.setting.刻度.维度, [{ 名: '勇武', 范围: '-100~100' }, { 名: '韬略', 范围: '-100~100' }], '★维度 + 取值范围进包（照抄原文）');
-    assert.deepEqual(p.pack.setting.刻度.档位, [{ 档: 'T0级_天下无双', 标定: '数值标定 勇武100' }, { 档: 'T1级_超一流', 标定: '数值标定 勇武95-99' }], '★档位 + 数值标定进包');
-    // 体积硬上界（A-8 的宽口必须可复核）：维度/档位各截断，字符串逐项 ≤ SCALE_STR_MAX
+    const tables = p.pack.setting.刻度;
+    assert.ok(Array.isArray(tables), '刻度块 = 概念表列表');
+    const allTiers = tables.flatMap((t) => t.档位 || []);
+    const allDims = tables.flatMap((t) => t.维度 || []);
+    assert.deepEqual(allDims, [{ 名: '勇武', 范围: '-100~100' }, { 名: '韬略', 范围: '-100~100' }], '★维度 + 取值范围进包（照抄原文）');
+    assert.deepEqual(allTiers, [{ 档: 'T0级_天下无双', 标定: '数值标定 勇武100' }, { 档: 'T1级_超一流', 标定: '数值标定 勇武95-99' }], '★档位 + 数值标定进包');
+    assert.ok(tables.every((t) => typeof t.表 === 'string' && t.表.length), '★每张表都带表名（旧口径两列平铺时没有它）');
+
+    // ①b ★leg62 核心：维度 range **回指**某个档位名 ⇒ 它们进**同一张表**（实教 `S~E级` 下挂 5 个属性那种）
+    const grouped = world();
+    grouped.context.setting.frozen.canon.powerScale = [
+        { level: 'A班', note: '精英最高资源保障' },
+        { level: 'D班', note: '底层资源最少多隐藏实力' },
+        { level: 'S~E级', note: '决定班级分配' },
+    ];
+    grouped.context.setting.frozen.canon.dims = [
+        { name: '学力', range: 'S~E级' },
+        { name: '智力', range: 'S~E级' },
+    ];
+    const g = buildEvolutionPack(grouped, null).pack.setting.刻度;
+    // ★leg62 的老账推导口径（`scalesFromFlat`）：`A班/D班/S~E级` 都**没有数字记号** ⇒ 合进同一张
+    //   《无记号档位》表；而 `学力/智力` 的 range 逐字回指 `S~E级`（该表的成员之一）⇒ 也挂进这张表。
+    //   ⇒ 这一格里**档位与维度落在同一张表**——正是"一把尺 + 它底下的一组属性"的形态
+    //     （实教 `S~E级` 下 5 个属性就是这形状）。★新账由模型直接交 `刻度` 分组，不走这条推导。
+    const host = g.find((t) => (t.档位 || []).some((x) => x.档 === 'S~E级'));
+    assert.ok(host, '★`S~E级` 所在的表在包里（它是被两个维度回指的那把尺）');
+    assert.deepEqual((host.维度 || []).map((d) => d.名), ['学力', '智力'], '★回指它的两个维度挂进同一张表（不是平铺在别的栏里）');
+    assert.deepEqual((host.档位 || []).map((x) => x.档), ['A班', 'D班', 'S~E级'], '★无记号档位合一张表（老账没有分组信息，碎成一张张表面板画不出来）');
+    assert.equal(g.length, 1, '★这一格里只有一张表（两个维度都回指到它，没有游离维度）');
+
+    // ★★leg62 夹具与断言的**真实口径**（这段踩了四轮才定，改之前先读）：
+    //   旧口径（`leg60`）是"两列各自独立截断"⇒ 维 8 / 档 24 两条互不影响。
+    //   换成概念表后**它们不再独立**：一张表同时装着档位与维度，而表数上限是体积兜底
+    //   ⇒ 退化到"一档一表 / 一维一表"时，`表数上限` 会**先于**两条预算咬住。
+    //   实测（90 个互不相同档位名 + 40 个互不相同维度名）：上限 16 → 档位 15/24、维度 1/8。
+    //   ⇒ 本锁因此**不再断言"两条预算各自都压到上限"**（那是旧形状才成立的性质），改锁**真正保证的三条**：
+    //     ① 逐项字符串 ≤ SCALE_STR_MAX；② 表数 ≤ 上限；③ 整体有界。
+    //   而"两条预算各自压到上限"这条性质，用**真实形状的夹具**在下面单独锁（现实里档位是
+    //   "少数几把尺、每把许多档"，维度挂在尺上——大荒 103 档/65 维、实教 1 尺挂 5 维都是这形状）。
     const big = world();
-    big.context.setting.frozen.canon.dims = Array.from({ length: 40 }, (_, i) => ({ name: `维${i}`.repeat(20), range: '范'.repeat(80) }));
     big.context.setting.frozen.canon.powerScale = Array.from({ length: 90 }, (_, i) => ({ level: `档${i}`.repeat(20), note: '标'.repeat(80) }));
+    big.context.setting.frozen.canon.dims = Array.from({ length: 40 }, (_, i) => ({ name: `维${i}`.repeat(20), range: '范'.repeat(80) }));
     const q = buildEvolutionPack(big, null);
-    assert.equal(q.pack.setting.刻度.维度.length, DIM_TOP, '维度条数截到 DIM_TOP');
-    assert.equal(q.pack.setting.刻度.档位.length, TIER_TOP, '档位条数截到 TIER_TOP');
-    assert.ok(q.pack.setting.刻度.维度.every((d) => d.名.length <= SCALE_STR_MAX && d.范围.length <= SCALE_STR_MAX), '逐项 ≤ SCALE_STR_MAX');
+    const qT = q.pack.setting.刻度;
+    assert.ok(qT.flatMap((t) => t.维度 || []).every((d) => d.名.length <= SCALE_STR_MAX && d.范围.length <= SCALE_STR_MAX), '逐项 ≤ SCALE_STR_MAX');
+    assert.ok(qT.flatMap((t) => t.档位 || []).every((t) => t.档.length <= SCALE_STR_MAX), '档位逐项 ≤ SCALE_STR_MAX');
+    assert.ok(qT.length <= SCALE_TABLE_TOP_PACK, `表数 ≤ ${SCALE_TABLE_TOP_PACK} 张（实测 ${qT.length}）`);
+    assert.ok(qT.every((t) => t.档位?.length || t.维度?.length), '★没有空表（空行不许占表数名额——实测踩过：8 张表里 2 张是空的）');
+    assert.ok(qT.flatMap((t) => t.档位 || []).length > 0, '★退化形状下档位仍有（锚不能整块丢）');
+    assert.ok(qT.flatMap((t) => t.维度 || []).length > 0, '★退化形状下维度仍有（不能 0/8——实测踩过：提前 break 把维度饿死）');
+
+    // ★真实形状（**一把尺，底下许多档 + 一组挂在它上面的维度** —— 实教 `S~E级` 下挂 5 个属性就是这形状）
+    //   ⇒ 两条预算**各自压到上限**，且表数远小于上限（表数封顶完全不参与 ⇒ 这段只验预算本身）。
+    const real = world();
+    real.context.setting.frozen.canon.powerScale = [
+        { level: 'S~E级', note: '决定班级分配' },
+        ...Array.from({ length: 30 }, (_, j) => ({ level: `档${j}`, note: '标' })),   // 31 档 ⇒ 逼 TIER_TOP
+    ];
+    real.context.setting.frozen.canon.dims = [
+        ...Array.from({ length: 12 }, (_, i) => ({ name: `维${i}`, range: 'S~E级' })),  // 12 维 ⇒ 逼 DIM_TOP
+        // ★对照：一个**回指不到任何档位名**的维度 ⇒ 它自成一表（`scalesFromFlat` 的兜底分支）
+        { name: '独立维', range: '0~100' },
+    ];
+    const rq = buildEvolutionPack(real, null).pack.setting.刻度;
+    assert.equal(rq.flatMap((t) => t.档位 || []).length, TIER_TOP, '★真实形状：档位压到 TIER_TOP');
+    assert.equal(rq.flatMap((t) => t.维度 || []).length, DIM_TOP, '★真实形状：维度压到 DIM_TOP');
+    // ★老账推导的分组（`scalesFromFlat`）：
+    //   · `档0…档29` 有数字记号 ⇒ 同形态归一组（组名取该组第一条档位名 = `档0`）；
+    //   · `S~E级` **无数字记号** ⇒ 进《无记号档位》那张表，而那 12 个回指它的维度也跟着挂进**同一张表**。
+    //   ★为什么必须归组（实测）：不归组时"一档一表" ⇒ 31 档推出 31 张表 ⇒ 表数名额被占光，档位只剩 15/24。
+    assert.equal(rq.length, 2, `★只有两张表（实测 ${JSON.stringify(rq.map((t) => t.表))}）`);
+    const unmarkedT = rq.find((t) => t.表 === '无记号档位');
+    assert.ok(unmarkedT, '★无记号档位（`S~E级`）自成一张《无记号档位》表');
+    assert.deepEqual((unmarkedT.档位 || []).map((x) => x.档), ['S~E级'], '★它装着 `S~E级` 这一个档位');
+    assert.equal((unmarkedT.维度 || []).length, DIM_TOP, '★回指它的 12 个维度截到 DIM_TOP，全挂在同一张表里');
+    const markedT = rq.find((t) => t.表 !== '无记号档位');
+    assert.equal((markedT.档位 || []).length, TIER_TOP - 1, '★另一张表装同形态的 30 个档（截到剩余名额）');
+
+    // ★leg62：表数封顶只管"还能不能开新表"，**绝不能顺手把预算也停了**（实测踩过一次：
+    //   表数那行原来带 `break`，维度预算当场被饿死成 0/8）。
+    const spread = world();
+    spread.context.setting.frozen.canon.dims = Array.from({ length: 20 }, (_, i) => ({ name: `独维${i}`, range: `范${i}` }));
+    spread.context.setting.frozen.canon.powerScale = [{ level: 'T1', note: '甲' }, { level: 'T2', note: '乙' }];
+    const sp = buildEvolutionPack(spread, null).pack.setting.刻度;
+    assert.equal(sp.flatMap((t) => t.维度 || []).length, DIM_TOP,
+        '★散开的维度仍要填满 DIM_TOP（表数封顶不许饿死维度预算）');
+    assert.ok(sp.length <= SCALE_TABLE_TOP_PACK, `散开时表数仍 ≤ ${SCALE_TABLE_TOP_PACK}（实测 ${sp.length}）`);
     assert.ok(JSON.stringify(q.pack.setting).length < 3000, `刻度块整体有界（实测 ${JSON.stringify(q.pack.setting).length} 字符）`);
     // 空则键不出现（"空着就是空着"——与 env 同一条纪律；既有世界零扰动）
     const none = world();
