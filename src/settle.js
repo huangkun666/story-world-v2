@@ -635,14 +635,19 @@ function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate
     world.meta.simLog.push(entry);
 }
 
-// K37 生通道②落账（细案 §3.7 → A-10）：入局提议——单轮 ≤1 拒超限；
+// K37 生通道②落账（细案 §3.7 → A-10）：入局提议——单轮 ≤N 拒超限；
 // 落账（id=e_<tick>_<n>；kind 缺省 character；**attrs 只在模型提议时落，没提议就空着**——leg24 片2）
 // + 编年「XX 入局」（kind major=大事）
-function spawnEntities(world, gstep, tick, warnings, chronicle) {
+// ★★★leg63（用户令「我要把另外两个参数也设置成可调」）：上限从**出厂常量**改成**`lim.每轮入局`**
+//   （`= resolveLimits(world)`：账上设了按账上、没设回出厂 1 ⇒ 逐字不变）。
+//   为什么过去那个理由不成立：注释写的是"一次调太多，每个都得重跑基线"——那是**保守**，
+//   而真账里它会咬人：模型一轮提两个新人 ⇒ 第二个直接拒（"入局限额"那条裁定就是这个）。
+function spawnEntities(world, gstep, tick, warnings, chronicle, lim = { 每轮入局: ENTITY_BIRTH_PER_TICK }) {
     const born = [];
+    const cap = Number(lim?.每轮入局) > 0 ? Number(lim.每轮入局) : ENTITY_BIRTH_PER_TICK;
     for (const ne of gstep.newEntities || []) {
-        if (born.length >= ENTITY_BIRTH_PER_TICK) {
-            warnings.push(`裁定: 入局限额（每 tick 新生 ≤${ENTITY_BIRTH_PER_TICK}）：「${ne.name}」被拒`);
+        if (born.length >= cap) {
+            warnings.push(`裁定: 入局限额（每 tick 新生 ≤${cap}）：「${ne.name}」被拒`);
             continue;
         }
         if (world.entities.some((e) => e.name === ne.name)) {
@@ -897,7 +902,10 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     // ★★leg32g：第 4 个参数＝**本轮待启用名单**（引擎机械选出、也随包递给模型的那 12 个）。
     //   为什么必须传进来：名单上的人按结构三条件是静默的 ⇒ 模型照名单给他开线也会被门控丢掉
     //   ⇒ 那份名单就成了空转（"规则与引擎判据必须对得上"）。传进来 ⇒ 他们获得**一次起头资格**。
-    const spotlight = new Set(computeIdleFaces(ssot).map((f) => f.id));
+    // ★★★leg63（用户令「我要把另外两个参数也设置成可调」）：这份名单的口径是**同一份**（包与门控同源），
+    //   故这里的上限也必须读账上那个值 —— 否则包/面板递了 N 个人、门控只认前 `IDLE_FACES_TOP` 个
+    //   ⇒ 名单上多出来的人"照名单开了线也会被门控丢掉"（那份名单就成了空转）。
+    const spotlight = new Set(computeIdleFaces(ssot, resolveLimits(world).待启用名单).map((f) => f.id));
     const gate = gateWorldStep(stepN, ssot, moveFact, spotlight);
     // ★leg40b 续（死锁修复·收尾一格）：**把"按位次认下来的同轮引用"改成引擎真发的号**。
     //   位置必须在**门控之后**：`gate.js:87-93` 会丢掉"静默方属主的 plot 事件"⇒ 数组位次会变，
@@ -919,7 +927,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
         // 不可达（check 已过），防御
         return { ok: false, ssot, stage: { warnings, chronicle } };
     }
-    const born = spawnEntities(world, gstep, tick, warnings, chronicle);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
+    const born = spawnEntities(world, gstep, tick, warnings, chronicle, lim);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
     // K19 事件产率上限（因果链细案 §3.2 → A-2）：按提议序保留前 ≤N，超限拒建 + 警告（"事件洪峰"——与盘算大厦顶
     // 同哲学：双面无痕于世界，留痕于 simLog）；门控后、影响通道前——被拒不涉影响/挂链/编年
     // ★leg40b 续：这个上限现在**可调**（`每轮事件`：6/9/12 ⇒ `lim.每轮事件`），账上没设档位时 = 出厂 6（逐字不变）。

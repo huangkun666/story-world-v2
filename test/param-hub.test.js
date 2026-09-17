@@ -194,8 +194,8 @@ test('★★★leg46·⑤（用户报的那一条）：改完参数 → 世界�
     assert.deepEqual(st.store(), want, '★真源不在世界账里 ⇒ 世界怎么换手动不到玩家的档位');
     const hub2 = await makeHub();                            // 新页面 = 新 hub（读同一份主路）
     const c = hub2.commit(fresh);                            // 载入期：接纳 + 镜像
-    assert.deepEqual(hub2.displayEnv(c.world), { 天时: '大灾', 每轮事件: '12', 每轮递线: '3', 每轮新生: '3', 顶层大计: '15', 在飞大计: '20' },
-        '★五个上限输入框都画对（12 而不是回到 6；★leg63 起多一个「每轮新生」= 出厂 3）');
+    assert.deepEqual(hub2.displayEnv(c.world), { 天时: '大灾', 每轮事件: '12', 每轮递线: '3', 每轮新生: '3', 每轮入局: '1', 待启用名单: '12', 顶层大计: '15', 在飞大计: '20' },
+        '★七个上限输入框都画对（12 而不是回到 6；★leg63 起多了「每轮新生/每轮入局/待启用名单」）');
     assert.deepEqual(c.world.context.setting.dynamic.env, { 天时: '大灾', 每轮事件: '12' },
         '★刷新之后镜像照旧同步给引擎');
 });

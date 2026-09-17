@@ -9,13 +9,14 @@
 //   ③ **档位真能改引擎判据**：把上限调低 ⇒ 引擎按新值拒提议并留痕（**这是"参数化成功"的机械判据**）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
     LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS, LIMIT_META, LIMIT_ROWS,
     limitsOf, normalizeLimit, resolveLimits, usingDefaults, limitKey,
 } from '../src/limits.js';
 import { AGENDA_CAPS, EVENT_CAPS, ENTITY_BIRTH_PER_TICK, settleTick } from '../src/settle.js';
-import { buildEvolutionPack, THREADS_TOP, IDLE_FACES_TOP } from '../src/pack.js';
+import { buildEvolutionPack, THREADS_TOP, IDLE_FACES_TOP, computeIdleFaces } from '../src/pack.js';
 
 /** 一份最小但真形状的世界（够 `settleTick` 跑完一轮空步）。 */
 function world({ tick = 1, env = null } = {}) {
@@ -175,6 +176,47 @@ test('★★★leg63：「每轮新生」（每 tick 新生）调到 6 ⇒ 一�
     assert.ok(raised2.stage.warnings.some((w) => w.includes('在飞全局') && w.includes('4')),
         `这时才报第二道，并写出账上那个值：${raised2.stage.warnings.join('; ')}`);
     assert.ok(!raised2.stage.warnings.some((w) => w.includes('每 tick 新生')), '第一道放行之后它就不该再报（顺序方向正确）');
+});
+
+// ★★★leg63（用户令「我要把另外两个参数也设置成可调」）：最后两个"丙档只读"的转正。
+//   这两条判据锁的是**引擎真读账上那个值**（leg61 §4 形状②：喂函数的判据永远绿，必须走真路径）。
+test('★★★leg63：「每轮入局」调到 3 ⇒ 一轮能进 3 个新人（出厂 1 只进 1 个，其余按"入局限额"拒）', () => {
+    //   ★夹具注意（本判据第一版连着踩了两次，留着当例子——**夹具形状不对，读数全是假的**）：
+    //     ① `source.type` 枚举是 `book|event|dialogueFact|entity`（与盘算/事件那几处**不一样**）；
+    //     ② 光有 `type` 还不够：`check-step.js:223` 要求**还要有 `ref`**（"无源不入局"）
+    //        ⇒ 走 `{ type: 'entity', ref: <在册实体 id> }`（本仓既有夹具同款，见 deadlock-heal.test.js:250）。
+    const mk = (n) => Array.from({ length: n }, (_, i) => ({
+        name: `新人${i}`, kind: 'character', location: '大营',
+        entity: 'e_a', source: { type: 'entity', ref: 'e_b' },
+    }));
+    const at1 = settleTick({ ssot: world(), step: stepWith({ newEntities: mk(3) }) });
+    assert.equal(at1.ssot.entities.length, 2 + LIMIT_DEFAULTS.每轮入局, `出厂 ${LIMIT_DEFAULTS.每轮入局} ⇒ 只进 1 个`);
+    assert.equal(at1.stage.warnings.filter((w) => w.includes('入局限额')).length, 3 - LIMIT_DEFAULTS.每轮入局,
+        '被拒的**逐条留痕**（如实报，不许静默）');
+    const at3 = settleTick({ ssot: world({ env: { 每轮入局: '3' } }), step: stepWith({ newEntities: mk(3) }) });
+    assert.equal(at3.ssot.entities.length, 2 + 3, '★抬到 3 ⇒ 3 个新人全进（档位真的进了判据）');
+    assert.ok(!at3.stage.warnings.some((w) => w.includes('入局限额')), '不再报那一条拒签');
+});
+
+test('★★★leg63：「待启用名单」调到 N ⇒ 名单正好 N 张脸，且**门控与包读同一份**', () => {
+    // 造足够的冷门池（> N），否则"名单多长"会被池子长度盖住（birth.test.js 那两个坑的教训）
+    const pool = (env) => {
+        const w = world({ env });
+        for (let i = 0; i < 40; i++) w.entities.push({ id: `e_x${i}`, kind: 'character', name: `闲${i}`, location: '大营' });
+        return w;
+    };
+    const w12 = pool({});
+    assert.equal(computeIdleFaces(w12).length, LIMIT_DEFAULTS.待启用名单, `出厂 ⇒ ${LIMIT_DEFAULTS.待启用名单} 张`);
+    const w30 = pool({ 待启用名单: '30' });
+    assert.equal(computeIdleFaces(w30, resolveLimits(w30).待启用名单).length, 30, '★账上 30 ⇒ 递 30 张');
+    // ★口径：**两处必须传同一个数**（包与门控同源）——源码锁，防"包递 30、门控只认 12"的空转
+    const packSrc = readFileSync(new URL('../src/pack.js', import.meta.url), 'utf8');
+    const settleSrc = readFileSync(new URL('../src/settle.js', import.meta.url), 'utf8');
+    assert.match(packSrc, /computeIdleFaces\(ssot, lim\?\.待启用名单/, '★包那侧走上限参数（不是裸常量）');
+    assert.match(settleSrc, /computeIdleFaces\(ssot, resolveLimits\(world\)\.待启用名单\)/, '★门控那侧读同一份（否则名单空转）');
+    // 端到端：真出一次包，看名单条数跟着账上走
+    const p = buildEvolutionPack(w30, null, { lim: resolveLimits(w30) });
+    assert.equal(p.pack.idleFaces.length, 30, '★进包的名单条数 = 账上那个数');
 });
 
 test('★★尺度上限：把「在飞大计」调到 20 的下限之外 ⇒ 引擎按新值拒提议并留痕（参数化生效的机械判据）', () => {

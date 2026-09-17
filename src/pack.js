@@ -590,9 +590,13 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
     //   ★这份名单**不是纯展示**：`settle.js` 会把它**同时**交给门控（`gateWorldStep` 的第 4 个参数），
     //   让名单上的人获得"起头"资格——否则"模型照名单给他开线、引擎照样丢掉"，名单就是空转。
     //   ⇒ 口径实现在下面那个**导出的纯函数**里（一处真源：包与门控读同一份）。
-    // ★leg40b 续：`待启用名单`（`IDLE_FACES_TOP`=12）**刻意不做旋钮**（丙档只读：一次调太多，每个都得重跑基线）
-    //   ⇒ 这里仍是出厂常量（见 `buildEvolutionPack` 形参 `lim` 的注释）。
-    const idleFaces = computeIdleFaces(ssot);
+    // ★★★leg63（用户令「我要把另外两个参数也设置成可调」）：这一份**也走账上的值**了。
+    //   为什么必须让它在 `lim` 里（而不是留常量）：这份名单**不是纯展示**——`settle.js` 把
+    //   同一个函数算出来的那份交给门控（`gateWorldStep` 的第 4 参），名单上的人才有"起头"资格。
+    //   两处若读不同的数 ⇒ 面板/包里递了 20 个人，门控只认前 12 个 ⇒ 名单空转（本仓治过的老病）。
+    //   ⇒ 口径：**上限从 `lim` 进来**（`buildEvolutionPack` 的形参，`runTick` 用 `resolveLimits` 递），
+    //     账上没设 ⇒ 出厂 `IDLE_FACES_TOP`（12）逐字不变。
+    const idleFaces = computeIdleFaces(ssot, lim?.待启用名单 ?? IDLE_FACES_TOP);
     // ★★leg34（小说家条款 §6.4 那一格，实测坐实）：**离场名册**。
     //   细案原话：「★**`pack.js:51`** 必须一并改——否则"复活了但模型看不见他"，世界继续当他死了」
     //   ★本棒实测把这一格量得更准了：真账 621 实体里 `dead` 1（万子明）· `retired` 1（白小娥）——
