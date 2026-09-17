@@ -71,7 +71,10 @@ test('K30 守卫声明与豁免合理：st-preset 确持 node:fs；transport-htt
 test('K30 动态导入冒烟：web/index.js 顶层零 DOM，Node 可直接加载（浏览器可载性实证）', async () => {
     const mod = await import('../web/index.js');
     assert.equal(typeof mod.sw2Version, 'function');
-    assert.equal(mod.sw2Version(), '0.1.0');
+    // ★1.0.0（发布首版）：这个断言锁的是**发布版本号**（`web/index.js` 的 VERSION），
+    //   而它与 `manifest.json` 的 `version` 是同一个号的两处写法 ⇒ **发版时两处同批改**，
+    //   判据当场红就是提醒你漏了一处（本仓"同一件事两处实现"的一贯治法：让它红，别让它漂）。
+    assert.equal(mod.sw2Version(), '1.0.0');
     // ★leg40b（体检 · 第二刀）：`sw2TabState(name, active)` 探针已删——它是 `{ name, active }` 的
     //   恒等包装、生产零调用。这条用例的真实目的（模块能在 Node 里被加载）由上面两行承担；
     //   这里改为锁**它不该再回来**（同一个"零引用的包装函数"是这次体检删掉的一类东西）。
