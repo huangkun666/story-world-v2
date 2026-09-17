@@ -6,14 +6,35 @@
 > 本文与 `ledger.md` / `LEDGER.md` 里凡提到 **leg28～leg47 的 `session-handoff-*.md`**，文件已移到
 > **`F:\deepseek\backups\story-world-v2-docs-pruned-20260916\`**（含 `MANIFEST.txt`）——**引用不是写错，是搬家了**。
 > `docs/handoffs/`（leg2～leg27，34 份）**原地未动**；★**代码注释会引用它们**（`src/params.js:66`、`test/plugin-master-switch.test.js:145` 指向 `leg26.md`）⇒ **删文档前先查引用**。
-> 最后更新：2026-09-18（**leg64**：★★★**规则进包——判定原则第一次进了每轮包**——
+> 最后更新：2026-09-18（**leg66**：★★★**发布收尾 —— 1.0.0 已经上了社区**。四件：
+> **`README.md`**（195 行；三处按真源写准：**安装目录名硬要求 `story-world-v2`**——`web/index.js:172` 的
+> `renderExtensionTemplateAsync('third-party/story-world-v2','settings')` 是固定路径，目录名不对面板就退化成
+> 最小回退窗 · 八个页签名照 `settings.html` 抄 · **零依赖无构建、不要 npm install**；按用户拍板**绕开 `docs/`**）·
+> **`LICENSE`**（MIT；版权行 **`Copyright (c) 2026 HK0716`**，与 `manifest.author: huangkun` **不是一个串**，如实登记）·
+> **`manifest.json` 三改**（`description` 重写 · `0.1.0` → **`1.0.0`** · `auto_update` → **`true`**）·
+> **`git rm` 三个过期导出**（它们是**四维时代**产物，leg25c 早删了那套形状 ⇒ 留着等于给玩家一份"描述另一个引擎"的样例）。
+> ★★**拆成独立仓并发布**：`git subtree split --prefix=story-world-v2` ⇒ **230 笔历史**、树根已正 ⇒
+> **`https://github.com/huangkun666/story-world-v2`**（public · MIT · `main` = `d4bc2a8`）。
+> 为什么必须拆（可验证）：ST 的自动更新是**在插件目录里 `git pull` 它自己的 `origin`**
+> （`extensions.js:1443` → `src/endpoints/extensions.js:152`）⇒ 照 monorepo 发，玩家点更新会拉整仓、
+> 而 `git clone story-director.git story-world-v2` 的树根**没有 `manifest.json`**（ST 认不出这个扩展）。
+> ★★★**补上了 leg63/64 从没验过的那一格**：`src/` **38 模块全部载入** · 版本三处一致（1.0.0）·
+> 目录名与注入路径**用实机目录实证对得上** · **真账八页 `renderAll` 21 ms 零抛错**（合计 169,964 字符）·
+> **从发布产物本体跑 899/899 + 冒烟 8231 字节**。★**实机位是 junction**（`…/third-party/story-world-v2`
+> → `F:\deepseek\plugins\story-world-v2`）⇒ **改仓库就是改实机、没有部署步骤、也没有灰度层**。
+> ★**还欠的一格**：真浏览器打开面板 + 真模型推进一轮（只有用户能做；判据 = 硬刷新后页脚显示
+> `构建 leg64-scale-catalog`）。★**UI 微调与项目结构优化**用户提了但**没说指哪里**，本棒一个字没动
+> （`PANEL_BUILD` 未升位）。★★**本棒犯的错留档**：`a469ffc` 的 commit message 写了 manifest 却没进那笔
+> （`git status` 抓出、补落 `7fc4f56`）· README 里一度写了一条**没验过**的命令（裸跑当场 `ERR_INVALID_ARG_TYPE`）
+> ⇒ 撤下。★下一棒正事见 `docs/session-handoff-2026-09-18-leg67.md`（= 本棒交接）。
+> 上一棒 **leg64**：★★★**规则进包——判定原则第一次进了每轮包**——
 > 病是 leg63 §1.2 量到的那根刺：`canon.rules`（大荒 129 条：`跨1大境→DC24` · `1点仙阶≈1,000,000点下界`）
 > **只有 `render.js` 读** ⇒ 模型每轮写实力/好感/战果**一条都看不到**。治法：契约加 `ruleKinds`
 > （`{法则原文: 类别}`，四类 = 判断依据/文风禁令/变量指令/其他）+ `buildRuleAnchor` **只把「判断依据」递进包**
 > （大荒 129 条 6,286 字符 = 21.0% 包预算 ⇒ **判据 70 条 3,445 字符 = 11.5%**）+ 面板按类分段**如实报进包条数**。
 > ★老账零迁移（没有 `ruleKinds` ⇒ 包里 `法则` 键不出现）⇒ ★★**判据进包必须重抽一次设定**
 > （于是"重抽"有两个理由：leg63 的 `源` + leg64 的 `判据`）；★★**磁盘上 0 份账有 `ruleKinds`**。
-> ★★★ **真机验收 + 上一棒那处更正** = 下一棒正事，见 `docs/session-handoff-2026-09-18-leg65.md`；
+> ★★★ **真机验收 + 上一棒那处更正** 曾是 leg65 交接的正事（现已由 leg66 收口，见顶部）；
 > 出数档 `docs/measure-leg64-rule-kinds.md`。★本棒实现由另一位 agent 完成，本棒做**独立复核 + 更正 + 收口**
 > （本仓第一次两 agent 同工作区，纪律见 leg65 交接 §0.2）。）
 > 再上一棒 **leg63**：★★★**刻度成体系 + 两条抽取通道统一 + 七个旋钮全可调**——
