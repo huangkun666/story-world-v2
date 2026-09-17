@@ -497,6 +497,48 @@ export function buildScaleAnchor(canon) {
     return capped;
 }
 
+// ★★★leg64 第三轮（用户问「有这么多模型该怎么检索，难道直接全塞吗？」→ 拍板**递目录 + 按需查**）：
+//   **刻度目录**——把"账上有哪些尺"递到模型眼前，但**不带档位内容**。
+//
+//   病（本棒实测，指得出出处）：重抽后的大荒账有 **64 张尺表 / 28,764 字符**（= 包预算 **32.0%**），
+//   而进包闸只放得下 **4 张 / 24 档** ⇒ **丢 93.8%**，且模型**根本不知道另外 60 张存在**
+//   （leg63 登记过同一个洞：「进包静默截断」，当时也是"包里没有痕迹"）。
+//   ⇒ 后果：模型在需要"量班级分配"那把尺时无尺可依 ⇒ 又回到"自己发明形容词"（本块当初要治的病）。
+//
+//   为什么**不能**靠"全塞"解决（用户那一问的直接答复）：64 张表 = 32% 预算，而每轮真正用得上的
+//   通常只有 3~5 张（尺的索引是**概念**——"这一轮在量什么"；实体表的索引是**身份**——"谁出场"，
+//   所以实体能每轮全递、尺表不能）。
+//
+//   形状（纯字符串数组，与 `法则`/`recalled` 同一种"最省"的排法）：
+//     `刻度目录: ['异金榜（12 档）', '大虞皇朝锁灵机制（3 档 · 2 维）', …]`   ← **只列还没进包的那些**
+//   ★为什么只列"没进包的"：已在 `刻度` 里的表，目录再列一遍是重复占预算；模型需要的是
+//     "**我手里没有、但书里有**"这一份差距清单。全集 = `刻度` ∪ `刻度目录`。
+//   ★与 `刻度` 的分工写在同一条纪律里：**一处按预算取前几张、一处如实报"还有什么"**，
+//     两处都读 `resolveScales`（同一个读取口）⇒ 不会出现"目录里有的、包里没有；包里有的、目录说没有"。
+export const SCALE_CATALOG_TOP = 200;       // 荒谬上界（真账 64 张 ⇒ 留 3 倍余量；它只是**表名**）
+export function buildScaleCatalog(canon, packedNames) {
+    if (!canon || typeof canon !== 'object') return null;
+    const tables = resolveScales(canon);
+    if (!tables.length) return null;
+    const has = packedNames instanceof Set ? packedNames : new Set();
+    const cutName = (s) => {
+        const t = String(s ?? '').trim();
+        return t.length > SCALE_NAME_MAX_PACK ? t.slice(0, SCALE_NAME_MAX_PACK) : t;
+    };
+    const out = [];
+    for (const t of tables) {
+        if (out.length >= SCALE_CATALOG_TOP) break;
+        const nm = cutName(t.名);
+        if (!nm || has.has(nm)) continue;          // 已在包里的不重复列
+        const nTier = (Array.isArray(t.档位) ? t.档位 : []).length;
+        const nDim = (Array.isArray(t.维度) ? t.维度 : []).length;
+        // 只有表名（+规模），**不带任何档位内容**——这一块的定位就是"目录"
+        const size = [nTier ? `${nTier} 档` : '', nDim ? `${nDim} 维` : ''].filter(Boolean).join(' · ');
+        out.push(size ? `${nm}（${size}）` : nm);
+    }
+    return out.length ? out : null;
+}
+
 // ★★★leg64（用户令「规则会怎么样？规则太多会怎么样？」→ 拍板「只进『判断依据』」）：**法则块**。
 //
 //   病（leg63 §1.2 的消费面审计，本棒复查确认）：`canon.rules` **只有 `render.js` 读**——
@@ -616,6 +658,14 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
     const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
     // ★★leg60（交接第 2 件）：**刻度块**——A-8 体积纪律的**唯一一处窄口**（见 `buildScaleAnchor` 头注）。
     const scale = buildScaleAnchor(ssot.context?.setting?.frozen?.canon);
+    // ★★★leg64 第三轮：**刻度目录**——"书里还有哪些尺"（用户拍板「递目录 + 按需查」）。
+    //   为什么必须与 `刻度` 同源算：目录排除的正是**已经进包的那几张**（`scale` 的 `表` 名就是
+    //   `buildScaleAnchor` 截断后的名字，目录用同一个 `cutName` ⇒ 两边认得出是同一张）。
+    //   ⇒ 模型看到的是"我手里没的、但书里有的"那一份差距清单。见 `buildScaleCatalog` 头注。
+    const scaleCatalog = buildScaleCatalog(
+        ssot.context?.setting?.frozen?.canon,
+        new Set((scale || []).map((t) => String(t?.表 ?? ''))),
+    );
     // ★★★leg64（交接 §3-A「规则进包」）：**法则块**——只取「判断依据」那一类（见 `buildRuleAnchor` 头注）。
     //   与 `刻度` 并列进同一个 `setting` 块：一个是"书里的尺子"，一个是"书里的判定原则"，
     //   都是**冻结的短表**（编译一次、之后每轮逐字相同），都违反 A-8 而那是有意的（它们是锚）。
@@ -685,9 +735,11 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
         //   ★leg62：`scale` 现在是**概念表列表**（一把尺一个元素，见 `buildScaleAnchor` 头注），
         //     故这里由调用点写 `刻度` 这个键（改前 `buildScaleAnchor` 自己返回 `{刻度:[…]}` ⇒ 这里会嵌成两层）。
-        setting: (dyn || scale || ruleAnchor) ? {
+        setting: (dyn || scale || ruleAnchor || scaleCatalog) ? {
             ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
             ...(scale ? { 刻度: scale } : {}),
+            // ★leg64 第三轮：**目录**（只表名 + 规模，不带档位内容）——治"60 张尺模型不知道存在"。
+            ...(scaleCatalog ? { 刻度目录: scaleCatalog } : {}),
             ...(ruleAnchor ? { 法则: ruleAnchor } : {}),   // ★leg64：判据进包（老账/无判据 ⇒ 键不出现）
         } : undefined,
         positions: ssot.context?.positions,

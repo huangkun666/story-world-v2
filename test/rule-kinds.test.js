@@ -21,7 +21,7 @@ import {
     RULE_PACK_TOP, RULE_PACK_STR_MAX, RULE_PACK_CHAR_TOP,
     buildRosterPrompt, buildSettingOnlyPrompt, RULE_CLASS_GUIDE,
 } from '../src/abstract.js';
-import { buildRuleAnchor, buildEvolutionPack } from '../src/pack.js';
+import { buildRuleAnchor, buildScaleAnchor, buildScaleCatalog, buildEvolutionPack } from '../src/pack.js';
 import { renderSettingHtml } from '../src/render.js';
 
 // ───────── 夹具：**自造**的五类法则（术语全部与真书无关） ─────────
@@ -267,7 +267,59 @@ test('★★leg64 面板：老账如实报"一条都没进包"，并指出出路
     assert.ok(!html.includes('**'), '★老账那一支同样不许有星号');
 });
 
-// ═══════════════ ⑧ 源码锁：分类只有一处实现（面板与进包不许各写一遍） ═══════════════
+// ═══════════ ⑧ 刻度目录（leg64 第三轮：用户问「这么多模型怎么检索，难道直接全塞吗」） ═══════════
+test('★★leg64 刻度目录：只列**没进包**的表名（不带档位内容），给模型一份"书里还有什么"', () => {
+    // 真账实景：64 张表 / 28,764 字符 = 预算 32%（全塞不进）；进包只 4 张 ⇒ 60 张模型不知道存在。
+    const canon = {
+        powerScale: [], dims: [], rules: [],
+        刻度: Array.from({ length: 40 }, (_, i) => ({
+            名: `表${i}`, 源: '条目甲',
+            档位: Array.from({ length: 3 }, (_, j) => ({ 档: `X${j}`, 注: '说明' })),
+        })),
+    };
+    const packed = buildScaleAnchor(canon) || [];
+    const cat = buildScaleCatalog(canon, new Set(packed.map((t) => t.表))) || [];
+    assert.ok(packed.length > 0 && packed.length < 40, `夹具确实发生了截断（进包 ${packed.length} / 40）`);
+    assert.equal(cat.length, 40 - packed.length, '★目录 = 账上 - 已进包（不重复列已经给过的）');
+    assert.ok(cat.every((s) => !s.includes('X0')), '★目录里**不许带档位名**（它只是目录，带内容就变第二份真相）');
+    assert.ok(cat.every((s) => /（\d+ 档）$/.test(s)), '目录形状：`表名（N 档）`');
+    const chars = cat.reduce((a, s) => a + s.length, 0);
+    assert.ok(chars < 40 * 12, `★目录必须极便宜（实测 60 张 = 753 字符；夹具 ${cat.length} 张 = ${chars} 字符）`);
+});
+
+test('★leg64 刻度目录：空着就是空着（没有表 / 全都进了包 ⇒ 键不出现）', () => {
+    assert.equal(buildScaleCatalog(undefined, new Set()), null);
+    assert.equal(buildScaleCatalog({ powerScale: [], dims: [] }, new Set()), null);
+    // 全进包 ⇒ 目录没东西可列
+    const canon = { powerScale: [], dims: [], rules: [], 刻度: [{ 名: '唯一表', 档位: [{ 档: 'X1', 注: '一' }] }] };
+    assert.equal(buildScaleCatalog(canon, new Set(['唯一表'])), null, '★全进了包 ⇒ 目录为 null（不留空栏）');
+});
+
+test('★★leg64 刻度目录真接线：`buildEvolutionPack` 的 `setting.刻度目录` 真的出现', () => {
+    const canon = {
+        powerScale: [], dims: [], rules: [],
+        刻度: Array.from({ length: 30 }, (_, i) => ({ 名: `表${i}`, 源: '甲', 档位: [{ 档: `X${i}`, 注: '一' }] })),
+    };
+    const ssot = {
+        context: { world: '测试世界', setting: { frozen: { canon }, dynamic: { tension: { polarity: '甲/乙', intensity: 0.5 }, env: {} } } },
+        entities: [], agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 },
+    };
+    const built = buildEvolutionPack(ssot, null);
+    assert.ok(Array.isArray(built.pack.setting.刻度目录), '★目录真的进了每轮包');
+    assert.ok(built.pack.setting.刻度目录.length > 0);
+    assert.ok(built.pack.setting.刻度, '刻度块仍在（目录不是替代它）');
+    // 键序锁：`刻度目录` 紧跟在 `刻度` 之后（面板与调试者按这个序读；也防"目录跑到 setting 外面去"）
+    const keys = Object.keys(built.pack.setting);
+    assert.equal(keys[keys.indexOf('刻度') + 1], '刻度目录', '★键序：刻度 → 刻度目录');
+    // 三块齐全时（有判据 + 有表 + 有目录）的顺序
+    const c2 = { ...canon, rules: ['跨甲境: 跨一阶→DC17'], ruleKinds: { '跨甲境: 跨一阶→DC17': '判断依据' } };
+    const s2 = { ...ssot, context: { ...ssot.context, setting: { frozen: { canon: c2 }, dynamic: ssot.context.setting.dynamic } } };
+    assert.deepEqual(Object.keys(buildEvolutionPack(s2, null).pack.setting), ['tension', 'env', '刻度', '刻度目录', '法则'],
+        '★三块齐全时的键序：刻度 → 刻度目录 → 法则');
+});
+
+
+// ═══════════════ ⑨ 源码锁：分类只有一处实现（面板与进包不许各写一遍） ═══════════════
 test('★leg64 源码锁：进包与面板**共用** `classifyRulesByKind`（不许各推一遍口径）', () => {
     const pack = readFileSync(new URL('../src/pack.js', import.meta.url), 'utf8');
     const render = readFileSync(new URL('../src/render.js', import.meta.url), 'utf8');
