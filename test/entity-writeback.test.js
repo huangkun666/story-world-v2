@@ -134,6 +134,41 @@ test('W2e：同一实体同一字段一轮内重复提议 ⇒ 拒（一条变更
     assert.ok(c.errors.some((e) => e.includes('重复提议')), c.errors.join('; '));
 });
 
+// ★★★leg66（用户实机贴回的一条裁定）：**"本批次开始时因是开着的" 才是判据**，不是"复核那一刻它还开着"。
+//   现场（真账 tick 7 · 大荒z1）：模型给「苏千欢」写回字段、因 = `ev_5_3`（它自己那件"阵眼破碎、龙气外泄"）；
+//   `settle` 入口的 `checkWorldStep` **看到它是开的 ⇒ 放行**，而同一批里她那条盘算走到了满步
+//   ⇒ `closeEvents` 的"源结清"型**先把 `ev_5_3` 关掉** ⇒ 随后 `applyEntityUpdates` 的防御复核读到 `closed=true`
+//   ⇒ 一条合法变更被吞，玩家看到那句"不在账或已了结"（**而它明明在账上、也明明是本轮的由头**）。
+//   本组锁两件：①同一批次内被本轮关掉的因**照旧认**；②真·旧事（进来时就已经是关的）**照旧拒**。
+test('W2f：因在本批次内被本轮自己关掉 ⇒ **照旧认**（判据是"批次开始时它是开的"）', () => {
+    // 盘算 3/3：这一推就是满步结算 ⇒ closeEvents 的"源结清"会把它的 plot 事件一并关掉
+    const w = baseWorld({
+        agendas: [{
+            id: 'a_1', owner: 'e_a', goal: '夺龙气', stage: '入体', visibility: 'known',
+            maxSteps: 3, progress: 3, memory: { promises: [], done: [], blocked: [], turnsAlive: 3 }, source: { type: 'state' },
+        }],
+        events: [{ id: 'ev_1', title: '阵眼破碎', source: { type: 'plot', ref: 'a_1' }, position: '大营', ripples: ['e_a'], links: { up: [], down: [] }, closed: false }],
+    });
+    const r = settleTick({ ssot: w, step: step7({
+        agendaAdvances: [{ agendaId: 'a_1', step: '硬抗反噬，将其压入丹田' }],
+        entityUpdates: [upd({ value: '元婴', cause: { type: 'event', ref: 'ev_1' } })],
+    }) });
+    // 先确认"因真的被本轮关掉了"——不然后面那条断言就是空绿
+    assert.equal(r.ssot.events.find((e) => e.id === 'ev_1').closed, true, '★前提：因确实被本轮关掉（源结清）');
+    assert.equal(r.ssot.agendas.find((a) => a.id === 'a_1').closed, true, '★前提：盘算确实本轮满步结算');
+    assert.equal(r.ssot.entities.find((e) => e.id === 'e_a').实力, '元婴', '★写回必须落账（不许因为"本轮自己把它关掉"而吞掉合法变更）');
+    assert.equal(r.stage.warnings.filter((x) => x.includes('字段写回复核拒绝')).length, 0, `不该有复核拒绝裁定：${r.stage.warnings.join('; ')}`);
+});
+
+test('W2g：真·旧事（进来时就已经是关的）⇒ 防御复核**照旧拒**，且报错说清"在第几轮了结"', () => {
+    // 绕过 check（直调 settleTick 也走 check，故这里构造"check 能过、复核该拦"的形状是不可达的；
+    //   本用例锁的是**复核不会因为 W2f 的放宽而一起放宽**——真旧事在 check 那一关就被拒了，世界原样不动）
+    const w = baseWorld({ events: [{ id: 'ev_old', title: '旧事', source: { type: 'state' }, position: '大营', ripples: ['e_a'], closed: true, closedAt: 2 }] });
+    const r = settleTick({ ssot: w, step: step7({ entityUpdates: [upd({ cause: { type: 'event', ref: 'ev_old' } })] }) });
+    assert.equal(r.ok, false, '真旧事必须被拒（fail-fast）');
+    assert.equal(r.ssot.entities.find((e) => e.id === 'e_a').实力, '筑基', '★世界原样未动');
+});
+
 // ============ W3 约束 4：黑名单 + 玩家不可改 ============
 
 test('W3：黑名单全拒——理由全是机械的（主键/类型契约/身份锚/引擎簿记/出处发票）', () => {

@@ -1727,7 +1727,12 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   （"其余 N 张没进包、表名仍每轮进包"）；③补**模型点名的表**（按需查表）⇒ 玩家可见面真变了。
     //   ★起名纪律又咬了一次：第一版 `leg64-rule-kinds` 含禁词 `kind`（就在下面这个循环里）⇒ 改
     //     `leg64-rule-classes`，刻度目录落地后再升 `leg64-scale-catalog`。这条雷 leg50/52 各踩过一次。
-    assert.equal(PANEL_BUILD, 'leg64-scale-catalog');
+    // ★★★leg66 换档：**观棋页「⚖ 本轮裁定 N 条」那条的文案改了**——原一句"不在账或已了结"是
+    //   一句话两义（真账 tick 7 实测：因明明在账上、也明明是本轮的由头，却被那句领去查"抄错号"）；
+    //   现在分开报"账上根本没这个号"/"在本批次开始前就已了结（第 N 轮）"，且**同一批次内被本轮
+    //   自己关掉的因照旧认**（治法见 `settle.js` 的 `captureOpenCauseState`）。
+    //   ★起名纪律照旧：`leg66-cause-at-batch-entry` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    assert.equal(PANEL_BUILD, 'leg66-cause-at-batch-entry');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

@@ -749,6 +749,26 @@ function applyEntityFates(world, gstep, tick, warnings, chronicle) {
     }
 }
 
+// ★★★leg66：**来路快照**——进入 settle 那一刻，账上哪些事件/盘算是**开着的**（以及已经关了的那些是在哪一轮关的）。
+//   为什么要快照而不是实时读：本函数在结算尾声会自己关掉一批（源结清/涟漪平息/盘算满步），
+//   而"变更的因必须未闭环"这条契约的判定时点必须是**批次开始时**——否则引擎会用自己的收尾动作
+//   去否掉一条它刚刚放行过的合法变更（见 `applyEntityUpdates` 头注与 W2f 用例）。
+function captureOpenCauseState(world) {
+    const openEvents = new Set();
+    const closedEventsAt = new Map();
+    for (const ev of world.events || []) {
+        if (ev.closed) closedEventsAt.set(ev.id, ev.closedAt ?? null);
+        else openEvents.add(ev.id);
+    }
+    const openAgendas = new Set();
+    const closedAgendasAt = new Map();
+    for (const a of world.agendas || []) {
+        if (a.closed) closedAgendasAt.set(a.id, a.closedAt ?? null);
+        else openAgendas.add(a.id);
+    }
+    return { openEvents, closedEventsAt, openAgendas, closedAgendasAt };
+}
+
 // ★★leg34（小说家条款 §6 实施）：**实体字段写回** + **带因复活**（同一个通道）
 //   用户 ⑤：「llm 有权决定任何字段，实力是可以增长的，性情是可以大变的，就连死亡在一个有复活的世界都可以改变」
 //   ★这一笔让引擎**放弃"这值对不对"的判断权**，只保留"这变更有因、有痕、有额度"的核验（细案 §6.5 的真实代价，记在案）：
@@ -756,7 +776,7 @@ function applyEntityFates(world, gstep, tick, warnings, chronicle) {
 //     补救是**留痕**，不是判断：每条变更永久落账（值 + 因 + 轮次）⇒ 前后矛盾**可被发现**，但引擎不替世界仲裁。
 //   ★"只许改现值、不许回改历史"在**形状上**就已经成立：本函数只写得回 `entity[field]` 一个现值格，
 //     账上的事件/编年/里程碑**没有任何写通道** ⇒ 不需要额外判据（这是形状保证，不是口头纪律）。
-function applyEntityUpdates(world, gstep, tick, warnings, chronicle) {
+function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAtEntry) {
     const updates = gstep.entityUpdates || [];
     const stats = { applied: 0, revived: 0 };
     for (const u of updates) {
@@ -767,8 +787,37 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle) {
         const ref = u.cause?.ref;
         const ev = u.cause?.type === 'event' ? (world.events || []).find((e) => e.id === ref) : null;
         const ag = u.cause?.type === 'agenda' ? (world.agendas || []).find((a) => a.id === ref) : null;
-        if (ev?.closed || ag?.closed || (!ev && !ag)) {
-            warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因「${ref}」不在账或已了结（因果只能挂在正在发生的事上）`);
+        // ★★★leg66：两道判据**分开**（原先那句"不在账或已了结"是一句话两义，会把人领到错方向去查"是不是抄错号"）
+        //   ① 账上根本没有这个号 ⇒ 拒（真正的"不存在"）
+        //   ② 账上有、但**进入本批次时就已经是关的** ⇒ 拒（真·旧事："不许拿旧事解释今天的变化"）
+        //   ③ 账上有、进来时开着、**本轮被引擎自己关掉**（源结清/涟漪平息/满步结算）⇒ **认**
+        //      （判定时点 = 进入 settle 那一刻；引擎自己的收尾不许反过来否掉刚放行的合法变更）
+        const entry = openCauseAtEntry || null;
+        if (u.cause?.type === 'event') {
+            if (!ev) {
+                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因事件「${ref}」**账上根本没有这个号**（本轮的因不能是凭空生成的号）`);
+                continue;
+            }
+            const openAtEntry = !entry || entry.openEvents.has(ref);
+            if (!openAtEntry) {
+                const at = entry.closedEventsAt.get(ref);
+                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因「${ref}」（${String(ev.title || '').slice(0, 20)}）**在本批次开始前就已经了结${at != null ? `（第 ${at} 轮）` : ''}**——因果只能挂在还没了结的事上`);
+                continue;
+            }
+        } else if (u.cause?.type === 'agenda') {
+            if (!ag) {
+                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因盘算「${ref}」**账上根本没有这个号**`);
+                continue;
+            }
+            const openAtEntry = !entry || entry.openAgendas.has(ref);
+            if (!openAtEntry) {
+                const at = entry.closedAgendasAt.get(ref);
+                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因盘算「${ref}」（${String(ag.goal || '').slice(0, 20)}）**在本批次开始前就已经结算${at != null ? `（第 ${at} 轮）` : ''}**——因果只能挂在在办的事上`);
+                continue;
+            }
+        } else {
+            // 未知因型（check 已拒，防御）
+            warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因型「${String(u.cause?.type)}」认不出`);
             continue;
         }
         if (u.field === 'status') {
@@ -915,6 +964,16 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     const gstep = normalizeSameStepEventRefs(gate.step, tick);
     // ★leg40b 续：生效上限**在入口解析一次**，之后全文件都用它（防"某条路仍读旧常量"）。
     const lim = resolveLimits(world);
+    // ★★★leg66（用户实机贴回的一条裁定）：**"本批次开始时因是开着的"才是判据**——先抓一份**来路快照**。
+    //   病（真账 tick 7 实测 + 对照实验复现）：`settle` 入口的 `checkWorldStep` 看到因是开的 ⇒ 放行；
+    //   而**同一批**里 `closeEvents`（本函数第 966 行）会先把它关掉（源盘算满步结算 ⇒ "源结清"型）
+    //   ⇒ `applyEntityUpdates`（第 970 行）的防御复核读到的却是**事后状态** ⇒ 一条**合法**变更被吞，
+    //   玩家看到"因不在账或已了结"（而它明明在账上、也明明是本轮的由头）。
+    //   口径：**"因必须未闭环"这条契约的判定时点 = 进入 settle 那一刻**；引擎自己在结算尾声做的闭环
+    //   是"这件事这一轮收了尾"，**不许反过来宣布"它从来不算数"**。
+    //   ⚠ 只放宽这一格：进来时就已经关着的旧事**照旧拒**（W2g 锁着）；`newEntities`/`newAgendas` 的
+    //     同形复核**不动**（它们核的是"新事物要挂在正在发生的事上"，与"变更的因"不是同一件事）。
+    const openCauseAtEntry = captureOpenCauseState(world);
     // K14 出生裁判（盘算树细案 §3.2 落点：gate 之后、裁定之前）：GC 上限 → 落账 → 挂因/委派留痕 → 环检测自动拆
     const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle, lim);
 
@@ -967,7 +1026,8 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     applyEntityFates(world, gstep, tick, warnings, chronicle);   // K37 灭通道：覆灭复核落账（在闭环后——尘埃落定再言灭）
     // ★leg34（小说家条款 §6）：字段写回 + 带因复活。位置在 `reactivateNamed` **之前**：
     //   复活与"被点名复归"是同一件事的两种入口（dead 要模型声明，retired 自动），先落后者就好。
-    applyEntityUpdates(world, gstep, tick, warnings, chronicle);
+    //   ★leg66：多带一个 `openCauseAtEntry`（来路快照，见上面的头注）——它是"因必须未闭环"的**判定时点**。
+    applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAtEntry);
     pulseEntropy(world, tick, chronicle);   // K27 熵泵（细案 §3.5 → A-6）：环境推演器每 ENV_TICK 一步；越阈落状态源事件；恢复闭环
     reactivateNamed(world, events, tick, chronicle);   // K37 复归：本 tick 落账事件点名 → retired 升回 active
     retireInactive(world, tick, warnings, chronicle);  // K37 背景化 GC：扫描轮条件退休 + 超席位强制（守卫）

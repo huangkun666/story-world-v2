@@ -182,7 +182,13 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   与**模型点名的表**（按需查表）。在此之前那两栏都不报进包口径，于是"抽出来"看着就像"在用了"。
 //   ★起名先过禁词扫描：第一版叫 `leg64-rule-kinds`，**当场被 `render.test.js` 的扫描器咬住**
 //     （`kind` 在禁词表里）⇒ 改 `leg64-rule-classes`，随后刻度目录落地再升一格。
-export const PANEL_BUILD = 'leg64-scale-catalog';
+// ★★★leg66：**玩家可见面又变了一格**——观棋页底部那条「⚖ 本轮裁定 N 条」的**文案**改了：
+//   原来一句"因「ev_5_3」不在账或已了结"是**一句话两义**（读者会去查"是不是抄错号"，而它明明在账上）；
+//   现在分开说"账上根本没有这个号" / "在本批次开始前就已经了结（第 N 轮）"，并且**同一批次内被本轮
+//   自己关掉的因照旧认**（真账 tick 7 那条误判的治法，见 `settle.js` 的 `captureOpenCauseState` 头注）。
+//   ★起名先过禁词扫描（`leg50/52/64` 各踩过一次）：`leg66-cause-at-batch-entry` 不含
+//     agenda/tick/ssot/schema/chronicle/entity/kind 任一个，形状合 `/^leg\d+-/`。
+export const PANEL_BUILD = 'leg66-cause-at-batch-entry';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
