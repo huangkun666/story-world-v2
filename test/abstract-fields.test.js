@@ -10,6 +10,7 @@
 //   旧口径下 `sanitizeBookFields` 静默丢键、`pushEntity` 静默不抄 `所属`，两边判据都是绿的。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import {
@@ -18,6 +19,7 @@ import {
     fieldEvidenceOf,
     seedBookEntities,
     buildSettingPrompt,
+    buildSettingOnlyPrompt,
     buildAttrsOnlyPrompt,
     extractWorldSetting,
     assembleSetting,
@@ -186,6 +188,72 @@ test('★leg61 属性遍提示词：形状里没有名册那一项（那正是�
     assert.ok(shape.includes('entities'), '形状里有 entities');
     assert.ok(p.includes('值必须是本节原文里能逐字找到的原话'), '值必须有出处的铁律写在提示词里');
     assert.ok(p.includes('键你可以按本书自己的写法起名'), '键开放（不预设一本书的字段名）');
+});
+
+// ═══════════ ★★★leg63：**设定遍**（用户令「属性不要抽，只抽设定和概念即可，而且要将表组织起来」）═══════════
+//
+// 病（用户实机报「重抽出来的设定很简洁，跟之前的表的数量不是一个量级」+「这不是重抽设定吗？为什么要抽属性了」）：
+//   三笔改动叠加 ⇒ 「只重抽设定」这条通道**抽不到任何概念表**、设定只覆盖第 1 块（大荒实测 10.1%），
+//   却把全 10 块读了一遍去抄属性（而属性抄完被接线层丢掉）。三笔的来路见 `buildSettingOnlyPrompt` 头注。
+test('★★★leg63 设定遍提示词：只抽设定与概念（不抽属性）、带概念表形状、要求按原文条目组织', () => {
+    const p = buildSettingOnlyPrompt('【条目甲】X1 甲境。', [{ name: '某势力' }]);
+    // 解析形状块（★不去比字符串——`JSON.stringify` 带缩进会把内层引号转义，朴素 includes 必假）
+    const parsed = JSON.parse(p.slice(p.indexOf('{\n'), p.lastIndexOf('}') + 1));
+    assert.deepEqual(Object.keys(parsed), ['刻度', 'rules', 'society', 'techOrMagic', 'historyNotes', 'situation', 'tension', 'env'],
+        '★形状 = 概念表 + 设定五件套 + 张力/环境（顺序与生产口径一致）');
+    // ① 只抽设定与概念
+    assert.ok(parsed.刻度, '★带概念表（旧口径那份设定遍用的是 `CANON_SHAPE`，里面**没有** `刻度` ⇒ 重抽永远出不来概念表）');
+    assert.ok(!('entities' in parsed) && !('bookEntities' in parsed), '★不问名册/属性（形状里没有这一项）');
+    assert.ok(!('powerScale' in parsed) && !('dims' in parsed),
+        '★不许再交旧两列（它们是 `刻度` 的派生视图，再交一遍＝同一档存两份＋白烧预算）');
+    assert.ok(p.includes('不要') && /不要[\s\S]{0,8}抄任何人的属性/.test(p), '★说明书里明写"不要抄属性"');
+    // ② 概念表口径与名册遍/直抽**共用一份**（各写一份 ⇒ 改一处忘一处）
+    assert.ok(p.includes('一把尺 = 一张表'), '★共用 `SCALE_RULES`');
+    // ③ ★"将表组织起来"：要求每张表都填 `源`（按原文条目归节，面板据此成目录）
+    assert.deepEqual(Object.keys(parsed.刻度[0]), ['名', '源', '用途', '档位', '子表', '维度'], '★刻度那一项的格与契约逐字一致（含 `源`）');
+    assert.ok(/都要填 `源`/.test(p), '★明写"每一把尺都要填 `源`"（这就是"把表组织起来"那一层）');
+    assert.ok(/把表组织起来/.test(p), '★任务句里点名"要把表组织起来"');
+    // ④ 每块都要问（调用方对每一块都用这一份）
+    assert.ok(/每一块都要单独问一遍/.test(p), '★明写每块都单独问（设定散布全书，不是只有头块）');
+});
+
+test('★★★leg63 接线：**重抽**时每一块都问设定（`skipRoster`）、**初始化**时那一支一个字不改', async () => {
+    // 这一条锁的是**接线**（提示词绿 ≠ 生产路径上真的用了它——本仓"机制在、线断了"那张卡）。
+    const src = readFileSync(new URL('../src/abstract.js', import.meta.url), 'utf8');
+    // ★读源码锁的形状（条件表达式不许被"顺手简化"回旧口径）：
+    //   旧口径：`buildPrompt: first ? buildSettingPrompt : buildAttrsOnlyPrompt`（第 2..N 块只问属性）
+    assert.match(src, /const settingPass = \(t, isFirst\) => \(skipRoster/,
+        '★设定遍的选词必须**按 skipRoster 分叉**（旧口径无条件"只有第 1 块问设定"）');
+    assert.match(src, /skipRoster\s*\n?\s*\? buildSettingOnlyPrompt\(t, declared\)/,
+        '★重抽那一支：**每块**都用设定遍提示词（不是只有第 1 块）');
+    assert.match(src, /isFirst \? buildSettingPrompt\(t, declared\) : buildAttrsOnlyPrompt\(t, declared\)/,
+        '★初始化那一支**照旧**（属性还要并进名册喂 seedBookEntities，有人消费）');
+    // 端到端：真跑一次"重抽"（skipRoster）与一次"初始化"，看每一块收到的提示词
+    const promptsOf = async (skipRoster) => {
+        const seen = [];
+        // ★必须**真的切成多块**：块尺寸取决于原文长度（`> CANON_SRC_CHAR` 才走 3 万的小块）
+        //   ⇒ 夹具要够长，否则只有一块、这条判据量不到"第 2..N 块"那一半（第一版就是这么红的）。
+        const line = `【条目】X1 甲境。${'说明说明说明说明说明说明说明说明说明说明'.repeat(12)}`;
+        const book = Array.from({ length: 400 }, (_, i) => `${line}${i}`).join('\n');
+        await extractWorldSetting({
+            sourceText: book, skipRoster, force: true,
+            extract: async (prompt) => {
+                seen.push(prompt);
+                const isSetting = /本遍只抽"设定"/.test(prompt);
+                const isAttrs = /本遍只干一件事/.test(prompt);
+                return JSON.stringify(isSetting
+                    ? { 刻度: [{ 名: `表${seen.length}`, 源: '条目0', 档位: [{ 档: 'X1', 注: '一' }] }], rules: ['某法则'] }
+                    : isAttrs ? { entities: [{ name: '某人', kind: 'character', fields: { 身份: '甲境' } }] } : {});
+            },
+        });
+        return seen;
+    };
+    const re = await promptsOf(true);
+    assert.ok(re.length > 1, `重抽要分多块（实测 ${re.length} 块）`);
+    assert.ok(re.every((p) => /本遍只抽"设定"/.test(p)), '★★重抽：**每一块**问的都是设定遍（不问属性）');
+    assert.ok(re.every((p) => !/本遍只干一件事/.test(p)), '★重抽：一块都不许走"只问属性"那份');
+    const init = await promptsOf(false);
+    assert.ok(init.some((p) => /本遍只干一件事/.test(p)), '★初始化：第 2..N 块照旧问属性（那一支未被动）');
 });
 
 test('★leg61 键表仍登记七个常用键（旧账形态不动，开放的是"表外"那一半）', () => {

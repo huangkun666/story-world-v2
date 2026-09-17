@@ -56,7 +56,14 @@ export const ROSTER_CHUNK_DEPTH = 4;       // 块失败对半拆递归深度上�
 //   模型按新形状交、净化层按旧形状收（或者反过来），字段静默消失且没有任何报错。
 //   现在：`buildAbstractPrompt`（留档 / `demo/diag-init-extract.js` 度量用）与
 //   `buildRosterPrompt`（leg60 起 = 每块的**合并提示词**，大小书共用）共用这一份。
-const CANON_SHAPE = {
+// ★★★leg63：**旧两列与设定那几样必须能分开取**（用户令「属性不要抽，只抽设定和概念即可」）。
+//   为什么要在源头拆（不是在使用处 omit 一下）：leg63 新加的"设定遍"要用**同一份**设定形状，
+//   但**不许**带旧两列（`刻度` 是源、那两列是派生视图，模型再交一遍＝同一档存两份+白烧预算）。
+//   在使用处 `const { powerScale, dims, ...rest } = CANON_SHAPE` 也能做到，但那会让
+//   "哪个键属于哪一半"**只活在那一行的解构里**——下一棒再加一个键就会又漏一处
+//   （leg62 漏的正是"概念表只加进名册遍那一份"，教训就在上面那段注释里）。
+//   ⇒ 口径：**键的归属住在定义处**；`CANON_SHAPE` 仍是给旧调用方的**同一个合体**（键序逐字不变）。
+const SCALE_COLUMN_SHAPE = {
     powerScale: [{ level: '档位名（原文）', note: '该档意味着什么（原文措辞）' }],
     // ★★leg60（交接第 2 件）：**维度与刻度**——"书里的量纲"，原样照抄，引擎不换算、不进公式。
     //   为什么要单列一项（真账实证）：三国那本 `[mvu_update]变量更新规则` 写着
@@ -64,13 +71,17 @@ const CANON_SHAPE = {
     //   `核心属性: 勇武/统御 各 0-100`——**这两条就是"尺子"**。旧口径下它们只落在 `render.js` 的设置页，
     //   **模型一个字看不到** ⇒ 模型写实力/属性时没有书里的尺子可依（真账 85 实体里 `实力` 0 条）。
     //   现在：维度/范围/档位合成"刻度"块进每轮包当锚（见 `pack.js` 的 `buildScaleAnchor`）。
+    //   ★★★leg62 起：**这两列是派生视图**（源是 `刻度` 概念表），下游读它们、模型**不该再交**。
     dims: [{ name: '属性/维度名（原文）', range: '该维度的取值范围（原文，如 -100~100 / 0-100）' }],
+};
+const SETTING_SHAPE = {
     rules: ['法则1（原文）'],
     society: '社会与制度格局（原文）',
     techOrMagic: '力量/生态体系（原文）',
     historyNotes: ['历史要点1（原文）'],
     situation: '当前世情：天下大势/各方态势一句（原文措辞 ≤80字；原文无全局局势则省）',
 };
+const CANON_SHAPE = { ...SCALE_COLUMN_SHAPE, ...SETTING_SHAPE };
 const TENSION_SHAPE = { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' };
 const ENV_SHAPE = { 民生度: '崩溃|艰难|尚可|富足（四选一，原文能判才填）', 动乱度: '太平|小乱|动荡|大乱', 天时: '大灾|失调|平常|风调雨顺', 张力推手: '沉寂|平缓|暗涌|紧绷' };
 
@@ -200,6 +211,73 @@ export function buildRosterPrompt(sourceText, declared = []) {
  * 为什么第二遍**不要名号**：`bookEntities` 从形状里去掉 ⇒ 输出全花在内容上；
  *   属性仍按 kind 分（角色/势力），键**开放**（见 `sanitizeBookFields`：键可自由命名，**值必须有原文出处**）。
  */
+/**
+ * ★★★leg63（用户令「**属性不要抽，只抽设定和概念即可，而且要将表组织起来**」）：
+ * **设定遍**——「只重抽设定」这条通道的提示词。
+ *
+ * 为什么必须单独有一份（三笔改动叠加出来的洞，本棒实测钉死的）：
+ *   ① leg61 拆成两遍时假设"设定只有头部那一块有" ⇒ 第二遍的**第 2..N 块只问属性**
+ *      （见 `buildAttrsOnlyPrompt` 的头注：那是为了救属性，理由在当时成立）。
+ *   ② leg62 把**概念表**（`刻度`）加进了提示词，但**只加了名册遍那一份**
+ *      （`buildRosterPrompt` 里的 `...SCALE_RULES` + `SCALE_SHAPE_OBJ.刻度`）——
+ *      而 `buildSettingPrompt` 的模板是 `CANON_SHAPE`，**里面根本没有 `刻度`**。
+ *   ③ leg62c 为了提速让「只重抽设定」走 `skipRoster: true` ⇒ **名册遍整遍不跑**。
+ *   ⇒ 三条叠起来：这个按钮**抽不到任何概念表**（没有一份提示词在问它）、
+ *     设定只覆盖**第 1 块**（大荒实测 30,689/302,554 = **10.1%**），
+ *     而它**把全 10 块读了一遍**去抄属性——属性抄完还被接线层丢掉
+ *     （保住账上那份 `bookEntities`，见 web 的 reextract-setting）
+ *     ⇒ 用户的话：「重抽出来的设定很简洁，跟之前的表的数量不是一个量级」「这不是重抽设定吗？为什么要抽属性了」。
+ *
+ * 本份的口径（四条，都是用户拍的）：
+ *   ① **只抽设定与概念**——不问属性、不列名册（那条路这一遍不入账，问了纯白烧）；
+ *   ② **每块都要问**（调用方对**每一块**都用这一份）——设定散布全书，不是只有头块；
+ *   ③ **形状 = 概念表**（`SCALE_SHAPE_OBJ`，含 `子表`/`维度`/**`源`**）
+ *      ——`源` 就是用户要的"**将表组织起来**"那一层（按原文条目分节，面板据此成目录）；
+ *   ④ **不再交 `powerScale`/`dims`**——那是旧两列，leg62 起由 `刻度` 派生（`scalesToFlat`）；
+ *      再交一遍 = 同一档存两份 + 白烧输出预算（这正是 leg62 在名册遍里删掉的那两句）。
+ */
+export function buildSettingOnlyPrompt(sourceText, declared = []) {
+    // 设定那一半的形状：`SETTING_SHAPE`（**不含**旧两列 `powerScale`/`dims`——它们由 `刻度` 派生）。
+    const settingShape = SETTING_SHAPE;
+    const lines = [
+        '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实，不创作、不润色、不补全、不重排。',
+        '原文没有提到的字段一律省略；档位名、法令、措辞必须来自原文；数量没有任何限制，取全不取量。',
+        '★**本遍只抽"设定"**（书里的尺子、法则、格局、体系、史略、世情）。',
+        '  · **不要**列名册（人名/势力名/地名）；**不要**抄任何人的属性——那两件事由别的遍负责，本遍交的会被丢掉。',
+        // ★概念表那一套口径**一处定义**：与名册遍、直抽通道共用 `SCALE_RULES` + `SCALE_SHAPE_OBJ`。
+        '★★**刻度（书里的尺子）一律交进 `刻度` 字段，一把尺 = 一张表，并且要把表组织起来**'
+        + '（模板在下面那段 JSON 里；**紧凑：不要缩进、不要换行**）。',
+        '  · **不要**另外交 `powerScale` / `dims`——那两列由引擎从 `刻度` 派生。',
+        ...SCALE_RULES,
+        '输出严格 JSON（形状如下；可省字段不写 null）：',
+        JSON.stringify(
+            {
+                刻度: SCALE_SHAPE_OBJ.刻度,
+                ...settingShape,
+                tension: TENSION_SHAPE,
+                env: ENV_SHAPE,
+            },
+            null,
+            2,
+        ),
+        '纪律：',
+        '1. 法则/格局/体系/史略**照抄原文措辞**，不许概括成一句话（概括＝创作）。',
+        '2. **每一块都要单独问一遍**：本节原文里有几把尺就交几把，别管别处有没有交过——'
+        + '引擎按表名把各块合成一张（同一把尺散在书里几处写，本来就该合成一张）。',
+        '3. 每一把尺**都要填 `源`**（它出自原文哪一条条目，照抄题名）——表按它归到条目底下，'
+        + '没有这一格，几十把尺在面板上就只是一堆平铺的卡（这正是要被治的那件事）。',
+        '4. 原文没有的刻度/法则/格局就省掉那一项，**不许补全、不许拿别的书的体系来填**。',
+    ];
+    if (declared.length) {
+        lines.push(
+            '5. 以下名号是本段原文里出现过的（**只作定位用，不要抄它们的属性**）：',
+            declared.map((d) => d.name).join('、'),
+        );
+    }
+    lines.push('———— 设定原文如下 ————', sourceText);
+    return lines.join('\n');
+}
+
 export function buildSettingPrompt(sourceText, declared = []) {
     const lines = [
         '你是世界设定的抽取器。只提取不创作：只从给定的设定原文里提取事实与属性原话，不创作、不润色、不补全、不重排。',
@@ -2201,8 +2279,11 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const probeState = { failures: 0 };
     let okChunks = 0;
     const failLog = [];                     // leg27：失败明细（给界面显形用，不是只报一个数字）
-    let settingChunks = 0;                  // leg61：属性+设定遍成功的块数
-    let settingEarlyStop = 0;               // leg61：属性遍"已收够就止损"跳过的块数
+    let settingChunks = 0;                  // leg61：设定/属性遍成功的块数
+    // ★leg63：`settingEarlyStop`（"已收够就止损"跳过的块数）**已删**——它是 leg61 那条止损判据的遗留，
+    //   而那条判据在 leg61 就改成了"第 2..N 块换提示词"（见 `buildAttrsOnlyPrompt` 头注），
+    //   从此**没有任何代码给它加过 1**：计数恒 0、`if (settingChunks || settingEarlyStop)` 那一支
+    //   永远只报"成功 N 块"。留着它 = 一个看起来在防守、实际永远不会触发的面（本仓"死参数"那一类）。
     const rawSettingEnts = [];              // leg61：属性遍交的 {name, kind, fields} —— 并入名册（不新造实体）
     // ★★★leg61：**同一批块、跑两遍**——名册一遍（只报名号），属性+设定一遍（不问名号）。
     //   口径与代价（实测见 `buildSettingPrompt` 头注）：调用数从 每块 1 次 → 每块 2 次，
@@ -2239,13 +2320,25 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     //   ★定稿形态（踩过两次坑之后，见 `buildAttrsOnlyPrompt` 头注）：
     //     **第一块问"设定 + 属性"，其后每块只问属性**——设定只值得问一块（块间并集去重），
     //     属性必须每块都问（三国 340 人横跨 1~7 块）。调用数与"每块都问"完全相同。
+    //   ★★★leg63（用户令「属性不要抽，只抽设定和概念即可，而且要将表组织起来」）：
+    //     **`skipRoster`（＝「只重抽设定」那条通道）时，这一遍变成纯粹的"设定遍"**：
+    //       ① **每块都问设定**（旧口径只有第 1 块问，实测只覆盖 10.1% 的书）；
+    //       ② **带概念表形状**（旧口径的 `buildSettingPrompt` 用的是 `CANON_SHAPE`，里面没有 `刻度`
+    //          ⇒ 重抽永远出不来概念表，正是用户报"抽出来很简洁"的根）；
+    //       ③ **不问属性**（属性这一遍抽完不入账——接线层要保住账上那份 `bookEntities`——
+    //          而调用是一次都不能少的全 10 块 ⇒ 那是纯白烧）。
+    //     ★初始化（`skipRoster=false`）那一支**一个字不改**：属性还要并进名册喂 `seedBookEntities`，
+    //       那条路有人消费（判据锁着这一支不许被动）。
+    const settingPass = (t, isFirst) => (skipRoster
+        ? buildSettingOnlyPrompt(t, declared)
+        : (isFirst ? buildSettingPrompt(t, declared) : buildAttrsOnlyPrompt(t, declared)));
     for (const [ci, chunk] of chunks.entries()) {
         const chunkChars = Array.from(chunk).length;
         const first = ci === 0;
         progress.start('canon', ci + 1, chunks.length, chunkChars);
         const r2 = await tryRosterChunk(extract, chunk, 0, probeState, {
             declared, onProgress, progressLog: failLog,
-            buildPrompt: first ? (t) => buildSettingPrompt(t, declared) : (t) => buildAttrsOnlyPrompt(t, declared),
+            buildPrompt: (t) => settingPass(t, first),
         });
         if (!r2.cleaned) {
             const last = failLog[failLog.length - 1];
@@ -2261,8 +2354,8 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         for (const b of (r2.cleaned.canon.settings || [])) rawSettingEnts.push(b);
         rawCanons.push(r2.cleaned);
     }
-    if (settingChunks || settingEarlyStop) {
-        errors.push(`属性+设定遍：成功 ${settingChunks} 块${settingEarlyStop ? ` · 已收够止损跳过 ${settingEarlyStop} 块` : ''}`);
+    if (settingChunks) {
+        errors.push(`${skipRoster ? '设定遍' : '属性+设定遍'}：成功 ${settingChunks} 块`);
     }
     // ★leg60：块收齐后合并设定（**纯函数、绝不摘要**）——并集去重 + 一句话取信息量最大那块。
     //   首块优先的只有 `tension`/`env`（张力与四个环境档位）：首块 = 旧窗口（头 3 万）所在的那块
