@@ -7,7 +7,9 @@ import { QUIET_TICKS } from './gate.js';
 // ★leg62：刻度块要按**概念表**分组 ⇒ 读那一份"概念表唯一读取口"（新账读 `刻度`、旧账纯函数推导）。
 //   为什么不在本文件自己从 powerScale/dims 推一遍：面板也读它 ⇒ 两处各推一次迟早漂移成
 //   "面板分了两张表、包里还是一栏"（本仓最贵的那类 bug，见 abstract.js 的 resolveScales 头注）。
-import { resolveScales } from './abstract.js';
+// ★leg64：法则块的三道上界与类别词表**读真源**（`abstract.js` 定义处）——不在本文件另抄一份数字，
+//   否则"面板报的上界"与"包里真用的上界"会各说各话（leg63 那句不准确的文案就是这么来的）。
+import { resolveScales, classifyRulesByKind, RULE_PACK_TOP, RULE_PACK_STR_MAX, RULE_PACK_CHAR_TOP } from './abstract.js';
 // K44/第十九棒（full-roster-lens-spec C2/C7 拍板）：实体段=**镜头选择器**——
 //   全量棋盘上按「四段确定性序：①例外保送（被点名/在飞盘算属主/近 2 tick 活跃）②手上有在办盘算 ③近 5 轮出手 ④实体 id 序」排序、30k 内取前缀；
 //   势力实体附「麾下成员」简表（parent 派生反查，含分支成员）；分量数字仍不入包（P3 不变）。
@@ -495,6 +497,47 @@ export function buildScaleAnchor(canon) {
     return capped;
 }
 
+// ★★★leg64（用户令「规则会怎么样？规则太多会怎么样？」→ 拍板「只进『判断依据』」）：**法则块**。
+//
+//   病（leg63 §1.2 的消费面审计，本棒复查确认）：`canon.rules` **只有 `render.js` 读**——
+//     判定原则（`T1-T4跨境→DC24` / `1点仙阶≈1,000,000点下界` / `一次好感增加不超过5点` /
+//     `1上品=1000中品`）**模型一个字看不到** ⇒ 它每轮写实力、好感、战果、物价时只能自己发明数。
+//     这与 `刻度` 当初的病**同源**（"抽出来的东西没人消费 = 没抽"，leg61 律 7），
+//     而 `刻度` 那一块已经用"把可判等的一小块递进包当锚"治好了 ⇒ 本条是它的兄弟。
+//
+//   为什么**只进一类**（本棒按真账 179 条逐条读出来的边界，不是凭想象分）：
+//     · 三国 32 条里 **11 条**是文风禁令（`绝对禁止现代口语语法`）——那是**怎么写**，不是**判什么**；
+//     · 大荒 129 条里 `【肉身全量初始化铁律】…必须全量 replace` / `【背包联动铁律】…delta -1`
+//       是**变量更新指令**（MVU 脚本那一层），进叙事提示词是纯噪声（用户 leg63 原话就是
+//       「这不是重抽设定吗？为什么要抽属性了」——同一类越界）；
+//     · 还有格言（`功成身退天之道`）、世界观陈述（`三十三重天`）——它们是书的世界观，不是这一轮的判据。
+//   ⇒ **只有 `判断依据` 进包**；其余三类**一条都不删**，全留账给面板（用户拍板）。
+//
+//   体积纪律（与 `buildScaleAnchor` 同尺，**上界必须有**——leg63 §1.5 量到的病正是
+//   "`rules` 没有任何上界判据"，而 `刻度` 有 表≤16/档≤24/维≤8）：条数 · 单条长度 · 总字符，三道闸。
+//   大荒真账 129 条 6,286 字符（整包塞入 = 包预算 21.0%）；只取判据一类后实测见
+//   `docs/measure-leg64-rule-kinds.md`。
+//
+//   ★老账口径（用户拍板）：**没有 `ruleKinds` 就是没有**（与 leg63 的 `源` 同一条**零迁移**纪律：
+//     不猜、不重抽、不按关键词瞎分类）⇒ 老账一块都不进包，面板照旧全平铺并**如实报**"0 条进包"。
+//     为什么不做"关键词猜判据"：那正是本仓明禁的过拟合（换本书就废），且猜错会把散文灌进每轮包。
+export function buildRuleAnchor(canon) {
+    if (!canon || typeof canon !== 'object') return null;
+    // ★分类法**不在本文件写**——走 `classifyRulesByKind`（面板读的是同一个函数 ⇒ 报的和干的一致）。
+    const { 判据 } = classifyRulesByKind(canon.rules, canon.ruleKinds);
+    const out = [];
+    let chars = 0;
+    for (const s of 判据) {
+        if (out.length >= RULE_PACK_TOP) break;
+        const cut = s.length > RULE_PACK_STR_MAX ? s.slice(0, RULE_PACK_STR_MAX) : s;
+        if (chars + cut.length > RULE_PACK_CHAR_TOP) break;
+        out.push(cut);
+        chars += cut.length;
+    }
+    // 空着就是空着（与 env/刻度 同一条纪律）：一条判据都没有 ⇒ 键不出现，老账与旧行为**逐字节相同**。
+    return out.length ? out : null;
+}
+
 // 固定打包序：活跃实体简表 → 在飞盘算（含 memory）→ 未决事件 → 最近 2 tick 关闭事件 → 玩家落子事实 → 张力
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
@@ -568,6 +611,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
     const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
     // ★★leg60（交接第 2 件）：**刻度块**——A-8 体积纪律的**唯一一处窄口**（见 `buildScaleAnchor` 头注）。
     const scale = buildScaleAnchor(ssot.context?.setting?.frozen?.canon);
+    // ★★★leg64（交接 §3-A「规则进包」）：**法则块**——只取「判断依据」那一类（见 `buildRuleAnchor` 头注）。
+    //   与 `刻度` 并列进同一个 `setting` 块：一个是"书里的尺子"，一个是"书里的判定原则"，
+    //   都是**冻结的短表**（编译一次、之后每轮逐字相同），都违反 A-8 而那是有意的（它们是锚）。
+    const ruleAnchor = buildRuleAnchor(ssot.context?.setting?.frozen?.canon);
     // K38 补差包（敲定稿 C 条）：对话依据册摘要进包——"谁反复被点名"模型看得见（dialogueFact 源/镜头依据；
     // 只取前 TOP 条，计数+最近提及轮；依据册总量留在账上）
     const db = ssot.meta?.dialogueBook;
@@ -633,9 +680,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
         //   ★leg62：`scale` 现在是**概念表列表**（一把尺一个元素，见 `buildScaleAnchor` 头注），
         //     故这里由调用点写 `刻度` 这个键（改前 `buildScaleAnchor` 自己返回 `{刻度:[…]}` ⇒ 这里会嵌成两层）。
-        setting: (dyn || scale) ? {
+        setting: (dyn || scale || ruleAnchor) ? {
             ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
             ...(scale ? { 刻度: scale } : {}),
+            ...(ruleAnchor ? { 法则: ruleAnchor } : {}),   // ★leg64：判据进包（老账/无判据 ⇒ 键不出现）
         } : undefined,
         positions: ssot.context?.positions,
         entities,

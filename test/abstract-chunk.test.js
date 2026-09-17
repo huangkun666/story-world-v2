@@ -201,10 +201,20 @@ test('★leg60 一块里名册与设定同轮抽（旧"名册轮只问 name/kind
     //    ★★leg62 起多一项 `刻度`（**概念表**）：书里的尺子按"一把尺 = 一张表"交，
     //       `powerScale`/`dims` 两列保留在形状里（老账与 `buildAbstractPrompt` 的兼容面），
     //       但**生产提示词明确要求模型不要再交它们**（净化层以 `刻度` 为源、旧两列由它派生）。
-    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'rules', 'situation', 'society', 'techOrMagic', 'tension', '刻度'],
-        '★一份 JSON 里同时有设定（含维度/刻度/概念表）与名册（leg60 的"一遍抽完"）');
+    //    ★★★leg64 起多一项 `判据`（**法则的类别**，与 `rules` 按位对齐）：决定哪几条法则进每轮包。
+    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'rules', 'situation', 'society', 'techOrMagic', 'tension', '判据', '刻度'],
+        '★一份 JSON 里同时有设定（含维度/刻度/概念表/法则类别）与名册（leg60 的"一遍抽完"）');
     // ★★leg62：概念表必须是**第一项**（模型按形状办事，先看到的那一项最容易被交出来）
     assert.equal(Object.keys(tpl)[0], '刻度', '★概念表排在最前（形状的第一项就是它）');
+    // ★★★leg64：`判据` 必须**紧挨** `rules`（形状里"这一条法则是什么类"就写在法则下面，模型不易漏）
+    //   ★按**相邻性**锁，不写下标字面量：本笔第一版这里写的是 `slice(3, 5)`，而它假定
+    //     "rules 一定在第 3 位"——那个位置由 `刻度` 与 `CANON_SHAPE` 的展开顺序共同决定，
+    //     加一项或调一次顺序它就红，而**红的不是被锁的那件事**（正是本仓"判据锁了字面量、
+    //     没锁性质"的老病）。要锁的性质只有一条：**`判据` 紧跟在 `rules` 后面**。
+    const shapeKeys = Object.keys(tpl);
+    assert.equal(shapeKeys[shapeKeys.indexOf('rules') + 1], '判据', '★判据紧挨 rules（按位对齐那一列）');
+    assert.ok(p.includes('与 `rules` 逐条对齐'), '★分类口径真的写进了提示词（共用 `RULE_CLASS_GUIDE`）');
+    assert.ok(p.includes('大多数法则都属于"其他"'), '★明写"大多数是其他"（不这么写，判据那一类会被灌满 ⇒ 等于整包塞进去）');
     assert.match(p, /一律交进 `刻度` 字段/, '★写明刻度一律交进 `刻度`（概念表口径）');
     assert.match(p, /不要\*\*另外交 `powerScale` \/ `dims`/, '★写明不要另交 powerScale/dims（防同一档存两份 + 白烧输出预算）');
     assert.match(p, /一把尺 = 一张表|同一套等级记号、用来描述同一个概念/, '★概念表的定义在位（"一张表"=同一套记号描述同一个概念）');

@@ -15,7 +15,7 @@ import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 //   ⇒ leg31b 把 `topLevel` 5 → 10 之后，世界真的变宽了而面板还写着 5，
 //   玩家无法从面板判断任何变宽实验是否奏效（用户实机「一点变化都没有」追出来的真缺陷）。
 //   依赖方向：render → settle（settle 不反向依赖 render）——无环，已在 import 图上核过。
-import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';import { resolveScales, groupScales } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）；★leg63：按原文条目分节
+import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';import { resolveScales, groupScales, classifyRulesByKind, RULE_CLASSES, RULE_CLASS_NONE } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）；★leg63：按原文条目分节；★leg64：法则分类（与进包**同一个函数**）
 import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
 // ★★leg63：进包读数**必须读真源**（`buildScaleAnchor` 就是进包用的那一个函数）。
 //   为什么不能在这里自己按 `TIER_TOP` 另算一份：本仓"两份复制品漂移"的亏吃过多次，
@@ -177,7 +177,11 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   "下面那一部分是已冻结的设定，一个字没动"）。玩家可见面又变了 ⇒ 构建号同批再升一格。
 //   ★形状纪律（`render.test.js` 锁着）：必须是 `leg<数字>-…`（升位链条要能一眼看出来）⇒
 //     同一棒内的第二次升位写成 `leg62-…-2`，**不许**用 `leg62b` 这种（不合形状、当时被锁当场抓住）。
-export const PANEL_BUILD = 'leg63-scale-index-2';
+// ★★★leg64：**玩家可见面又变了**——设定页的「法则」一栏从"129 行平铺"改成**按类别分段 +
+//   如实报"哪几条真的进了每轮包"**（在此之前那一栏不报进包，于是"抽出来"看着就像"在用了"）。
+//   ★起名先过禁词扫描：第一版叫 `leg64-rule-kinds`，**当场被 `render.test.js` 的扫描器咬住**
+//     （`kind` 在禁词表里）⇒ 改 `leg64-rule-classes`。这条纪律 leg50/52 各踩过一次。
+export const PANEL_BUILD = 'leg64-rule-classes';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -1729,7 +1733,45 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             + (cp.titleNames ? ` · 题名面贡献名号 ${cp.titleNames} 条（零调用）` : '')
             + (cp.settingTitles ? ` · 设定类条目覆盖 ${cp.settingCompiled ?? 0}/${cp.settingTitles}` : '')
         : '';
-    const ruleRows = (canon.rules || []).map((r) => `<div class="sw2-sv-row"><b>法则</b><span>${escapeHtml(r)}</span></div>`).join('');
+    // ★★★leg64（交接 §3-A「规则进包」）：**法则卡按类别组织 + 如实报"哪几条真的进了每轮包"**。
+    //   病（leg63 §1.2 的消费面审计）：`rules` **只有本文件读**——判定原则（`DC24`/换算率/好感锁）
+    //     模型一个字看不到，而这一页过去把 129 条平铺成 129 行、**不报"有没有进包"**
+    //     ⇒ 玩家（和上一棒的我）都会以为"抽出来就在用"。
+    //   ★为什么这里的分堆必须调 `classifyRulesByKind` 而不是在渲染层自己数：
+    //     leg63 那句不准确的文案（"这些表每轮都在模型的包里当锚"）就是"渲染层自己推一遍进包口径"
+    //     的产物 ⇒ 面板报的和包里真干的各说各话。现在**面板与进包读同一个函数**。
+    const ruleStat = classifyRulesByKind(canon.rules, canon.ruleKinds);
+    const ruleTotal = (canon.rules || []).length;
+    // 每类的行（类别在前，原文在后；**原文一个字不改**——它仍是账上那一列）
+    const ruleRowsOf = (arr) => arr
+        .map((r) => `<div class="sw2-sv-row"><b>法则</b><span>${escapeHtml(r)}</span></div>`).join('');
+    const ruleSections = RULE_CLASSES
+        .filter((k) => ruleStat.计数[k])
+        .map((k) => `<div class="sw2-hint" style="margin-top:6px"><b>${escapeHtml(k)}（${ruleStat.计数[k]} 条）</b>`
+            + (k === '判断依据' ? '&nbsp;—— 这一类每轮进模型的包当判定锚（写实力/好感/战果/物价时按它判）' : '&nbsp;—— 只留在这里给作者看，不进每轮包')
+            + `</div>${ruleRowsOf((canon.rules || []).filter((r) => { const kk = String((canon.ruleKinds || {})[String(r ?? '').trim()] ?? '').trim(); return (RULE_CLASSES.includes(kk) ? kk : RULE_CLASS_NONE) === k; }))}`)
+        .join('');
+    const ruleUnmarkedRows = ruleStat.未标数
+        ? `<div class="sw2-hint" style="margin-top:6px"><b>${escapeHtml(RULE_CLASS_NONE)}（${ruleStat.未标数} 条）</b>`
+            + '&nbsp;—— 老账没有"类别"这一格，所以它们<b>不进每轮包</b>（零迁移：没有就是没有，不猜也不重抽）</div>'
+            + ruleRowsOf((canon.rules || []).filter((r) => { const kk = String((canon.ruleKinds || {})[String(r ?? '').trim()] ?? '').trim(); return !RULE_CLASSES.includes(kk); }))
+        : '';
+    // ★如实报进包读数（读的就是 `pack.js` 那个函数用的同一份分堆；旧文案那种"每轮都在包里"的写法不许回来）
+    const rulePackLine = ruleTotal
+        ? (ruleStat.判据.length
+            ? `<div class="sw2-hint">其中 <b>${ruleStat.判据.length}</b> 条（判断依据那类）每轮进模型的包当判定锚；`
+                + `其余 ${ruleTotal - ruleStat.判据.length} 条留在本页与账本里，不进每轮包。</div>`
+            : `<div class="sw2-hint">这一栏<b>一条都没进每轮包</b>：进包只取「判断依据」那一类`
+                + `${ruleStat.未标数 ? `，而这份账 ${ruleStat.未标数} 条全是「${escapeHtml(RULE_CLASS_NONE)}」（老账没抽过类别）` : ''}`
+                + ' ——对设定不满意就按上面的「只重抽设定」再抽一次，新账才会带上类别。</div>')
+        : '';
+    const ruleCard = ruleTotal
+        ? `<div class="sw2-set-card"><h4>法则（${ruleTotal} 条 · 按用途分 ${RULE_CLASSES.filter((k) => ruleStat.计数[k]).length + (ruleStat.未标数 ? 1 : 0)} 类）</h4>`
+            + `<div class="sw2-hint">书里写下的规则条条都在这里，一条不删。`
+            + `<b>只有「判断依据」那一类进每轮的包</b>——那是"这一轮写剧情要拿它来判"的硬规则（DC 检定、换算率、好感/心防锁…）；`
+            + `文风禁令、变量指令、世界观与格言留在本页给作者看。</div>`
+            + rulePackLine + ruleSections + ruleUnmarkedRows + `</div>`
+        : `<div class="sw2-set-card"><h4>法则（0 条）</h4><div class="sw2-sv-row"><span>（无）</span></div></div>`;
     const histRows = (canon.historyNotes || []).map((h, i) => `<div class="sw2-sv-hist"><span class="sw2-hist-tick">第 ${i + 1} 条</span><span>${escapeHtml(h)}</span></div>`).join('');
     // ★★leg52（BLACKLIST 漏网）：旧措辞是 `浪尖（派生源）：…`——**「派生源」是引擎术语**，
     //   而文件头（`:8`）从 leg26 起就把它列在"禁"字里，可 `BLACKLIST` 数组里**只有英文 `derivedFrom`**，
@@ -1783,7 +1825,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             + `<div class="sw2-hint">${escapeHtml(compileLine)}</div>`
             + (cp?.missedTitles?.length ? `<div class="sw2-hint" style="margin-top:4px">未编译的设定类条目（前 ${cp.missedTitles.length} 个）：${escapeHtml(cp.missedTitles.join('、'))}</div>` : '')
             + `</div>` : '')
-        + `<div class="sw2-set-card"><h4>法则（${(canon.rules || []).length} 条）</h4>${ruleRows || '<div class="sw2-sv-row"><span>（无）</span></div>'}</div>`
+        + ruleCard
         + `<div class="sw2-set-card"><h4>社会格局 · 力量体系</h4><p class="sw2-sv-para">${escapeHtml(canon.society || '（无）')}</p><p class="sw2-sv-para">${escapeHtml(canon.techOrMagic || '（无）')}</p></div>`
         + `<div class="sw2-set-card"><h4>史略（${(canon.historyNotes || []).length} 条）</h4>${histRows || '<div class="sw2-sv-hist"><span>（无）</span></div>'}</div>`
         + `</div>`;

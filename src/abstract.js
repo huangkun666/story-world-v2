@@ -76,12 +76,26 @@ const SCALE_COLUMN_SHAPE = {
 };
 const SETTING_SHAPE = {
     rules: ['法则1（原文）'],
+    // ★★★leg64：**法则的类别**——形状上与 `rules` **逐条对齐**的并列数组（第 i 项的类别给第 i 条法则）。
+    //   为什么是"并列数组"而不是把 `rules` 改成 `[{文, 类}]`：`rules` 是**纯字符串数组**，
+    //   下游有四处按字符串读它（`dedupeRules` 的同形键、`mergeCanonChunks` 的并集、
+    //   `render.js` 的法则卡、`pack.js` 的进包块）+ 8 个测试文件的固定夹具。
+    //   改成对象元素 = 一次真契约变更，而它换来的信息量与"并列数组"**完全相同**。
+    //   ⇒ 口径：`rules` 仍是原文那一列（一个字的原文都不改），类别**另起一格、按位对齐**。
+    //   ★形状里明写"大多数是其他"是有意的（不是啰嗦）：不这么写，模型会给每条都贴一个类
+    //     ⇒ 判据那一类被灌满 ⇒ 进包又变回"整包塞进去"（正是这一格要治的病）。
+    判据: ['判断依据|文风禁令|变量指令|其他（与 rules 逐条对齐；判断依据 = 要照它判结果的，带数或不带数都算）'],
     society: '社会与制度格局（原文）',
     techOrMagic: '力量/生态体系（原文）',
     historyNotes: ['历史要点1（原文）'],
     situation: '当前世情：天下大势/各方态势一句（原文措辞 ≤80字；原文无全局局势则省）',
 };
-const CANON_SHAPE = { ...SCALE_COLUMN_SHAPE, ...SETTING_SHAPE };
+//   ★★★leg64：**活的那几项排在前面**——`...SETTING_SHAPE` 先展开、旧两列殿后。
+//     为什么顺序有意义（有判据锁着，见 `test/abstract-chunk.test.js`）：模型**按形状办事**，
+//     先看到的那一项最容易被交出来（leg62 把 `刻度` 排第一就是这个道理）。
+//     而 `powerScale`/`dims` 是 **leg62 起就不许模型再交**的派生视图（提示词明写"不要另外交"）
+//     ⇒ 让它们排在最后，把"要交的那几项"（`rules` 与紧随其后的 `判据`）顶到前面。
+const CANON_SHAPE = { ...SETTING_SHAPE, ...SCALE_COLUMN_SHAPE };
 const TENSION_SHAPE = { polarity: '两股劲的名字（原文）', direction: '当前方向：谁压谁（原文措辞，可省）' };
 const ENV_SHAPE = { 民生度: '崩溃|艰难|尚可|富足（四选一，原文能判才填）', 动乱度: '太平|小乱|动荡|大乱', 天时: '大灾|失调|平常|风调雨顺', 张力推手: '沉寂|平缓|暗涌|紧绷' };
 
@@ -132,6 +146,8 @@ export function buildRosterPrompt(sourceText, declared = []) {
         '★★**刻度（书里的尺子）一律交进 `刻度` 字段**（模板在下面那段 JSON 里；**紧凑：不要缩进、不要换行**）。',
         '  · **不要**另外交 `powerScale` / `dims`——那两列由引擎从 `刻度` 派生，交重了只会白烧输出预算、还会导致同一档存两份。',
         ...SCALE_RULES,
+        // ★★★leg64：法则分类（见 `RULE_CLASS_GUIDE` 头注）——**两条设定通道共用同一份**。
+        ...RULE_CLASS_GUIDE,
         '输出严格 JSON（形状如下；可省字段不写 null）：',
         JSON.stringify(
             {
@@ -249,6 +265,9 @@ export function buildSettingOnlyPrompt(sourceText, declared = []) {
         + '（模板在下面那段 JSON 里；**紧凑：不要缩进、不要换行**）。',
         '  · **不要**另外交 `powerScale` / `dims`——那两列由引擎从 `刻度` 派生。',
         ...SCALE_RULES,
+        // ★★★leg64：法则分类（同上——**设定遍也要交 `判据`**，否则「只重抽设定」出来的账
+        //   永远没有类别 ⇒ 那份账的法则一条都进不了包。这正是 leg62 概念表漏在名册遍的同款坑）。
+        ...RULE_CLASS_GUIDE,
         '输出严格 JSON（形状如下；可省字段不写 null）：',
         JSON.stringify(
             {
@@ -724,6 +743,39 @@ export const BOOK_ALIAS_MAX = 8;
 export const BOOK_ALIAS_CHAR = 30;
 // ★leg60：维度/刻度每项的长度上限（与 `BOOK_FIELD_MAX` 同尺——防模型把"取值范围"写成一段散文）
 export const BOOK_DIM_MAX = 30;
+
+// ★★★leg64（用户令「规则会怎么样？规则太多会怎么样？」→ 拍板「只进『判断依据』」）：
+//   **法则的类别词表**（唯一一份口径：提示词、净化、面板、进包四处共用这一个数组）。
+//
+//   病（leg63 §1.2 的消费面审计 + 本棒复查）：`rules` **只有 `render.js` 读**——
+//     判定原则（`T1-T4跨境→DC24` / `1点仙阶≈1,000,000点下界` / `一次只能突破一道心防`）
+//     模型**一个字看不到**，于是它每轮写实力/好感/战果时只能自己发明数。
+//     而 `刻度` 那一块已经解决了同一类问题（把"可判等的那一小块"递进包当锚）——本条是它的兄弟。
+//
+//   为什么要有类别而不是"整包塞进去"（本棒按真账 179 条逐条读出来的）：
+//     · 三国 32 条里 **11 条是文风禁令**（`绝对禁止现代口语语法`）——那是**怎么写**，不是**判什么**；
+//     · 大荒 129 条里 `【肉身全量初始化铁律】…必须全量 replace` / `【背包联动铁律】…delta -1`
+//       是**变量更新指令**（MVU 脚本那一层的活），进叙事提示词是纯粹的噪声；
+//     · 还有格言警句（`功成身退天之道` / `无欲则刚`）与世界观陈述（`三十三重天`）——
+//       它们是书的世界观，不是**这一轮的判定依据**。
+//   ⇒ 只有「这一轮判定要用的那几条数」进包；其余**留账给面板**（一条都不删）。
+export const RULE_CLASSES = ['判断依据', '文风禁令', '变量指令', '其他'];
+export const RULE_CLASS_NONE = '未分类';           // 老账的 rules 没有这一格（= 零迁移：没有就是没有，不猜也不重抽）
+export const RULE_CLASS_PACK = '判断依据';          // 唯一进每轮包的那一类（用户拍板）
+//   体积纪律（与 `buildScaleAnchor` 同尺，写在真源处）：上界**必须存在**——
+//   leg63 §1.5 量到的病正是"`rules` 没有任何上界判据"，而 `刻度` 有（表 ≤16 · 档 ≤24 · 维 ≤8）。
+//   大荒真账 129 条 6,286 字符（占 30k 包预算 21.0%，若整包塞入）；只取判据一类后实测约 3,477 字符。
+//   ★两道闸的分工（本棒实测后定的，别把条数闸当主闸）：
+//     · **主闸 = 总字符**（`RULE_PACK_CHAR_TOP`）——真正稀缺的是包预算，字符才是它的直接度量；
+//     · **条数闸只当"荒谬上界"**（`RULE_PACK_TOP`）——防"几千条一句话的判据"把包塞爆。
+//   ★为什么不把条数闸设成主闸（本棒第一版就是那样，实测当场暴露）：大荒 70 条判据平均仅 **50 字符**
+//     ⇒ 条数闸 40 会**先于**字符闸咬住 ⇒ **静默丢掉约 27 条真判据**，而字符闸明明还差得远。
+//     "条数"不是预算的度量，"字符"才是 ⇒ 主闸必须是后者（同 `刻度` 那边"表数必须 ≥ 档/维各自需要的表数之和"
+//     是同一类教训：**用错的单位去封顶，会从结构上把预算卡死**）。
+export const RULE_PACK_TOP = 160;                  // 荒谬上界（真账最多 70 条 ⇒ 留 2 倍余量；本闸**只防荒谬**）
+export const RULE_PACK_STR_MAX = 120;              // 进包每条长度上限（判据是短句；散文型的进不来）
+export const RULE_PACK_CHAR_TOP = 4500;            // ★主闸：进包总字符上限（= 30k 包预算的 15%）
+
 export function sanitizeAliases(rawAliases, name) {
     if (!Array.isArray(rawAliases)) return null;
     const self = String(name ?? '').trim();
@@ -1236,6 +1288,49 @@ export const SCALE_RULES = [
     '  · `用途` = 这张尺在书里**用来干什么**（用原文的说法，如：分级 / 资源分配 / 换算 / 入阶条件 …；自由写，不要凑词）。',
     '  · 如果某个刻度**本身是一把尺、底下挂着一组属性**（例：同一套等级下并列若干项属性），把这些属性写进那张表的 `维度`。',
 ];
+
+// ★★★leg64：**法则分类的口径**（唯一一份：生产名册遍 `buildRosterPrompt`、设定遍 `buildSettingOnlyPrompt`、
+//   直抽 `buildScalePrompt` 与属性遍 `buildAttrsOnlyPrompt` 全部 `...RULE_CLASS_GUIDE` 展开同一份）。
+//   ★为什么必须共用一份：leg62 的病就是"概念表那套口径只加进了名册遍那一份"，
+//     于是「只重抽设定」那条通道**抽不到任何概念表**（用户实机报「重抽出来的设定很简洁」）。
+//     本棒这一格同样有两条通道要吃它 ⇒ 照抄那条教训，**一处定义、四处展开**。
+//
+//   各分类的判据（按真账 179 条逐条读出来的边界，不是凭想象分的）：
+//     · **判断依据** = 这一轮写剧情时**要拿它判**的硬性规则。**两类都算**：
+//         ① 带**具体数**的（`跨1大境界→DC24困难检定` · `1点仙阶 ≈ 1,000,000点下界` ·
+//            `一次好感度增加数最高不可超过5点` · `1上品 = 1000中品` · `悟道值满100强制触发小阶段突破`）；
+//         ② 带**明确条件**的（`跨1境: 必败，唯道器加持可短暂支撑` · `装备品阶不可超越自身境界两阶，否则反噬` ·
+//            `强行越层进入=被天道法则当场碾碎` · `及格线=班均÷2最高50分`）。
+//         ★②这一类**最容易漏**——它们常常一个阿拉伯数字都没有，却是货真价实的判据
+//           （本棒用"数+阈值词"的机械规则先量了一遍：实教 18 条**一条都认不出来**，
+//            而实教恰恰是机制最密的那本 ⇒ 记下这个反例，别重犯）。
+//         反例（**不算**）：`功成身退天之道`（格言，没数没条件）· `三十三重天`（世界观陈述）
+//           · `严禁生成【顶级】与【超一流】势力`（这是**内容禁令**——"不许写某种势力"，
+//             不是"拿它判这一轮谁强谁弱" ⇒ 落 `其他`）。
+//     · **文风禁令** = 措辞/呈现的禁令：`绝对禁止使用现代口语语法` · `绝不写成回合制对砍`
+//     · **变量指令** = 让脚本去改状态变量的指令：`必须对六组字段同时全量replace` · `穿戴装备时必须同步 delta -1`
+//     · **其他** = 上三类之外的一切（世界观、格言、制度描述、内容禁令、人物/势力设定…）**默认就是这一类**。
+export const RULE_CLASS_GUIDE = [
+    '★另外交一列 `判据`：**与 `rules` 逐条对齐**的类别数组（第 i 项给第 i 条法则）。',
+    '  · 只能填这四个词之一：`判断依据` / `文风禁令` / `变量指令` / `其他`。',
+    '  · `判断依据` = **这一轮写剧情时你要拿它来判**的硬性规则。**下面两类都算**：',
+    '    ① 带**具体数**的：`T1-T4跨境: 跨1大境界→DC24困难检定`、`1点仙阶 ≈ 1,000,000点下界`、`一次好感增加不超过5点`、`1斛 = 10斗`。',
+    '    ② 带**明确条件**、但一个数字都没有的：`跨1境: 必败，唯道器加持可短暂支撑`、'
+        + '`装备品阶不可超越自身境界两阶，否则反噬`、`强行越层进入=被天道法则当场碾碎`、`及格线=班均÷2最高50分`。',
+    '    ★★**第②类最容易漏**：它们不带阿拉伯数字，却是货真价实的判据（"谁能赢/能不能做/算不算数"）。',
+    '      不要因为"没看到数字"就把它归进 `其他`——拿不准就问自己一句：**这一轮写剧情时，我是不是要照它判一个结果？**是，就是判据。',
+    '  · `文风禁令` = 只管**怎么写/怎么呈现**的禁令（例：`绝对禁止现代口语语法`、`绝不写成回合制对砍`）。',
+    '  · `变量指令` = 让**脚本去改状态变量**的指令（例：`必须对六组字段同时全量replace`、`穿戴装备时同步 delta -1`）。',
+    '  · 其余一律 `其他`（世界观陈述、格言警句、制度描述、内容禁令、人物/势力设定…）。**大多数法则都属于"其他"**，不要给它凑类别。',
+    // ★★本棒先在这里写成"拿不准就填其他"，随后按**代价不对称**改成了"拿不准就填判断依据"：
+    //   漏掉一条判据的代价 = 模型那一轮**自己编一个数**（正是本棒要治的病，且事后无从察觉）；
+    //   多带一条的代价 = 多几十个字符（包预算 0.1% 量级）。⇒ **两个方向不等价，往判据那边偏。**
+    //   防"整包塞进去"靠的不是这一句保守，而是上面那个自问自答（"我是不是要照它判一个结果？"）。
+    '  · 两个方向的代价**不一样**：漏一条判据 ⇒ 我那一轮只能自己编一个数（这条通道就白建了）；'
+        + '多带一条 ⇒ 只多几十个字符。⇒ **拿不准时填 `判断依据`**，不要填 `其他`；'
+        + '但上面那个自问只要能答"不用照它判"（格言、世界观、只是描写要求、只是让脚本改变量），就照实填别的类。',
+    '  · `判据` 与 `rules` 必须**等长**（一条法则对一个类别，顺序一一对应；缺项按 `其他` 处理）。',
+];
 // 紧凑形状（用户令「紧凑序列化」；真机实测：@原预算下就 finish=stop，且表/档/表名准度三项全胜）。
 //   ★两处（生产 `buildRosterPrompt` 与直抽 `buildScalePrompt`）**共用这一个对象**——
 //     各写一份 ⇒ 改一处忘一处 ⇒ 模型按新形状交、净化层按旧形状收（本仓吃过多次）。
@@ -1309,7 +1404,33 @@ export function sanitizeCanon(raw, { sourceText = '' } = {}) {
     } else errors.push('dims 非数组（已弃）');
 
     if (Array.isArray(raw.rules)) {
-        for (const r of raw.rules) { const s = String(r ?? '').trim(); if (s) canon.rules.push(s); }
+        // ★leg64：模型可能按"对象数组"的习惯交（`[{文, 类}]`）——`文` 取正文，别把对象串成 `[object Object]`。
+        const rawS = raw.rules.map((r) => {
+            if (r && typeof r === 'object' && !Array.isArray(r)) {
+                const t = r.文 ?? r.rule ?? r.text ?? r.法则;
+                return t === undefined ? '' : String(t).trim();
+            }
+            return String(r ?? '').trim();
+        });
+        const kinds = ruleKindsFromRaw(raw.判据);   // ③ 对象形态（`{法则原文: 类别}`）先收
+        for (let i = 0; i < rawS.length; i += 1) {
+            const s = rawS[i];
+            if (!s) continue;
+            const k = classifyRule(raw.判据, i);     // ①② 并列数组按位取（缺项/词表外 ⇒ 未分类）
+            if (k !== RULE_CLASS_NONE && !kinds.has(s)) kinds.set(s, k);
+        }
+        for (const s of rawS) if (s) canon.rules.push(s);      // 先原样收（去重交给 `dedupeRules`，与既有口径同尺）
+        // ★★★leg64：**类别按"去重后的胜者"重挂**——不能直接用原文串当键：
+        //   块间/块内去重可能让**另一条更长的近义原文**胜出，而类别是挂在被丢掉的那条上的。
+        //   ⇒ 重挂一次：胜者认不出类别时，用"原文里以它为前缀/它为原文前缀"的那条兜。
+        const keyed = keyByPrefix(rawS, kinds);
+        const out = new Map();
+        for (const s of canon.rules) {
+            if (out.has(s)) continue;
+            const k = kinds.get(s) ?? keyed.get(s);
+            if (k) out.set(s, k);
+        }
+        if (out.size) canon.ruleKinds = Object.fromEntries(out);
     } else if (raw.rules !== undefined) errors.push('rules 非数组（已弃）');
 
     if (typeof raw.society === 'string') canon.society = raw.society.trim();
@@ -1795,9 +1916,87 @@ export function dedupeTiers(list = []) {
     return out;
 }
 
+/**
+ * ★★★leg64：**法则按类别分堆**（唯一一份口径——面板与进包**读同一个函数**）。
+ *   为什么不各写一遍：leg63 那句不准确的文案（"这些表每轮都在模型的包里当锚"）就是
+ *   "面板自己推一遍进包口径"的产物 ⇒ 面板报的和包里真干的会各说各话。
+ *   ⇒ 口径：分类只此一处，`pack.js` 的 `buildRuleAnchor` 与 `render.js` 的面板都读它。
+ *   返回：`{ 计数, 未标数, 判据 }`——`判据` 就是**进每轮包的那些原话**（按账本序）。
+ *   ★`未标数` = 没有类别或有未知类别的条数（老账全落这里）；面板据此如实报"为什么一条都没进包"。
+ */
+export function classifyRulesByKind(rules, ruleKinds) {
+    const list = Array.isArray(rules) ? rules : [];
+    const kinds = ruleKinds && typeof ruleKinds === 'object' && !Array.isArray(ruleKinds) ? ruleKinds : {};
+    const byKind = { 判断依据: [], 文风禁令: [], 变量指令: [], 其他: [], [RULE_CLASS_NONE]: [] };
+    for (const r of list) {
+        const s = String(r ?? '').trim();
+        if (!s) continue;
+        const k = String(kinds[s] ?? '').trim();
+        // 词表外（含"没有这一格"）一律落 `未分类`——**不猜**（与 `classifyRule` 同一条纪律）。
+        const bucket = RULE_CLASSES.includes(k) ? k : RULE_CLASS_NONE;
+        byKind[bucket].push(s);
+    }
+    return {
+        计数: {
+            判断依据: byKind.判断依据.length,
+            文风禁令: byKind.文风禁令.length,
+            变量指令: byKind.变量指令.length,
+            其他: byKind.其他.length,
+        },
+        未标数: byKind[RULE_CLASS_NONE].length,
+        判据: byKind[RULE_CLASS_PACK],
+    };
+}
+
+/**
+ * ★leg64：**取第 i 条法则的类别**（模型交的是 `判据` 那一列，与 `rules` 按位对齐）。
+ *   能容的三种形态（**都是真机上会出现的**，不猜）：
+ *     ① 并列数组且**等长** ⇒ 按位取（本棒提示词要求的口径）；
+ *     ② 数组**不等长/缺项** ⇒ 缺的按 `未分类`（宁可漏判据，也不许错位贴类别——错贴会让"其他"混进包）；
+ *     ③ 对象形态（`{法则原文: 类别}`）⇒ 按原文串取（模型自作主张换形态时的兜底）。
+ *   ★词表外的值一律落 `未分类`（这就是"契约层放行、净化层收口"那条纪律的具体做法）——
+ *     模型自己发明一个类别词（`设定`/`机制`…）时，它**不会**被当成判据放进每轮包。
+ */
+export function classifyRule(rawKinds, i) {
+    if (Array.isArray(rawKinds)) {
+        const v = String(rawKinds[i] ?? '').trim();
+        return RULE_CLASSES.includes(v) ? v : RULE_CLASS_NONE;
+    }
+    return RULE_CLASS_NONE;
+}
+/** ★leg64：对象形态的类别表（`{法则原文: 类别}`）——只收词表内的值。 */
+export function ruleKindsFromRaw(rawKinds) {
+    if (!rawKinds || typeof rawKinds !== 'object' || Array.isArray(rawKinds)) return new Map();
+    const out = new Map();
+    for (const [k, v] of Object.entries(rawKinds)) {
+        const s = String(k ?? '').trim();
+        const c = String(v ?? '').trim();
+        if (s && RULE_CLASSES.includes(c)) out.set(s, c);
+    }
+    return out;
+}
+/**
+ * ★leg64：**把类别从"被去重丢掉的那条原文"挪到胜者身上**。
+ *   为什么必须有这一步（本棒在设计时逐条推演出来的洞）：
+ *     `dedupeRules` 会把"互为前缀的近义两版"合成一条，**留最长的**。而类别是按原文串挂的
+ *     ⇒ 若模型给短的那版贴了 `判断依据`、给长的贴了 `其他`（或没贴），胜者就**拿不到判据类别**
+ *     ⇒ 那条判据**静默地进不了包**（正是本棒要治的病，换了张脸回来）。
+ *   ⇒ 口径：先精确命中；不中时，在原文里找"以胜者为前缀 / 胜者是它的前缀"的那条，**取它的类别**。
+ */
+export function keyByPrefix(rawList, kinds) {
+    const out = new Map();
+    for (const s of (Array.isArray(rawList) ? rawList : [])) {
+        if (!s || kinds.has(s) || out.has(s)) continue;
+        for (const [k, v] of kinds) {
+            if (k === s) { out.set(s, v); break; }
+            if (k.startsWith(s) || s.startsWith(k)) { out.set(s, v); break; }
+        }
+    }
+    return out;
+}
+
 /** 法则并集去重（纯函数 · 可测）：按"同形键"去重（含**互为前缀**的那种近义），留最长的那条原话。 */
-export function dedupeRules(list = []) {
-    // ★写法纪律（本函数踩过两次坑，改之前先读）：
+export function dedupeRules(list = []) {    // ★写法纪律（本函数踩过两次坑，改之前先读）：
     //   ① **不用 Map 迭代**（`for…of idx` / `idx.forEach` 在这条路上实测"一次都不迭代"⇒ 整段变死代码）；
     //      用最笨的两层数组循环，一眼能验。
     //   ② 前缀比较用 `startsWith`，**不拼正则**——法则原文里全是 `(`/`+`/`[`（`T1-T4(感气→金丹)跨境:…`），
@@ -2016,6 +2215,7 @@ export function mergeCanonChunks(parts = []) {
     const seenPs = new Set();
     const seenDim = new Map();          // name → 已收的那条（range 缺什么补什么，同实体不重复）
     const seenRule = new Set();
+    const ruleKinds = new Map();        // ★leg64：法则原文 → 类别（跨块并集；见下方 rules 那一段）
     const seenHist = new Set();
     let society = '';
     let techOrMagic = '';
@@ -2052,6 +2252,13 @@ export function mergeCanonChunks(parts = []) {
             seenRule.add(s);
             rules.push(s);
         }
+        // ★leg64：**类别跟着并集走**（同一格 `ruleKinds` = `{法则原文: 类别}`；先到先得，
+        //   与 `用途`/`源` 的"补空位"同口径）。老账没有这一格 ⇒ 一条都不进，零迁移。
+        for (const [k, v] of Object.entries(c.ruleKinds && typeof c.ruleKinds === 'object' ? c.ruleKinds : {})) {
+            const ks = String(k ?? '').trim();
+            const vs = String(v ?? '').trim();
+            if (ks && RULE_CLASSES.includes(vs) && !ruleKinds.has(ks)) ruleKinds.set(ks, vs);
+        }
         for (const h of (Array.isArray(c.historyNotes) ? c.historyNotes : [])) {
             const s = String(h ?? '').trim();
             if (!s || seenHist.has(s)) continue;
@@ -2080,12 +2287,23 @@ export function mergeCanonChunks(parts = []) {
     // ★leg62：概念表并完之后，**旧两列从它派生**（避免"同一档位在两张表里各存一份"的漂移）。
     //   没交概念表的块（老提示词/老账）⇒ `scales` 为空 ⇒ 旧两列照旧走下面的原路，零扰动。
     const flatFromScales = scales.length ? scalesToFlat(scales) : null;
+    // ★leg64：法则去重之后**类别要重挂在胜者身上**（`dedupeRules` 可能留下的是另一条近义原文）——
+    //   与 `sanitizeCanon` 里同一条口径，见 `keyByPrefix` 头注。不重挂 ⇒ 判据会静默丢类别。
+    const finalRules = dedupeRules(rules);
+    const rebased = keyByPrefix(rules, ruleKinds);
+    const finalKinds = {};
+    for (const s of finalRules) {
+        const k = ruleKinds.get(s) ?? rebased.get(s);
+        if (k) finalKinds[s] = k;
+    }
     return {
         canon: {
             ...(scales.length ? { 刻度: scales } : {}),
             powerScale: flatFromScales ? flatFromScales.powerScale : dedupeTiers(powerScale), // ★leg61：并集之后再归一次
             dims: flatFromScales ? flatFromScales.dims : dims,
-            rules: dedupeRules(rules), society, techOrMagic, historyNotes, situation, bookEntities, settings,
+            rules: finalRules,
+            ...(Object.keys(finalKinds).length ? { ruleKinds: finalKinds } : {}),   // ★leg64：空着就是空着（老账零扰动）
+            society, techOrMagic, historyNotes, situation, bookEntities, settings,
         },
         tension: first.tension || { polarity: '', direction: '' },
         env: first.env || {},

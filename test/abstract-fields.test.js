@@ -199,8 +199,8 @@ test('★★★leg63 设定遍提示词：只抽设定与概念（不抽属性�
     const p = buildSettingOnlyPrompt('【条目甲】X1 甲境。', [{ name: '某势力' }]);
     // 解析形状块（★不去比字符串——`JSON.stringify` 带缩进会把内层引号转义，朴素 includes 必假）
     const parsed = JSON.parse(p.slice(p.indexOf('{\n'), p.lastIndexOf('}') + 1));
-    assert.deepEqual(Object.keys(parsed), ['刻度', 'rules', 'society', 'techOrMagic', 'historyNotes', 'situation', 'tension', 'env'],
-        '★形状 = 概念表 + 设定五件套 + 张力/环境（顺序与生产口径一致）');
+    assert.deepEqual(Object.keys(parsed), ['刻度', 'rules', '判据', 'society', 'techOrMagic', 'historyNotes', 'situation', 'tension', 'env'],
+        '★形状 = 概念表 + 设定五件套（含 leg64 的法则类别）+ 张力/环境（顺序与生产口径一致）');
     // ① 只抽设定与概念
     assert.ok(parsed.刻度, '★带概念表（旧口径那份设定遍用的是 `CANON_SHAPE`，里面**没有** `刻度` ⇒ 重抽永远出不来概念表）');
     assert.ok(!('entities' in parsed) && !('bookEntities' in parsed), '★不问名册/属性（形状里没有这一项）');
@@ -215,6 +215,10 @@ test('★★★leg63 设定遍提示词：只抽设定与概念（不抽属性�
     assert.ok(/把表组织起来/.test(p), '★任务句里点名"要把表组织起来"');
     // ④ 每块都要问（调用方对每一块都用这一份）
     assert.ok(/每一块都要单独问一遍/.test(p), '★明写每块都单独问（设定散布全书，不是只有头块）');
+    // ⑤ ★★★leg64：**法则类别也要在这一遍里问**（否则「只重抽设定」出来的账永远没有 `ruleKinds`
+    //    ⇒ 那份账的法则一条都进不了每轮包。这正是 leg62"概念表只加进名册遍"的同款坑，本棒必须守住）
+    assert.ok(parsed.判据, '★设定遍也带 `判据`（法则的类别列）');
+    assert.ok(p.includes('与 `rules` 逐条对齐'), '★共用 `RULE_CLASS_GUIDE`（分类口径一处定义、四处展开）');
 });
 
 test('★★★leg63 接线：**重抽**时每一块都问设定（`skipRoster`）、**初始化**时那一支一个字不改', async () => {
