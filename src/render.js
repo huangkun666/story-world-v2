@@ -177,11 +177,12 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   "下面那一部分是已冻结的设定，一个字没动"）。玩家可见面又变了 ⇒ 构建号同批再升一格。
 //   ★形状纪律（`render.test.js` 锁着）：必须是 `leg<数字>-…`（升位链条要能一眼看出来）⇒
 //     同一棒内的第二次升位写成 `leg62-…-2`，**不许**用 `leg62b` 这种（不合形状、当时被锁当场抓住）。
-// ★★★leg64：**玩家可见面又变了**——设定页的「法则」一栏从"129 行平铺"改成**按类别分段 +
-//   如实报"哪几条真的进了每轮包"**（在此之前那一栏不报进包，于是"抽出来"看着就像"在用了"）。
+// ★★★leg64 三轮累计：**玩家可见面变了**——设定页「法则」一栏从"129 行平铺"改成**按类别分段 +
+//   如实报"哪几条真的进了每轮包"**；刻度那一栏补上**目录**（"其余 N 张没进包，但表名仍每轮进包"）
+//   与**模型点名的表**（按需查表）。在此之前那两栏都不报进包口径，于是"抽出来"看着就像"在用了"。
 //   ★起名先过禁词扫描：第一版叫 `leg64-rule-kinds`，**当场被 `render.test.js` 的扫描器咬住**
-//     （`kind` 在禁词表里）⇒ 改 `leg64-rule-classes`。这条纪律 leg50/52 各踩过一次。
-export const PANEL_BUILD = 'leg64-rule-classes';
+//     （`kind` 在禁词表里）⇒ 改 `leg64-rule-classes`，随后刻度目录落地再升一格。
+export const PANEL_BUILD = 'leg64-scale-catalog';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
@@ -1723,6 +1724,8 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             + `<div class="sw2-hint sw2-fold-body"><div class="sw2-hint" style="margin-bottom:6px">${escapeHtml(showNames)}</div>${inner}</div></details>`;
     }).join('');
     const nSect = scaleGroups.filter((g) => !g.未标).length;
+    // ★leg64 第四轮：模型本回合点名要来的表（账上 `meta.scaleRequests`；只作**如实报**用，不参与渲染）
+    const scaleWanted = (world.meta?.scaleRequests || []).filter((s) => typeof s === 'string' && s.trim());
     // ★leg60（交接第 3 件）：**编译完整性**——上限口径"漏了如实报"（数字全部来自初始化那一刻的探测，落账带过来）。
     const cp = frozen.compile;
     const compileLine = cp
@@ -1822,6 +1825,13 @@ export function renderSettingHtml(world, { config = {} } = {}) {
                 + (scaleFit
                     ? `<div class="sw2-hint">其中 <b>${scaleFit.表}</b> 张表 / <b>${scaleFit.档}</b> 档 / <b>${scaleFit.维}</b> 维每轮进模型的包当锚`
                         + `（写实力/属性时按书里的尺子写，不自造形容词）；表与档太多时按账本顺序取前面那些。</div>`
+                    : '')
+                // ★★★leg64 第四轮（按需查表）：**如实报"模型这一轮点名要了哪几张"**。
+                //   病：`lookupScales` 这条通道如果不报，作者就看不出"目录到底有没有被用上"
+                //   ——那正是本仓"静默的失败"那一类（与"被拒时去哪看"同一条纪律）。
+                + (scaleWanted.length
+                    ? `<div class="sw2-hint">模型本回合点名要了 <b>${scaleWanted.length}</b> 张：`
+                        + `${escapeHtml(scaleWanted.join('、'))}（这些表的整张档位已随包递过去；一次性的，下轮不再挂）。</div>`
                     : '')
                 // ★★★leg64 第三轮（用户问「有这么多模型该怎么检索，难道直接全塞吗？」）：
                 //   **如实报"还剩多少张没进包"，并说明它们去了哪**。病：过去这一栏只说"进了几张"，

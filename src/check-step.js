@@ -7,6 +7,12 @@ import { isSettingRef } from './setting.js';   // K25：设定池保留键空间
 import { RIPPLE_TARGET_CAP } from './weight.js';   // leg25：波及上限唯一真源（此前该上限生产 0 强制点=纸面机制）
 import { checkAgendaInvolvement } from './entity-lookup.js';   // 细案 §6 R2：单盘算一轮涉及实体 ≤15（唯一真源）
 import { normalizePosition } from './position.js';   // leg33：剥掉引擎自己打在 location 列上的「（推）」注解（叶子模块，无环）
+// ★★★leg64 第四轮（按需查表）：表名必须能对回账上真有的尺——**"无源之物不入局"那条纪律的表格版**。
+//   ★为什么从 `pack.js` 拿（不在本文件另写一份索引）：目录、进包、查表三处必须**同一把尺**
+//     （表名截断长度 `SCALE_NAME_MAX_PACK` 都一样），各写一份迟早出现"目录里有的表、点名说没有"。
+//   ★无环：`pack.js` 只依赖 `gate.js`/`abstract.js`，两者都不回头 import 本文件
+//     （`settle.js` 同时 import 了本文件与 pack.js，但**本文件不 import settle**——见 `position.js:3` 那条留档）。
+import { buildScaleTableIndex, sanitizeScaleRequests, SCALE_ONDEMAND_TOP } from './pack.js';
 // leg25 c：属性白名单（INBORN_ATTR_KEYS）随 `stateChanges` 整条删除——四维浮点已不存在，没有键可白名单。
 
 // ★leg34（小说家条款 §6）：实体字段写回的三条上限/黑名单——**本文件是唯一真源**（照 AGENDA_INVOLVED_CAP 的惯例）。
@@ -355,6 +361,37 @@ export function checkWorldStep(step, ssot) {
             }
         }
     }
+    }
+
+    // ★★★leg64 第四轮：**按需查表**（`lookupScales`，可选组）——模型点名要的刻度表。
+    //   三条判据（都是机械的）：
+    //     ① **点名的表名必须对回账上真有的尺**（`buildScaleTableIndex`）。对不上 ⇒ 拒
+    //        ——"无源之物不入局"的表格版：模型编一个表名，引擎**不许替它造一张出来**；
+    //     ② 每轮 ≤ `SCALE_ONDEMAND_TOP` 张（防"我全要"把包塞爆）；
+    //     ③ 缺席合法（可选组，见 `world-step.schema.js` 那一格的注释）——本轮没要点表不是形状错误。
+    //   ★★它为什么**同时把结果写进 `ssot.meta.scaleRequests`**（本仓少见的一处写账）：
+    //     这一格要"**同一轮就生效**"——模型在这一轮的步里点名、出包时那张表就该在包里。
+    //     而 `checkWorldStep` 正是"步 → 包"之间唯一的引擎侧关口（`settle.js` 的 gstep 线：
+    //     先 check 再 buildEvolutionPack），且它**本来就返回 step**（净化掉非法项的版本是它的下游）。
+    //     ⇒ 写在这里 = 模型只拿得到**核过**的表名（编的名字进不了账），且不新增一条跨模块线。
+    //     生命周期：**每轮被新值覆盖**（没点名 ⇒ 写成空数组）⇒ 天然是"一次性"，不跨轮囤积
+    //     （与 `injectWorldBookRecall` 头注那条"过期内容冒充新检索"的坑同一条纪律）。
+    if (ssot && typeof ssot === 'object' && typeof step.lookupScales !== 'undefined') {
+        const raw = Array.isArray(step.lookupScales) ? step.lookupScales : [];
+        if (!Array.isArray(step.lookupScales)) {
+            errors.push('$.lookupScales: 必须是字符串数组（表名照抄输入里的「刻度目录」）');
+        } else if (raw.length > SCALE_ONDEMAND_TOP) {
+            errors.push(`$.lookupScales: 每轮至多要 ${SCALE_ONDEMAND_TOP} 张尺（当前 ${raw.length}）——一次看不完那么多，挑这一轮真要用的`);
+        } else {
+            const { ok, missed } = sanitizeScaleRequests(raw, buildScaleTableIndex(ssot.context?.setting?.frozen?.canon));
+            for (const nm of missed) {
+                errors.push(`$.lookupScales: 账上没有《${nm}》这张尺（照抄输入「刻度目录」里的表名；编的表名不会给你造）`);
+            }
+            // ★**只在整步没有错误时**写账：这一步是"被拒的步不该留下任何痕迹"那条纪律
+            //   （`checkWorldStep` 是纯判官，唯一被允许的副作用就是这个"同一轮生效"的交接）。
+            //   写的是**核过**的表名（编的名字进不了账）。
+            if (!errors.length) ssot.meta = { ...(ssot.meta || {}), scaleRequests: ok };
+        }
     }
 
     // ③ 因果：ripple 源必须引用已存在事件（无源拒绝的语义侧）

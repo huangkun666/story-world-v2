@@ -521,14 +521,10 @@ export function buildScaleCatalog(canon, packedNames) {
     const tables = resolveScales(canon);
     if (!tables.length) return null;
     const has = packedNames instanceof Set ? packedNames : new Set();
-    const cutName = (s) => {
-        const t = String(s ?? '').trim();
-        return t.length > SCALE_NAME_MAX_PACK ? t.slice(0, SCALE_NAME_MAX_PACK) : t;
-    };
     const out = [];
     for (const t of tables) {
         if (out.length >= SCALE_CATALOG_TOP) break;
-        const nm = cutName(t.名);
+        const nm = cutScaleName(t.名);          // ★与 `buildScaleAnchor`/查表索引**同一把尺**
         if (!nm || has.has(nm)) continue;          // 已在包里的不重复列
         const nTier = (Array.isArray(t.档位) ? t.档位 : []).length;
         const nDim = (Array.isArray(t.维度) ? t.维度 : []).length;
@@ -585,7 +581,103 @@ export function buildRuleAnchor(canon) {
     return out.length ? out : null;
 }
 
-// 固定打包序：活跃实体简表 → 在飞盘算（含 memory）→ 未决事件 → 最近 2 tick 关闭事件 → 玩家落子事实 → 张力
+// ★★★leg64 第四轮（用户令「做吧」）：**按需查表**——模型"点名要"某几张尺的入口。
+//
+//   为什么必须有这一格（上一轮核查出来的缺口，指得出出处）：
+//     · `recall` 那条路按**实体名 + 未决事件标题**发问（`recall.js` 的 `collectRecallQuery`）
+//       ⇒ 表格只能"随它所在的条目碰巧被召回"，**模型无法指定要看哪张尺**；
+//     · `lookup` 那条路（`meta.entityFields`）的索引键是**实体 id** ⇒ **对表格没有入口**。
+//     ⇒ 后果：上一轮交给模型的 `刻度目录` 让它"知道书里有《仙阶法宝品阶》这张表"，
+//       **却没有办法拿到它**——那正是本仓最忌讳的"面板/提示词替机制承诺一个它做不到的事"
+//       （`render.js:126` 那条"永不会兑现的承诺"就是同一个病）。
+//
+//   口径四条：
+//     ① **点名的键 = 表名**（目录里逐字给的那个），因为那是模型手里唯一有的标识；
+//     ② **必须能对回账上的表**（`buildScaleTableIndex`）——对不上的一律**不收也不编**，
+//        并**如实记下被拒的名字**（"无源之物不入局"那条纪律：模型编一个表名 ⇒ 引擎不许替它造）；
+//     ③ **当轮就递**（与 `recalled`/查字段同一条：出包前准备好，投递那一轮可见，零额外调用）；
+//     ④ **生命周期 1 轮**（调用方在新一轮开头清掉请求）——不做跨轮囤积
+//        （`injectWorldBookRecall` 头注里那条"过期内容冒充新检索"的坑就在旁边，别重犯）。
+export const SCALE_ONDEMAND_TOP = 6;              // 一轮最多递几张（防"我全要"）
+export const SCALE_ONDEMAND_CHAR_TOP = 6000;      // 一轮补料总字符上限（= 包预算 6.7%）
+/** 表名截断（与 `buildScaleAnchor`/`buildScaleCatalog` **同一把尺**，否则两边认不出是同一张）。 */
+function cutScaleName(s) {
+    const t = String(s ?? '').trim();
+    return t.length > SCALE_NAME_MAX_PACK ? t.slice(0, SCALE_NAME_MAX_PACK) : t;
+}
+/** 表名 → 表（**唯一索引**：`resolveScales` 的账本序；目录与查表读的是同一份分组）。 */
+export function buildScaleTableIndex(canon) {
+    const idx = new Map();
+    for (const t of resolveScales(canon)) {
+        const nm = cutScaleName(t.名);
+        if (nm && !idx.has(nm)) idx.set(nm, t);
+    }
+    return idx;
+}
+/**
+ * 净化"模型点名的表名"：只收**账上真有的**，其余落 `missed`（如实留痕，不替它造）。
+ * @returns {{ok: string[], missed: string[]}}  —— `ok` 按**点名序**去重（先到先得）
+ */
+export function sanitizeScaleRequests(names, index) {
+    const idx = index instanceof Map ? index : new Map();
+    const ok = [];
+    const missed = [];
+    for (const raw of (Array.isArray(names) ? names : [])) {
+        const nm = cutScaleName(raw);
+        if (!nm) continue;
+        if (idx.has(nm)) { if (!ok.includes(nm) && ok.length < SCALE_ONDEMAND_TOP) ok.push(nm); continue; }
+        // 账上没有这张表 ⇒ **拒**（不许"差不多就给它一张"——那是替模型编）
+        if (!missed.includes(nm) && missed.length < SCALE_ONDEMAND_TOP) missed.push(nm);
+    }
+    return { ok, missed };
+}
+/**
+ * 按点名**取全那张表**（与 `buildScaleAnchor` 的取舍相反：那边受预算只能给前几档，
+ *   这边是"你点名要的，给你整张"——但仍有总字符闸，且**逐张整取、不半张截断**）。
+ * @returns {{tables:Array, chars:number, dropped:string[]}|null}  一张都给不出 ⇒ null（键不出现）
+ */
+export function buildScaleOnDemand(canon, names) {
+    const idx = buildScaleTableIndex(canon);
+    const { ok } = sanitizeScaleRequests(names, idx);
+    if (!ok.length) return null;
+    const cut = (s) => {
+        const t = String(s ?? '').trim();
+        return t.length > SCALE_STR_MAX ? t.slice(0, SCALE_STR_MAX) : t;
+    };
+    const tables = [];
+    const dropped = [];
+    let chars = 0;
+    for (const nm of ok) {
+        const t = idx.get(nm);
+        const rows = (Array.isArray(t.档位) ? t.档位 : []).map((x) => {
+            const item = { 档: cut(x?.档) };
+            const note = cut(x?.注);
+            if (note && note !== item.档) item.标定 = note;
+            return item;
+        }).filter((x) => x.档);
+        const dims = (Array.isArray(t.维度) ? t.维度 : []).map((d) => {
+            const item = { 名: cut(d?.名) };
+            const range = cut(d?.范围);
+            if (range) item.范围 = range;
+            return item;
+        }).filter((x) => x.名);
+        const subs = (Array.isArray(t.子表) ? t.子表 : []).map((st) => ({
+            名: cutScaleName(st?.名),
+            档位: (Array.isArray(st.档位) ? st.档位 : []).map((y) => ({ 档: cut(y?.档) })).filter((y) => y.档),
+        })).filter((st) => st.名 && st.档位.length);
+        const one = { 表: nm };
+        if (t.用途) one.用途 = cut(t.用途);
+        if (rows.length) one.档位 = rows;
+        if (subs.length) one.子表 = subs;
+        if (dims.length) one.维度 = dims;
+        const size = JSON.stringify(one).length;
+        // 逐张整取：装不下就**整张不要**（不做"给半张"——半张尺比没有更坏：模型会拿残缺的档位当全部）
+        if (chars + size > SCALE_ONDEMAND_CHAR_TOP) { dropped.push(nm); continue; }
+        tables.push(one);
+        chars += size;
+    }
+    return tables.length ? { tables, chars, dropped } : null;
+}
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
 // leg25：出包末尾**强制整包预算**（超限按固定剪枝序裁，包内留 `trimmed` 痕迹；见 trimPack）
@@ -666,6 +758,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         ssot.context?.setting?.frozen?.canon,
         new Set((scale || []).map((t) => String(t?.表 ?? ''))),
     );
+    // ★★★leg64 第四轮：**按需查表**——模型上一轮点名要的那几张（`meta.scaleRequests`）。
+    //   与 `recalled` 同一条生命周期口径：**每轮由账上现算**，调用方在新一轮开头清掉请求
+    //   ⇒ 递出去的那一轮可见、之后自然消失（不做跨轮囤积）。见 `buildScaleOnDemand` 头注。
+    const scaleWanted = buildScaleOnDemand(ssot.context?.setting?.frozen?.canon, ssot.meta?.scaleRequests);
     // ★★★leg64（交接 §3-A「规则进包」）：**法则块**——只取「判断依据」那一类（见 `buildRuleAnchor` 头注）。
     //   与 `刻度` 并列进同一个 `setting` 块：一个是"书里的尺子"，一个是"书里的判定原则"，
     //   都是**冻结的短表**（编译一次、之后每轮逐字相同），都违反 A-8 而那是有意的（它们是锚）。
@@ -735,11 +831,13 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
         //   ★leg62：`scale` 现在是**概念表列表**（一把尺一个元素，见 `buildScaleAnchor` 头注），
         //     故这里由调用点写 `刻度` 这个键（改前 `buildScaleAnchor` 自己返回 `{刻度:[…]}` ⇒ 这里会嵌成两层）。
-        setting: (dyn || scale || ruleAnchor || scaleCatalog) ? {
+        setting: (dyn || scale || ruleAnchor || scaleCatalog || scaleWanted) ? {
             ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
             ...(scale ? { 刻度: scale } : {}),
             // ★leg64 第三轮：**目录**（只表名 + 规模，不带档位内容）——治"60 张尺模型不知道存在"。
             ...(scaleCatalog ? { 刻度目录: scaleCatalog } : {}),
+            // ★leg64 第四轮：**点名要来的整张表**（`刻度补` = 补料；空着就是空着）。
+            ...(scaleWanted ? { 刻度补: scaleWanted.tables } : {}),
             ...(ruleAnchor ? { 法则: ruleAnchor } : {}),   // ★leg64：判据进包（老账/无判据 ⇒ 键不出现）
         } : undefined,
         positions: ssot.context?.positions,
