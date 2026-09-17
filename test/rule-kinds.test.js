@@ -17,16 +17,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     sanitizeCanon, mergeCanonChunks, classifyRule, classifyRulesByKind, keyByPrefix,
-    RULE_CLASSES, RULE_CLASS_NONE, RULE_CLASS_PACK,
+    RULE_CLASSES, RULE_CLASS_NONE, RULE_CLASSES_PACK,
     RULE_PACK_TOP, RULE_PACK_STR_MAX, RULE_PACK_CHAR_TOP,
     buildRosterPrompt, buildSettingOnlyPrompt, RULE_CLASS_GUIDE,
 } from '../src/abstract.js';
 import { buildRuleAnchor, buildEvolutionPack } from '../src/pack.js';
 import { renderSettingHtml } from '../src/render.js';
 
-// ───────── 夹具：**自造**的四类法则（术语全部与真书无关） ─────────
+// ───────── 夹具：**自造**的五类法则（术语全部与真书无关） ─────────
 const R_JUDGE = '跨甲境: 跨一阶→DC17 困难检定; 跨二阶→无效';
 const R_JUDGE2 = '1 枚甲晶 = 333 枚乙晶（换算率固定）';
+const R_WORLD = '目睹高维交锋会导致【道心】狂降，归零则畸变';      // ★世界观：不是判据，但也要进包
+const R_WORLD2 = '未录名册者视为野修，无资源分配权';
 const R_STYLE = '绝对禁止使用现代口语说法';
 const R_SCRIPT = '触发时必须对六组字段同时全量 replace';
 const R_OTHER = '功成身退，天之道';
@@ -56,10 +58,10 @@ const world = (canon) => ({
 
 // ═══════════════ ① 净化层：`判据` 按位对齐 · 词表收口 · 零迁移 ═══════════════
 test('★leg64 净化：`判据` 与 `rules` 按位对齐，落成一格 `ruleKinds`', () => {
-    const canon = canonOf([R_JUDGE, R_STYLE, R_SCRIPT, R_OTHER], [RULE_CLASS_PACK, '文风禁令', '变量指令', '其他']);
-    assert.deepEqual(canon.rules, [R_JUDGE, R_STYLE, R_SCRIPT, R_OTHER], '★原文那一列一个字不改（仍是纯字符串数组）');
+    const canon = canonOf([R_JUDGE, R_WORLD, R_STYLE, R_SCRIPT, R_OTHER], ['判断依据', '世界观设定', '文风禁令', '变量指令', '其他']);
+    assert.deepEqual(canon.rules, [R_JUDGE, R_WORLD, R_STYLE, R_SCRIPT, R_OTHER], '★原文那一列一个字不改（仍是纯字符串数组）');
     assert.deepEqual(canon.ruleKinds, {
-        [R_JUDGE]: '判断依据', [R_STYLE]: '文风禁令', [R_SCRIPT]: '变量指令', [R_OTHER]: '其他',
+        [R_JUDGE]: '判断依据', [R_WORLD]: '世界观设定', [R_STYLE]: '文风禁令', [R_SCRIPT]: '变量指令', [R_OTHER]: '其他',
     }, '类别另起一格、按原文串索引');
 });
 
@@ -73,13 +75,13 @@ test('★★leg64 净化：词表外的类别一律不认（模型自造类别�
     const canon = canonOf([R_JUDGE, R_STYLE], ['设定', '机制']);
     assert.equal('ruleKinds' in canon, false, '★自造类别词一个都不收 ⇒ 全都当"未分类"（契约层放行、净化层收口）');
     // 空串/缺项/短数组都要按"未分类"，**不许错位贴**
-    assert.equal(classifyRule([RULE_CLASS_PACK, '文风禁令'], 5), RULE_CLASS_NONE, '越界下标 ⇒ 未分类（不抛、不贴错）');
+    assert.equal(classifyRule(['判断依据', '文风禁令'], 5), RULE_CLASS_NONE, '越界下标 ⇒ 未分类（不抛、不贴错）');
     assert.equal(classifyRule(undefined, 0), RULE_CLASS_NONE, '没有这一列 ⇒ 未分类');
-    assert.equal(classifyRule([' 判断依据 '], 0), RULE_CLASS_PACK, '两侧空白照吃');
+    assert.equal(classifyRule([' 判断依据 '], 0), '判断依据', '两侧空白照吃');
 });
 
 test('★leg64 净化：对象形态（`{文, 类}`）也吃——别把对象串成 `[object Object]`', () => {
-    const canon = canonOf([{ 文: R_JUDGE, 类: RULE_CLASS_PACK }]);
+    const canon = canonOf([{ 文: R_JUDGE, 类: '判断依据' }]);
     assert.deepEqual(canon.rules, [R_JUDGE], '★取 `文` 当原文，而不是 `String(对象)`');
 });
 
@@ -93,13 +95,13 @@ test('★★leg64 净化：短版被判据、长版胜过它时，类别跟着�
     //     那是判据写错，不是代码错（本仓"按实测锁、不按脑补锁"的同一条教训）。
     const short = '跨甲境: 跨一阶→DC17 困难检定';
     const long = '跨甲境: 跨一阶→DC17 困难检定; 跨二阶→无效';
-    const canon = canonOf([short, long], [RULE_CLASS_PACK, RULE_CLASS_NONE]);
+    const canon = canonOf([short, long], ['判断依据', RULE_CLASS_NONE]);
     assert.deepEqual(canon.rules, [short, long], '块内原样收（两条都在）');
-    assert.equal(canon.ruleKinds[short], RULE_CLASS_PACK, '短版带判据类别');
+    assert.equal(canon.ruleKinds[short], '判断依据', '短版带判据类别');
     // 合并 ⇒ `dedupeRules` 留**长版**（近义互为前缀，留最长的）
     const merged = mergeCanonChunks([{ canon }]).canon;
     assert.deepEqual(merged.rules, [long], '★合并后只剩长版（去重口径与 leg61 一致）');
-    assert.equal(merged.ruleKinds[long], RULE_CLASS_PACK, '★类别跟着挪到胜者身上（不挪 ⇒ 判据静默丢类别）');
+    assert.equal(merged.ruleKinds[long], '判断依据', '★类别跟着挪到胜者身上（不挪 ⇒ 判据静默丢类别）');
     assert.equal(buildRuleAnchor(merged)?.length, 1, '⇒ 这条判据真的进得了包');
 });
 
@@ -111,38 +113,62 @@ test('★leg64 `keyByPrefix`：互为前缀才兜底，无关的两条不互相�
 
 // ═══════════════ ③ 块间合并：类别跟着并集走 ═══════════════
 test('★leg64 块间合并：`ruleKinds` 跨块并集（同一类只留一份，先到先得）', () => {
-    const a = canonOf([R_JUDGE, R_STYLE], [RULE_CLASS_PACK, '文风禁令']);
-    const b = canonOf([R_JUDGE, R_OTHER], [RULE_CLASS_PACK, '其他']);
+    const a = canonOf([R_JUDGE, R_STYLE], ['判断依据', '文风禁令']);
+    const b = canonOf([R_JUDGE, R_OTHER], ['判断依据', '其他']);
     const merged = mergeCanonChunks([{ canon: a }, { canon: b }]);
     assert.deepEqual(merged.canon.rules, [R_JUDGE, R_STYLE, R_OTHER], '法则仍并集去重');
-    assert.equal(merged.canon.ruleKinds[R_JUDGE], RULE_CLASS_PACK, '★类别没在合并里丢');
+    assert.equal(merged.canon.ruleKinds[R_JUDGE], '判断依据', '★类别没在合并里丢');
     assert.equal(merged.canon.ruleKinds[R_OTHER], '其他');
 });
 
 // ═══════════════ ④ 分堆：面板与进包**读同一个函数** ═══════════════
-test('★★leg64 `classifyRulesByKind`：计数 + 未标数 + 判据那一堆', () => {
-    const canon = canonOf([R_JUDGE, R_JUDGE2, R_STYLE, R_SCRIPT, R_OTHER], [RULE_CLASS_PACK, RULE_CLASS_PACK, '文风禁令', '变量指令', '其他']);
+test('★★leg64 `classifyRulesByKind`：计数 + 未标数 + 进包两类', () => {
+    const all = [R_JUDGE, R_JUDGE2, R_WORLD, R_WORLD2, R_STYLE, R_SCRIPT, R_OTHER];
+    const canon = canonOf(all, ['判断依据', '判断依据', '世界观设定', '世界观设定', '文风禁令', '变量指令', '其他']);
     const st = classifyRulesByKind(canon.rules, canon.ruleKinds);
-    assert.deepEqual(st.计数, { 判断依据: 2, 文风禁令: 1, 变量指令: 1, 其他: 1 });
+    assert.deepEqual(st.计数, { 判断依据: 2, 世界观设定: 2, 文风禁令: 1, 变量指令: 1, 其他: 1 });
     assert.equal(st.未标数, 0);
-    assert.deepEqual(st.判据, [R_JUDGE, R_JUDGE2], '判据按**账本序**（与包里同序）');
-    // 老账（无 ruleKinds）⇒ 全落"未分类"，判据为空
+    assert.equal(st.判据条数, 2, '判据条数单独可读（面板要分别报）');
+    assert.equal(st.世界观条数, 2, '世界观条数单独可读');
+    assert.deepEqual(st.判据, [R_JUDGE, R_JUDGE2, R_WORLD, R_WORLD2],
+        '★进包两类：**判据在前、世界观随后**（闸按这个序吃预算 ⇒ 判据先占，不被世界观挤走）');
+    // 老账（无 ruleKinds）⇒ 全落"未分类"，进包为空
     const legacy = classifyRulesByKind([R_JUDGE, R_OTHER], undefined);
     assert.equal(legacy.未标数, 2);
-    assert.equal(legacy.判据.length, 0, '★老账一条都不进判据（不猜）');
+    assert.equal(legacy.判据.length, 0, '★老账一条都不进包（不猜）');
 });
 
-// ═══════════════ ⑤ 进包：只取判据 · 三道闸 · 老账键不出现 ═══════════════
-test('★★leg64 进包：只有「判断依据」那一类进包，其余三类一条不进', () => {
-    const canon = canonOf([R_JUDGE, R_JUDGE2, R_STYLE, R_SCRIPT, R_OTHER], [RULE_CLASS_PACK, RULE_CLASS_PACK, '文风禁令', '变量指令', '其他']);
+// ═══════════════ ⑤ 进包：判据 + 世界观两类 · 三道闸 · 老账键不出现 ═══════════════
+test('★★★leg64 进包：**「判断依据」与「世界观设定」两类都进**（用户令「世界设定和判定依据都要」）', () => {
+    const all = [R_JUDGE, R_JUDGE2, R_WORLD, R_WORLD2, R_STYLE, R_SCRIPT, R_OTHER];
+    const canon = canonOf(all, ['判断依据', '判断依据', '世界观设定', '世界观设定', '文风禁令', '变量指令', '其他']);
     const anchor = buildRuleAnchor(canon);
-    assert.deepEqual(anchor, [R_JUDGE, R_JUDGE2], '★包里只有判据（文风/变量指令/其他全部留账给面板）');
-    for (const s of [R_STYLE, R_SCRIPT, R_OTHER]) assert.ok(!anchor.includes(s), `「${s}」不进包`);
+    assert.deepEqual(anchor, [R_JUDGE, R_JUDGE2, R_WORLD, R_WORLD2],
+        '★两类都进，判据在前（这是用户拍板的口径：世界设定也要）');
+    for (const s of [R_STYLE, R_SCRIPT, R_OTHER]) assert.ok(!anchor.includes(s), `「${s}」不进包（留账给面板）`);
+});
+
+test('★★leg64 进包：世界观**不许把判据挤出包外**（两类共用一个字符闸时，判据先占）', () => {
+    // 病（实机第一版就是这个形态）：262 条被标成判据 ⇒ 按账本序截断 ⇒ **真判据被"灵气浓度稀薄至普通"
+    //   这类设定挤在门外**。现在两类一起进包，更必须保证"判据先占"这条序。
+    const judges = Array.from({ length: 20 }, (_, i) => `判据${i}：${'数'.repeat(40)}`);   // 20×~45 字符
+    const worlds = Array.from({ length: 200 }, (_, i) => `世界观${i}：${'述'.repeat(90)}`);  // 大量长设定
+    const canon = canonOf([...judges, ...worlds], [...judges.map(() => '判断依据'), ...worlds.map(() => '世界观设定')]);
+    const anchor = buildRuleAnchor(canon);
+    const keptJudges = anchor.filter((s) => s.startsWith('判据')).length;
+    assert.equal(keptJudges, judges.length, `★${judges.length} 条判据一条都不许被世界观挤掉（实际留 ${keptJudges}）`);
+    assert.ok(anchor.some((s) => s.startsWith('世界观')), '世界观也确实进了（不是把那一类整类丢了）');
+    assert.ok(anchor.reduce((a, s) => a + s.length, 0) <= RULE_PACK_CHAR_TOP, '总字符仍在主闸之内');
+    // 反过来：判据自己就把预算吃满时，世界观**允许被让位**（判据优先是有意的，不是 bug）
+    const fatJudges = Array.from({ length: 300 }, (_, i) => `判据${i}：${'数'.repeat(100)}`);
+    const onlyJudge = canonOf([...fatJudges, ...worlds], [...fatJudges.map(() => '判断依据'), ...worlds.map(() => '世界观设定')]);
+    const a2 = buildRuleAnchor(onlyJudge);
+    assert.ok(a2.every((s) => s.startsWith('判据')), '★判据吃满预算时，包里全是判据（世界观让位，有意的）');
 });
 
 test('★★leg64 进包：老账（没有类别）⇒ **键不出现**，与旧行为逐字节相同', () => {
     const canon = canonOf([R_JUDGE]);
-    assert.equal(buildRuleAnchor(canon), null, '★一条判据都没有 ⇒ 返回 null ⇒ `setting.法则` 这个键不出现');
+    assert.equal(buildRuleAnchor(canon), null, '★一条都没有类别 ⇒ 返回 null ⇒ `setting.法则` 这个键不出现');
     // 别人的世界（没有 canon / 空 canon）都不许抛
     assert.equal(buildRuleAnchor(undefined), null);
     assert.equal(buildRuleAnchor({}), null);
@@ -152,15 +178,15 @@ test('★★leg64 进包：老账（没有类别）⇒ **键不出现**，与旧
 test('★leg64 进包：三道闸（条数 / 单条长度 / 总字符）——`rules` 过去**没有任何上界判据**', () => {
     // ① 条数闸（**荒谬上界**：与字符闸的先后关系在下面单独锁）
     const many = Array.from({ length: RULE_PACK_TOP + 15 }, (_, i) => `第 ${i} 条判据：阈值 ${i}`);
-    const c1 = canonOf(many, many.map(() => RULE_CLASS_PACK));
+    const c1 = canonOf(many, many.map(() => '判断依据'));
     assert.equal(buildRuleAnchor(c1).length, RULE_PACK_TOP, `★条数 ≤ ${RULE_PACK_TOP}`);
     // ② 单条长度闸（散文型的判据不许整段灌进包）
     const longOne = `这一条特别长：${'啰'.repeat(RULE_PACK_STR_MAX + 50)}`;
-    const c2 = canonOf([longOne], [RULE_CLASS_PACK]);
+    const c2 = canonOf([longOne], ['判断依据']);
     assert.equal(buildRuleAnchor(c2)[0].length, RULE_PACK_STR_MAX, `★单条截到 ${RULE_PACK_STR_MAX} 字`);
     // ③ 总字符闸（条数够但都偏长时仍不许撑裂包）
     const fat = Array.from({ length: RULE_PACK_TOP }, (_, i) => `第 ${i} 条：${'长'.repeat(RULE_PACK_STR_MAX - 10)}`);
-    const c3 = canonOf(fat, fat.map(() => RULE_CLASS_PACK));
+    const c3 = canonOf(fat, fat.map(() => '判断依据'));
     const got = buildRuleAnchor(c3);
     const chars = got.reduce((a, s) => a + s.length, 0);
     assert.ok(chars <= RULE_PACK_CHAR_TOP, `★总字符 ≤ ${RULE_PACK_CHAR_TOP}（实际 ${chars}）`);
@@ -174,7 +200,7 @@ test('★★leg64 闸的单位纪律：**总字符才是主闸**，条数闸不�
     const n = 70;                                          // 真账实测的最大规模（大荒 70 条判据）
     const avg = 50;                                        // 真账实测平均长度（3477 / 70 ≈ 50）
     const list = Array.from({ length: n }, (_, i) => `判据${i}：${'字'.repeat(avg - 6)}`);
-    const canon = canonOf(list, list.map(() => RULE_CLASS_PACK));
+    const canon = canonOf(list, list.map(() => '判断依据'));
     const got = buildRuleAnchor(canon);
     assert.equal(got.length, n, `★${n} 条真账规模的判据**一条都不许被条数闸砍掉**（实际进 ${got.length} 条）`);
     assert.ok(got.reduce((a, s) => a + s.length, 0) <= RULE_PACK_CHAR_TOP, '且总字符仍在主闸之内');
@@ -183,13 +209,14 @@ test('★★leg64 闸的单位纪律：**总字符才是主闸**，条数闸不�
 
 test('★★leg64 进包真接线：`buildEvolutionPack` 的 `setting.法则` 真的出现（机制在、线也要在）', () => {
     // 本仓最贵的那类病：机制写了但线没接（leg25 g 的别名、leg34 的复活都是）。
-    const canon = canonOf([R_JUDGE, R_STYLE], [RULE_CLASS_PACK, '文风禁令']);
+    const canon = canonOf([R_JUDGE, R_WORLD, R_STYLE], ['判断依据', '世界观设定', '文风禁令']);
     const ssot = {
         context: { world: '测试世界', setting: { frozen: { canon }, dynamic: { tension: { polarity: '甲/乙', intensity: 0.5 }, env: {} } } },
         entities: [], agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 },
     };
     const base = buildEvolutionPack(ssot, null);
-    assert.deepEqual(base.pack.setting.法则, [R_JUDGE], '★判据真的进了每轮包（这是本棒的全部意义）');
+    assert.deepEqual(base.pack.setting.法则, [R_JUDGE, R_WORLD],
+        '★判据与世界观**都**真的进了每轮包（这是本棒的全部意义）');
     assert.ok(!JSON.stringify(base.pack.setting).includes(R_STYLE), '文风禁令没混进去');
     // 老账：同一个位置**不许出现这个键**（零迁移 ⇒ 旧行为逐字节相同）
     const legacy = { ...ssot, context: { ...ssot.context, setting: { frozen: { canon: canonOf([R_JUDGE]) }, dynamic: { tension: { polarity: '甲/乙', intensity: 0.5 }, env: {} } } } };
@@ -205,21 +232,29 @@ test('★★leg64 提示词：名册遍与设定遍**都**问 `判据`（leg62"�
         const shape = p.slice(p.indexOf('{'), p.lastIndexOf('}') + 1);
         assert.ok(shape.includes('判据'), `${name}：形状里也有这一格（只在散文里说＝模型不会交）`);
     }
-    // ★"大多数是其他"必须写在提示词里：不这么写，判据那一类会被灌满 ⇒ 等于整包塞进去（本棒要治的病）
-    assert.ok(RULE_CLASS_GUIDE.some((l) => l.includes('大多数法则都属于"其他"')), '★明写"大多数是其他"');
-    assert.equal(RULE_CLASSES.length, 4, '词表就这四个（含 `其他`）');
+    // ★口径必须写在提示词里（**两轮实机修出来的**，见 `RULE_CLASS_GUIDE` 头注）：
+    //   ① 判据是稀疏的（"一本书通常只有二三十条"）——不这么写，判据那一类会被灌满；
+    //   ② 世界观**不是残渣**（它是独立一类、也进包）——第一版把它当兜底桶，实机当场证明是错的。
+    assert.ok(RULE_CLASS_GUIDE.some((l) => l.includes('一本书通常只有')), '★明写"判据是稀疏的（二三十条）"');
+    assert.ok(RULE_CLASS_GUIDE.some((l) => l.includes('也进每轮包')), '★明写"世界观设定也进包"（用户令「都要」）');
+    assert.ok(RULE_CLASS_GUIDE.some((l) => l.includes('这个世界是怎么运转的')), '★给出判据 vs 世界观的分界句');
+    assert.deepEqual(RULE_CLASSES, ['判断依据', '世界观设定', '文风禁令', '变量指令', '其他'], '词表五个（★世界观已升格成一类）');
+    assert.deepEqual(RULE_CLASSES_PACK, ['判断依据', '世界观设定'], '★进包两类，判据在前');
 });
 
 // ═══════════════ ⑦ 面板：按类别分段 + **如实报**进包条数 ═══════════════
-test('★★leg64 面板：法则栏按类别分段，并如实报"哪几条真的进了包"', () => {
-    const canon = canonOf([R_JUDGE, R_STYLE, R_OTHER], [RULE_CLASS_PACK, '文风禁令', '其他']);
+test('★★leg64 面板：法则栏按类别分段，并如实报"哪几条真的进了包"（两类分开报）', () => {
+    const canon = canonOf([R_JUDGE, R_WORLD, R_STYLE], ['判断依据', '世界观设定', '文风禁令']);
     const html = renderSettingHtml(world(canon));
     assert.ok(html.includes('法则（3 条'), '表头报总条数');
     assert.ok(html.includes('判断依据（1 条）'), '★判据单独一段');
+    assert.ok(html.includes('世界观设定（1 条）'), '★世界观**也单独成段**（第一版它混在兜底的"其他"里）');
     assert.ok(html.includes('文风禁令（1 条）'), '★文风禁令单独一段');
-    assert.ok(/其中 <b>1<\/b> 条（判断依据那类）每轮进模型的包当判定锚/.test(html), '★如实报进包条数（读的就是进包那个函数的分堆）');
+    assert.ok(/其中 <b>2<\/b> 条每轮进模型的包/.test(html), '★如实报进包总条数（读的就是进包那个函数的分堆）');
+    assert.ok(/<b>判断依据 1<\/b> 条/.test(html), '★两类**分开报**（合着报就看不出是谁进了包）');
+    assert.ok(/<b>世界观设定 1<\/b> 条/.test(html), '★世界观那一类也要报出来');
     // ★原文一条不许少（"折起来"不等于"藏掉"，本仓纪律）
-    for (const s of [R_JUDGE, R_STYLE, R_OTHER]) assert.ok(html.includes(s), `原文「${s}」仍在产物里`);
+    for (const s of [R_JUDGE, R_WORLD, R_STYLE]) assert.ok(html.includes(s), `原文「${s}」仍在产物里`);
     // ★HTML 里不许有 markdown 星号（leg60/leg63/leg64 各栽过一次）
     assert.ok(!html.includes('**'), '★整卡不许含 `**`（面板是 HTML）');
 });

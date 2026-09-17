@@ -15,7 +15,7 @@ import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 //   ⇒ leg31b 把 `topLevel` 5 → 10 之后，世界真的变宽了而面板还写着 5，
 //   玩家无法从面板判断任何变宽实验是否奏效（用户实机「一点变化都没有」追出来的真缺陷）。
 //   依赖方向：render → settle（settle 不反向依赖 render）——无环，已在 import 图上核过。
-import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';import { resolveScales, groupScales, classifyRulesByKind, RULE_CLASSES, RULE_CLASS_NONE } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）；★leg63：按原文条目分节；★leg64：法则分类（与进包**同一个函数**）
+import { AGENDA_CAPS, ENTITY_BIRTH_PER_TICK } from './settle.js';import { resolveScales, groupScales, classifyRulesByKind, RULE_CLASSES, RULE_CLASSES_PACK, RULE_CLASS_NONE } from './abstract.js';   // ★leg62：刻度的概念表分组（与 pack.js 同一个读取口）；★leg63：按原文条目分节；★leg64：法则分类（与进包**同一个函数**）
 import { lensList, membersOf, IDLE_FACES_TOP } from './pack.js';   // K46：镜头名单（引擎层同口径）与麾下成员派生——渲染只读复用
 // ★★leg63：进包读数**必须读真源**（`buildScaleAnchor` 就是进包用的那一个函数）。
 //   为什么不能在这里自己按 `TIER_TOP` 另算一份：本仓"两份复制品漂移"的亏吃过多次，
@@ -1748,7 +1748,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     const ruleSections = RULE_CLASSES
         .filter((k) => ruleStat.计数[k])
         .map((k) => `<div class="sw2-hint" style="margin-top:6px"><b>${escapeHtml(k)}（${ruleStat.计数[k]} 条）</b>`
-            + (k === '判断依据' ? '&nbsp;—— 这一类每轮进模型的包当判定锚（写实力/好感/战果/物价时按它判）' : '&nbsp;—— 只留在这里给作者看，不进每轮包')
+            + (RULE_CLASSES_PACK.includes(k) ? '&nbsp;—— 这一类每轮进模型的包' : '&nbsp;—— 只留在这里给作者看，不进每轮包')
             + `</div>${ruleRowsOf((canon.rules || []).filter((r) => { const kk = String((canon.ruleKinds || {})[String(r ?? '').trim()] ?? '').trim(); return (RULE_CLASSES.includes(kk) ? kk : RULE_CLASS_NONE) === k; }))}`)
         .join('');
     const ruleUnmarkedRows = ruleStat.未标数
@@ -1757,19 +1757,25 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             + ruleRowsOf((canon.rules || []).filter((r) => { const kk = String((canon.ruleKinds || {})[String(r ?? '').trim()] ?? '').trim(); return !RULE_CLASSES.includes(kk); }))
         : '';
     // ★如实报进包读数（读的就是 `pack.js` 那个函数用的同一份分堆；旧文案那种"每轮都在包里"的写法不许回来）
+    // ★★leg64 第二轮（用户令「世界设定和判定依据都要」）：进包的是**两类**，读数必须**分开报**
+    //   （合成一个数会让作者看不出"到底是判据进了还是世界观进了"——leg63 那句不准确的文案就是合着报的产物）。
     const rulePackLine = ruleTotal
         ? (ruleStat.判据.length
-            ? `<div class="sw2-hint">其中 <b>${ruleStat.判据.length}</b> 条（判断依据那类）每轮进模型的包当判定锚；`
+            ? `<div class="sw2-hint">其中 <b>${ruleStat.判据.length}</b> 条每轮进模型的包：`
+                + `<b>判断依据 ${ruleStat.判据条数}</b> 条（写实力/好感/战果/物价时按它算）· `
+                + `<b>世界观设定 ${ruleStat.世界观条数}</b> 条（照它写才对味）；`
                 + `其余 ${ruleTotal - ruleStat.判据.length} 条留在本页与账本里，不进每轮包。</div>`
-            : `<div class="sw2-hint">这一栏<b>一条都没进每轮包</b>：进包只取「判断依据」那一类`
+            : `<div class="sw2-hint">这一栏<b>一条都没进每轮包</b>：进包只取「判断依据」与「世界观设定」两类`
                 + `${ruleStat.未标数 ? `，而这份账 ${ruleStat.未标数} 条全是「${escapeHtml(RULE_CLASS_NONE)}」（老账没抽过类别）` : ''}`
                 + ' ——对设定不满意就按上面的「只重抽设定」再抽一次，新账才会带上类别。</div>')
         : '';
     const ruleCard = ruleTotal
         ? `<div class="sw2-set-card"><h4>法则（${ruleTotal} 条 · 按用途分 ${RULE_CLASSES.filter((k) => ruleStat.计数[k]).length + (ruleStat.未标数 ? 1 : 0)} 类）</h4>`
             + `<div class="sw2-hint">书里写下的规则条条都在这里，一条不删。`
-            + `<b>只有「判断依据」那一类进每轮的包</b>——那是"这一轮写剧情要拿它来判"的硬规则（DC 检定、换算率、好感/心防锁…）；`
-            + `文风禁令、变量指令、世界观与格言留在本页给作者看。</div>`
+            + `<b>「判断依据」与「世界观设定」两类进每轮的包</b>——`
+            + `前者是"这一轮写剧情要拿它算/判"的硬规则（DC 检定、换算率、好感/心防锁…），`
+            + `后者是"这个世界怎么运转"（照它写才对味）；`
+            + `文风禁令、变量指令与格言留在本页给作者看。</div>`
             + rulePackLine + ruleSections + ruleUnmarkedRows + `</div>`
         : `<div class="sw2-set-card"><h4>法则（0 条）</h4><div class="sw2-sv-row"><span>（无）</span></div></div>`;
     const histRows = (canon.historyNotes || []).map((h, i) => `<div class="sw2-sv-hist"><span class="sw2-hist-tick">第 ${i + 1} 条</span><span>${escapeHtml(h)}</span></div>`).join('');
