@@ -109,7 +109,38 @@ test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；�
 });
 
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
-// ★leg32e·小说家条款（细案 `docs/spec-novelist-clause.md` §3.2）第一片：**给"该出场但书上没写的人"一条路**
+// ★★★leg66（用户实机第二条裁定）：`newAgendas[].source` 引了**已了结**的事件时，报错**必须给出路**。
+//   现场（真账 tick 8 · 大荒z1）：模型给「苏千欢」起新盘算、源写 `{type:'event', ref:'ev_7_1'}`
+//   （「苏千欢携龙气破开废墟遁走」）——而 `ev_7_1` **已经了结**（`closedAt=7`，被它自己那条盘算满步结算联闭）。
+//   ★**引擎判得对**：`newAgendas` 的源型只有 event/parent/state（`world-step.schema.js:40` 锁着），
+//     `ripple` 不是它的合法源型。但模型**是照输入在写**——`ev_7_1` 就在包里的 `closedRoots`（拾遗）那一栏，
+//     而提示词第 14 条明写"**旧事也能接**，用 source.type='ripple' + ref= 它的 id"⇒
+//     **模型的意图（那件事的余波长出新线）完全合法，只是落错了格子**。
+//   旧文案只说"引一件未决事件，或把源改成 state"——两条都把模型的心愿说成不可能 ⇒ 它会反复换号重试
+//   （leg64 那条"报错把人领错方向"的同一种病）。
+//   ⇒ 本用例锁三件：①仍指名到事、仍说"已经了结"；②给出**拾遗→ripple**那条出路（照着读就能改对）；
+//     ③**不许**把已了结说成"不存在"（与上面 leg64 那条同一纪律）。
+test('★leg66：newAgendas 引已了结事件 ⇒ 报错要指名到事、说"已经了结"，并给出「拾遗→ripple」那条出路', () => {
+    const w = baseWorld();
+    w.agendas = w.agendas || [];
+    w.events = w.events || [];
+    w.events.push({ id: 'ev_gone', title: '苏千欢携龙气破开废墟遁走', source: { type: 'plot', ref: 'a_x' }, position: '大虞皇陵', ripples: [], links: { up: [], down: [] }, closed: true, closedAt: 7 });
+    const r = checkWorldStep(step({
+        newAgendas: [{
+            entity: 'e_merchant', goal: '顺着那缕龙气追下去', visibility: 'known',
+            source: { type: 'event', ref: 'ev_gone' }, maxSteps: 4,
+        }],
+    }), w);
+    assert.equal(r.ok, false, '已了结的事不能当新线的源（语义闸不许放宽）');
+    const msg = r.errors.find((e) => e.includes('已经了结')) || '';
+    assert.ok(msg.includes('ev_gone'), `要指名到号：${msg}`);
+    assert.ok(msg.includes('苏千欢携龙气破开废墟遁走'), `★要指名到**事**（读者才知道是哪件）：${msg}`);
+    assert.ok(msg.includes('ripple'), `★★必须给出「先接旧事（newEvents + ripple）」那条出路：${msg}`);
+    assert.ok(msg.includes('拾遗') || msg.includes('closedRoots'), `★并指出它在输入的哪一栏：${msg}`);
+    assert.ok(!msg.includes('必须引已存在未决事件'), `★已了结的**不许**被说成"不存在"（与 leg64 同一纪律）：${msg}`);
+});
+
+
 //   病（真账 tick 38 实测）：38 轮只有 **4 个属主**，其余 **614 人从未出场**——不是模型不想写别人，
 //   而是入局源只有 book/event/dialogueFact 三型 ⇒ **书上没写过的人永远进不来**（用户：「只有将创作权
 //   交在 llm 手里才能活起来」）。新源型 `entity` = **由在册实体牵出**（ref=那个实体 id）。

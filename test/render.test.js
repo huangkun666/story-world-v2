@@ -1732,7 +1732,11 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   现在分开报"账上根本没这个号"/"在本批次开始前就已了结（第 N 轮）"，且**同一批次内被本轮
     //   自己关掉的因照旧认**（治法见 `settle.js` 的 `captureOpenCauseState`）。
     //   ★起名纪律照旧：`leg66-cause-at-batch-entry` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
-    assert.equal(PANEL_BUILD, 'leg66-cause-at-batch-entry');
+    //   ★★★leg66 再升一格（用户实机第二条裁定）：`newAgendas` 引**已了结**事件的报错补上了
+    //   「拾遗（closedRoots）→ newEvents + ripple → 再用那件新事件当源」那条出路
+    //   （旧文案只说"引未决事件 / 改成 state"，等于把模型合法的心愿说成不可能）。
+    //   ★起名纪律照旧：`leg66-closed-root-path` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    assert.equal(PANEL_BUILD, 'leg66-closed-root-path');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }

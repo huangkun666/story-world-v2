@@ -186,9 +186,13 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //   原来一句"因「ev_5_3」不在账或已了结"是**一句话两义**（读者会去查"是不是抄错号"，而它明明在账上）；
 //   现在分开说"账上根本没有这个号" / "在本批次开始前就已经了结（第 N 轮）"，并且**同一批次内被本轮
 //   自己关掉的因照旧认**（真账 tick 7 那条误判的治法，见 `settle.js` 的 `captureOpenCauseState` 头注）。
-//   ★起名先过禁词扫描（`leg50/52/64` 各踩过一次）：`leg66-cause-at-batch-entry` 不含
+//   ★★★leg66 第二次升位（用户实机第二条裁定）：`newAgendas` 引**已了结**事件时，报错补上了
+//     **「拾遗（closedRoots）→ 先接旧事（newEvents + ripple）→ 再用那件新事件当源」** 那条出路
+//     （旧文案只说"引未决事件 / 改成 state"，把模型合法的心愿说成不可能 ⇒ 它会反复换号重试）。
+//     同批：字段写回的因**在本批次内被本轮关掉也照旧认**（那条裁定文案也在这条 verdict 栏里）。
+//   ★起名先过禁词扫描（`leg50/52/64` 各踩过一次）：`leg66-closed-root-path` 不含
 //     agenda/tick/ssot/schema/chronicle/entity/kind 任一个，形状合 `/^leg\d+-/`。
-export const PANEL_BUILD = 'leg66-cause-at-batch-entry';
+export const PANEL_BUILD = 'leg66-closed-root-path';
 
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
