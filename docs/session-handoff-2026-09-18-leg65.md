@@ -1,6 +1,13 @@
 # 交接 · 第六十五棒（leg65）：**判定原则第一次进了每轮包 —— 接"真机验收"**
 
-> **接手第一件事：读这份。** 第二件事：读 `docs/measure-leg64-rule-kinds.md`（本棒的出数档：
+> ★★★**本文件已被 leg66 取代为"接手第一件事"**——用户在本棒收尾时宣布**进入发布阶段**，
+> 新的交接是 **`docs/session-handoff-2026-09-18-leg66.md`**（发布收尾：monorepo 结构、
+> 安装目录名硬要求、README/LICENSE/manifest 三个缺口、三项已拍板的口径）。
+> **本文件的 §3「待办」除发布相关项外仍然有效**（进包体积落账 / `sourceText` 死路 / 老待办一串）。
+> ⚠ 另外两条本棒之后才确定的事实：**git 根已上移到 `F:/deepseek/plugins`**（monorepo）；
+>   **`plugins/shared/` 不在本插件的部署目录内**（所以 v2 自带 `undo-stack.js`，独立发布安全）。
+
+> **接手第二件事：读** `docs/measure-leg64-rule-kinds.md`（本棒的出数档：
 > 真账 179 条的分类实测、两道闸的**单位教训**、六个坑）。
 > **第三件事**：`docs/measure-leg63-scale-index.md`（刻度成体系 + 三个"探针口径"教训）与
 > `docs/session-handoff-2026-09-18-leg64.md`（= leg63 的交接，§3-A/§3-B 就是本棒与下一棒的活）。
