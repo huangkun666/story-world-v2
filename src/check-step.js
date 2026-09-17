@@ -180,8 +180,17 @@ export function checkWorldStep(step, ssot) {
         if (stype === 'event') {
             // ★leg40b 续（甲）：`findEvent` = 世界账 ∪ **本轮新建的那批**（同轮引用是合法写法，见上方 `findEvent` 注释）
             const ev = findEvent(step, ssot, na.source.ref);
-            if (!ev || ev.closed) {
+            if (!ev) {
                 errors.push(`$.newAgendas[${i}].source: event 源必须引已存在未决事件（当前 ref="${na.source.ref || ''}"）`);
+            } else if (ev.closed) {
+                // ★leg64 第五轮（用户实机贴回的错就在这一格）：**"存在但已了结"与"根本不存在"必须分开报**。
+                //   病：旧信息只有一句"必须引已存在未决事件"，而账上**确实有** `ev_5_1`
+                //   ——读者（与模型）只会理解为"我抄错号了"，于是换一个号再试，再被拒。
+                //   实测现场：大荒那份账 `ev_5_1 [已了结] 丹劫第三道天雷降下，穷奇强攻丹炉`
+                //   ⇒ 真实原因是"这件事办完了"，不是"没有这件事"。
+                //   纪律出处：本文件 `:242` 那条"错误信息**不许再说假话**"（leg32i 用户贴回来过一条把人看懵的）。
+                errors.push(`$.newAgendas[${i}].source: 「${ev.id}」（${String(ev.title || '').slice(0, 24)}）**已经了结**——`
+                    + '起盘算要挂在**正在发生**的事上；这件已经办完了，请引一件未决事件，或把源改成 state');
             }
         } else if (stype === 'parent') {
             const ag = na.source.ref && ssot.agendas.find((a) => a.id === na.source.ref);
@@ -235,7 +244,14 @@ export function checkWorldStep(step, ssot) {
         if (stype === 'event') {
             // ★leg40b 续（甲）：同上——同轮新建的未决事件可作入局之因（新人因"正在发生的这件事"入场）。
             const ev = findEvent(step, ssot, ref);
-            if (!ev || ev.closed) errors.push(`$.newEntities[${i}].source: event 源必须引已存在未决事件（当前 ref="${ref}"）`);
+            // ★leg64 第五轮：同 `newAgendas` 那一格——**"存在但已了结"不许报成"不存在"**
+            //   （用户实机贴回的那条错就是它：`ev_5_1` 在账上、但 `[已了结]`）。
+            if (!ev) {
+                errors.push(`$.newEntities[${i}].source: event 源必须引已存在未决事件（当前 ref="${ref}"）`);
+            } else if (ev.closed) {
+                errors.push(`$.newEntities[${i}].source: 「${ev.id}」（${String(ev.title || '').slice(0, 24)}）**已经了结**——`
+                    + '新人要因**正在发生**的事入场；这件已经办完了，请引一件未决事件，或改用 book/dialogueFact 源');
+            }
         } else if (stype === 'book') {
             if (!bookNames.has(ref)) errors.push(`$.newEntities[${i}].source: book 源必须命中书名录（当前 ref="${ref}"）`);
         } else if (stype === 'dialogueFact') {

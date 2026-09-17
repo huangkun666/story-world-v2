@@ -86,7 +86,9 @@ test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；�
     const w = baseWorld({ context: { world: '临渊城', tension: 0.5, positions: ['临渊城', '大营'], playerId: 'e_player' }, entities: [...baseWorld().entities, { id: 'e_player', kind: 'character', name: '黄坤', location: '临渊城' }] });
     w.events.push({ id: 'ev_closed', title: '旧事', source: { type: 'state' }, position: '临渊城', ripples: [], closed: true });
     const cases = [
-        [{ name: 'A', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_closed' } }, 'event 源必须引已存在未决事件'],
+        // ★leg64 第五轮：`ev_closed` **在账上**（只是已了结）⇒ 报的必须是"已经了结"，不是"必须引已存在未决事件"
+        //   （旧文案让用户/模型都以为"抄错号了"，实测现场：大荒 `ev_5_1 [已了结]` 被当成"不存在"）。
+        [{ name: 'A', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_closed' } }, '已经了结'],
         // ★leg32f：原来这里还有一条「重名 ⇒ 拒」。**已按用户实机反馈撤掉**——重名是"丢掉那条提议"
         //   （账上已有的那个人正在册），不是"世界步不合法"；旧法会让整轮陪葬（连同玩家这一轮的行动）。
         //   新的judgment在下面 leg32f 那两条用例里（含"同一步里别的事照常落账"）。
@@ -97,6 +99,13 @@ test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；�
         const r = checkWorldStep(step({ newEntities: [ne] }), w);
         assert.ok(!r.ok && r.errors.some((e) => e.includes(frag)), `${frag}: ${r.errors.join('; ')}`);
     }
+    // ★leg64 第五轮：**"不存在"与"存在但已了结"必须报成两句不同的话**（本仓"错误信息不许说假话"那条纪律）
+    const gone = checkWorldStep(step({ newEntities: [{ name: 'B', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_nope' } }] }), w);
+    assert.ok(gone.errors.some((e) => e.includes('必须引已存在未决事件')), '压根不存在的号 ⇒ 报"必须引已存在未决事件"');
+    assert.ok(!gone.errors.some((e) => e.includes('已经了结')), '★不存在的号**不许**被说成"已经了结"（两句不许混用）');
+    const closed = checkWorldStep(step({ newEntities: [{ name: 'B', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_closed' } }] }), w);
+    assert.ok(closed.errors.some((e) => e.includes('已经了结')), '账上真有的已了结事件 ⇒ 报"已经了结"');
+    assert.ok(closed.errors.every((e) => !e.includes('必须引已存在未决事件')), '★已了结的**不许**被说成"不存在"');
 });
 
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
