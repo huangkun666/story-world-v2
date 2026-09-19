@@ -375,33 +375,45 @@ test('细案 §3.5/T3 · 全册渲染零禁词（BLACKLIST 全量扫描，含新
     assert.ok(all.chronicle.includes('编年 · 史卷'));
 });
 
-// ── 真账副本（只读；不在则跳过——照既有约定，真账装置不进仓库、不进判据的硬依赖）──
-const REAL = 'F:/deepseek/tmp/sw2-ui-audit/world.json';
-const hasReal = existsSync(REAL);
+// ── 真账副本（只读）——★leg96c：**已收进仓库**，不再依赖仓库外路径 ──
+//   ★为什么搬进来（这是一次真实损失换来的纪律）：原来这里写的是
+//     `F:/deepseek/tmp/sw2-ui-audit/world.json`（仓库外）。leg96c 清理那个临时目录时把它当垃圾删了，
+//     而这三条判据写的是"文件不在就跳过"⇒ **它们不报错、只是静默跳过**（`skipped 3`）——
+//     ★**静默跳过比红了更坏：红了有人看见，跳过没人看见。**
+//   ★那份 360 行的旧副本已无法恢复（现存副本是 367 / 162 行，回收站里那几份是小世界）
+//     ⇒ 本笔换成同世界的另一份真账（60 轮 · 大荒z · 编年 **367** 行），并**按它的实测重新标定**下面所有数字。
+//   ★纪律：**判据要吃的真账副本，跟判据一起住在仓库里**（先例 `test/fixtures/*-world.json`）——
+//     否则它总会被某一次清理带走，而"跳过的绿"看起来永远是对的。
+//   ★位置口径：放 **`test/fixtures/` 这一层**，**不放进 `fixtures/snapshots/`**——
+//     那个子目录被 `snapshot-replay.test.js` 整个扫走当"快照"用（它按 `fx.sourceWorld` 去找世界文件），
+//     真账放进去会被它当快照解析（leg96c 当场踩到：`ENOENT .../test/fixtures/undefined`）。
+//     与仓里既有的 `live-world.json` / `player-world.json` / `golden-world.min.json` 同一层、同一命名法。
+const REAL = new URL('./fixtures/chronicle-page-real-world.json', import.meta.url);
+const hasReal = existsSync(REAL);   // 留作防御（正常路径下它必然在；不在只可能是仓库被剪过）
 
-test('细案 §3.2 · 真账 360 行：零 UNKNOWN + 子类合计 = 总行数 + 四个数（123/69/92/48/28）', { skip: hasReal ? false : '真账副本不在（只读装置不在仓库里）' }, () => {
+test('细案 §3.2 · 真账 367 行：零 UNKNOWN + 子类合计 = 总行数 + 四个数（126/70/92/50/29）', { skip: hasReal ? false : '★真账副本不在：它本该在 test/fixtures/chronicle-page-real-world.json（跑 leg96c 的装置可重建）' }, () => {
     const w = JSON.parse(readFileSync(REAL, 'utf8'));
     const sel = selectChroniclePage(w, { ...makeChronicleView(), range: 'all' });
-    assert.equal(sel.total, 360, '真账编年 360 行');
-    assert.equal(sel.counts.event, 123, '真事件 123');
-    assert.equal(sel.counts.book, 237, '账目 237');
-    assert.deepEqual(sel.bookGroups.map((g) => [g.key, g.hit]), [['走一步', 69], ['了结', 92], ['起因', 48], ['结清', 28]]);
+    assert.equal(sel.total, 367, '真账编年 367 行');
+    assert.equal(sel.counts.event, 126, '真事件 126');
+    assert.equal(sel.counts.book, 241, '账目 241');
+    assert.deepEqual(sel.bookGroups.map((g) => [g.key, g.hit]), [['走一步', 70], ['了结', 92], ['起因', 50], ['结清', 29]]);
     const sum = sel.bookGroups.reduce((a, g) => a + g.hit, 0) + sel.counts.event;
-    assert.equal(sum, 360, '子类合计 + 真事件 = 总行数（★这是底线：零未分类）');
-    assert.equal(sel.counts.done, 120, '已了结 120（了结 92 + 结清 28）');
-    assert.equal(sel.counts.open, 240);
-    // 「链」钮数（真账实测 215 行有目标）——三路口径下不许有假钮
+    assert.equal(sum, 367, '子类合计 + 真事件 = 总行数（★这是底线：零未分类）');
+    assert.equal(sel.counts.done, 121, '已了结 121（了结 92 + 结清 29）');
+    assert.equal(sel.counts.open, 246);
+    // 「链」钮数（真账实测 218 行有目标）——三路口径下不许有假钮
     const noTarget = (w.chronicle || []).filter((c) => c.chainRef || c.eventRef).filter((c) => !chronicleChainTargetOf(c));
     assert.equal(noTarget.length, 0, '★"渲染了钮却没有目标"的行数必须是 0');
 });
 
-test('细案 §3.3 · 真账"近 N 轮"三档读数（近 5 轮 17 · 近 10 轮 29 · 近 20 轮 48 · 全部 123）', { skip: hasReal ? false : '真账副本不在' }, () => {
+test('细案 §3.3 · 真账"近 N 轮"三档读数（近 5 轮 17 · 近 10 轮 30 · 近 20 轮 49 · 全部 126）', { skip: hasReal ? false : '真账副本不在' }, () => {
     const w = JSON.parse(readFileSync(REAL, 'utf8'));
     const ev = (range) => selectChroniclePage(w, { ...makeChronicleView(), range }).events.hit;
     assert.equal(ev('5'), 17);
-    assert.equal(ev('10'), 29);
-    assert.equal(selectChroniclePage(w, { ...makeChronicleView(), range: '20' }).events.hit, 48);
-    assert.equal(ev('all'), 123);
+    assert.equal(ev('10'), 30);
+    assert.equal(selectChroniclePage(w, { ...makeChronicleView(), range: '20' }).events.hit, 49);
+    assert.equal(ev('all'), 126);
 });
 
 test('细案 §3.6 · 真账：占位词「未明」不进搜索面（不含它的行搜不到，含它的行照旧搜得到）', { skip: hasReal ? false : '真账副本不在' }, () => {

@@ -26,13 +26,13 @@ import {
     linkContainedFactions,
     isTransientCallError,
     SETTING_CHUNK_CHAR,
-    dedupeTiers,
-    dedupeRules,
     BOOK_FIELD_KEYS,
     BOOK_FIELD_MAX,
     BOOK_FIELD_MAX_OPEN,
     BOOK_FIELD_MAX_WIDE,
 } from '../src/abstract.js';
+// ★★★leg71（丙案）：`dedupeTiers` / `dedupeRules` 跟着"档位归一 + 法则分类"那一块搬到 `abstract-tier.js`。
+import { dedupeTiers, dedupeRules } from '../src/abstract-tier.js';
 
 // —— ① 出处闸（纯函数）——
 test('★leg61 出处闸：整串命中 / 维度+数值命中 / 都对不上 ⇒ inferred', () => {

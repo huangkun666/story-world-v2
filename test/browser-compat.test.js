@@ -29,18 +29,34 @@ function listSources() {
     for (const f of readdirSync(path.join(ROOT, 'src'))) {
         if (f.endsWith('.js')) out.push(path.join(ROOT, 'src', f));
     }
-    out.push(path.join(ROOT, 'web', 'index.js'));
+    // ★★★leg72（丙-web）：接线层**从"一个文件"变成"一个目录"**（`web/memory-store.js` 等）。
+    //   本扫描面必须**整个 web/ 目录**都扫，否则新模块成了"浏览器可载性"的盲区——
+    //   ★这正是 leg71 §4.1 那类病的同族：**判据还绿，但它已经照不到新东西**（覆盖面悄悄漏了）。
+    //   ★同时保留 `web/index.js` 的显式在列断言（下面那条），让"入口文件被漏扫"不可能发生。
+    for (const f of readdirSync(path.join(ROOT, 'web'))) {
+        if (f.endsWith('.js')) out.push(path.join(ROOT, 'web', f));
+    }
     return out;
 }
 
 const files = listSources();
 
-test('K30 扫描面完整：src 全部模块 + web/index.js 在列', () => {
+test('K30 扫描面完整：src 全部模块 + web/ 全部模块在列（leg72：web 侧已不止 index.js）', () => {
     assert.ok(files.length >= 20, `扫描面 ${files.length} 项`);
     assert.ok(files.some((f) => f.endsWith(path.join('src', 'transport-http.js'))));
     assert.ok(files.some((f) => f.endsWith(path.join('src', 'st-preset.js'))));
     assert.ok(files.some((f) => f.endsWith(path.join('src', 'transport-config.js'))));
     assert.ok(files.some((f) => f.endsWith(path.join('web', 'index.js'))));
+    // ★★★leg72：**扫描面必须跟着目录走**——新加的 web 侧模块要**自动**被扫到，
+    //   而不是"等谁想起来再加一行"（那正是覆盖面悄悄漏掉的老路）。
+    //   判据：`web/` 下每一个 .js 都必须在扫描面里（拿目录现算，不写死清单）。
+    for (const f of readdirSync(path.join(ROOT, 'web'))) {
+        if (!f.endsWith('.js')) continue;
+        assert.ok(files.some((p) => p.endsWith(path.join('web', f))),
+            `★web/${f} 不在浏览器可载性扫描面里 ⇒ 它成了盲区（改 listSources 让它跟着目录走）`);
+    }
+    // 反向自证：这条判据真的会咬（塞一个不存在的"新模块"进清单，断言必须失败）
+    assert.ok(!files.some((p) => p.endsWith(path.join('web', '不存在的模块.js'))), '★反向自证：不在盘上的文件不许出现在扫描面');
 });
 
 test('K30 浏览器面零 Node 内建（Node-only 模块豁免）', () => {

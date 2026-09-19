@@ -19,7 +19,10 @@
       <span class="sw2-main" id="sw2_status_text">观棋窗口就绪 · 世界随对话自动推进</span>
     </div>
     <nav class="sw2-tabs" id="sw2_tabs">
-      <div class="sw2-tab sw2-active" data-view="board">&#9820; 观棋</div>
+      <!-- ★leg97 并页（用户令「观棋和说书其实是一个东西吧，不如就合并成一页也简洁些」）：
+           原来的「观棋」与「说书」两个页签**并成一页**——主层是四层（大势→面→线→点），
+           底下接着观棋原来的信息带/盘算总览/动态流/位置速览。⇒ 页签从九个减到八个。 -->
+      <div class="sw2-tab sw2-active" data-view="panorama">&#9820; 观棋 &#183; 说书</div>
       <div class="sw2-tab" data-view="chronicle">&#128220; 编年</div>
       <div class="sw2-tab" data-view="archive">&#127963; 大事纪&#183;旧卷</div>
       <div class="sw2-tab" data-view="entities">&#128101; 角色与势力</div>
@@ -28,7 +31,7 @@
       <div class="sw2-tab" data-view="snapshots">&#128190; 快照</div>
       <div class="sw2-tab" data-view="settings">&#9881; 设置</div>
     </nav>
-    <section id="sw2_view_board" class="sw2-view sw2-active"><div class="sw2-placeholder">观棋页（时局 / 信息带 / 盘算总览 / 动态流 / 位置速览）——已接入，打开即渲染</div></section>
+    <section id="sw2_view_panorama" class="sw2-view sw2-active"><div class="sw2-placeholder">观棋 &#183; 说书（大势 → 面 → 线 → 点；底下接信息带 / 盘算总览 / 动态流 / 位置速览）——已接入，打开即渲染</div></section>
     <section id="sw2_view_chronicle" class="sw2-view"><div class="sw2-placeholder">编年 · 史卷（五筛 + 因果链珠链视图）——已接入</div></section>
     <section id="sw2_view_archive" class="sw2-view"><div class="sw2-placeholder">大事纪&#183;旧卷（里程碑 / 阅卷）——已接入</div></section>
     <section id="sw2_view_entities" class="sw2-view"><div class="sw2-placeholder">角色与势力（影响力 / 四维 / 状态徽）——已接入 · 实体状态体系随 K37 主线</div></section>

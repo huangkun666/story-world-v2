@@ -15,7 +15,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildMemoryPayload, MEMORY_TABLE_STATE, MEMORY_TABLE_EVENTS, PLUGIN_TABLE_EVENTS } from '../src/memory-bridge.js';
-import { memoryStoreReport, memoryStoreCheckLine } from '../web/index.js';
+// ★★★leg72（丙-web）：同 `memory-bridge.test.js` —— 记忆那一族改从新家取。
+import { memoryStoreReport, memoryStoreCheckLine } from '../web/memory-store.js';
 
 // 夹具刻意含一处"人名与地名同名"的危险形状：`大虞` 既是势力名、又是**玩家所在地**（真账里正是这样，
 //   用户截图里"世界状态说你在大虞"与"世界大事的波及名单里有大虞"就是这么来的）。

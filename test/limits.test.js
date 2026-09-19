@@ -213,7 +213,10 @@ test('★★★leg63：「待启用名单」调到 N ⇒ 名单正好 N 张脸�
     const packSrc = readFileSync(new URL('../src/pack.js', import.meta.url), 'utf8');
     const settleSrc = readFileSync(new URL('../src/settle.js', import.meta.url), 'utf8');
     assert.match(packSrc, /computeIdleFaces\(ssot, lim\?\.待启用名单/, '★包那侧走上限参数（不是裸常量）');
-    assert.match(settleSrc, /computeIdleFaces\(ssot, resolveLimits\(world\)\.待启用名单\)/, '★门控那侧读同一份（否则名单空转）');
+    assert.match(settleSrc, /computeIdleFaces\(ssot, resolveLimits\(world\)\.待启用名单\)/,
+        '★门控那侧读同一份（否则名单空转）'
+        + '——★leg84（乙-2）：这一行随阶段化搬进了 `computeSpotlight` 阶段（实参仍是 `ssot` 与 `resolveLimits(world)`，'
+        + '**语义一个字没变**：门控读的仍是账上那个上限）。');
     // 端到端：真出一次包，看名单条数跟着账上走
     const p = buildEvolutionPack(w30, null, { lim: resolveLimits(w30) });
     assert.equal(p.pack.idleFaces.length, 30, '★进包的名单条数 = 账上那个数');

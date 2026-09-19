@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHttpTransport, createEnvTransport, PROPOSED_CALL_LIMITS, EXTRACTION_MAX_TOKENS, EXTRACTION_TIMEOUT_MS } from '../src/transport-http.js';
+import { isTransientCallError } from '../src/abstract.js';
 
 test('HTTP 传输：请求形状正确（URL/鉴权/payload）且透传内容', async () => {
     let captured;
@@ -53,6 +54,45 @@ test('K36/A-5 超时防线：超时（AbortController）→ 竞态中止并抛�
     const t2 = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: ok, timeoutMs: 1000 });
     assert.equal(await t2('x'), '{"a":1}');
 });
+
+// ★★★leg93d（交接 §5.1 登记了两棒的那一行 · 真因修）：超时那句人话**必须真的到得了用户眼前**。
+//   病：真浏览器里 fetch 被中止时抛的是**它自己的** DOMException（`signal is aborted without reason`），
+//   **不带**我们 `abort(reason)` 传进去的 reason ⇒ 那句英文一路被包成 `传输失败: …`
+//   （`worldstep.js:14`）印到状态条上（`async-tick.js:43`）：「⚠ 演算失败：传输失败:
+//   signal is aborted without reason」——**看得出失败、看不出为什么**（用户为这句查了两棒）。
+//   ★★为什么上面那条老判据一直是绿的（**空绿的第二个实例**，形状与 leg89 那次一模一样）：
+//     它的假 fetch 写的是 `reject(opts.signal.reason)` —— **把 reason 直接传了出来**，
+//     于是 `/超时/` 过得去；而**真 fetch 不这么干**。⇒ 本条的假 fetch 照**真浏览器语义**写。
+test('★★★leg93d：真浏览器语义下超时也要抛**人话**（不是 DOMException 那句英文）', async () => {
+    // 照真 fetch：被中止 ⇒ 抛 DOMException，**reason 不参与**
+    const realFetchShape = (url, opts) => new Promise((_resolve, reject) => {
+        opts.signal?.addEventListener('abort', () => {
+            reject(new DOMException('signal is aborted without reason', 'AbortError'));
+        });
+    });
+    const t = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: realFetchShape, timeoutMs: 30 });
+    let seen = null;
+    try { await t('x'); } catch (e) { seen = e; }
+    assert.ok(seen, '必须抛错（不许静默返回空）');
+    // ① 玩家可见的那一句必须是**人话**，且**说得出是多少毫秒**（超时是我们自己发的信号，我们知道）
+    assert.match(String(seen.message), /超时/, `★状态条上要能读懂：${seen.message}`);
+    assert.match(String(seen.message), /30ms/, '★人话里要带真实的超时值（从我们自己的 timeoutMs 来）');
+    assert.ok(!/signal is aborted without reason/.test(String(seen.message)),
+        '★★不许把那句英文原样抛出去（这就是用户在控制台里看到、又查不出所以然的那一行）');
+    // ② 超时的**标志位与止损语义一个都不许丢**（`abstract.js` 靠它判"不重试、不拆半"）
+    assert.equal(seen.sw2Timeout, true, '★sw2Timeout 必须还在（丢了就会被当成可重试的瞬时错 ⇒ 又等满一个超时）');
+    assert.equal(seen.cause?.name, 'AbortError', '★原异常挂在 cause 上（要复盘仍拿得到名与栈）');
+    // ③ 与"网关偶发空回复"仍分得开：瞬时错判据不许把这条超时算进去
+    assert.equal(isTransientCallError(seen), false, '★超时=止损：不许被判成可重试的瞬时错');
+});
+
+// ★leg93d 反面：**没有**我们的标志位、message 里也没有 abort 字样的普通错，不许被误当成超时
+test('leg93d 反面：普通失败不许被误判成超时（标志位与文案都不认它）', () => {
+    assert.equal(isTransientCallError({ message: 'HTTP 500' }), true, '500 仍是可重试的瞬时错');
+    assert.equal(isTransientCallError({ message: 'HTTP 401' }), false, '配置错不重试');
+    assert.equal(isTransientCallError({ message: '主调用超时（30000ms）——这一轮没等到模型回话，已中止', sw2Timeout: true }), false,
+        '★带标志的人话超时同样不重试（新文案里没有 abort 字样，靠的是标志位）');});
+
 
 test('K36/A-5 max_tokens 上限：默认带定案值 16384；显式传参可覆盖/关闭', async () => {
     let bodies = [];

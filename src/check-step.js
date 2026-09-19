@@ -13,7 +13,25 @@ import { normalizePosition } from './position.js';   // leg33：剥掉引擎自�
 //   ★无环：`pack.js` 只依赖 `gate.js`/`abstract.js`，两者都不回头 import 本文件
 //     （`settle.js` 同时 import 了本文件与 pack.js，但**本文件不 import settle**——见 `position.js:3` 那条留档）。
 import { buildScaleTableIndex, sanitizeScaleRequests, SCALE_ONDEMAND_TOP } from './pack.js';
+// ★★★leg67（甲案 · 用户 2026-09-18 拍板）：**引用完整性收成单一主人**。
+//   判据（"这个号在此时此地能不能这么用"）与 id 解析全部住进 `src/ref-rules.js`（零 import 的叶子模块）；
+//   本文件**只留渲染**（`$.foo[i].source: <判据文案>`）与结构/身份/额度类校验。
+//   ★为什么必须收口：同一套规矩原先在本文件与 `sanitize-step.js` 各手写一份，**已实测长歪**——
+//     `newEntities.source.type==='entity'` 引已灭实体：本文件**拒整步**（世界原样不动），
+//     净化器**只丢那一条**（其余照落）。同一份输入、两个引擎侧关口、两种后果。
+//     细案 `docs/plan-structure-optimization.md` §1.3：leg66 两天三条 bug 同一个根，全在这里。
+//   ★依赖方向仍是树：`ref-rules.js` 零 import ⇒ 不引入环（与 `position.js` 同为叶子）。
+import { judgeRef, renderVerdict, resolveRefTarget, eventOrdinal, newEventIdsOf } from './ref-rules.js';
+// ★`newEventIdsOf` 从本文件 re-export（实现已搬进 `ref-rules.js`）：`settle.js` 与既有用例的 import 面不动。
+export { newEventIdsOf } from './ref-rules.js';
 // leg25 c：属性白名单（INBORN_ATTR_KEYS）随 `stateChanges` 整条删除——四维浮点已不存在，没有键可白名单。
+
+/** ★leg67（甲案）：判一个引用、并把**判据文案**渲染出来。
+ *  渲染刻意留在本文件——校验面的输出是 `$.foo[i].source: <判据文案>`，与净化器的"丢掉理由"不同形。 */
+const verdictOf = (point, source, ctx) => {
+    const v = judgeRef(point, source, ctx);
+    return v ? renderVerdict(v) : null;
+};
 
 // ★leg34（小说家条款 §6）：实体字段写回的三条上限/黑名单——**本文件是唯一真源**（照 AGENDA_INVOLVED_CAP 的惯例）。
 //   ★三个数字都是**提案态**（铁律 2），细案 §6.2 明写"数字先出曲线再报批"；本棒按最小可跑取值并如实登记未出曲线。
@@ -83,16 +101,9 @@ function indexIds(ssot) {
 //   于是"同轮引用"唯一可靠的解析方式就是**位次**：第 i 件事 ⇒ 模型说的号解析到 `step.newEvents[i]`。
 //   这也是它救得回 wide 臂那个停摆的原因：模型写 `ev_5_3`（它以为是 5 轮）而引擎记的是 6 轮——
 //   按位次解析，说的就是同一件事。
-/** 本轮新事件**将要拿到的 id**（引擎的发号规矩，唯一真源；`settle.js` 的 `hangEvents` 与净化器都从这里取）。 */
-export function newEventIdsOf(step, tick) {
-    return (step?.newEvents || []).map((_, i) => `ev_${tick}_${i + 1}`);
-}
-
-/** 从"形如 `ev_<n>_<m>` 的号"里取出位次 m（不是这个形状 ⇒ null）。 */
-function eventOrdinal(ref) {
-    const m = /^ev_\d+_(\d+)$/.exec(String(ref || ''));
-    return m ? Number(m[1]) : null;
-}
+/** 本轮新事件**将要拿到的 id**（引擎的发号规矩）。
+ *  ★leg67：**实现已搬进 `ref-rules.js`**（那条规矩与"按位次解析"是一对，必须同住一处）；
+ *  本文件 `import` 它、并 re-export ⇒ `settle.js`、净化器与既有用例的取值面一个字不动。 */
 
 /**
  * ★leg40b 续（死锁修复·**这一步不能省**）：把"按位次认下来的同轮引用"**改写成引擎真发的号**。
@@ -133,18 +144,12 @@ export function normalizeSameStepEventRefs(step, tick) {
 }
 
 /** 事件查找：**世界账优先**，找不到再看本轮新建的那批。
- *  ★本函数是"事件引用算不算存在"的**唯一真源**（校验与净化器共用）——两把尺子会长歪，见 `sanitize-step.js` 头注。
+ *  ★leg67：本函数退化成一层"取 `.target`"的薄壳——**真正的解析只有一处**（`ref-rules.js` 的
+ *    `resolveRefTarget`），校验与净化器共用它（两把尺子会长歪，见 `sanitize-step.js` 头注）。
  *  ★同轮那半用的是**位次解析**（见上方长注）：模型写 `ev_<任意轮号>_<m>` ⇒ 落到本轮第 m 件事上。
  *    只有两个条件同时成立才认：① 世界账里**没有**这个 id（有则以账为准）；② 位次落在本轮 `newEvents` 范围内。 */
 export function findEvent(step, ssot, ref) {
-    if (!ref) return null;
-    const onWorld = (ssot.events || []).find((e) => e.id === ref);
-    if (onWorld) return onWorld;
-    const list = step?.newEvents || [];
-    if (!list.length) return null;
-    const ord = eventOrdinal(ref);
-    if (ord == null || ord < 1 || ord > list.length) return null;
-    return list[ord - 1] || null;
+    return resolveRefTarget(ssot, ref, { step, includeSameRound: true, includeArchived: false }).target;
 }
 
 export function checkWorldStep(step, ssot) {
@@ -163,7 +168,12 @@ export function checkWorldStep(step, ssot) {
     //    K8 禁写规则（优先于未知实体检查）：模型禁写玩家——actions 涉 playerId 一律拒绝，世界如实不动
     for (const [i, a] of step.actions.entries()) {
         if (playerId && a.entity === playerId) errors.push(`$.actions[${i}].entity: 模型禁写玩家 "${playerId}"（红线 1 代码化）`);
-        if (!entityIds.has(a.entity)) errors.push(`$.actions[${i}].entity: 未知实体 "${a.entity}"`);
+        // ★★★leg67 甲-余：行动方存在性收进判据表（`'actions.entity'`）——原先与净化器各写一份。
+        //   ⚠紧邻上面那条**不是**同一件事（那条是红线 1 的"禁写玩家"，读 `context.playerId`）。
+        {
+            const v = verdictOf('actions.entity', { type: 'id', ref: a.entity }, { world: ssot, step });
+            if (v) errors.push(`$.actions[${i}].entity: ${v}`);
+        }
     }
     // ★leg32h（用户：「又把主角演了」）：**禁写玩家的面上加一条——不许推进玩家的盘算**（见 ②b' 段落的实现）。
     //   为什么放在 ②b'：它属于"身份/因果"校验（盘算属主 == 玩家），与 agendaAdvances 的形状校验同段。
@@ -175,52 +185,26 @@ export function checkWorldStep(step, ssot) {
     for (const [i, na] of (step.newAgendas || []).entries()) {
         // K14（K13 施工补差）：模型禁写玩家三通道完整——行动/状态变更（K8）+ 新盘算提议（玩家是棋子不是模拟主体，盘算树细案 §2）
         if (playerId && na.entity === playerId) errors.push(`$.newAgendas[${i}].entity: 模型禁写玩家 "${playerId}"（红线 1 代码化）`);
-        if (!entityIds.has(na.entity)) errors.push(`$.newAgendas[${i}].entity: 未知实体 "${na.entity}"`);
-        const stype = na.source?.type;
-        if (stype === 'event') {
-            // ★leg40b 续（甲）：`findEvent` = 世界账 ∪ **本轮新建的那批**（同轮引用是合法写法，见上方 `findEvent` 注释）
-            const ev = findEvent(step, ssot, na.source.ref);
-            if (!ev) {
-                errors.push(`$.newAgendas[${i}].source: event 源必须引已存在未决事件（当前 ref="${na.source.ref || ''}"）`);
-            } else if (ev.closed) {
-                // ★leg64 第五轮（用户实机贴回的错就在这一格）：**"存在但已了结"与"根本不存在"必须分开报**。
-                //   病：旧信息只有一句"必须引已存在未决事件"，而账上**确实有** `ev_5_1`
-                //   ——读者（与模型）只会理解为"我抄错号了"，于是换一个号再试，再被拒。
-                //   实测现场：大荒那份账 `ev_5_1 [已了结] 丹劫第三道天雷降下，穷奇强攻丹炉`
-                //   ⇒ 真实原因是"这件事办完了"，不是"没有这件事"。
-                //   纪律出处：本文件 `:242` 那条"错误信息**不许再说假话**"（leg32i 用户贴回来过一条把人看懵的）。
-                // ★★★leg66（用户实机第二条：`newAgendas[2].source` 引了 `ev_7_1`「苏千欢携龙气破开废墟遁走」）：
-                //   **这一格引擎判得对**（`newAgendas` 的源型只有 event/parent/state，
-                //   而 `ripple` **不是**它的合法源型——`world-step.schema.js:40` 锁着），
-                //   错的是**这句提示没给出路**：`ev_7_1` 正是 `closedRoots`（拾遗）那一栏里的"可以动手接的旧事"，
-                //   提示词第 14 条明写"**旧事也能接**，用 `source.type="ripple"` + ref= 它的 id"，
-                //   而模型把这件事写进了 `newAgendas`（源型给成了 `event`）⇒ 意图对、落点错。
-                //   旧文案只说"引一件未决事件，或把源改成 state"——**两条都把模型的心愿（那件事的余波长出新线）
-                //   说成不可能**，于是它会反复换号重试（正是 leg64 那条"报错把人领错方向"的同一种病）。
-                //   ⇒ 补上第三条路（**这才是它想要的那条**）：先接旧事（`newEvents` + `ripple`）⇒
-                //     那件**新事件**就是未决的 ⇒ 下一轮（或同轮）再用它当 `newAgendas` 的 event 源。
-                //   ★只改文案，**不动判据**：`newAgendas` 的源型一个字不放宽（放宽带宽的是"线要挂在正在发生的事上"这条语义闸）。
-                errors.push(`$.newAgendas[${i}].source: 「${ev.id}」（${String(ev.title || '').slice(0, 24)}）**已经了结**——`
-                    + '起盘算要挂在**正在发生**的事上；这件已经办完了。三条出路：'
-                    + '① 换一件**未决**事件当源；'
-                    + `② 若这就是你要接的那条旧线（它在输入的"拾遗/closedRoots"一栏里）——**先接它**：`
-                    + `用 newEvents 写一条 source.type="ripple" + ref="${ev.id}" 的新事件（"那件事的余波现在显出来了"），`
-                    + '那条**新事件**就是未决的，再用它当本条的 event 源；'
-                    + '③ 真是局势自己拱出来的处境，才把源改成 state');
-            }
-        } else if (stype === 'parent') {
-            const ag = na.source.ref && ssot.agendas.find((a) => a.id === na.source.ref);
-            if (!ag) {
-                errors.push(`$.newAgendas[${i}].source: parent 源必须引已存在盘算（当前 ref="${na.source.ref || ''}"）`);
-            } else if (ag.closed) {
-                errors.push(`$.newAgendas[${i}].source: parent 源必须是未结算（在飞）盘算`);
-            }
-        } else if (stype === 'state' && na.source?.ref) {
-            errors.push(`$.newAgendas[${i}].source: state 源不应带 ref`);
+        // ★★★leg67 甲-余：属主存在性也收进判据表（`'newAgendas.entity'`）——它原先与净化器各写一份。
+        {
+            const v = verdictOf('newAgendas.entity', { type: 'id', ref: na.entity }, { world: ssot, step });
+            if (v) errors.push(`$.newAgendas[${i}].entity: ${v}`);
         }
+        // ★leg40b 续（甲）：同轮引用是合法写法——`ref-rules.js` 的 event 格在解析时并进"本轮新建的那批"。
+        // ★★★leg67（甲案）：**这一段的判据整体搬进 `src/ref-rules.js` 的 `'newAgendas.source'` 表**
+        //   （含 leg64 第五轮那条"存在但已了结 ≠ 不存在"的分开报、以及 leg66 第二条裁定补的那**三条出路**）。
+        //   本文件只剩两行渲染——**判据文案不再在这里手写**（M2 源码锁扫的就是"这里有没有手写判词"）。
+        //   ★本仓实测过两把尺子会长歪，故 `state`/`parent`/`event` 三型现在都由同一张表回答。
+        //   ★`if (stype === ...)` 那圈分派也一并删了：分派住进表里（源型 ⇒ 那一格），本文件不挑源型。
+        const v = verdictOf('newAgendas.source', na.source, { world: ssot, step });
+        if (v) errors.push(`$.newAgendas[${i}].source: ${v}`);
     }
     for (const [i, ad] of step.agendaAdvances.entries()) {
-        if (!agendaIds.has(ad.agendaId)) errors.push(`$.agendaAdvances[${i}].agendaId: 未知盘算 "${ad.agendaId}"`);
+        // ★leg67（甲案）：判据搬进 `src/ref-rules.js` 的 `'agendaAdvances.agendaId'` 表。
+        {
+            const v = verdictOf('agendaAdvances.agendaId', { type: 'id', ref: ad.agendaId }, { world: ssot, step });
+            if (v) errors.push(`$.agendaAdvances[${i}].agendaId: ${v}`);
+        }
         // ★leg32h（用户：「又把主角演了」）：**红线 1 补一个缺口——不许推进玩家的盘算**。
         //   实测机制（真账 tick 50）：玩家棋子叫「你」（`attachPlayerPiece` 初始化时没拿到玩家名），
         //   而主角「黄坤」在 t42 被模型当**新实体**入局（`e_42_1`）⇒ 世界账里两个平行的人
@@ -236,12 +220,10 @@ export function checkWorldStep(step, ssot) {
     // ②c 取消通道（K18/因果链 T5）：提议放弃——agendaId 必须存在且未结算（"已结算盘算不可取消"）；
     // 模型只有提议权，裁决归引擎；玩家不是模拟主体（agendaCancels 无 entity 通道，形状天然无玩家面）
     for (const [i, ac] of (step.agendaCancels || []).entries()) {
-        const ag = ac.agendaId && ssot.agendas.find((a) => a.id === ac.agendaId);
-        if (!ag) {
-            errors.push(`$.agendaCancels[${i}].agendaId: 未知盘算 "${ac.agendaId || ''}"`);
-        } else if (ag.closed) {
-            errors.push(`$.agendaCancels[${i}].agendaId: 已结算盘算不可取消（"${ac.agendaId}"）`);
-        }
+        // ★leg67（甲案）：判据搬进 `src/ref-rules.js` 的 `'agendaCancels.agendaId'` 表
+        //   （"未知盘算" / "已结算盘算不可取消"两句原先手写在本文件里——它就是"同一个号能不能这么用"）。
+        const v = verdictOf('agendaCancels.agendaId', { type: 'id', ref: ac.agendaId }, { world: ssot, step });
+        if (v) errors.push(`$.agendaCancels[${i}].agendaId: ${v}`);
     }
 
     // ②d 实体治理（K37/细案 §3.7 → A-10/A-11）：入局提议（newEntities）与覆灭提议（entityFates）语义校验
@@ -250,47 +232,24 @@ export function checkWorldStep(step, ssot) {
     const booked = new Set(Object.keys(ssot.meta?.dialogueBook || {}));
     for (const [i, ne] of (step.newEntities || []).entries()) {
         if (playerId && ne.entity === playerId) errors.push(`$.newEntities[${i}].entity: 模型禁写玩家（红线 1 代码化；玩家不是入局提议者）`);
-        if (ne.entity && !entityIds.has(ne.entity)) errors.push(`$.newEntities[${i}].entity: 未知提议者 "${ne.entity}"`);
+        // ★★★leg67 甲-余：提议者存在性收进判据表（`'newEntities.entity'`）。
+        //   ★`ne.entity &&` 这个**前置守卫不能省**（本棒实测栽过一次）：提议者**可省**
+        //     （`world-step.schema.js` 里 `entity` 不在 required 里，dialogueFact 源可省略）
+        //     ⇒ 没写提议者不是"未知提议者"。判据表只答"这个号在不在账上"，"这一格该不该判"归消费口。
+        const vProposer = ne.entity
+            ? verdictOf('newEntities.entity', { type: 'id', ref: ne.entity }, { world: ssot, step })
+            : null;
+        if (vProposer) errors.push(`$.newEntities[${i}].entity: ${vProposer}`);
         if (!ne.source?.type || !ne.source.ref) {
             errors.push(`$.newEntities[${i}].source: 无源不入局——新实体必须带源引用（book/event/dialogueFact/entity）`);
             continue;
         }
-        const stype = ne.source.type;
-        const ref = ne.source.ref;
-        if (stype === 'event') {
-            // ★leg40b 续（甲）：同上——同轮新建的未决事件可作入局之因（新人因"正在发生的这件事"入场）。
-            const ev = findEvent(step, ssot, ref);
-            // ★leg64 第五轮：同 `newAgendas` 那一格——**"存在但已了结"不许报成"不存在"**
-            //   （用户实机贴回的那条错就是它：`ev_5_1` 在账上、但 `[已了结]`）。
-            if (!ev) {
-                errors.push(`$.newEntities[${i}].source: event 源必须引已存在未决事件（当前 ref="${ref}"）`);
-            } else if (ev.closed) {
-                errors.push(`$.newEntities[${i}].source: 「${ev.id}」（${String(ev.title || '').slice(0, 24)}）**已经了结**——`
-                    + '新人要因**正在发生**的事入场；这件已经办完了，请引一件未决事件，或改用 book/dialogueFact 源');
-            }
-        } else if (stype === 'book') {
-            if (!bookNames.has(ref)) errors.push(`$.newEntities[${i}].source: book 源必须命中书名录（当前 ref="${ref}"）`);
-        } else if (stype === 'dialogueFact') {
-            // ★leg32i：错误信息**不许再说假话**（用户贴回来过一条把人看懵的）：
-            //   模型提议 `dialogueFact` 源、ref 指向「白小娥」——而白小娥**明明就在账上**
-            //   （她是静默实体、不在依据册里）。旧信息只说"必须命中对话依据册"，读者以为账上没有这个人。
-            //   ⇒ 现在按**三种真实情况**分别报：①账上已有同名实体（那就别入局，她已经在册）
-            //   ②名字在依据册里但没到门槛 ③压根没被点过名。
-            const existing = ssot.entities.find((e) => e.name === ref);
-            if (existing && !booked.has(ref)) {
-                errors.push(`$.newEntities[${i}].source: 「${ref}」**账上已有这个实体**（${existing.id}）——他/她已在册，不需要入局（dialogueFact 源是给"还没入册、但对话里反复被点名的人"用的）`);
-            } else if (!booked.has(ref)) {
-                errors.push(`$.newEntities[${i}].source: dialogueFact 源必须命中对话依据册（当前 ref="${ref}" 既不在依据册、也不在账上——只有"对话里反复被点名"的对象才走这一型）`);
-            }
-        } else if (stype === 'entity') {
-            // ★leg32e（小说家条款 §3.2 第一片）：**由在册实体牵出**——给"该出场但书上没写的人"一条路。
-            //   两条硬闸（全机械可核）：①牵出者**必须在册** ②**必须未灭**。
-            //   为什么这两条不能松：「无源之物不存在」是"因果生成"与"凭空造人"的唯一分界；
-            //   而死者不生事（与 entityFates 的"dead=终局"一致）。
-            const src = ssot.entities.find((e) => e.id === ref);
-            if (!src) errors.push(`$.newEntities[${i}].source: entity 源必须引出在册实体（当前 ref="${ref}" 未知实体）`);
-            else if ((src.status || 'active') === 'dead') errors.push(`$.newEntities[${i}].source: entity 源不能引已覆灭实体（"${src.name}" 已灭，死者不生事）`);
-        }
+        // ★★★leg67（甲案）：四型（book/event/dialogueFact/entity）的判据整体搬进
+        //   `src/ref-rules.js` 的 `'newEntities.source'` 表——含 leg64 第五轮那条"存在但已了结 ≠ 不存在"、
+        //   leg32i 那条"错误信息不许再说假话"（dialogueFact 按**三种真实情况**分别报）、
+        //   leg32e 那条 entity 源的两条硬闸（在册 + 未灭）。本文件只剩一行渲染。
+        const v = verdictOf('newEntities.source', ne.source, { world: ssot, step, bookNames, booked });
+        if (v) errors.push(`$.newEntities[${i}].source: ${v}`);
         // ★leg32f（用户实机：「$.newEntities[0].name: 账上已有同名实体「白小娥」（已有者不重建）」整步被拒）：
         //   ① 同名**不再报致命错**——账上已有的那个人本来就在册，**丢掉这条提议对世界零损害**；
         //      旧法把它判成"世界步不合法"⇒ 整轮（连同玩家这一轮的行动）一起陪葬。丢掉由 `settle.js`
@@ -303,24 +262,26 @@ export function checkWorldStep(step, ssot) {
     }
     for (const [i, f] of (step.entityFates || []).entries()) {
         const ent = f.entity && ssot.entities.find((e) => e.id === f.entity);
-        if (!ent) { errors.push(`$.entityFates[${i}].entity: 未知实体 "${f.entity || ''}"`); continue; }
+        // ★★★leg67 甲-余：目标存在性收进判据表（`'entityFates.entity'`）。
+        //   ⚠"玩家不可灭"与"已覆灭不重复覆灭"是**别的判据**（红线 1 / dead=终局），照旧留在这里。
+        if (verdictOf('entityFates.entity', { type: 'id', ref: f.entity }, { world: ssot, step })) {
+            errors.push(`$.entityFates[${i}].entity: 未知实体 "${f.entity || ''}"`);
+            continue;
+        }
         if (playerId && f.entity === playerId) errors.push(`$.entityFates[${i}].entity: 玩家不可灭（玩家是棋子，覆灭归世界）`);
         if ((ent.status || 'active') === 'dead') errors.push(`$.entityFates[${i}].entity: 已覆灭实体不重复覆灭（dead=终局）`);
         if (!f.source?.ref) {
             errors.push(`$.entityFates[${i}].source: 覆灭提议必须带源引用（真实落账复核归引擎）`);
             continue;
         }
-        // ★leg40b 续：**这一段刻意*不*享用"本轮新建事件"**（`findEvent` 只给 newAgendas/newEntities 两处用）。
-        //   为什么：覆灭的语义是"**尘埃落定再言灭**"——`settle.js` 的 `applyEntityFates` 跑在 `closeEvents`
-        //   **之后**，且那里还要复核"源事件必须 `closed`"。若把本轮新建的**未决**事件并进存在集，
-        //   模型只要同轮"新建一件事 + 顺手宣告某人覆灭"就能绕过这条闸 ⇒ 等于把一条刻意设的闸静默拆掉。
-        //   ⇒ 这一段的"已存在"**只认已落在世界账上的事件**（含归档入纪的里程碑），与修复前逐字相同。
-        if (f.source.type === 'event' && !eventIds.has(f.source.ref)
-            && !(ssot.milestones || []).some((m) => (m.ids || []).includes(f.source.ref))) {
-            errors.push(`$.entityFates[${i}].source: event 源必须引已存在事件（当前 ref="${f.source.ref}"；归档入纪者亦可）`);
-        } else if (f.source.type === 'agenda' && !agendaIds.has(f.source.ref)) {
-            errors.push(`$.entityFates[${i}].source: agenda 源必须引已存在盘算（当前 ref="${f.source.ref}"）`);
-        }
+        // ★★★leg67（甲案）：两型判据搬进 `src/ref-rules.js` 的 `'entityFates.source'` 表。
+        //   ★该表**刻意不享用"本轮新建事件"**（见 `findFateEventSource` 头注）：覆灭的语义是
+        //     "**尘埃落定再言灭**"——`settle.js` 的 `applyEntityFates` 跑在 `closeEvents` **之后**，
+        //     且那里还要复核"源事件必须 `closed`"。若把本轮新建的**未决**事件并进存在集，
+        //     模型只要同轮"新建一件事 + 顺手宣告某人覆灭"就能绕过这条闸（刻意设的闸不许静默拆掉）。
+        //   ⇒ 这一格只认**已落在世界账上的事件**（含归档入纪的里程碑），与收口前逐字相同。
+        const v = verdictOf('entityFates.source', f.source, { world: ssot, step });
+        if (v) errors.push(`$.entityFates[${i}].source: ${v}`);
     }
 
     // ★★leg34（小说家条款 §6 实施）：实体字段写回 + 带因复活（同一个通道，两种用法）
@@ -346,7 +307,11 @@ export function checkWorldStep(step, ssot) {
         const seenPairs = new Set();
         for (const [i, u] of step.entityUpdates.entries()) {
             const ent = u.entity && ssot.entities.find((e) => e.id === u.entity);
-            if (!ent) { errors.push(`$.entityUpdates[${i}].entity: 未知实体 "${u.entity || ''}"`); continue; }
+            // ★★★leg67 甲-余：目标存在性收进判据表（`'entityUpdates.entity'`）。
+            if (verdictOf('entityUpdates.entity', { type: 'id', ref: u.entity }, { world: ssot, step })) {
+                errors.push(`$.entityUpdates[${i}].entity: 未知实体 "${u.entity || ''}"`);
+                continue;
+            }
             if (playerId && u.entity === playerId) {
                 errors.push(`$.entityUpdates[${i}].entity: 玩家不可改（红线 1；玩家的行为与承诺是唯一真相源）`);
             }
@@ -359,15 +324,18 @@ export function checkWorldStep(step, ssot) {
             const ref = u.cause?.ref;
             if (!ref) { errors.push(`$.entityUpdates[${i}].cause: 必须带因（无因之变＝随口改，不是因果）`); continue; }
             if (u.cause.type === 'event') {
-                // ★leg40b 续（死锁修复）：这里**暂时仍只认世界账**（与 `entityFates` 同处一格）。
+                // ★★★leg67（甲案）：判据搬进 `src/ref-rules.js` 的 `'entityUpdates.cause'` 表。
+                //   ★判定时点：这里（校验期）**在 settle 之前**，故按"当前状态"判，与"进入批次那一刻"等价。
+                //     真正的时点纪律在结算期（`settle.js` 传 `openCauseAtEntry` 快照进来）——见该表头注。
+                const v = verdictOf('entityUpdates.cause', u.cause, { world: ssot, step });
+                if (v) { errors.push(`$.entityUpdates[${i}].cause: ${v}`); continue; }
+                // ★leg40b 续（死锁修复）：本格**只认世界账**（与 `entityFates` 同处一格）。
                 //   语义上"为什么是现在？因为正在发生的这件事"与 newAgendas 的 event 源**同族**，
                 //   并入本轮新建事件在方向上是一致的（尤其带因复活：同轮新建的事点到他的名字 + 同轮复活，
                 //   正是 `settle.js:746` 那条"复活必须与被点名同轮发生"的口径）。
                 //   但本笔**不顺手扩大**：用户授权的是"死锁"那一格，而这一格的收益未被实测过 ⇒
                 //   登记为待办（见 docs/ledger.md 本笔"未做"条），要动先按老规矩出数。
                 const ev = (ssot.events || []).find((e) => e.id === ref);
-                if (!ev) { errors.push(`$.entityUpdates[${i}].cause: event 源必须引已存在事件（当前 ref="${ref}"）`); continue; }
-                if (ev.closed) { errors.push(`$.entityUpdates[${i}].cause: 因必须是**未闭环**的事（"${ref}" 已了结）——不许拿旧事解释今天的变化`); continue; }
                 // ★带因复活的**唯一**位置：改 status ⇒ 必须"被那件未了结的事点名"（ripples 含他）。
                 //   为什么这么定（细案 §6.4 风险条要求"cause 本身必须是复活/重生性质"，但词表判语义是 ANCHOR §4.8 明禁的）：
                 //   ⇒ 换一条**结构性**的、更硬的判据：他必须真的出现在那件未了结的事里。
@@ -386,13 +354,43 @@ export function checkWorldStep(step, ssot) {
                     }
                 }
             } else if (u.cause.type === 'agenda') {
-                const ag = (ssot.agendas || []).find((a) => a.id === ref);
-                if (!ag) { errors.push(`$.entityUpdates[${i}].cause: agenda 源必须引已存在盘算（当前 ref="${ref}"）`); continue; }
-                if (ag.closed) { errors.push(`$.entityUpdates[${i}].cause: 因必须是**在飞**的盘算（"${ref}" 已结算）`); continue; }
+                // ★★★leg67（甲案）：同上，判据在 `'entityUpdates.cause'` 表的 `agenda` 一格。
+                const v = verdictOf('entityUpdates.cause', u.cause, { world: ssot, step });
+                if (v) { errors.push(`$.entityUpdates[${i}].cause: ${v}`); continue; }
                 if (u.field === 'status') errors.push(`$.entityUpdates[${i}].field: 复活必须挂在一件**提到他的事**上（agenda 源没有波及名单，核不了这件事）`);
+            }
             }
         }
     }
+
+    // ★★★leg95（用户令「让 llm 来决定何时结束」）：**收场提议**（`eventClosures`，可选组）。
+    //   分工纪律（用户原话「引入机械就一定要避免让代码去理解语义」）：
+    //     · **模型判"这一段讲完了没有"**（语义）——引擎一个字都不判；
+    //     · **引擎只做机械审计**：号在册 ∧ 还没收场 ∧ 同批不重复 ∧ 每轮配额。
+    //   为什么配额**不写进这里当错误**（与 `entityUpdates` 的 `FIELD_UPDATE_PER_TICK` 不同）：
+    //     "超配额"不是形状错、也不是无源之物——它是"这轮太多了，剩下的顺延"，**引擎给警告、照收前 N 件**。
+    //     若在这里报错 ⇒ 整个世界步被拒 ⇒ **世界白停一轮**，代价远大于"少收几件旧事"。
+    //     （这正是本仓的老教训：判据该拦的是"错的"，不是"多的"。）
+    if (step.eventClosures !== undefined) {
+        if (!Array.isArray(step.eventClosures)) {
+            errors.push('$.eventClosures: 必须是数组（每项 {event, why?}；不提议就写 [] 或整组省掉）');
+        } else {
+            const seenEv = new Set();
+            for (const [i, ec] of step.eventClosures.entries()) {
+                if (!ec || typeof ec !== 'object' || Array.isArray(ec)) {
+                    errors.push(`$.eventClosures[${i}]: 必须是 {event, why?} 形状的对象`);
+                    continue;
+                }
+                const id = typeof ec.event === 'string' ? ec.event.trim() : '';
+                if (!id) { errors.push(`$.eventClosures[${i}].event: 缺事件 id（照抄输入里"还没结束的事"的号）`); continue; }
+                if (seenEv.has(id)) { errors.push(`$.eventClosures[${i}]: 同一件事一轮内重复提议（"${id}"）——一件只能收一次`); continue; }
+                seenEv.add(id);
+                // ★判据搬进 `src/ref-rules.js` 的 `'eventClosures.event'` 表（与 `entityUpdates.cause` 同一族：
+                //   都是"同一个号在此时此地能不能这么用"）。那一格查两件事：号在册、且**还没收场**。
+                const v = verdictOf('eventClosures.event', { type: 'id', ref: id }, { world: ssot, step });
+                if (v) errors.push(`$.eventClosures[${i}].event: ${v}`);
+            }
+        }
     }
 
     // ★★★leg64 第四轮：**按需查表**（`lookupScales`，可选组）——模型点名要的刻度表。
@@ -427,16 +425,11 @@ export function checkWorldStep(step, ssot) {
     }
 
     // ③ 因果：ripple 源必须引用已存在事件（无源拒绝的语义侧）
+    //   ★★★leg67（甲案）：判据搬进 `src/ref-rules.js` 的 `'newEvents.source'` 表
+    //     （plot/state/ripple 三型；`plot` 那格原先只在 `ref` 非空时才判，口径原样保留在表里）。
     for (const [i, ev] of step.newEvents.entries()) {
-        if (ev.source.type === 'ripple') {
-            if (!ev.source.ref || !eventIds.has(ev.source.ref)) {
-                errors.push(`$.newEvents[${i}].source: ripple 源必须引用已有事件（当前 ref="${ev.source.ref || ''}"）`);
-            }
-        } else if (ev.source.type === 'plot' && ev.source.ref) {
-            if (!agendaIds.has(ev.source.ref)) {
-                errors.push(`$.newEvents[${i}].source: plot 源 ref 必须是已有盘算 id`);
-            }
-        }
+        const v = verdictOf('newEvents.source', ev.source, { world: ssot, step });
+        if (v) errors.push(`$.newEvents[${i}].source: ${v}`);
     }
 
     // ④ 位置：**自由文本**（★leg33c 用户拍板「要么就直接将位置变成自由文本就好了，位置集干脆删了」）
@@ -481,7 +474,11 @@ export function checkWorldStep(step, ssot) {
             errors.push(`$.newEvents[${i}].ripples: 一次事件波及目标数上限 ${RIPPLE_TARGET_CAP}（当前 ${ripples.length} 个：${ripples.join('/')}）`);
         }
         for (const [j, rid] of ripples.entries()) {
-            if (!entityIds.has(rid)) errors.push(`$.newEvents[${i}].ripples[${j}]: 未知实体 "${rid}"`);
+            // ★★★leg67 甲-余：波及名单的存在性收进判据表（`'newEvents.ripples'`，逐 id 判）。
+            //   ⚠紧邻下面那条**不是**同一件事，别合并：那是 K25 的"设定池保留键空间"
+            //     （读**串的形状**、不读账），本格读的是"账上有没有这个号"。
+            const v = verdictOf('newEvents.ripples', { type: 'item', ref: rid }, { world: ssot, step });
+            if (v) errors.push(`$.newEvents[${i}].ripples[${j}]: ${v}`);
         }
     }
 

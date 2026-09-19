@@ -62,6 +62,10 @@ export const EXTRACTION_TIMEOUT_MS = 300_000;
 //   ⚠ leg27 澄清我此前一个**误判**（留档防复发）：我一度怀疑 `abort(reason)` 传 non-cloneable 会抛
 //   ⇒ 超时根本没生效。**实测证伪**（本机真跑）：`abort(new Error('…'))` 正常返回、
 //   `signal.aborted=true`、挂住的 fetch 在 528 ms 被中断 ⇒ **超时是生效的**，别再修这一处。
+//   ★★★leg93d 补一句（**上面那句"不是靠猜错误文案"当年只对了一半**）：`abort(reason)` 确实生效，
+//   但**真浏览器里 fetch 不会把 reason 交回来**——它抛的是自己的
+//   `DOMException('signal is aborted without reason')` ⇒ 光靠"把 reason 传进 abort"**拿不到人话**。
+//   ⇒ 定稿：**标志位（本函数）负责"可判"，人话由 catch 里我们自己组**（见那段注释与判据 leg93d）。
 function markTimeout(err) {
     try { err.sw2Timeout = true; } catch (_) {}
     return err;
@@ -71,7 +75,10 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
     return async (prompt) => {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(new Error(`主调用超时（${timeoutMs}ms，提案）`)), timeoutMs);
+        // ★`abort(reason)` 里的 reason 在真浏览器里**到不了我们手上**（见上面 leg93d 那段），
+        //   它留着只为两件事：① 本仓既有判据的假 fetch 会读它；② 调试时能在 devtools 里看见。
+        //   **不要指望靠它给用户一句人话**——那句在下面的 catch 里显式组。
+        const timer = setTimeout(() => controller.abort(new Error(`模型超时（${timeoutMs}ms）`)), timeoutMs);
         try {
             const res = await fetchImpl(endpoint, {
                 method: 'POST',
@@ -100,7 +107,27 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
         } catch (err) {
             // leg27：超时**如实标识**（判据 = 本控制器自己发出过中止 ⇒ fetch 因我们超时而拒）
             //   ⇒ 编排层据此把它与"网关偶发空回复"分开：**超时不重试、不拆半**（拆了也白拆，见文件头）。
-            if (controller.signal.aborted) throw markTimeout(err);
+            // ★★★leg93d 真因修（交接 §5.1 那行 `signal is aborted without reason` 的来源）：
+            //   **不要把 fetch 那个异常原样抛出去**。真浏览器里 fetch 被中止时抛的是**它自己的**
+            //   `DOMException('signal is aborted without reason', 'AbortError')` ——
+            //   **不带**我们 `abort(new Error('主调用超时…'))` 传进去的 reason（实测三臂对照，
+            //   装置 `F:/deepseek/tmp/leg93-abort-shape.mjs`：甲臂"假 fetch 直传 reason"能拿到人话，
+            //   乙/丙臂"真 fetch 形状"拿到的一律是那句英文）。
+            //   ⇒ 那句英文一路被包成 `传输失败: …`（`worldstep.js:14`）印到状态条上：
+            //     「⚠ 演算失败：传输失败: signal is aborted without reason（世界原样未动，可重试）」
+            //     ——**看得出"失败了"，看不出"为什么"**（用户为这一句查了两棒）。
+            //   ★修法：由**我们自己**记下的 `timeoutMs` 组一句人话（**超时是我们发的信号，我们知道是多少毫秒**），
+            //     并把原异常挂在 `cause` 上（要复盘仍拿得到名与栈），同时保住 `sw2Timeout` 标志
+            //     （`abstract.js` 靠它判"超时=止损，不重试、不拆半"）。
+            if (controller.signal.aborted) {
+                //   ★措辞纪律（本仓 A-3）：这句**会印到状态条上**（`async-tick.js:43` 的「⚠ 演算失败：…」），
+                //     所以**说人话、零引擎术语**——不写"主调用/传输/transport"这类内部词。
+                //     `ms` 留着：它是维护者与用户对齐"到底等了多久"的唯一实数。
+                const e = new Error(`模型超时（${timeoutMs}ms）——这一轮没等到模型回话，已中止；可在参数页把「单轮超时」调大`);
+                e.name = 'Sw2TimeoutError';
+                e.cause = err;
+                throw markTimeout(e);
+            }
             throw err;
         } finally {
             clearTimeout(timer);

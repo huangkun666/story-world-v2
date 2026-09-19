@@ -15,9 +15,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
     sanitizeScales, scalesToFlat, scalesFromFlat, resolveScales, parseScaleTier,
-    buildScalePrompt, SCALE_SHAPE_OBJ, sanitizeCanon, mergeCanonChunks,
-    mergeSameTierEntries, tierWordsOf, groupScales,
+    buildScalePrompt, sanitizeCanon, mergeCanonChunks,
+    tierWordsOf, groupScales,
 } from '../src/abstract.js';
+// ★★★leg71（丙案）：形状（`SCALE_SHAPE_OBJ`）与档位归一（`mergeSameTierEntries`）搬到新模块。
+import { SCALE_SHAPE_OBJ } from '../src/abstract-shape.js';
+import { mergeSameTierEntries } from '../src/abstract-tier.js';
 import { renderSettingHtml } from '../src/render.js';
 
 // 最小世界夹具（够 `renderSettingHtml` 走完设定页；形状照 live-world 精简）

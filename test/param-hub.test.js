@@ -410,8 +410,13 @@ test('★★★leg46·⑪：自检读数**一次拿全**（键名 · 原文 · �
     // ⑥ 构建号也在读数里（"页面是不是新代码"是第一件要分清的事）
     //   ★leg50：形状从 `/^leg4\d/` 放宽到 `/^leg\d+/`——原来那条把"升位链条"钉死在 4x 上，
     //     换到 leg50 就红（而它要说的只是"这是一串构建号"，不是"必须是第 4x 棒"）。
+    //   ★★★leg93b：**第二回放宽，同一条理由**——原来那条把"补笔"钉死了：`leg93b-…`
+    //     **不匹配 `/^leg\d+-/`**（`\d+` 吃完 `93` 就要求 `-`，撞上 `b` 当场红）。
+    //     而本仓**本来就有补笔写法**（`leg40b`、`leg90b`、`leg90c`、`leg92` 的续笔），
+    //     它们全靠"号里不带字母"才侥幸过关（`leg40b` 能过是因为它 = `leg`+`40`+`b-`，`\d+` 只吃了 40）。
+    //     ⇒ 补上**可选的一个小写字母**：`/^leg\d+[a-z]?-/`。它要守的仍然是"这是一串构建号 + 升位链条看得出来"。
     assert.equal(typeof ev['构建号'], 'string');
-    assert.match(ev['构建号'], /^leg\d+-/, `构建号形状不对：${ev['构建号']}`);
+    assert.match(ev['构建号'], /^leg\d+[a-z]?-/, `构建号形状不对：${ev['构建号']}`);
     void st;
 });
 
@@ -480,7 +485,8 @@ test('★★leg46·⑪e：**参数页上画出来的每个按钮都有人接**�
     // ★★leg52 新增：**设置页**也扫一遍（同一把尺子）。
     //   为什么必须加这一页：`advance-world` 现在**只**在设置页画——不扫它，这个入口就成了
     //   "没人看着的那一格"（本仓的病从来不是"某处画错"，而是"某处没人扫"）。
-    const settingsHtml = renderSettingsHtml(st_liveWorld(), { config: { playerDesc: '', apiKey: '', baseUrl: '', model: '' } });
+    //   ★leg87：夹具里那个 `playerDesc` 键已随「你的开档描述」整张卡撤掉（登记在 retired-controls）。
+    const settingsHtml = renderSettingsHtml(st_liveWorld(), { config: { apiKey: '', baseUrl: '', model: '' } });
     const setActions = [...new Set([...settingsHtml.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]))];
     assert.ok(setActions.includes('advance-world'), '★设置页必须有「推进一轮」那枚按钮（参数页撤了它，入口只能在这儿）');
     // `advance-world` 是这个面上**唯一**的有意例外（走 tick 队列特判，不走动作总线）；其余一律要有人接。
@@ -798,12 +804,21 @@ test('★★★leg54：**控件从 `<select>` 换成 `<input>` 之后，接线�
     assert.deepEqual(live.selects, { 每轮递线: '50', 每轮事件: '80' }, '★`<input>` 的现值要采全（旧版只认 SELECT/BUTTON）');
     assert.equal(live.env['每轮递线'], '50', '★控件值要覆盖在真源之上（真源里没有它 ⇒ 不许画回出厂默认）');
     // ② **对齐**：一笔操作结束后，`<input>` 也要被按真源对齐（旧版只认 SELECT ⇒ 静默退让）
-    const src = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    // ★★★leg82：`sw2SetParamControl` 已随参数族搬进 `web/param-panel.js` ⇒ **锚点跟着符号改指新家**
+    //   （`docs/leg81-REBUILD-GUIDE.md` §6 那张"跨族锁要跟着符号走"表里的第 2 行；口径**不放宽**：
+    //    仍锁"两种控件都认"这条）。
+    //   ★★为什么必须同时加一句"锚点非空"自证：锚点失效时 `indexOf` 返回 -1 ⇒
+    //     `src.slice(-1, -1 + 1400)` 拿到的是**一段不相干的尾巴**，下面那条断言就成了**假绿**
+    //     （反过来，若新家也搜不到，切片为空 ⇒ 断言红）。这一句把"锚点还在不在"当场钉住。
+    const src = readFileSync(path.join(ROOT, 'web', 'param-panel.js'), 'utf8');
     const at = src.indexOf('export function sw2SetParamControl');
+    assert.ok(at >= 0, '★锚点必须还能在新家 `web/param-panel.js` 里找到 `export function sw2SetParamControl`'
+        + '（找不到 ⇒ 下面那条断言测的是空气 —— leg81 那条"跨族锁跟着符号走"要防的就是这个）');
     const seg = src.slice(at, at + 1400);
     assert.match(seg, /tag !== 'SELECT' && tag !== 'INPUT'/,
         '★`sw2SetParamControl` 必须同时认 SELECT 与 INPUT（否则"手滑清空"会留在屏幕上冒充一次改动）');
     // ③ **写格**：`sw2ControlText` 早就同时认（这一条是防它被改窄）
+    //   ★leg82 同步：这个函数也搬去了新家 ⇒ 从新家那份 `src` 上扫（同一条口径）。
     assert.match(src, /tag === 'SELECT' \|\| tag === 'INPUT'/, '★`sw2ControlText` 必须同时认两种控件');
     void st;
 });
@@ -870,7 +885,12 @@ test('★leg46·⑨b：旧补丁层与旧写入口都不许回潮（七轮补丁
     for (const name of forbidden) {
         assert.ok(!codeLines.some((l) => l.includes(name)), `★${name} 是旧写入口/旧补丁层，不许回潮`);
     }
-    assert.match(src, /hotMetaFingerprint\(\)/, '世界账自己的回读核对**保留**（它对"世界"仍然有用）');
+    // ★leg78：世界账自己的回读核对**保留**（它对"世界"仍然有用）——但 `hotMetaFingerprint` 的实现体
+    //   已随热账族搬进 `web/hot-ledger.js` ⇒ 本断言改查**热账新家**（★不放宽成"两处任一有就行"：
+    //   那样"回读核对被人删掉"就没人看了）。
+    //   ★反向自证同时钉住另一半：**这四样旧补丁名单仍然只在接线层扫**（上面那个循环没动）。
+    const hotSrc = readFileSync(path.join(ROOT, 'web', 'hot-ledger.js'), 'utf8');
+    assert.match(hotSrc, /hotMetaFingerprint\(\)/, '世界账自己的回读核对**保留**在热账新家（它对"世界"仍然有用）');
 });
 
 test('★leg46·⑨c：判据自己的夹具只有一份（真源注入 ⇒ 两个判据文件共用 fixture-param）', async () => {
@@ -977,9 +997,20 @@ test('★★★leg48·D：**读的桶 = 写的桶**（写完后拿空态世界�
         '★★空态世界（世界名 = 未名世界）**不许**把读数切到另一个空桶——切过去就会读成出厂默认 3、'
         + '把玩家选的 9 从画面上盖掉（真浏览器现场抓到的形状）');
     assert.equal(hub.currentWorldName(), '大荒z', '★hub 认的桶自始至终是写过的那个');
-    // ③ 接线层必须用 `currentWorldName()` 取桶（源码级，防回潮）
+    // ③ 接线层必须用"hub 认的那个桶"取桶（源码级，防回潮）
+    // ★★★leg82：那一句已随参数族搬进 `web/param-panel.js`（本文件现在只经**受控口** `paramApi`
+    //   取桶），而锚点原来写的是 `paramHub.currentWorldName()`（旧家的直读形状）⇒ 搬完之后锚点失效。
+    //   ★口径**不放宽**：仍锁"**取桶取的是 `currentWorldName()`**（hub 真正读写过的那个桶），
+    //     不是'当下那个世界对象'"这条（leg48 被违反过九轮的机理）。
+    //   ★两半都要断言，缺一半就是假绿：
+    //     ① 接线层**必须**经 `paramApi.currentWorldName()` 取桶（本文件已改走受控口）；
+    //     ② 新家**必须**留着 `currentWorldName()` 自证口（它就是"hub 认的那个桶"的唯一读数）。
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
-    assert.match(web, /paramHub\.currentWorldName\(\)/, '★面板显示值/控件对齐必须读"hub 认的那个桶"');
+    assert.match(web, /paramApi\.currentWorldName\(\)/,
+        '★面板显示值/控件对齐必须读"hub 认的那个桶"（经受控口 `paramApi.currentWorldName()`）');
+    const panel = readFileSync(path.join(ROOT, 'web', 'param-panel.js'), 'utf8');
+    assert.match(panel, /currentWorldName:\s*\(\)\s*=>\s*paramHub\.currentWorldName\(\)/,
+        '★受控口那一条必须真的接在 hub 的 `currentWorldName()` 上（否则"读的桶=写的桶"只剩个名字）');
 });
 
 // ── ⑩ 面板接线（真跑总线）────────────────────────────────────────────────

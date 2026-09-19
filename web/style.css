@@ -75,11 +75,29 @@
 .sw2-digest-line{font-size:16.5px;font-weight:700;letter-spacing:.3px;line-height:1.5;}
 .sw2-digest-sub{margin-top:4px;font-size:13px;color:var(--sw2-text-dim);}
 
-/* ---------- 观棋：信息带 ---------- */
+/* ---------- 观棋：信息带 ----------
+   ★★★leg98（用户令「**里面有两个大势卡片留一个就好了**，世情 · 3 键，还有浪尖，张力，盘算数量
+   你看看怎么集合起来好看」，并在三套候选里选了**乙**）：
+   旧版是**五格等宽平铺**（世情 / 大势 / 张力 / 浪尖 / 盘算），而五格的**信息密度差了十倍**：
+   世情是三条带刻度的行（最高）、大势是一整段句子、张力两行、浪尖一列条目、盘算只有一个数
+   ⇒ 排出来是"高的把矮的顶到天花板、矮的给高的留一片空"（用户原话「**极为难看**」）。
+   ★定稿**两栏**：左＝世情 3 键（**竖排**，它本来就是竖的行）；右＝三行读数（盘算 / 张力 / 浪尖）。
+     **竖排的归竖排、横排的横排** ⇒ 不再把两种排版硬塞进同一条边里。
+   ★同时**撤掉带里的「大势」格**（与四层顶上那格是同一句话，照 leg97 裁 `digest` 的口径：同一件事不说两遍）。 */
 .sw2-infoband{display:flex;align-items:stretch;border:1px solid var(--sw2-line-soft);border-radius:10px;background:var(--sw2-card);margin-bottom:10px;overflow:hidden;}
 .sw2-band-block{padding:10px 14px;flex:1;min-width:0;}
 .sw2-band-block + .sw2-band-block{border-left:1px solid var(--sw2-line-soft);}
 .sw2-band-label{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:7px;}
+/* ★leg98：左栏（世情 3 键）**定宽**——它是三条刻度行，宽度要跟它自己的内容走；
+   右栏（读数）吃剩下的全部宽度，三行各自左对齐。 */
+.sw2-infoband > .sw2-band-block:first-child{flex:0 0 340px;}
+.sw2-band-read{display:flex;flex-direction:column;justify-content:center;gap:7px;}
+/* 三行读数：每行开头一个小标签（定宽 ⇒ 三行的内容左边对齐，读数才成"一列"） */
+.sw2-readrow{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0;}
+.sw2-readrow .sw2-readkey{flex:0 0 36px;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+/* 读数区里那几样各归各位：数字不再自带下边距（行距由 `.sw2-band-read` 的 gap 管） */
+.sw2-band-read .sw2-num-sub{margin-top:0;}
+.sw2-band-read .sw2-clash-sub{margin-top:0;}
 /* ★★★leg56（用户令「根据挡位渲染不同长度的进度条」+「中间太空旷了」）：
    这两行原来是 `grid-template-columns:44px 1fr` 的**两栏**，而 `.sw2-env-val` 是 `text-align:right`——
    于是值被推到右缘、中间那整条 1fr 空着（用户截图：名字在左、值在右、中间一片死区）。
@@ -97,11 +115,45 @@
 .sw2-clash-main{font-size:14.5px;font-weight:700;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
 .sw2-clash-main .sw2-int{font-size:12px;font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-amber);font-weight:400;}
 .sw2-clash-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}
-.sw2-tides{display:flex;flex-direction:column;gap:4px;}
+/* ★leg98：浪尖从"独立一栏的竖列"改成**读数行里的横排条目**——
+   它现在住在 `.sw2-readrow`（flex 行）里，竖列会把整行顶高、又跟左边的小标签对不齐。 */
+.sw2-tides{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;min-width:0;}
 .sw2-tide{font-size:12px;color:var(--sw2-text-dim);}
 .sw2-big-num{font-size:19px;font-weight:700;font-family:"Cascadia Mono",Consolas,monospace;}
 .sw2-big-num small{font-size:12px;color:var(--sw2-text-faint);font-weight:400;margin-left:2px;}
 .sw2-num-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;line-height:1.55;}
+
+/* ---------- ★★★leg98 补四：并页那一页改**两栏**（用户令「**你总得把这个放在上面吧？
+   而且我要往下翻很久才能看到这些**」）
+   读数（`F:/deepseek/tmp/prototypes/leg98-page-size.mjs`，真机账）：
+     四层 43031 字节 / 可见 **10150 字**（11 张面卡 · 27 段线里 16 段默认展开）
+     信息带 1390 字节 / 可见 **94 字**  ← 这条 94 字的状态条原来排在页尾
+   ⇒ 两件事一起治：①**信息带升成页头**（它上面只剩那一行说书页头）②这一页不再是"一条竖线到底"。
+   ★★★leg99 按用户令改了两处（「**动态流可以不要了**，其他就按那个模板做，但要注意**两列都能独自滑动**」）：
+     ①**动态流撤出这一页**（它原是左栏的尾巴）⇒ 左栏＝故事轴（大势→此刻→面→散落→自证），右栏照旧＝盘算总览＋地图。
+     ②**两栏各自独立滑动**（下面那三行 `overflow-y:auto` ＋ 容器定高）。
+   ★为什么要给容器**定高**：面板外壳（`#story_world2_window`）自己是 `max-height:88%` + `overflow:auto`
+     ——那是"整页一条滚动条"。要让**两栏各滑各的**，就得把"滚动"这件事从面板外壳**下放到两栏里**，
+     而"里面能滚"的前提是"外面有个确定的高度"（不然内容会把它撑开，两栏永远滚不动）。
+     高度取 `calc(88vh - 190px)`：88vh 对齐面板那 88%，190px ≈ 页头一行 ＋ 信息带（实测 1390 字节那一块）。
+     ★下限 `min-height:320px`：屏幕矮的时候宁可整页滚，也不许把两栏压成两条缝。
+     ★窄屏（< 980px）退回单列时**必须把定高取消**（`height:auto` + `overflow:visible`）——
+       否则单列里那两栏会各自变成一口小井，反而更难读。 */
+.sw2-merged-grid{
+  display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start;
+  height:calc(88vh - 190px);min-height:320px;
+}
+/* ★两栏各自独立滑动（用户令「两列都能独自滑动」）：
+   左＝故事轴（长，约万字的正文在这里滚）、右＝盘算总览 ＋ 地图（短，但跟着自己的滚动条走）。
+   ★`overscroll-behavior:contain`：滚到一栏的头/尾时**别把滚动传给面板外壳**（否则又变成"整页跟着动"）。*/
+.sw2-merged-main{min-width:0;height:100%;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;}
+.sw2-merged-side{display:flex;flex-direction:column;gap:12px;height:100%;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;}
+/* ★leg99：右栏原来那条 `position:sticky;top:0` **撤掉**——"能不能滚"已经由 `overflow-y` 表达，
+   sticky 是"整页滚、右栏钉住"那个模型的产物；两个模型并存会互相打架（钉住的东西在滚动容器里不动）。 */
+@media (max-width:980px){
+  .sw2-merged-grid{grid-template-columns:minmax(0,1fr);height:auto;min-height:0;}
+  .sw2-merged-main,.sw2-merged-side{height:auto;overflow:visible;padding-right:0;}
+}
 
 /* ---------- 观棋：盘算总览 + 动态流 + 位置速览 ---------- */
 .sw2-agenda-strip{margin-bottom:12px;}
@@ -275,7 +327,8 @@
 .sw2-ch-badge{flex:none;font-size:10.5px;border-radius:6px;padding:0 7px;}
 .sw2-ch-badge.ev{color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);}
 .sw2-ch-badge.bk{color:var(--sw2-text-faint);border:1px dashed var(--sw2-line);}
-.sw2-ch-roll{font-size:12.5px;color:var(--sw2-amber);font-weight:600;padding:9px 10px;margin-top:5px;border-top:1px dashed var(--sw2-line);border-bottom:1px dashed var(--sw2-line);}
+/* ★leg94：`.sw2-ch-roll`（编年页里程碑插行）随那一段渲染一起撤掉了——类名已无生产点，规则留此无主，
+   故删除。里程碑本身没消失：它长在大事纪页的 `.sw2-milestone` 卡上（用户令：「这是大事纪旧卷的东西」）。 */
 /* 分层块（真结构 = details.sw2-ch-group，判据按它咬——不是 <summary> 那种恒真判据） */
 .sw2-ch-group{margin:6px 0 2px;border:1px solid var(--sw2-line-soft);border-radius:9px;background:var(--sw2-card);}
 .sw2-ch-group > summary{display:flex;align-items:baseline;gap:10px;padding:8px 12px;cursor:pointer;user-select:none;list-style:none;}
@@ -437,6 +490,10 @@
 .sw2-sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
 .sw2-set-card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:10px;padding:12px 14px;}
 .sw2-set-card h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:9px;display:flex;align-items:center;gap:7px;}
+/* ★leg89：注入那张卡的内层容器——开关行**自己就是一张 `.sw2-set-card.sw2-actions-inline`**
+   （它带 `display:flex`），第一版把它套进外层卡里 ⇒ 卡里套卡、布局是乱的。这里只负责竖着排。 */
+.sw2-inject-box{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+.sw2-inject-box .sw2-set-card{margin:0;}
 .sw2-set-card h4::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
 .sw2-sv-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--sw2-line-soft);font-size:13px;align-items:baseline;}
 .sw2-sv-row:last-child{border-bottom:none;}
@@ -562,8 +619,137 @@
 .sw2-cv-foot{padding:8px 15px;font-size:10.5px;color:var(--sw2-text-faint);border-top:1px solid var(--sw2-line-soft);}
 .sw2-cv-def{padding:14px 16px;font-size:12.5px;color:var(--sw2-text-faint);}
 
+/* ---------- ★leg93c：事件链弹窗（用户令「点击后不要放在编年页了，直接弹出一个小窗口」） ----------
+   病：`bus['open-chain']` 把链视图**硬插进 `#sw2_view_chronicle`** ⇒ 在大事纪·旧卷页点「链」，
+   内容却被塞进**另一个页签**里，玩家得自己切回编年页才看得见。
+   ★三条设计（都为了"不跟面板抢"）：
+     ① 挂在 **`document.body`** 上、**不在面板窗口里** ⇒ 面板是开着还是关着都能看（链的正文本来就是只读事实）；
+     ② `z-index` **高于面板那 50000**（面板自己的弹窗压顶用的是 50000）⇒ 一定浮在面板之上；
+     ③ 内层 `.sw2-cv` 是**已经写好的链视图**（`renderChainViewHtml` 一字不改），
+        这里只给它一个壳、一个"点背景关掉"和一条 ESC。它自带的「收起」按钮（`chain-close`）照旧管用。 */
+.sw2-cv-mask{
+  position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
+  z-index:51000;display:flex;align-items:center;justify-content:center;
+  padding:24px;box-sizing:border-box;background:rgba(13,16,21,.62);
+  font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+  color:var(--sw2-text);font-size:14px;line-height:1.6;
+}
+.sw2-cv-box{
+  width:820px;max-width:100%;max-height:86%;overflow:auto;box-sizing:border-box;
+  padding:14px 16px 4px;background:var(--sw2-panel);
+  border:1px solid var(--sw2-line);border-radius:12px;
+  box-shadow:0 20px 70px rgba(0,0,0,.6);
+}
+/* 弹窗里那条链的圆角与边距收一收（它本来是嵌在页签里的，外边距会顶出多余空隙） */
+.sw2-cv-box > .sw2-cv{margin:0;border:none;background:transparent;border-radius:0;}
+.sw2-cv-hint{font-size:10.5px;color:var(--sw2-text-faint);text-align:right;padding:2px 2px 8px;}
+
 /* K38：拒签可见（世界的重力，动态流顶部裁定条） */
 .sw2-verdict{margin:0 0 6px;padding:6px 10px;border-left:3px solid var(--sw2-amber);background:linear-gradient(120deg,rgba(227,173,85,.10),transparent);font-size:12px;color:#e7cf95;line-height:1.6;word-break:break-all;}
 .sw2-verdict-tag{font-weight:700;margin-right:8px;white-space:nowrap;}
 /* leg21: baseline hint (pre-evolution values) */
 .sw2-baseline-hint{font-size:10.5px;font-weight:400;opacity:.6;margin-left:6px;}
+
+/* ============ leg94 · 「说书」视图（用户令：「我看不懂，还要你给我讲解」） ============
+   为什么另起一格而不是塞进编年：编年是**底层账本**（引擎流水账，逐行、可查、可导出），
+   说书是**给人读的重排**（按因果线成段）——两种东西挤在一格里，用户已经说过"看不懂"。
+   版面口径：默认只展开**还开着的线**（收场的折叠），每条线一段：起头 / 一步步怎么走的 / 代价 / 还开着什么。 */
+.sw2-pan-head{font-size:13px;font-weight:600;color:var(--sw2-text);margin:2px 0 8px;}
+.sw2-pan-stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+.sw2-pan-stat{font-size:11.5px;color:var(--sw2-text-dim);background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:7px;padding:2px 9px;}
+.sw2-pan-stat b{color:var(--sw2-text);}
+.sw2-pan-stat.live{border-color:var(--sw2-amber-dim);}
+.sw2-pan-stat.live b{color:var(--sw2-amber);}
+.sw2-pan-hint{font-size:11.5px;color:var(--sw2-text-faint);line-height:1.7;border-left:2px solid var(--sw2-line);padding-left:9px;margin-bottom:10px;}
+/* ★leg97：「面」这一层不再用区块标题（`.sw2-pan-sec` 那条规则随旧版式撤下——零生产点的死规则，
+   与 leg94 撤 `.sw2-ch-roll` 同一条纪律：**删死规则不算"样式变了"**）。 */
+.sw2-pan-secn{font-weight:400;color:var(--sw2-text-faint);margin-left:6px;}
+.sw2-pan-empty{padding:14px;font-size:12.5px;color:var(--sw2-text-faint);background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;}
+.sw2-pan-thread{margin:6px 0;border:1px solid var(--sw2-line-soft);border-radius:9px;background:var(--sw2-card);}
+.sw2-pan-thread.live{border-color:var(--sw2-amber-dim);}
+.sw2-pan-thread > summary{display:flex;align-items:baseline;gap:9px;padding:8px 12px;cursor:pointer;user-select:none;list-style:none;}
+.sw2-pan-thread > summary::-webkit-details-marker{display:none;}
+.sw2-pan-thread > summary:hover{background:var(--sw2-card-2);border-radius:9px;}
+.sw2-pan-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--sw2-text-faint);}
+.sw2-pan-dot.live{background:var(--sw2-amber);box-shadow:0 0 7px var(--sw2-amber-dim);}
+.sw2-pan-name{font-size:13.5px;font-weight:600;color:var(--sw2-text);}
+.sw2-pan-span{font-size:11px;color:var(--sw2-text-faint);}
+.sw2-pan-badge{margin-left:auto;flex:none;font-size:10.5px;border-radius:6px;padding:1px 8px;}
+.sw2-pan-badge.live{color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);}
+/* ★leg95 第二刀：线头那枚徽分三态（用户令「开没开着不应该挂在事件上」⇒ 状态只在线头说一次）。
+   实线=还在往下长（火烧眉毛）· 虚线但有色=挂着没了结（没人接着写了）· 灰虚线=已收场。 */
+.sw2-pan-badge.stale{color:var(--sw2-text-dim);border:1px dashed var(--sw2-amber-dim);}
+.sw2-pan-badge.done{color:var(--sw2-text-faint);border:1px dashed var(--sw2-line);}
+.sw2-pan-body{padding:2px 12px 10px;}
+.sw2-pan-rule{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.75;border-left:2px solid var(--sw2-amber-dim);padding-left:9px;margin:4px 0 8px;}
+.sw2-pan-sub{font-size:11.5px;font-weight:600;color:var(--sw2-text-dim);margin:9px 0 3px;}
+.sw2-pan-events,.sw2-pan-steps,.sw2-pan-costs,.sw2-pan-left{margin:0;padding-left:18px;}
+.sw2-pan-events li,.sw2-pan-steps li,.sw2-pan-costs li,.sw2-pan-left li{font-size:12.5px;line-height:1.8;color:var(--sw2-text);}
+.sw2-pan-costs li{color:#e7cf95;}
+.sw2-pan-left li{color:var(--sw2-text-dim);}
+.sw2-pan-t{font-size:11px;color:var(--sw2-text-faint);margin-right:4px;white-space:nowrap;}
+.sw2-pan-why{font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-pan-at{font-size:11.5px;color:var(--sw2-blue);}
+.sw2-pan-who{font-size:11.5px;color:var(--sw2-text-dim);}
+.sw2-pan-done{font-size:11px;color:var(--sw2-text-faint);}
+.sw2-pan-open{font-size:11px;color:var(--sw2-amber);}
+/* ★leg95：点层**不再印状态标**（用户令「开没开着不应该挂在事件上」）——这一格留给线头那枚徽，
+   它自己的三态见上面 `.sw2-pan-badge.live / .stale / .done`。 */
+.sw2-pan-foot{font-size:11px;color:var(--sw2-text-faint);margin-top:9px;border-top:1px dashed var(--sw2-line-soft);padding-top:6px;}
+.sw2-rawid-note{font-size:11px;color:var(--sw2-text-faint);margin-top:4px;}
+.sw2-rawid-num{color:var(--sw2-text-faint);}
+/* 零散的事：单件事一行（不进主线名单，但找得到） */
+.sw2-pan-oneshot{margin:0;padding-left:18px;}
+.sw2-pan-oneshot li{font-size:12.5px;line-height:1.9;color:var(--sw2-text);}
+
+/* ============ leg97 · 「面」四层（用户令：「以人物为切口感觉就不像面了」⇒ 面是空间上的一个地方） ============
+   版式照用户看过的演示页（`F:/deepseek/tmp/prototypes/leg96-face-view-B.html`，用户说「我看了，不错」）：
+   大势（一句前提）→ 此刻（活数）→ 面（一个地方一段卡）→ 线（一段故事）→ 点（一件事）。
+   ★"块"降为**面与面之间的关系**，印在面头上的"与别处相连"那一行（不是一层）。 */
+/* 大势：书里写定的一句（原文措辞）——它是**前提**，与面是"对读"关系，不去统领面 */
+.sw2-pan-dashi{border:1px solid var(--sw2-line);border-radius:10px;background:var(--sw2-card);padding:11px 14px;margin:0 0 9px;}
+.sw2-pan-dashilab{font-size:11.5px;color:var(--sw2-blue);letter-spacing:.06em;}
+.sw2-pan-dashitxt{font-size:14.5px;color:var(--sw2-text);line-height:1.75;margin:4px 0 0;}
+/* 此刻：活数那一行（机械算出来的，与"书里写定的"大势分得清清楚楚） */
+.sw2-pan-now{font-size:12.5px;color:var(--sw2-text-dim);border-top:1px dashed var(--sw2-line);padding-top:7px;margin-bottom:8px;}
+.sw2-pan-now b{color:var(--sw2-text);}
+/* 面：一个地方一张卡 */
+.sw2-pan-face{border:1px solid var(--sw2-line);border-radius:10px;margin:0 0 14px;background:var(--sw2-card);overflow:hidden;}
+.sw2-pan-fh{padding:10px 13px;background:var(--sw2-card-2);border-bottom:1px solid var(--sw2-line-soft);}
+.sw2-pan-fhl{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.sw2-pan-fhn{font-size:15.5px;font-weight:600;color:var(--sw2-text);}
+.sw2-pan-fhs{font-size:12px;color:var(--sw2-text-dim);}
+.sw2-pan-fhs b{color:var(--sw2-text);}
+/* 桥（原"块"）：面头上那一行"与别处相连：某某 → 哪几处" */
+.sw2-pan-brg{font-size:11.5px;color:var(--sw2-blue);margin-top:4px;line-height:1.75;}
+.sw2-pan-brg b{color:var(--sw2-text);}
+.sw2-pan-fb{padding:9px 13px 13px;}
+/* 线：面里那一段（本身是可折叠的一整条故事）
+   ★★leg98（用户令「**是改这一栏的颜色**不是标题文字」——指着线头那一栏）：
+     原来这里是 `background:transparent` ⇒ **透出的就是面卡的底**，实测两边**亮度差 0**
+     （`--sw2-card` #20252f 对 #20252f），整条栏只靠一条 2px 竖线划分，而那条竖线
+     （`--sw2-line` #2c3342）与面卡底的对比只有 **1.21:1** ⇒ 栏目和面卡糊成一片，这就是"没对比度"。
+     ⇒ 给**这一栏自己一个底**（`#282f3c`，对面卡 **1.14:1**、对悬停底 1.04:1）——
+       与本仓既有的台面阶梯同源（`--sw2-card` #20252f → `--sw2-card-2` #262c38），只多走半档；
+     竖线跟着提亮到 `--sw2-line` 的下一档（`#3a4356`，对栏底 1.35:1），让它真的像"栏的边"。
+     ★为什么不用 `--sw2-card-2`（现成的变量）：那样**悬停时就看不出来了**（悬停换的正是它）。
+     ★为什么不动标题文字的颜色：标题本来就 12.76:1（WCAG AAA 只要 7）——**文字没问题，是"这一栏"没有面**。
+     ★量过的候选全在 `F:/deepseek/tmp/prototypes/leg98-rowbg.mjs`（不靠眼睛猜）。 */
+.sw2-pan-face .sw2-pan-thread{margin:0 0 10px;background:#282f3c;border:none;border-left:2px solid #3a4356;border-radius:0 7px 7px 0;}
+.sw2-pan-face .sw2-pan-thread.live{border-left-color:var(--sw2-amber);}
+/* ★leg98：悬停再亮一档（原来是 `--sw2-card-2`，现在栏底已经比它亮 ⇒ 换 `--sw2-line` #2c3342） */
+.sw2-pan-face .sw2-pan-thread > summary:hover{background:#2c3342;}
+/* 线伸到哪儿去了（面与面之间的对读）· 与这一处别的线共享谁 */
+.sw2-pan-else{font-size:11.5px;color:var(--sw2-text-dim);margin:2px 0 1px;}
+.sw2-pan-share{font-size:11.5px;color:var(--sw2-blue);margin:1px 0 2px;}
+.sw2-pan-share b{color:var(--sw2-text);}
+/* 单线地点：只被一条线到达的那些地方（挂在它那条线的落脚面里 · 地名照印） */
+.sw2-pan-lonebox{margin-top:11px;border-top:1px dashed var(--sw2-line-soft);padding-top:8px;}
+/* 「各处散落」：一个地方只有一条线路过的那一批（用户裁的名字，不是「其他」、不是「位置未明」） */
+.sw2-pan-other{border:1px dashed var(--sw2-line);border-radius:10px;background:var(--sw2-panel);padding:10px 13px;margin-bottom:14px;}
+.sw2-pan-otherh{font-size:12.5px;color:var(--sw2-text-dim);margin-bottom:5px;}
+/* ★自证闸（本棒最值钱的一处）：总数对不对得上，印在页脚——与编年页那条同源 */
+.sw2-pan-selfcheck{font-size:11.5px;color:var(--sw2-text-faint);margin-top:16px;border-top:1px dashed var(--sw2-line);padding-top:8px;line-height:1.8;}
+.sw2-pan-selfcheck b{color:var(--sw2-text-dim);}
+.sw2-pan-selfcheck.bad{color:var(--sw2-red);border-top-color:var(--sw2-red);}
+.sw2-pan-selfcheck.bad b{color:var(--sw2-red);}

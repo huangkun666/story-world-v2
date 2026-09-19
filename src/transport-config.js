@@ -16,16 +16,25 @@ export { EXTRACTION_MAX_TOKENS };
 //   用法：`resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true })`
 //   为什么必须显式给（而不是自动判断）：同一份 settings 也用于主调用（演算），超时口径不同 ⇒
 //   由**调用点**声明意图，不在配置解析里猜（免得把主调用也悄悄改成 5 分钟）。
-export function resolveBrowserTransport(settings, { maxTokens, extraction = false } = {}) {
+// ★★★leg87（用户令「改也改不了是死的不会根据模型变化」）：新增 **`limits`** 形参——主调用的
+//   `timeoutMs`/`maxTokens` 从此**由调用点从设置现取**（`web/index.js` 的 `advanceTick`）。
+//   ★它**绝不覆盖抽取档**（`extraction: true` 那条路的超时/输出上限是 leg62 实测定的：
+//     超时 300 s、输出 32768 —— 见 `transport-http.js` 的 leg62 注释），两条路各自独立。
+//   ★缺省仍是"不传"⇒ `createHttpTransport` 用 `PROPOSED_CALL_LIMITS`（**未填时行为逐字节不变**）。
+export function resolveBrowserTransport(settings, { maxTokens, extraction = false, limits = null } = {}) {
     const s = settings || {};
     if (!s.baseUrl || !s.apiKey || !s.model) return null;
+    const lim = limits && typeof limits === 'object' ? limits : {};
+    // 优先级：抽取档（extraction）> 显式 `limits`（主调用现读）> 传输层出厂缺省。
+    const maxTokensFinal = extraction ? (maxTokens || EXTRACTION_MAX_TOKENS) : (lim.maxTokens ?? maxTokens);
+    const timeoutMsFinal = extraction ? EXTRACTION_TIMEOUT_MS : lim.timeoutMs;
     return {
         transport: createHttpTransport({
             baseUrl: s.baseUrl,
             apiKey: s.apiKey,
             model: s.model,
-            ...(maxTokens ? { maxTokens } : {}),
-            ...(extraction ? { timeoutMs: EXTRACTION_TIMEOUT_MS } : {}),
+            ...(maxTokensFinal ? { maxTokens: maxTokensFinal } : {}),
+            ...(timeoutMsFinal ? { timeoutMs: timeoutMsFinal } : {}),
             ...(s.fetchImpl ? { fetchImpl: s.fetchImpl } : {}), // 测试注入通道
         }),
         source: 'settings',

@@ -149,6 +149,33 @@ export const worldStepSchema = {
             kind: 'array',
             items: { kind: 'string', minLength: 1 },
         },
+        // ★★★leg95（用户令「让 llm 来决定何时结束」+「引入机械就一定要避免让代码去理解语义」）：
+        //   **模型判"这一段讲完了"的通道**——与 `agendaCancels` 同构（提议权归模型、落账归引擎），
+        //   但引擎那一侧**只做机械审计、不判语义**：号在册 ∧ 还没收场 ∧ 同批不重复 ∧ 每轮配额。
+        //   ★它治的是那道**结构死锁**：种子的"链头已了结"永远为 false（`settle.js` 的 chainSettled 旧法）
+        //     ⇒ 种子底下长出来的每一环永远闭不了（真账 A 局 16 条 / B 局 44 条，推 40 轮只增不减）。
+        //     模型点名链头收场 ⇒ 底下那串当场过门 ⇒ 引擎的老规则自己一层层扫干净。
+        //     **真账回测**（`demo/measure-leg95-close-live.js`，问法「讲完了没有」）：B 局只点 9 件 ⇒ 连带解开 21 件。
+        //   ★形状：**对象数组 `{event, why}`**（照 `entityUpdates` 那一族的写法）。
+        //     ⚠一处当场踩到的坑（留档）：**本仓的 `schema.js` 没有 `anyOf`**（只有 object/array/string/
+        //     number/boolean/numRecord/strRecord/any 八种）——第一版想写成"字符串或对象都收"，那是**凭空写契约**，
+        //     校验器根本不认。⇒ 定稿单一形状：`event` 必填、`why` 可省（引擎对裸字符串仍做防御性兼容，
+        //     但**契约只承诺这一种**）。
+        //   ★**可选组**（与 `entityUpdates` / `lookupScales` 同一条口径）：缺席 = 本轮不提议，**不是形状错误**
+        //     ——既有 ~110 处夹具与历史快照都没有这一组，强行必填会一次性砸掉且无收益。
+        //   ★每次 ≤ `EVENT_CLOSE_CAP`（8）：超出的**顺延下一轮**（引擎给警告，不整步拒——配额不是形状）。
+        eventClosures: {
+            kind: 'array',
+            items: {
+                kind: 'object',
+                additional: false,
+                required: ['event'],
+                props: {
+                    event: { kind: 'string', minLength: 1 },   // 照抄输入里未决事件的 id
+                    why: { kind: 'string' },                   // 一句话：为什么这一段已经讲完了（进编年）
+                },
+            },
+        },
         actions: {
             kind: 'array',
             items: {

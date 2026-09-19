@@ -5,7 +5,8 @@
 // 跑法：node demo/measure-leg25g-map.js "<chat jsonl 副本>" "<角色卡 png>"
 import { readFileSync } from 'node:fs';
 import { characterBookEntries, inheritLocations } from '../web/index.js';
-import { renderAll, PANEL_BUILD } from '../src/render.js';
+import { renderAll } from '../src/render.js';
+import { PANEL_BUILD } from '../src/render-base.js';   // ★leg85：共用底搬进 render-base.js
 
 function cardFromPng(file) {
     const buf = readFileSync(file);

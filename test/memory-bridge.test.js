@@ -24,7 +24,9 @@ import {
     MEMORY_EVENT_TAIL,
 } from '../src/memory-bridge.js';
 import { PLUGIN_TABLE_STATE, PLUGIN_TABLE_EVENTS, LEGACY_TABLE_IDS, DISPLAY_NAME_STATE, DISPLAY_NAME_EVENTS } from '../src/memory-bridge.js';
-import { memoryStore, SW2_RECORD_PREFIX, TABLE_ID_ALIAS } from '../web/index.js';
+// ★★★leg72（丙-web）：记忆投递子系统已搬出接线层 ⇒ 这三样改从它的**新家**取
+//   （口径同 leg71：**不搞 re-export** —— 那会让"它到底住哪"重新变模糊）。
+import { memoryStore, SW2_RECORD_PREFIX, TABLE_ID_ALIAS } from '../web/memory-store.js';
 
 // 夹具同时覆盖四条路：已了结（plot 源 / state 源）、在飞（ripple 源）、成段（里程碑）、
 //   "账上有地点"与"账上没有名字的人"（e3 的 location 是占位 `未明`，不许当人名用）。

@@ -14,7 +14,24 @@ import {
     diffWorld, applyDelta, makeSnapshot, planStep, restoreFrom, planRetention, describeSnapshots,
     ANCHOR_EVERY, RETAIN_STEPS, SNAPSHOT_FORMAT,
 } from '../src/snapshot.js';
-import { memoryStore, markMemoryPush, memoryPushLine, pushMemoryNow } from '../web/index.js';
+// ★★★leg72（丙-web）：记忆那一族（含"投递自证面"的状态与其读法）已搬进 `web/memory-store.js`
+//   ⇒ 改从新家取。★状态 `sw2MemoryPush` 的**唯一家**也在那边（本文件只经它给的两个通道读/清）。
+import { memoryStore, markMemoryPush, memoryPushLine, pushMemoryNow, readMemoryPush, clearMemoryPush } from '../web/memory-store.js';
+
+// ★★★leg72：**"这个函数住哪个文件"变了** ⇒ 下面两条**读源码的结构锁**跟着搬家（不搞 re-export 骗锁）。
+//   ★纪律：判据锚的是"**声明必须在模块顶层、块外调用得到**"这件事，不是"它必须住在 index.js 里"——
+//     所以这里按**符号的实际新家**取源码，判据本身一个字没放松（`declOf` 与深度口径原样保留）。
+// ★★★leg73（丙-web 第二格）：**快照族**（`ensureSnapshotChain` / `snapshotStore` / `requestSnapshot` /
+//   `restoreSnapshot` / `clearSnapshots` / `resetSnapshots` / `refreshSnapshots` …）已整族搬进
+//   `web/snapshot-store.js` ⇒ 同一个口径继续用：**按符号的新家取源码**，判据内容一个字不改。
+const WEB_SRC = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+// 记忆那一族（leg72 起住 memory-store.js）· 快照那一族（leg73 起住 snapshot-store.js）· 其余仍在接线层 index.js。
+const SRC_OF_FILE = {
+    'web/memory-store.js': () => WEB_SRC('../web/memory-store.js'),
+    'web/snapshot-store.js': () => WEB_SRC('../web/snapshot-store.js'),
+    'web/hot-ledger.js': () => WEB_SRC('../web/hot-ledger.js'),   // ★leg78：热账族的新家
+    'web/index.js': () => WEB_SRC('../web/index.js'),
+};
 
 // 逐字节比较（**判据必须是它**：快照的"对不对"只有一个含义——恢复出来的账与当时逐字节相等）
 const sameBytes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -343,7 +360,9 @@ test('路径含 `/` 的键：整棵替换（不许产出无法表示的路径）
 //   为什么漏了：那两处调用点在**同一个块内**（点击处理器），点了不炸；**只有自动流程那条路每轮都炸**。
 //   判据（结构性的，且**防复发**）：凡"由自动流程调用"的函数，声明必须在**模块顶层**（那行不许有缩进）。
 test('★leg27 d：自动流程调用的函数必须在**模块顶层**（缩进即块内 ⇒ 那次"落账失败"的病根）', () => {
-    const src = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    // ★★★leg72：这几个符号如今**分居两个文件** ⇒ 逐个按"它的新家"取源码。
+    //   ★判据的**内容**没变（仍是"声明行的花括号深度必须是 0"），变的只是"去哪读"。
+    const src = SRC_OF_FILE['web/index.js']();
     const lines = src.split(/\r?\n/);
     // 判据用**花括号深度**（逐字符扫描），**不许用行首缩进**——
     //   我第一版就是拿 `trimStart()` 判的，而它对"未闭合的模板字符串行"也会给出 0 ⇒ **给了假绿**，
@@ -352,21 +371,37 @@ test('★leg27 d：自动流程调用的函数必须在**模块顶层**（缩进
     // ★判据要**抗前缀变化**：原来写死 `'function memoryStore('`，而 leg27 g 把它提成
     //   `export function memoryStore(YM = …)`（为可注入真测）⇒ 锁当场红在"找不到函数"上。
     //   现在按**声明行**匹配（允许 `export `/`async ` 前缀），判据跟形状走、不跟字面前缀走。
-    const declOf = (name) => {
+    // ★★★leg72：**按"符号的新家"逐个取源码**（记忆那两族已搬去 `web/memory-store.js`）。
+    //   ★判据口径一个字没放松：仍然是"声明行的花括号深度必须 = 0"（块内声明 ⇒ 块外调用不到 ⇒ 落账失败）。
+    //   ★反向锁（下面那条）也照旧，只换取值来源。
+    const whereOf = {
+        memoryStore: 'web/memory-store.js',
+        pushMemoryNow: 'web/memory-store.js',
+        // ★leg73：快照那三个已搬进 snapshot-store.js（判据口径不变：声明行花括号深度 = 0）
+        snapshotStore: 'web/snapshot-store.js',
+        requestSnapshot: 'web/snapshot-store.js',
+        refreshSnapshots: 'web/snapshot-store.js',
+        advanceTick: 'web/index.js',
+    };
+    const srcOf = new Map();                                   // 文件 → 它的源码（同一个文件只读一次）
+    const declOfIn = (name) => {
+        const rel = whereOf[name];
+        if (!srcOf.has(rel)) { const s = SRC_OF_FILE[rel](); srcOf.set(rel, s); }
+        const ls = srcOf.get(rel).split(/\r?\n/);
         const marker = `function ${name}(`;
         let depth = 0;
-        for (let i = 0; i < lines.length; i += 1) {
+        for (let i = 0; i < ls.length; i += 1) {
             const before = depth;
-            const t = lines[i].trim();
-            if (t.includes(marker) && /^(export\s+)?(async\s+)?function\s/.test(t)) return { line: i + 1, depth: before, head: t };
-            for (const ch of lines[i]) { if (ch === '{') depth += 1; else if (ch === '}') depth -= 1; }
+            const t = ls[i].trim();
+            if (t.includes(marker) && /^(export\s+)?(async\s+)?function\s/.test(t)) return { line: i + 1, depth: before, head: t, rel };
+            for (const ch of ls[i]) { if (ch === '{') depth += 1; else if (ch === '}') depth -= 1; }
         }
         return null;
     };
     for (const name of ['memoryStore', 'pushMemoryNow', 'snapshotStore', 'requestSnapshot', 'refreshSnapshots', 'advanceTick']) {
-        const d = declOf(name);
-        assert.ok(d, `前置：找得到 function ${name}(（L 位置与 head 见下）`);
-        assert.equal(d.depth, 0, `★${name}（L${d.line}：${d.head}）的花括号深度 = ${d.depth} ⇒ 它在某个块内，块外调用不到（正是「落账失败：pushMemoryNow is not defined」）`);
+        const d = declOfIn(name);
+        assert.ok(d, `前置：在 ${whereOf[name]} 里找得到 function ${name}(（L 位置与 head 见下）`);
+        assert.equal(d.depth, 0, `★${name}（${d.rel} L${d.line}：${d.head}）的花括号深度 = ${d.depth} ⇒ 它在某个块内，块外调用不到（正是「落账失败：pushMemoryNow is not defined」）`);
     }
     // 反向锁：tick 落账那条路真的会调记忆投递（开关开着时）
     const saveSeg = src.slice(src.indexOf('save: async (ssot)'), src.indexOf('refresh:', src.indexOf('save: async (ssot)')));
@@ -433,7 +468,10 @@ function makeFakeYuzukiMemory() {
 }
 
 test('★leg27 g：记忆投递不许用 `null` 占位 sessionId（那会把用户档案清空）——且档案必须逐条保住', () => {
-    const src = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    // ★★★leg72：`readState` 这一族已搬进 `web/memory-store.js` ⇒ **结构锁跟着读新家**。
+    //   ★判据本身一个字没放松（仍是"`loadState` 的**第 2 个位置实参**不许是 `null`"）——
+    //     变的只是"去哪读源码"。这正是本仓那条纪律：判据锚**语义**，不锚"它必须住在某个文件里"。
+    const src = SRC_OF_FILE['web/memory-store.js']();
     // ① 结构层：**先剥注释再扫**（本仓禁止的写法会在注释里被引用＝留档，那是合法的；
     //    锁只能盯**真代码**——第一版没剥注释，红在了我自己的留档注释上，这条自检因此写进判据）。
     const code = stripComments(src);
@@ -574,7 +612,8 @@ test('★leg27 i：pushMemoryNow 必须**真跑得通**（成功日志那一行�
 //   ⇒ 刷新后新链又从 s1 开始 ⇒ **新快照按 id 覆盖旧快照**，多条链交织、重复份永远清不掉。
 //   判据：链必须**加载时与盘对齐**（取盘上最大序号续号），且"重置"必须把对齐标记一起清掉。
 test('★leg27 e：快照链必须与盘对齐（刷新不许把 seq 归零 ⇒ 不许覆盖旧快照）', () => {
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    // ★leg73：这一族已整族搬进 `web/snapshot-store.js` ⇒ 取样改指新家（判据内容一个字没改）
+    const web = SRC_OF_FILE['web/snapshot-store.js']();
     const bodyOf = (marker) => {
         const a = web.indexOf(marker);
         if (a < 0) return '';
@@ -584,7 +623,9 @@ test('★leg27 e：快照链必须与盘对齐（刷新不许把 seq 归零 ⇒ 
     };
     const ensure = bodyOf('async function ensureSnapshotChain(');
     assert.ok(ensure.length > 100, '前置：`ensureSnapshotChain` 必须在（链对齐的收口）');
-    assert.match(ensure, /snapshotStore\(\)\.list\(\)/, '★必须真的读盘（盘上有什么，链就从哪接着长）');
+    // ★leg73：签名由 `snapshotStore()` 变成 `snapshotStore(freshCtx)`（它现在只接注入来的 freshCtx）
+    //   ⇒ 判据锚**语义**（"必须真的读盘 list()"），不锚那个实参名——否则每次改注入形态都要改锁。
+    assert.match(ensure, /snapshotStore\([^)]*\)\.list\(\)/, '★必须真的读盘（盘上有什么，链就从哪接着长）');
     // 判据用**纯字符串包含**（不用正则字面量——本次就因为转义踩了一次"整文件语法错"）
     assert.ok(ensure.includes('/^s(' + String.fromCharCode(92) + 'd+)$/'), '★必须按 `s<数字>` 精确解析序号（旧法 `replace(/^s/,\'\')` 会静默降级成 0）');
     assert.match(ensure, /maxSeq/, '★取盘上最大序号续号（不是从 0 重来）');
@@ -600,31 +641,100 @@ test('★leg27 e：快照链必须与盘对齐（刷新不许把 seq 归零 ⇒ 
     assert.match(reset, /requestSnapshot\(current/, '★重置后必须立刻给当前世界拍一份链头');
 });
 
-test('★leg27 后：生产接线——快照钩子真的挂在唯一落账收口 writeHotMeta 上', () => {
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
-    // 取样按**函数边界**（用下一个顶层声明当下界），不用魔数窗口——本次吃过"窗口太短 ⇒ 断言假红"
-    const bodyOf = (marker, nextMarkers) => {
-        const a = web.indexOf(marker);
+// ★★★leg72b（**真缺陷，本棒修掉的**）：恢复快照那条通道的落盘**曾被换成存根**。
+//   病：`restoreSnapshot()` 里写的是 `const flushed = { ok: true };`（leg67–71 期间的未提交改动），
+//   而 `bus['snapshot-restore']` 印的是 `r.flushed ? ' · 已落盘' : ' · ⚠ 落盘失败'`
+//   ⇒ ①**一次 `flushHotMeta()` 都没调**；②那半句**恒真**（对象真值恒为真）⇒ 面板**报了一个不再为真的数**。
+//   ★为什么原来没有锁咬住它：`test/adopt-scale-draft.test.js` 里有一条 leg70 立的**锚点唯一性**判据，
+//   它顺手记了一句"不带注释的 `const flushed = await flushHotMeta();` 在全仓共 6 处"——
+//   ★那是**观察值、不是设计不变量**（探针实测 7 处），所以存根把它变成 5 处时**一条锁都没红**。
+//   ⇒ 本判据锚**语义**（"恢复这条通道必须真的落盘、且结果如实流到面板"），不锚计数。
+test('★★leg72b：恢复快照必须**真的落盘**、且面板读的是**真状态**（防"存根恒真"回潮）', () => {
+    // ★leg73：`restoreSnapshot` 随快照族搬进 `web/snapshot-store.js`（判据内容一个字没改）；
+    //   面板侧那句（`r.flushed?.ok`）仍在接线层的 `bus['snapshot-restore']` 里 ⇒ 两处各按新家取。
+    const web = SRC_OF_FILE['web/index.js']();                       // 面板侧（动作总线）
+    const snapMod = SRC_OF_FILE['web/snapshot-store.js']();          // 恢复通道的实现体
+    const bodyOfIn = (src, marker, nextMarkers) => {
+        const a = src.indexOf(marker);
         if (a < 0) return '';
         let b = -1;
         for (const nm of nextMarkers) {
-            const i = web.indexOf(nm, a + marker.length);
+            const i = src.indexOf(nm, a + marker.length);
             if (i > 0 && (b < 0 || i < b)) b = i;
         }
-        return web.slice(a, b > 0 ? b : undefined);
+        return src.slice(a, b > 0 ? b : undefined);
     };
-    const fn = bodyOf('function writeHotMeta(meta)', ['\nfunction ', '\nasync function ', '\nexport async function ']);
-    assert.ok(fn.length > 100, '前置：找得到 writeHotMeta 函数体');
-    assert.match(fn, /requestSnapshot\(/, '★writeHotMeta 必须调 requestSnapshot（否则"每步生成快照"根本没接线）');
-    const req = bodyOf('function requestSnapshot(', ['\nasync function ', '\nfunction ', '\nexport async function ']);
+    const body = bodyOfIn(snapMod, 'export async function restoreSnapshot(', ['\nexport async function clearSnapshots(']);
+    assert.ok(body.length > 200, '前置：取得到 restoreSnapshot 的函数体（新家 web/snapshot-store.js）');
+
+    // ① 真落盘（leg20 语义：关键路径**落盘后**才报成功）——★这一条就是那条存根的反面
+    assert.match(body, /const flushed = await flushHotMeta\(\);/,
+        '★恢复通道必须**真的** `await flushHotMeta()`（写成 `{ ok: true }` 存根 ⇒ 一次落盘都没调，却报"已落盘"）');
+    // ★★"不许是字面量"这一条**必须剥掉注释再判**：本判据上面的说明注释里**逐字写着那个存根**
+    //   ⇒ 裸正则当场红在我自己的留档上（本仓 leg71 §4.1 那个洞的**第三次**复发，如实留档）。
+    //   口径：只剥**整行注释**（够用且不会误伤含引号的真代码行）。
+    const codeOnly = (t) => t.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+    const stripSelfRef = (t) => t.replace(/const flushed = \{ ok: true \};/g, '');   // 去掉"反面样例"那个字面量引用
+    assert.ok(!/const flushed = \{/.test(codeOnly(stripSelfRef(body))),
+        '★★落盘结果**不许是字面量**（存根 `{ ok: true }` 会让下游恒判成功——本棒修掉的正是它）');
+    assert.ok(/const flushed = \{/.test(body),
+        '★剥离器自证：本判据的注释里**确实**写着那个存根（所以上面那条才必须剥注释再判）');
+    // ② 结果必须**流出去**（算了不用 = 还是个摆设）
+    assert.match(body, /return \{[^}]*\bflushed\b/, '★`flushed` 必须随返回值交给调用方（否则面板无从如实报）');
+
+    // ③ 面板侧读的必须是**真状态**：`flushHotMeta` 返回三态对象 ⇒ 要读 `.ok`，不是判对象真值
+    //    （写 `r.flushed ?` 是判对象真值=恒真 ⇒ 真失败也印"已落盘"）
+    assert.match(web, /r\.flushed\?\.ok \? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'/,
+        '★★`snapshot-restore` 必须按 `flushed.ok` 分叉（原来写 `r.flushed ?` ⇒ 恒真、失败也报已落盘）');
+
+    // ④ 反向自证：这条判据咬的是**形状**，拿两个假函数体验一遍，必须"好的过、坏的不过"
+    const GOOD = 'const flushed = await flushHotMeta();\nsw2LastWorld = x;\nreturn { ok: true, tick: t, plan: p, flushed };';
+    const BAD = 'const flushed = { ok: true };\nsw2LastWorld = x;\nreturn { ok: true, tick: t, plan: p, flushed };';
+    assert.match(GOOD, /const flushed = await flushHotMeta\(\);/, '★反向自证：真落盘那种写法必须被认成合格');
+    assert.ok(!/const flushed = \{/.test(GOOD), '★反向自证：真落盘不许被误判成存根');
+    assert.match(BAD, /const flushed = \{/, '★反向自证：**存根必须被认出来**（否则这条锁是假绿）');
+});
+
+test('★leg27 后：生产接线——快照钩子真的挂在唯一落账收口 writeHotMeta 上', () => {
+    // ★leg73：本判据横跨**两个文件** ⇒ 各按"符号的新家"取：
+    //   · `writeHotMeta`（落账收口）★**leg78 起搬进 `web/hot-ledger.js`**（热账族整族搬走）；
+    //   · `requestSnapshot` / `restoreSnapshot` 的实现体在 `web/snapshot-store.js`（leg73 搬的）。
+    const hotMod = SRC_OF_FILE['web/hot-ledger.js']();
+    const snapMod = SRC_OF_FILE['web/snapshot-store.js']();
+    // 取样按**函数边界**（用下一个顶层声明当下界），不用魔数窗口——本次吃过"窗口太短 ⇒ 断言假红"
+    const bodyOfIn = (src, marker, nextMarkers) => {
+        const a = src.indexOf(marker);
+        if (a < 0) return '';
+        let b = -1;
+        for (const nm of nextMarkers) {
+            const i = src.indexOf(nm, a + marker.length);
+            if (i > 0 && (b < 0 || i < b)) b = i;
+        }
+        return src.slice(a, b > 0 ? b : undefined);
+    };
+    // ★leg78：`writeHotMeta` 现在**不带 `function` 前缀**（它是 `export function`）
+    const fn = bodyOfIn(hotMod, 'export function writeHotMeta(meta)', ['\nexport function ', '\nfunction ', '\nconst ', '\nlet ']);
+    assert.ok(fn.length > 100, '前置：在热账新家找得到 writeHotMeta 函数体');
+    // ★leg73：调用点改成走 hub（`snapHub.requestSnapshot(…)`）——判据锚**"这一处必须真的调它"**，
+    //   所以形态都接受：裸名（旧）· `snapHub.` 成员（leg73）· `getSnapHub().` 取值函数（★leg78：
+    //   快照 hub 由接线层**在热账之后**才建 ⇒ 只能注入取值函数，见 `web/hot-ledger.js` 文件头"两处迟到"）。
+    //   ★不许放宽成"只要提到 requestSnapshot"——必须带左括号（= 真调用），否则一句注释就能骗过它。
+    assert.match(fn, /(?:^|[^\w$.])(?:getSnapHub\(\)\.|snapHub\.)?requestSnapshot\s*\(/,
+        '★writeHotMeta 必须**真的调** requestSnapshot（裸名 / `snapHub.` / `getSnapHub().`）——否则"每步生成快照"根本没接线');
+    // ★自证：必须走**受控通道**（不是裸名，也不是直接抓死那个 hub 对象）——防"判据放宽之后旧形态悄悄回潮"
+    assert.match(fn, /getSnapHub\(\)\.requestSnapshot\s*\(/,
+        '★leg78 起落账钩子必须走 `getSnapHub().requestSnapshot(`（快照 hub 是迟到注入的取值函数）');
+    const req = bodyOfIn(snapMod, 'export function requestSnapshot(', ['\nasync function ', '\nfunction ', '\nexport async function ']);
+    assert.ok(req.length > 100, '前置：在新家取得到 requestSnapshot 的函数体');
     assert.match(req, /catch\s*\(/, '★requestSnapshot 必须自带 try/catch（快照失败绝不许影响世界推进）');
     // ★leg27 d：内容闸必须在（"落账"不等于"世界动了"）
     assert.match(req, /sw2SnapLast/, '★必须有"内容没变就不拍"的闸（用户实拍「怎么一下子多了这么多，落账太细了还是 tick 吧」）');
     assert.match(req, /if \(sw2SnapLast\.includes\(fp\)\) return;/, '★逐字节相同 ⇒ 直接不拍');
-    const restore = bodyOf('export async function restoreSnapshot(', ['\nexport async function ', '\nfunction ']);
+    const restore = bodyOfIn(snapMod, 'export async function restoreSnapshot(', ['\nexport async function ', '\nfunction ']);
     assert.match(restore, /requestSnapshot\(current/, '★恢复前必须先给当前状态拍一份');
     assert.match(restore, /if \(!r\.ok\) return \{ ok: false/, '★链不可恢复时明确拒绝（不许"大概恢复"）');
-    assert.match(web, /'snapshots'/, 'SECTIONS 必须含 snapshots');
+    // ★leg78：`SECTIONS`（八个页签）是**接线层**的东西，与热账族无关 ⇒ 这里按名字取接线层源码
+    assert.match(SRC_OF_FILE['web/index.js'](), /'snapshots'/, 'SECTIONS 必须含 snapshots');
     const tpl = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
     assert.match(tpl, /id="sw2_view_snapshots"/, '★模板必须有快照页容器（缺它 ⇒ 渲染产物无处可填）');
     assert.equal(typeof renderSnapshotsHtml, 'function', '渲染面 renderSnapshotsHtml 必须在');

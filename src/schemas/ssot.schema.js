@@ -461,6 +461,15 @@ export const ssotSchema = {
                     },
                     closed: { kind: 'boolean' },
                     closedAt: { kind: 'number', int: true, min: 0 },   // K18/因果链 T1/T3：闭环落账 tick（源结清/链尾结清时写；归档判龄用；历史闭环无此字段视为可直接归档）
+                    // ★★leg95（用户令「让 llm 来决定何时结束」+「机械不许替模型判语义」）：**收场留痕两格**——
+                    //   这两格是"账目合上了"与"真的讲完了"分开记的**唯一凭据**（此前一个 `closed` 布尔背三种语义，
+                    //   下游分不清对面是哪一种，面板因此把"账目状态"当事实印出来——用户截图那句「还开着」的病根）。
+                    //   `closedBy`：'model' = 模型判"这一段讲完了"（`eventClosures` 通道）；缺格 = 引擎机械扫的
+                    //   （源结清/链尾结清/取消联闭——机械清扫是"账目的事"，不声称任何语义）。
+                    //   `closedWhy`：模型给出的一句话理由（机械清扫不写这格——它没有理由，只有判据）。
+                    //   两格都可选（旧账零扰动；`additional:false` 下不加这两格会**判据当场红**）。
+                    closedBy: { kind: 'string', enum: ['model'] },
+                    closedWhy: { kind: 'string', minLength: 1 },
                 },
             },
         },
@@ -530,6 +539,13 @@ export const ssotSchema = {
                     additional: true,
                     props: {},
                 },
+                // ★★★leg89：**这一轮世界发生了什么**（给聊天模型注入用）——`runTick` 结算后写，
+                //   下一轮 `web/inject.js` 的③段读它注入聊天上下文（开关默认关）。
+                //   ★形状：编年条目拼成的**一句文本**（`◆ [第N轮] …；◆ …`），不是结构。
+                //   ★为什么登记在这里（本笔实测代价）：漏登记 ⇒ `test/backdrop-smoke.test.js` 的
+                //     "非预期警告"当场红（`$.meta.lastInjection: 未知字段`）——**这正是判据该干的活**：
+                //     契约层不许有"引擎偷偷多写的字段"。
+                lastInjection: { kind: 'string', minLength: 1 },   // 可选（没有新事发生 ⇒ 键不出现）
                 // leg25 c：`playerParse`（K32 溯源账）**整条删除**——它记的是"哪些 attrs 键由解析注入"，
                 //   而玩家四维注入与解析两个模块（player-inject/player-setup）已随四维一并删除。
                 // leg25 c（旧账清理·迁移留档）：migrateLegacyAttrs 一次性摘除 `entity.attrs` 时写这两个字段。

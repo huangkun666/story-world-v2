@@ -2,6 +2,11 @@
 // 结算管线（S5）：按序 校验 → 薄裁定 → 因果挂链 → 一致性检查 → 分量重算（常量占位）→ 落账 → 编年 → GC/度量。
 // 纯函数：输入 SSOT 不被修改，返回新世界。硬规则出处：ANCHOR §3②/§4.2/§4.4/§4.5、切片细案 S5、长跑防线细案 §2.5。
 import { checkWorldStep, newEventIdsOf, normalizeSameStepEventRefs } from './check-step.js';
+// ★★★leg67（甲案）：**引用完整性收成单一主人**——"因必须未闭环"这条判据（含 leg66 的"判定时点 = 进入批次那一刻"）
+//   整段搬进 `src/ref-rules.js` 的 `'entityUpdates.cause'` 表；本文件只传 `entry` 快照并渲染裁定文案。
+//   ★为什么必须收口：这条判据原先在**三处**各写一份（校验期 `check-step`、净化期 `sanitize-step`、
+//     结算期本文件），而 leg66 那两条真账 bug 正是"三处各说各话"的直接后果。
+import { judgeRef, renderVerdict, captureOpenCauseState } from './ref-rules.js';
 import { buildEvolutionPack, computeIdleFaces } from './pack.js';
 import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
@@ -19,6 +24,11 @@ import { resolveLimits, THREADS_TOP, EVENT_CAP_PER_TICK, AGENDA_CAP_PER_TICK, AG
 //   只写 re-export 时模块内 `normalizePosition is not defined`，被新用例当场抓红）。
 import { normalizePosition } from './position.js';
 export { normalizePosition };
+// ★★★leg74 立、leg75 推广（用户令「把这些全给我删干净了」）：**"不算世界"的那几类不进法则账**
+//   （`文风禁令` / `变量指令` / `其他`——丢弃集唯一定义在 `abstract-tier.js` 的 `RULE_CLASSES_DROP`）。
+//   唯一实现在 `abstract-tier.js` 的 `pruneJunkRules`（零 import 的叶子 ⇒ 引它不成环）；
+//   本文件这一道是**载入期的旧账清理**（老账上那几类早已抽出来了，只能在这里摘）。
+import { pruneJunkRules } from './abstract-tier.js';
 
 // ★leg31 拍板：`topLevel` 5 → 10（用户令「先走保守的」）。
 //   依据（真账副本 tick 17 / 618 实体 / 20 轮；门控放宽到 P2-(c) 后实测，细案 `spec-world-widening.md` §5.5 表六～表八）：
@@ -142,6 +152,55 @@ export function migrateLegacyAttrs(ssot) {
     };
 }
 
+// ★★★leg74 立、leg75 推广（用户令「把这些全给我删干净了」）：
+//   **第三处旧账清理**——把"不算世界"的那几类（`文风禁令` / `变量指令` / `其他`）从法则账里摘掉。
+//   典型：`必须放在 <content> 标签内` · `角色对话：（角色名）` · `旁白：直接写普通段落`（文风禁令）
+//   · `数据库配置：安装：下载最新版本数据库…` · `表格模板导入：配置方法：状态栏倒数第三个按钮`（其他）。
+//
+//   为什么必须在**载入期**清（而不只是"下次抽取别再收"）：这些条目**早就抽进老账了**
+//   （leg64 起就有），只改抽取侧 ⇒ 老账里那几类会一直躺在面板上（用户看到的正是它）。
+//
+//   三条纪律（与前两处清理同款）：
+//     ① **幂等**：账上没有这几类 ⇒ **原对象返回**（字节一致，老账零扰动）；
+//     ② **不可变**：返回新 ssot，绝不就地改（与 `migrateLegacyAttrs` / `slimLegacyCompile` 同一风格）；
+//     ③ **不许无声消失**：摘掉的原话进 `meta.styleRulesPurged` 留档（照 `legacyAttrsPurged` 的先例）。
+//   ★它**只看"模型标成这几类"的条目**（`ruleKinds` 里值 ∈ `RULE_CLASSES_DROP`），**不按关键词猜内容**——
+//     老到 leg64 之前的账**根本没有 `ruleKinds` 这一格** ⇒ 一条都认不出来 ⇒ **不动它**（零迁移：不猜）。
+//   ★leg75：函数名与两个留痕常量**保持不变**（`migrateStyleRulesFromCanon`/`styleRulesPurged*`）——
+//     名字里的 style 是 leg74 起的历史口径，改常量名会让**已经落过盘的老留痕读不出来**（得不偿失）。
+export const STYLE_RULES_PURGED_AT = 'styleRulesPurgedAt';
+export const STYLE_RULES_PURGED = 'styleRulesPurged';
+export function migrateStyleRulesFromCanon(ssot) {
+    if (!ssot || typeof ssot !== 'object') return ssot;
+    const frozen = ssot?.context?.setting?.frozen;
+    const canon = frozen?.canon;
+    if (!canon || typeof canon !== 'object') return ssot;
+    if (!Array.isArray(canon.rules) || !canon.rules.length) return ssot;      // 无账可清 ⇒ 一字不改
+    const pruned = pruneJunkRules(canon.rules, canon.ruleKinds);
+    if (!pruned.dropped.length) return ssot;                                  // ★幂等闸：无可摘即原对象返回
+    // ★"空着就是空着"（全仓同一条纪律）：摘空了就把 `ruleKinds` 这一格**删掉**，绝不留 `undefined` 或空对象。
+    //   ★写法纪律：不能用 `{ ruleKinds: undefined }` 那种展开——它**会留下一个自有键**（`'ruleKinds' in canon` 为真），
+    //     而本仓判据正是按 `in` / `Object.keys` 判"这一格在不在"的（leg64 的零迁移锁就是这么写的）。
+    const nextCanon = { ...canon, rules: pruned.rules };
+    if (Object.keys(pruned.ruleKinds).length) nextCanon.ruleKinds = pruned.ruleKinds;
+    else delete nextCanon.ruleKinds;
+    return {
+        ...ssot,
+        context: {
+            ...ssot.context,
+            setting: {
+                ...ssot.context.setting,
+                frozen: { ...frozen, canon: nextCanon },
+            },
+        },
+        meta: {
+            ...(ssot.meta || {}),
+            [STYLE_RULES_PURGED_AT]: (ssot.meta || {})[STYLE_RULES_PURGED_AT] ?? ssot.meta?.tick ?? 0,
+            [STYLE_RULES_PURGED]: [...((ssot.meta || {})[STYLE_RULES_PURGED] || []), ...pruned.dropped],
+        },
+    };
+}
+
 // ① 校验（薄裁定器）：世界步过全部语义校验；不过 → 世界如实不动（调用方退回）。
 // leg25 c（用户令「删」）：**属性裁定整段删除**。原先此处逐条裁 `stateChanges[].attr/delta`
 //   （边界钳制、首值落账、静默方自我增强被拒、空裁定措辞、属性编年、hurtWindow 输入）——
@@ -224,16 +283,32 @@ export function resolveEventSource({ world, ev, weights }) {
 //   红线 1（引擎独占写玩家）本身不变，只是"可写的内容"没了；`playerAffected` 记录**照旧留着**
 //   并照旧进 simLog（审计面不缩水——它的语义是"世界伸手碰了玩家"；将来若有新的可写事实，仍从这里走）。
 
-// 执行债（events.closed 关闭路径最小面，2026-09-07 顺手清）+ K19 闭环三型（因果链细案 §3.1 → A-1）：
+// 执行债（events.closed 关闭路径最小面，2026-09-07 顺手清）+ K19 闭环三型（因果链细案 §3.1 → A-1）
+//   + ★leg95 第四型（模型判"这段讲完了"，见下方 `applyEventClosures`）：
 // ① 源结清：盘算终结/取消 → 其 plot 源事件全部闭环（closedAt 记落账 tick——归档判龄）；
-// ② 链尾结清：ripple 事件链头已了结 + 落账 ≥ 涟漪平息窗（CHAIN_SETTLE）+ 无未决下游引用 → 自动闭环
-//    （"涟漪平息"——K6 点名窗口随链尾收敛，世界不自锁）；链头语义：plot → 源盘算终结才算数；
-//    state → 处境不是驱动马达（波纹靠自身延伸/消亡），恒视为已了结（常驻保留不变）；
+// ② 链尾结清：ripple 事件**链头已收场**（`chainSettled`：沿链上溯到"播种源/处境源"就算走到头——
+//    ★leg95 改，旧法问"根那件事办完了没有"⇒ 种子链结构上永远闭不了）+ 落账 ≥ 涟漪平息窗（CHAIN_SETTLE）
+//    + 无未决下游引用 → 自动闭环（"涟漪平息"——K6 点名窗口随链尾收敛，世界不自锁）；
 // ③ 常驻保留：state 源未决事件永不自动闭环（不在此函数内处理）。
+// ④ ★leg95：**模型判定的收场**（`eventClosures`）——语义归模型、记账归引擎，两个角色不互相替。
 // 闭环留痕只进观棋（不带 eventRef → 不进注入：闭环是历史状态，不是新动向）。
 // 完整闭环设计（叶子结清/裁剪/事件产率上限）随因果链强化阶段（dev-process §6 队列）。
 const bornTickOf = (ev) => eventBornTick(ev.id);   // 事件 id 契约共享解析器（setting.js；K29 起同源）
-const headClosed = (world, ev) => {
+// ★★★leg95（用户令「让 llm 来决定何时结束」+「引入机械就一定要避免让代码去理解语义」）：
+//   **这条就是那道"永久死锁"的所在，改的是它。**
+//   旧法 `headClosed`：沿着链条上溯，谋划源要"那个谋划已结算"、处境源"恒算了结"——
+//   **而种子源既不是 plot 也不是 state ⇒ 走到最后 return false ⇒ 链头永远"没结清"** ⇒
+//   种子底下长出来的每一环**结构上永远闭不了**（真账：A 局 16 条 / B 局 44 条；推 40 轮只增不减）。
+//   ★病根不是"漏了一个分支"——是**用错了判据**：它问的是"**根那件事办完了没有**"（语义，机械无从知道），
+//     而引擎该问的是"**这一段还在不在往下长**"（结构，账上直接读得出来）。
+//   ⇒ 定稿判据：沿链上溯，**遇到"播种源"（seed）或"处境源"（state）就当链条在这里走到头**——
+//     它们**生来就是一个起点，没有"了结"这一说**（本书的原始设定/当时的局面，不是谁在办的事）；
+//     链条中间若压着一个**还没收场的谋划**，那这条链就还在被人办着 ⇒ 不算收场。
+//   ★与使用者分工（leg95 定稿，两个角色不许互相替）：
+//     · **引擎**只判"账目结不结清"（机械、可复算）：这一段没人接着它长了 ⇒ 把它从账上放下来；
+//     · **模型**判"这段故事讲完了没有"（语义）：判完的事由引擎按 `closedBy:'model'` 落账（`eventClosures` 通道）。
+//     **引擎不许拿岁数/图论替模型判语义；模型也不许替引擎记账。**
+const chainSettled = (world, ev) => {
     let cur = ev;
     const seen = new Set();
     while (cur && !seen.has(cur)) {
@@ -242,13 +317,26 @@ const headClosed = (world, ev) => {
             const a = (world.agendas || []).find((x) => x.id === cur.source.ref);
             return !!(a && a.closed);
         }
-        if (cur.source?.type === 'state') return true;
+        // 播种源 / 处境源 = 链条的起点（不是"待办的事"）⇒ 走到头，这一段没有"没结清"的上游
+        if (cur.source?.type === 'state' || cur.source?.type === 'seed') return true;
         cur = (cur.source?.ref && world.events.find((e) => e.id === cur.source.ref)) || null;
     }
     return false;   // 防御：链异常/悬空 → 不结清
 };
 const hasPendingDownstream = (world, ev) =>
     (world.events || []).some((e) => !e.closed && (e.links?.up || []).includes(ev.id));   // 下游 = links.up 引用方（down 未维护）
+// leg95：这条链的**源头是哪一种源**（措辞分化用——链源是播种源/处境源时不许说"链源已了结"）
+const rootSourceTypeOf = (world, ev) => {
+    let cur = ev;
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+        seen.add(cur);
+        const t = cur.source?.type;
+        if (t === 'seed' || t === 'state' || t === 'plot') return t;
+        cur = (cur.source?.ref && world.events.find((e) => e.id === cur.source.ref)) || null;
+    }
+    return null;
+};
 
 function closeEvents(world, closedIds, tick, chronicle) {
     if (closedIds.size) {
@@ -262,12 +350,52 @@ function closeEvents(world, closedIds, tick, chronicle) {
     }
     for (const ev of world.events) {
         if (ev.closed || ev.source?.type !== 'ripple') continue;
-        if (!headClosed(world, ev)) continue;
+        if (!chainSettled(world, ev)) continue;
         if (tick - bornTickOf(ev) < CHAIN_SETTLE) continue;
         if (hasPendingDownstream(world, ev)) continue;
         ev.closed = true;
         ev.closedAt = tick;
-        chronicle.push({ id: `ch_${tick}_evc2_${ev.id}`, tick, text: `事件「${ev.title}」涟漪平息（链源已了结）`, kind: 'ripple', chainRef: ev.id });
+        // ★leg95 措辞分化（不许把两件事说成一句）：链头是**播种源/处境源**时，那句"链源已了结"是**不诚实**的——
+        //   种子是书的原始设定，它没有被"了结"过，是**这一段没人接着长了**才收的。两句话必须分开说。
+        const root = rootSourceTypeOf(world, ev);
+        const why = (root === 'seed' || root === 'state') ? '涟漪平息（这一段没人接着长了）' : '涟漪平息（链源已了结）';
+        chronicle.push({ id: `ch_${tick}_evc2_${ev.id}`, tick, text: `事件「${ev.title}」${why}`, kind: 'ripple', chainRef: ev.id });
+    }
+}
+
+// ★★★leg95（用户令「让 llm 来决定何时结束」）：**「这段讲完了」的落账通道**（`eventClosures`）。
+//   与 `applyAgendaCancels` 完全同构：**模型只有提议权，落账归引擎**——但引擎这里**只做机械审计，不判语义**
+//   （用户定稿纪律：「引入机械就一定要避免让代码去理解语义」）。审计三条，全是账上可核的：
+//     ① 号必须在册且**还没收场**（无源之物不入局、不许重收）② 同一批不许重复 ③ 每轮配额
+//   ★第三种"死锁"的解在这条通道 + `chainSettled` 的配合上：
+//     模型点名**链头**（种子/处境的根）收场 ⇒ 底下那一串涟漪当场过 `chainSettled` ⇒ 后续由引擎的
+//     老规则（窗满 + 无下游）自己一层层扫干净。**模型只出判断，清扫交引擎**（真账回测：B 局点 9 件 ⇒ 连带解开 21 件）。
+export const EVENT_CLOSE_CAP = 8;   // 每轮收场上限（提案态；老账首轮积压多，分几轮收完，每轮都是小步可回看）
+function applyEventClosures(world, gstep, tick, chronicle, warnings) {
+    const list = gstep.eventClosures || [];
+    if (!list.length) return;
+    const seen = new Set();
+    let n = 0;
+    for (const ec of list) {
+        const id = typeof ec === 'string' ? ec : ec?.event;
+        if (!id || seen.has(id)) continue;                                  // ② 同批重复 → 静默跳（不是错，是冗余）
+        const ev = world.events.find((e) => e.id === id);
+        if (!ev) { warnings.push(`收场被拒: ${id}（不在账上）`); continue; }   // ① 号不在册
+        if (ev.closed) { warnings.push(`收场被拒: ${id}（「${ev.title}」已经收场）`); continue; }
+        if (n >= EVENT_CLOSE_CAP) { warnings.push(`收场超额: 本轮已收 ${EVENT_CLOSE_CAP} 件，其余顺延下一轮（${id} 未收）`); break; }
+        seen.add(id);
+        n += 1;
+        ev.closed = true;
+        ev.closedAt = tick;
+        ev.closedBy = 'model';                                             // ★落账留痕：这条是"模型判讲完了"，不是引擎扫的
+        if (ec?.why) ev.closedWhy = String(ec.why).slice(0, 120);
+        chronicle.push({
+            id: `ch_${tick}_evs_${ev.id}`,
+            tick,
+            text: `事件「${ev.title}」这一段收场了${ec?.why ? `：${ec.why}` : ''}`,
+            kind: 'major',
+            chainRef: ev.id,
+        });
     }
 }
 
@@ -749,25 +877,10 @@ function applyEntityFates(world, gstep, tick, warnings, chronicle) {
     }
 }
 
-// ★★★leg66：**来路快照**——进入 settle 那一刻，账上哪些事件/盘算是**开着的**（以及已经关了的那些是在哪一轮关的）。
-//   为什么要快照而不是实时读：本函数在结算尾声会自己关掉一批（源结清/涟漪平息/盘算满步），
-//   而"变更的因必须未闭环"这条契约的判定时点必须是**批次开始时**——否则引擎会用自己的收尾动作
-//   去否掉一条它刚刚放行过的合法变更（见 `applyEntityUpdates` 头注与 W2f 用例）。
-function captureOpenCauseState(world) {
-    const openEvents = new Set();
-    const closedEventsAt = new Map();
-    for (const ev of world.events || []) {
-        if (ev.closed) closedEventsAt.set(ev.id, ev.closedAt ?? null);
-        else openEvents.add(ev.id);
-    }
-    const openAgendas = new Set();
-    const closedAgendasAt = new Map();
-    for (const a of world.agendas || []) {
-        if (a.closed) closedAgendasAt.set(a.id, a.closedAt ?? null);
-        else openAgendas.add(a.id);
-    }
-    return { openEvents, closedEventsAt, openAgendas, closedAgendasAt };
-}
+// ★★★leg67（甲案）：`captureOpenCauseState` **已搬进 `src/ref-rules.js`**（本文件从那里 import）。
+//   搬家的理由：那张快照不是"settle 的内部记账"，它是**"因必须未闭环"这条判据的判定时点**——
+//   而判据的单一主人是 `ref-rules.js`，时点自然必须跟着判据走（否则"时点"又会变成第二处能各自说话的东西）。
+//   原实现与行为**逐字未变**（`test/ref-rules.test.js` 的 W2f/W2g 两条真账夹具锁着）。
 
 // ★★leg34（小说家条款 §6 实施）：**实体字段写回** + **带因复活**（同一个通道）
 //   用户 ⑤：「llm 有权决定任何字段，实力是可以增长的，性情是可以大变的，就连死亡在一个有复活的世界都可以改变」
@@ -792,32 +905,12 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
         //   ② 账上有、但**进入本批次时就已经是关的** ⇒ 拒（真·旧事："不许拿旧事解释今天的变化"）
         //   ③ 账上有、进来时开着、**本轮被引擎自己关掉**（源结清/涟漪平息/满步结算）⇒ **认**
         //      （判定时点 = 进入 settle 那一刻；引擎自己的收尾不许反过来否掉刚放行的合法变更）
-        const entry = openCauseAtEntry || null;
-        if (u.cause?.type === 'event') {
-            if (!ev) {
-                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因事件「${ref}」**账上根本没有这个号**（本轮的因不能是凭空生成的号）`);
-                continue;
-            }
-            const openAtEntry = !entry || entry.openEvents.has(ref);
-            if (!openAtEntry) {
-                const at = entry.closedEventsAt.get(ref);
-                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因「${ref}」（${String(ev.title || '').slice(0, 20)}）**在本批次开始前就已经了结${at != null ? `（第 ${at} 轮）` : ''}**——因果只能挂在还没了结的事上`);
-                continue;
-            }
-        } else if (u.cause?.type === 'agenda') {
-            if (!ag) {
-                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因盘算「${ref}」**账上根本没有这个号**`);
-                continue;
-            }
-            const openAtEntry = !entry || entry.openAgendas.has(ref);
-            if (!openAtEntry) {
-                const at = entry.closedAgendasAt.get(ref);
-                warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因盘算「${ref}」（${String(ag.goal || '').slice(0, 20)}）**在本批次开始前就已经结算${at != null ? `（第 ${at} 轮）` : ''}**——因果只能挂在在办的事上`);
-                continue;
-            }
-        } else {
-            // 未知因型（check 已拒，防御）
-            warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」的因型「${String(u.cause?.type)}」认不出`);
+        // ★★★leg67（甲案）：上面这套判据**整段搬进 `src/ref-rules.js` 的 `'entityUpdates.cause'` 表**
+        //   （`entry` 就是那张表的"判定时点"入参）。本文件只剩"渲染 + 记账"——
+        //   ⚠这是本棒唯一**真正改行为风险最高**的一处，故 `test/ref-rules.test.js` 用 W2f/W2g 两条真账夹具锁着。
+        const verdict = judgeRef('entityUpdates.cause', u.cause, { world, step: gstep, entry: openCauseAtEntry });
+        if (verdict) {
+            warnings.push(`裁定: 字段写回复核拒绝——「${ent.name}」${renderVerdict(verdict)}`);
             continue;
         }
         if (u.field === 'status') {
@@ -918,35 +1011,139 @@ function retireInactive(world, tick, warnings, chronicle) {
     }
 }
 
-// ★★leg40b 续（**尺度上限参数化**）：读数口径统一到 `src/limits.js` 的 `resolveLimits(world)`——
-//   账上设了档位就用档位，没设就用本文件这些**出厂默认**（`limits.js` 引用式取它们，不重写数字）。
-//   口径与 `params.js` 一致：值落 `context.setting.dynamic.env`、白名单归一、缺键=用默认。
-export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }) {
-    // 校验先行：不合格则世界如实不动（诚实不落账），tick 不推进
+// ═══════════════ ★★★leg68（乙-1）：结算**顺序表** —— 顺序本身承担语义，故把它显式写下来 ═══════════════
+// 病（细案 §1.2 实测）：`settleTick` 是一条**139 行就地改 `world`** 的顺序过程（`applyX(world, …)`），
+//   **步骤先后本身在承担语义**，而"为什么必须在这个位置"只散在沿途注释里
+//   ⇒ 新人得靠读 139 行去悟顺序，改序时没人能一眼看出踩了哪条不变量。
+//   真账证据（leg66 W2f）：`applyEntityUpdates` 里那句复核**注释自称"防御"**，实际是**承重的**——
+//   契约层说"因必须还没了结"，而"真正生效的位置"由它与 `closeEvents` 的先后决定
+//   ⇒ 曾把一条**刚放行的合法变更**吞掉（真账 `meta.entityFields['e_bk_297']` 零留痕）。
+//
+// 治法（本棒）：把顺序写成这张**表**，并用 `test/settle-order.test.js` 锁住
+//   「**表里的顺序 = 代码里的调用顺序**」（子序列口径：允许往里插新步，**改序/删步/换函数当场红**）。
+//
+// ⚠**这张表是"为什么"的单一主人，不是"清单"的单一主人**：两条纪律写在这里，改本函数的人先读它——
+//   ① 表里没有的调用**照样是管线的一部分**（表只回答"为什么必须在这个位置"）；
+//   ② 表**只登记会导致行为不同的先后**——纯读/只记数的末尾两步也登记，因为"读的是哪一版的账"同样影响输出。
+// ★字段：`why` = **为什么必须在这个位置**（不是"它做了什么"）；
+//   `args` = **该次调用实参头部的逐项值**（字面量 / 标识符 / 成员访问；`a || b` 按两个记号记，如
+//   `buildEvolutionPack(world, moveFact || null)` ⇒ `['world','moveFact','null']`）。
+//   ★它存在的唯一理由是**把"名字在别处也出现"的调用钉到真的那一次**上：
+//     `closeEvents` 在正文里调用、也在 `applyAgendaCancels` 那行的注释里被提到；
+//     `normalizeSameStepEventRefs` **真的被调用了两次**（一次在校验后、一次在门控后——**两次位置都承担语义**，故表里是两行）。
+//   ★判据口径是**恰好相等**（不是"前缀含"）：判据只校验"表里的 `args` 与那次调用实参头部逐项相等"，
+//     **不校验语义**——语义靠读 `why`。（leg68 实测：这条"恰好"当场咬出本棒自己 13 处 `args` 抄错。）
+//   ⚠`args` 是这条锁的**软肋**：写错 ⇒ 锁会去匹配别的地方。故"钉不住"时**报错、不静默跳过**。
+export const SETTLE_ORDER = Object.freeze([
+    { call: 'checkWorldStep', args: ['step', 'ssot'], why: '校验先行：不合格则世界如实不动（诚实不落账）、tick 不推进' },
+    { call: 'normalizeSameStepEventRefs', args: ['step', 'tick'], why: '校验读模型原话（报错才准确），改写要在落账前生效' },
+    // ★★★leg84（乙-2）**次序勘正**：下面两行在旧版里是 `gateWorldStep` 在前、`captureOpenCauseState` 在后，
+    //   而**原文文件里的真实次序是 capture 在前、gate 在后**（原文行序：克隆 → capture → 门控那两行）。
+    //   ⇒ 表与代码**当时就不一致**，只是旧版那张锁只按"子序列 + 钉位单调"判、且两行钉位恰好单调，才没发作：
+    //     - 原文里 `captureOpenCauseState` 读的是 `world`（工作副本）、`gateWorldStep` 读的是 `ssot`（原件）
+    //       ⇒ 两个实参**不同源**，钉位按内容取，旧表把它们排成 gate→capture 恰好也能单调命中。
+    //   乙-2 把两者拆成独立阶段后，这条不一致立刻显形（判据报"顺序倒退"）。
+    //   ⇒ 勘正为**与代码一致的次序**，并把 why 写明"它为什么在这个位置"（语义未动：两者**都是纯读**，
+    //     谁先谁后世界一个字不变 —— 差分随机测试 400/400 逐字节等价已证）。
+    { call: 'captureOpenCauseState', args: ['world'], why: '★leg66 裁定：因果判据的时点 = **进入批次那一刻**（在函数尾改世界之前抓快照，否则引擎自己的收尾会否掉刚放行的变更）；它是**纯读**⇒排在门控前（与原文行序一致）' },
+    { call: 'gateWorldStep', args: ['stepN', 'ssot', 'moveFact', 'spotlightSet'], why: '门控必须在第二次改写**之前**：它按门控后的位次发号；★读的是**原件 ssot**（"这一轮之前"那本账）' },
+    { call: 'spawnAgendas', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle', 'lim'], why: 'K14 出生裁判：gate 之后、裁定之前（先上闸再落账）' },
+    { call: 'spawnEntities', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle', 'lim'], why: 'K37：**裁定之后再落账**——重名自反才不误伤' },
+    { call: 'hangEvents', args: ['world', 'gstep', 'tick'], why: 'K19 产率上限截断**之后**才挂链：被拒的事件不涉影响/挂链/编年' },
+    { call: 'checkConsistency', args: ['world', 'gstep', 'warnings'], why: 'K3 活跃记账**之前**：一致性检查要看到这一轮的账' },
+    { call: 'recomputeWeights', args: ['world', 'tick'], why: '分量重算先于终点判定——否则结局读的是上一轮的分量' },
+    { call: 'applyAgendaCancels', args: ['world', 'gstep', 'tick', 'chronicle'], why: '★K22 **先于推进**：被取消者当 tick 推进落 closed，顺序反了取消就不生效' },
+    { call: 'applyAgendaAdvances', args: ['world', 'gstep', 'tick', 'chronicle', 'warnings'], why: 'K9 执行债的产出者：返回 `closedIds` 供下行三条消费（取消集并入其中）' },
+    { call: 'pushTidePeak', args: ['world', 'closedIds', 'tick'], why: 'K29 浪尖派生：消费 `closedIds` ⇒ 必须紧随其产出（A-5 的两来源之一）' },
+    { call: 'applyEventClosures', args: ['world', 'gstep', 'tick', 'chronicle', 'warnings'], why: '★leg95 第四型：**模型判"这段讲完了"**的落账（机械只审计不判语义）——排在 `closeEvents` 之前，否则模型给的理由会被引擎的通用措辞顶掉' },
+    { call: 'closeEvents', args: ['world', 'closedIds', 'tick', 'chronicle'], why: '闭环四型（源结清/链尾结清/取消联闭/模型收场）：**在判定"灭"与"字段写回"之前**——尘埃落定' },
+    { call: 'applyEntityFates', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle'], why: '★灭通道在**闭环后**：先结清再言灭；顺序反了会把"因刚刚了结"误判成"因从来不算"' },
+    { call: 'applyEntityUpdates', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle', 'openCauseAtEntry'], why: '★★字段写回：**承重的那一格**——它排在上面那条 `closeEvents` 之后，靠 `openCauseAtEntry` 快照把口径拉回批次入口（W2f 真账）' },
+    { call: 'pulseEntropy', args: ['world', 'tick', 'chronicle'], why: 'K27 熵泵：环境推演每 ENV_TICK 一步，越阈落状态源事件（故此步之后世界里会有新事件）' },
+    { call: 'reactivateNamed', args: ['world', 'events', 'tick', 'chronicle'], why: 'K37 复归：认的是 `hangEvents` **那一行**产出的 `events`，不是 `gstep.newEvents`' },
+    { call: 'retireInactive', args: ['world', 'tick', 'warnings', 'chronicle'], why: 'K37 背景化 GC：资格看的是**本轮最终那份账**（在飞盘算/未决事件），故排在复归与熵泵之后' },
+    { call: 'updateUnrestGear', args: ['world', 'tick'], why: '★leg53：它派生自**事件**（此时已全部落账）且会读 `status`（`retireInactive` 刚改过）⇒ 必须落在两者之后' },
+    { call: 'chronicleEvents', args: ['world', 'gstep', 'tick', 'chronicle'], why: '编年落在所有改世界的步骤**之后**：编年必须记"这一轮最终发生了什么"' },
+    { call: 'archiveClosedEvents', args: ['world', 'tick'], why: 'K20 档案摘要化：闭环满热窗 + 整链结清 ⇒ 里程碑温层（零编年零注入）' },
+    { call: 'buildEvolutionPack', args: ['world', 'moveFact', 'null'], why: '递包读的是**本轮最终那份账**（含编年与归档），故排在归档之后' },
+    { call: 'recordMetrics', args: ['world', 'tick', 'pack.estTokens', 'calls', 'warnings', 'chronicle', 'gate', 'playerAffected', 'proposals', 'rejected'], why: 'K38 观测台记账最后：分子/分母由 `gate.droppedCounts` + `warnings` 现算，放在末尾才是终结账' },
+]);
+
+// ═══════════════ ★★★leg84（乙-2 · 细案 `docs/leg84-settle-stages-spec.md`）：`settleTick` 显式阶段化 ═══════════════
+// 病（细案 §1）：`settleTick` 是一条 **140 行就地改 `world`** 的顺序过程，步骤先后**本身承担语义**，
+//   而读的人要同时装下"8 个概念域 + 3 个共享收集器 + 5 个跨阶段产物"才能读懂一行。
+//   leg68 的 `SETTLE_ORDER` 已经把**顺序**写下来了（那是本棒的**前置**）；本棒让**"阶段"在代码里也成为一等公民**。
+//
+// ★★★**六条形态纪律**（全部由判据咬住）：
+//   ① ★★**"源码序"与"执行序"是两件事，本文件把它们分开写明白**：
+//      · **执行序** = `SETTLE_STAGES` 数组的顺序（运行时真的按它跑）；
+//      · **源码序** = 阶段函数在本文件里的排列顺序 —— 顺序锁 `test/settle-order.test.js` 咬的是**它与
+//        `SETTLE_ORDER` 表序一致**（表是"为什么在这个位置"的单一主人），**不是**与执行序一致。
+//      · 两者在本文件里**故意不同**（`applyStepConstraints`：执行在 2、定义排在后面），
+//        原因见 `SETTLE_STAGES` 上方那段说明 —— 那是**依赖序**（`computeSpotlight` 的产出门控要用）
+//        与**登记序**（表按原文行序登记）之间的差异，不是笔误。
+//   ② **实参形态逐字保留原文**（`ssot` 而非 `ctx.ssot`）——`SETTLE_ORDER` 的 `args` 是**逐字面量锚**，
+//      按"恰好等于"判；故阶段开头**先取局部名**，再按原文原样传。
+//   ③ **行首形态也算形态**：`ctx.X = f(...)` 会让顺序锁的抽取器**整行匹配不上** ⇒ 那次调用从 SITES 消失
+//      （报"僵尸条目"）。故一律写成 `const X = f(...); ctx.X = X;`。
+//   ④ **早退不许 `return` 穿出去**：阶段一律 `return <它收到的世界>`，早退写 `ctx.blocked`。
+//   ⑤ **驱动只做两件事**：跑第一个阶段（它负责克隆）+ 按 `SETTLE_STAGES` 跑其余；`blocked` 一置上立刻停。
+//   ⑥ ★**克隆只有一处、在阶段1 内**：多处克隆 = 静默错账（施工期实测踩过）。
+//
+// ★★★**施工期最贵的教训**（被 10 条判据 + 差分随机测试逼出来的，下一棒务必先读）：
+//   原文 `computeIdleFaces(**ssot**, resolveLimits(world).待启用名单)` 与 `gateWorldStep(stepN, **ssot**, …)`
+//   —— **两处第一个实参都是原件 `ssot`**（它的 `meta.tick` **未自增**），而 `resolveLimits` 读的是**工作副本**。
+//   **同一行里两个实参不同源**。我按"看起来同源"推演，连错三次（用克隆件 / 与 tick 同刻 / 浅拷贝补 tick），
+//   每次都改变了"这一轮到谁起头"的轮转 ⇒ `birth.test.js` / `tree-smoke` / `weight-smoke` 轮流红。
+//   ★最终定位靠**差分随机测试**（`F:/deepseek/tmp/leg84-diff-fuzz.mjs`：400 例里恰好 1 例分歧——
+//     `simLog.silent` 首项不同），**不是**靠读代码。
+//   ⇒ 纪律：**重构顺序过程时，"每个实参是哪一份对象"必须逐字对原文核**；等价性靠差分测试证。
+
+/** 阶段1 准备：校验先行 → 立工作副本（唯一克隆）→ 收集本轮共享产物 → 对话依据册记账。
+ *  ★★★三个真陷阱（都当场红过）：
+ *    ① `bookDialogue` 必须改**克隆件**：校验失败返回的是**原件 `ssot`**（调用方按 `strictEqual` 断言
+ *       "原世界对象原样返回"）⇒ 克隆必须发生在它**之前**。
+ *    ② **"早退"不是返回值，是"后面不再发生"**：`blocked` 一置上驱动必须立刻停。
+ *    ③ 门控与待启用名单读的是**原件**（见上面的教训）。 */
+export function prepareSettle(ssot, ctx) {
+    const step = ctx.step;
+    const preWarnings = ctx.preWarnings;
+    const moveFact = ctx.moveFact;
+    // 校验先行：不合格则世界如实不动（诚实不落账）、tick 不推进
     const pre = checkWorldStep(step, ssot);
     if (!pre.ok) {
-        return { ok: false, ssot, stage: { warnings: pre.errors.map((e) => `校验拒绝: ${e}`), chronicle: [] } };
+        // ★早退走 `ctx.blocked`（纪律④）；此刻 `ssot` 就是**原件**，一个字节没动
+        ctx.blocked = { ok: false, ssot,
+            stage: { warnings: pre.errors.map((e) => `校验拒绝: ${e}`), chronicle: [] } };
+        return ssot;
     }
-
-    const world = structuredClone(ssot);
-    const warnings = [];
-    const chronicle = [];
-    const tick = world.meta.tick + 1;
-    world.meta.tick = tick;
-    // ★leg40b 续（死锁修复·收尾一格）：**把"按位次认下来的同轮引用"改成引擎真发的号**。
-    //   为什么必须在落账前做：`findEvent` 只是"认了它"，而落账用的是 `step` 里的原字符串——
-    //   不改写 ⇒ 账上留一条悬空来路（本笔实测：模型写 ev_5_3、真号 ev_6_3，账上就记着 ev_5_3）。
-    //   放在校验**之后**（校验读的是模型原话，报错信息才准确）、落账**之前**（改写要生效）。
-    const stepN = normalizeSameStepEventRefs(step, tick);
-    // ★leg40b 续（死锁修复 ③）：**降级路径的回执**——"这一轮为什么不是模型写的那一轮"必须进
-    //   `stage.warnings`（面板裁定条 + `simLog` 都读它）。不给这个口子，那条降级就成了静默失败面。
-    for (const w of preWarnings || []) warnings.push(w);
+    ssot = structuredClone(ssot);                       // ★纪律⑥：唯一的一次克隆
+    const tick = ssot.meta.tick + 1;
+    ctx.tick = tick;
+    ssot.meta.tick = tick;
+    for (const w of preWarnings || []) ctx.warnings.push(w);
     // ★leg33c：位置集外的非致命留痕先收（`pre.warnings`）——玩家的这一步也要能看到"这本书的位置够不够"。
-    for (const w of pre.warnings || []) warnings.push(w);
-    const playerId = world.context?.playerId ?? null;   // K8/K9：玩家棋子标注（红线 1 代码化就位）
-    const playerAffected = [];                          // K9：影响通道审计
-    bookDialogue(world, moveFact, tick);                // K37：对话依据册记账（moveFact.object 命中）
+    for (const w of pre.warnings || []) ctx.warnings.push(w);
+    bookDialogue(ssot, moveFact, tick);                 // K37：对话依据册记账（★改克隆件）
+    return ssot;
+}
 
+/** 阶段2 步约束：把"同轮引用"归一成引擎真发的号（第一次）。★只算 `stepN`、**一个字都不改世界**。 */
+export function applyStepConstraints(world, ctx) {
+    const step = ctx.step;
+    const tick = ctx.tick;
+    const stepN = normalizeSameStepEventRefs(step, tick);
+    ctx.stepN = stepN;
+    return world;
+}
+
+/** 阶段5 门控与限额：主动作权门控（★读**原件**）→ 第二次归一 → 生效上限。 */
+export function gateAndSnapshot(world, ctx) {
+    const stepN = ctx.stepN;
+    const moveFact = ctx.moveFact;
+    const ssot = ctx.ssot;
+    const spotlightSet = ctx.spotlightSet;
+    const tick = ctx.tick;
     // ②' 主动作权门控（K2，细案 §3.2）：校验之后、裁定之前。滤除静默方主动作——不落账、不编年、不注入（双面无痕）；被点名可应答。
     // ★★leg32g：第 4 个参数＝**本轮待启用名单**（引擎机械选出、也随包递给模型的那 12 个）。
     //   为什么必须传进来：名单上的人按结构三条件是静默的 ⇒ 模型照名单给他开线也会被门控丢掉
@@ -955,28 +1152,53 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     //   故这里的上限也必须读账上那个值 —— 否则包/面板递了 N 个人、门控只认前 `IDLE_FACES_TOP` 个
     //   ⇒ 名单上多出来的人"照名单开了线也会被门控丢掉"（那份名单就成了空转）。
     const spotlight = new Set(computeIdleFaces(ssot, resolveLimits(world).待启用名单).map((f) => f.id));
-    const gate = gateWorldStep(stepN, ssot, moveFact, spotlight);
+    const gate = gateWorldStep(stepN, ssot, moveFact, spotlightSet);
+    ctx.gate = gate;
     // ★leg40b 续（死锁修复·收尾一格）：**把"按位次认下来的同轮引用"改成引擎真发的号**。
     //   位置必须在**门控之后**：`gate.js:87-93` 会丢掉"静默方属主的 plot 事件"⇒ 数组位次会变，
     //   而 `hangEvents` 是按**门控后**的位次发号 ⇒ 改写必须与发号看**同一个数组**，否则会指错人。
     //   （校验仍读模型原话 ⇒ 报错信息准确；这里只把"已经认下来的"写对。）
     //   不改写会怎样（本笔实测定到的真缺陷）：模型写 `ev_5_3`、真号 `ev_6_3` ⇒ 账上留一条悬空来路。
     const gstep = normalizeSameStepEventRefs(gate.step, tick);
+    ctx.gstep = gstep;
     // ★leg40b 续：生效上限**在入口解析一次**，之后全文件都用它（防"某条路仍读旧常量"）。
     const lim = resolveLimits(world);
-    // ★★★leg66（用户实机贴回的一条裁定）：**"本批次开始时因是开着的"才是判据**——先抓一份**来路快照**。
-    //   病（真账 tick 7 实测 + 对照实验复现）：`settle` 入口的 `checkWorldStep` 看到因是开的 ⇒ 放行；
-    //   而**同一批**里 `closeEvents`（本函数第 966 行）会先把它关掉（源盘算满步结算 ⇒ "源结清"型）
-    //   ⇒ `applyEntityUpdates`（第 970 行）的防御复核读到的却是**事后状态** ⇒ 一条**合法**变更被吞，
-    //   玩家看到"因不在账或已了结"（而它明明在账上、也明明是本轮的由头）。
-    //   口径：**"因必须未闭环"这条契约的判定时点 = 进入 settle 那一刻**；引擎自己在结算尾声做的闭环
-    //   是"这件事这一轮收了尾"，**不许反过来宣布"它从来不算数"**。
-    //   ⚠ 只放宽这一格：进来时就已经关着的旧事**照旧拒**（W2g 锁着）；`newEntities`/`newAgendas` 的
-    //     同形复核**不动**（它们核的是"新事物要挂在正在发生的事上"，与"变更的因"不是同一件事）。
+    ctx.lim = lim;
+    return world;
+}
+
+/** 阶段3 批次入口快照：抓"进入本轮那一刻"的因果判定底账（★必须在门控与任何世界改动之前）。
+ *  顺序表把它登记为承重步骤（`why`：因果判据的时点 = **进入批次那一刻**）。
+ *  ★leg66 用户实机贴回的那条裁定：`settle` 入口看到因是开的 ⇒ 放行；而同一批里 `closeEvents`
+ *    会先把它关掉（源盘算满步结算）⇒ `applyEntityUpdates` 的复核读到**事后状态** ⇒ 一条**合法**变更被吞。
+ *  ⚠ 只放宽这一格：进来时就已经关着的旧事**照旧拒**（W2g 锁着）。 */
+export function captureEntryState(world, ctx) {
     const openCauseAtEntry = captureOpenCauseState(world);
+    ctx.openCauseAtEntry = openCauseAtEntry;
+    return world;
+}
+
+/** 阶段4 待启用名单：算出"这一轮轮到谁起头"（按 `ssot` 的 tick 轮转）。
+ *  ★位置：夹在「批次入口快照」与「门控」之间（原文这一行就在那两处之间）。
+ *  ★★读**原件 `ssot`**、上限读**工作副本**——这一行"两个实参不同源"，见上方教训。 */
+export function computeSpotlight(world, ctx) {
+    const ssot = ctx.ssot;
+    const spotlightSet = new Set(computeIdleFaces(ssot, resolveLimits(world).待启用名单).map((f) => f.id));
+    ctx.spotlightSet = spotlightSet;
+    return world;
+}
+
+/** 阶段6 裁定与落账：出生裁判 → 落账 → 事件产率上限 → 挂链。 */
+export function adjudicateAndPopulate(world, ctx) {
+    const gstep = ctx.gstep;
+    const tick = ctx.tick;
+    const warnings = ctx.warnings;
+    const chronicle = ctx.chronicle;
+    const lim = ctx.lim;
+    const ssot = ctx.ssot;
     // K14 出生裁判（盘算树细案 §3.2 落点：gate 之后、裁定之前）：GC 上限 → 落账 → 挂因/委派留痕 → 环检测自动拆
     const spawned = spawnAgendas(world, gstep, tick, warnings, chronicle, lim);
-
+    ctx.spawned = spawned;
     // leg25 c：`hurtByEntity`（属性负向 δ 收集）随属性裁定一并删除——没有负向 δ 可收。
     // leg25 f：原来这里还有一段"把旧账残留的 hurtWindow 滑零自删"的补丁。**整段删除**——
     //   那段之所以存在，是因为当时还想让窗口"自己归零后消失"；既然该键已从 schema 摘掉、消费者
@@ -986,7 +1208,8 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
         // 不可达（check 已过），防御
         return { ok: false, ssot, stage: { warnings, chronicle } };
     }
-    const born = spawnEntities(world, gstep, tick, warnings, chronicle, lim);   // K37：入局提议落账（校验先行——裁定后再落账，重名自反不误伤）
+    const born = spawnEntities(world, gstep, tick, warnings, chronicle, lim);
+    ctx.born = born;
     // K19 事件产率上限（因果链细案 §3.2 → A-2）：按提议序保留前 ≤N，超限拒建 + 警告（"事件洪峰"——与盘算大厦顶
     // 同哲学：双面无痕于世界，留痕于 simLog）；门控后、影响通道前——被拒不涉影响/挂链/编年
     // ★leg40b 续：这个上限现在**可调**（`每轮事件`：6/9/12 ⇒ `lim.每轮事件`），账上没设档位时 = 出厂 6（逐字不变）。
@@ -998,6 +1221,18 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
         gstep.newEvents = kept;
     }
     const events = hangEvents(world, gstep, tick);
+    ctx.events = events;
+    return world;
+}
+
+/** 阶段7 一致性与分量：一致性检查 → 活跃记账 → 分量/张力重算。 */
+export function consistencyAndWeights(world, ctx) {
+    const gstep = ctx.gstep;
+    const spawned = ctx.spawned;
+    const born = ctx.born;
+    const moveFact = ctx.moveFact;
+    const tick = ctx.tick;
+    const warnings = ctx.warnings;
     // K9 影响通道：引擎独占写玩家（他人 targeting / 新事件波及 → 分量比影响，落账在重算前——分量当轮反映）
     // leg25 c：K9 影响通道（被人打/被事件波及 → 扣玩家的属性）**随属性一并删除**——
     //   它扣的是 hardPower/各 attrs，而账上已经没有这些数了。
@@ -1007,6 +1242,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     checkConsistency(world, gstep, warnings);
     // K3 活跃记账：落账主动作方（actions/盘算推进/plot 事件属主）记 lastActiveTick；被打击/被波及的客体不计
     // K11 玩家同尺：有落子轮（moveFact.verb 非空）= active；OOC/静默轮不记 → 站桩权力照萎缩（长跑 §2.3）
+    const playerId = world.context?.playerId ?? null;   // K8/K9：玩家棋子标注（红线 1 代码化就位）
     const agendaOwner = new Map((world.agendas || []).map((a) => [a.id, a.owner]));
     const activeIds = new Set();
     for (const a of gstep.actions) activeIds.add(a.entity);
@@ -1017,18 +1253,40 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     if (playerId && moveFact?.verb) activeIds.add(playerId);
     for (const e of world.entities) { if (activeIds.has(e.id)) e.lastActiveTick = tick; }
     recomputeWeights(world, tick);
-    updateTensionIntensity(world, tick);   // K29 张力强度（细案 T3：事件频次×分量比×衰减；引擎确定性计算，模型不拍）
+    updateTensionIntensity(world, tick);
+    return world;
+}
+
+/** 阶段8 闭环与终局：取消 → 推进 → 浪尖 → 闭环 → 灭 → 字段写回 → 熵泵。 */
+export function closeAndSettleFates(world, ctx) {
+    const gstep = ctx.gstep;
+    const tick = ctx.tick;
+    const warnings = ctx.warnings;
+    const chronicle = ctx.chronicle;
+    const openCauseAtEntry = ctx.openCauseAtEntry;
     const cancelledIds = applyAgendaCancels(world, gstep, tick, chronicle);   // K22 取消裁决（细案 §3.5 → A-5；先于推进——被取消者当 tick 推进落 closed 拦截）
     const closedIds = applyAgendaAdvances(world, gstep, tick, chronicle, warnings);
     for (const id of cancelledIds) closedIds.add(id);   // 取消集并入联闭（取消 = 终结产果路径之一）
     pushTidePeak(world, closedIds, tick);   // K29：盘算浪尖派生（细案 §3.6②——顶层终结/取消 → derivedFrom 浪尖项，A-5 两来源之一）
-    closeEvents(world, closedIds, tick, chronicle);   // 闭环三型：源结清（K9 执行债）+ 链尾结清（K19）+ 取消联闭（K22）
+    // ★leg95 第四型（模型判"这段讲完了"）**排在既有三型之前**：模型点名的事先按它的理由落账，
+    //   剩下的才交给引擎机械扫（谁的未来没人接就放下来）——否则模型那句"为什么收场"会被引擎的通用措辞顶掉。
+    applyEventClosures(world, gstep, tick, chronicle, warnings);
+    closeEvents(world, closedIds, tick, chronicle);   // 闭环四型：源结清（K9 执行债）+ 链尾结清（K19）+ 取消联闭（K22）+ 模型收场（leg95，见上）
     applyEntityFates(world, gstep, tick, warnings, chronicle);   // K37 灭通道：覆灭复核落账（在闭环后——尘埃落定再言灭）
     // ★leg34（小说家条款 §6）：字段写回 + 带因复活。位置在 `reactivateNamed` **之前**：
     //   复活与"被点名复归"是同一件事的两种入口（dead 要模型声明，retired 自动），先落后者就好。
     //   ★leg66：多带一个 `openCauseAtEntry`（来路快照，见上面的头注）——它是"因必须未闭环"的**判定时点**。
     applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAtEntry);
-    pulseEntropy(world, tick, chronicle);   // K27 熵泵（细案 §3.5 → A-6）：环境推演器每 ENV_TICK 一步；越阈落状态源事件；恢复闭环
+    pulseEntropy(world, tick, chronicle);
+    return world;
+}
+
+/** 阶段9 复归与退休：复归 → 背景化 GC → 乱象档位派生。 */
+export function reactivateAndRetire(world, ctx) {
+    const events = ctx.events;
+    const tick = ctx.tick;
+    const warnings = ctx.warnings;
+    const chronicle = ctx.chronicle;
     reactivateNamed(world, events, tick, chronicle);   // K37 复归：本 tick 落账事件点名 → retired 升回 active
     retireInactive(world, tick, warnings, chronicle);  // K37 背景化 GC：扫描轮条件退休 + 超席位强制（守卫）
     // ★★leg53（用户令「引擎每轮从账上真发生的事推一个档位」）：**乱象的生产者**——
@@ -1042,6 +1300,20 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
         const next = updateUnrestGear(world, tick);
         if (next !== world) world.context.setting.dynamic = next.context.setting.dynamic;
     }
+    return world;
+}
+
+/** 阶段10 记账与归档：编年落账 → 档案摘要化 → 递包 → 观测台记账。 */
+export function recordAndArchive(world, ctx) {
+    const gstep = ctx.gstep;
+    const tick = ctx.tick;
+    const warnings = ctx.warnings;
+    const chronicle = ctx.chronicle;
+    const stepN = ctx.stepN;
+    const gate = ctx.gate;
+    const calls = ctx.calls;
+    const playerAffected = ctx.playerAffected;
+    const moveFact = ctx.moveFact;
     chronicleEvents(world, gstep, tick, chronicle);
     world.chronicle = [...world.chronicle, ...chronicle];   // 编年落账（推进留痕 + 事件条目）
     archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）
@@ -1051,13 +1323,69 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
     // leg25 c：`stateChanges` 已从世界步契约删除 ⇒ 从分母里**移除**（留着恒为 0，会让分母少算一项——
     //   "删字段只删一半"的典型残留）。同处 `rejected` 的死过滤 `!w.includes('入局属性钳制')` 一并删除
     //   （那条警告已不可能产生）。
-    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates', 'entityUpdates']
+    //   ★leg95：`eventClosures` 一并计入（它是**提议**，与其余八组同性质）——漏了它会让"提议数"少算，
+    //     拒签率读数跟着失真（同上面那条 `提议丢弃:` 的理由）。
+    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates', 'entityUpdates', 'eventClosures']
         .reduce((n, k) => n + (stepN[k]?.length ?? 0), 0);
     // ★leg32f：`提议丢弃:` 并入拒签分子——它在语义上与"裁定拒"同类（模型提了、世界没落账），
     //   漏掉它会让拒签率**低估**（丢掉的东西不计入分子 ⇒ 读数失真）。
     const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)
         + warnings.filter((w) => w.startsWith('裁定:') || w.startsWith('校验拒绝:') || w.startsWith('提议丢弃')).length;
     recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected);
+    return world;
+}
 
-    return { ok: true, ssot: world, stage: { chronicle, warnings, events } };
+/** ★★★阶段顺序表（乙-2 的唯一**执行**驱动源）：数组顺序 = 运行时真的按它跑；
+ *  每一步"为什么在这个位置"见 `SETTLE_ORDER`（那个表是**登记序**，与"函数在文件里怎么排"一致）。
+ *  ★它与本文件里的**函数定义序**故意不同：数组是**执行/依赖序**（`computeSpotlight` 的产出门控要用 ⇒ 必须排在门控前），
+ *    文件排列是**登记序**（照 `SETTLE_ORDER`）。两者都由判据咬住，改任何一个都要先读阶段块的头注。 */
+export const SETTLE_STAGES = Object.freeze([
+    prepareSettle,           // 1  校验 → 工作副本（唯一克隆）→ 收集器 → 对话依据册
+    applyStepConstraints,    // 2  同轮引用归一（第一次，★纯计算、不改世界）
+    captureEntryState,       // 3  批次入口因果快照（★纯读；必须在门控与任何世界改动之前）
+    computeSpotlight,        // 4  待启用名单（★按**原件**的 tick 轮转；**门控要用它**）
+    gateAndSnapshot,         // 5  门控 → 归一（第二次）→ 生效上限
+    adjudicateAndPopulate,   // 6  出生裁判 → 落账 → 事件上限 → 挂链
+    consistencyAndWeights,   // 7  一致性 → 活跃记账 → 分量/张力
+    closeAndSettleFates,     // 8  取消 → 推进 → 浪尖 → 闭环 → 灭 → 字段写回 → 熵泵
+    reactivateAndRetire,     // 9  复归 → 退休 → 乱象档位
+    recordAndArchive,        // 10 编年 → 归档 → 递包 → 观测台
+]);
+
+export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }) {
+    // ★★★leg84（乙-2）：本函数从 140 行**顺序过程**收成**薄驱动**——
+    //   10 个显式阶段住在本文件上方（定义序 = `SETTLE_ORDER` 的**登记序**，那条"源码序"锁咬的就是它），
+    //   运行时顺序由 `SETTLE_STAGES` 唯一驱动，每一步"为什么在这个位置"仍由 `SETTLE_ORDER` 唯一承载。
+    //   ★两处早退（校验拒绝 / 裁定拒绝）走 `ctx.blocked`，由这里统一返回 —— 阶段自己一律 `return <它的入参>`。
+    const ctx = {
+        // 入参（★`ssot` 必须留在 ctx 里：两处早退返回的都是**原件**，不是工作副本）
+        // ★★而且**门控与待启用名单读的也是它**（不是工作副本）—— 这是施工期最贵的一处，
+        //   见 `gateAndSnapshot` 与驱动里 spotlight 那两处的注解。
+        ssot, step, moveFact, calls, preWarnings,
+        // 本轮共享产物（★就地收集：与原实现逐字节等价，见阶段块头注的口径收窄说明）
+        tick: null, warnings: [], chronicle: [], playerAffected: [],
+        // 跨阶段产物（按阶段顺序逐个填入）
+        stepN: null, gate: null, gstep: null, lim: null, openCauseAtEntry: null, spotlightSet: null,
+        spawned: [], born: [], events: [], pack: null,
+        // 早退出口
+        blocked: null,
+    };
+    // ★★★**驱动只做两件事**（施工期被 10 条判据反复逼出来的定稿）：
+    //   ① 跑第一个阶段（`prepareSettle`：校验读原件 → **唯一的一次克隆** → `tick` → `bookDialogue` 改克隆件）
+    //   ② 按 `SETTLE_STAGES` 顺序跑其余阶段；`blocked` 一置上**立刻停**（原实现 `return` 的等价形态）
+    //   ★快照与待启用名单**都不在驱动里** —— 它们是顺序表/阶段里的承重步骤，各有自己的阶段。
+    //     驱动一薄，"顺序"这件事才只剩**一个**主人（`SETTLE_STAGES` + `SETTLE_ORDER`）。
+    const head = SETTLE_STAGES[0];
+    let world = head(ssot, ctx) || ssot;
+    if (ctx.blocked) return ctx.blocked;                 // 校验失败 ⇒ 原件原样返回（一个字节没动）
+    // ★★★`blocked` 一置上就**立刻停** —— 这是原实现 `return` 的等价形态。
+    //   ★施工期实测踩到（10 条判据当场红）：第一版写成"照跑完 8 个阶段、最后再判 `blocked`"
+    //     ⇒ 校验失败那一轮，后面的阶段仍然跑了，在**未通过校验的世界**上继续就地改。
+    //   ⇒ **"早退"不是一个返回值，是"后面不再发生"**：顺序承担语义在这里第二次显形。
+    for (const stage of SETTLE_STAGES.slice(1)) {
+        world = stage(world, ctx) || world;
+        if (ctx.blocked) break;
+    }
+    if (ctx.blocked) return ctx.blocked;
+    return { ok: true, ssot: world, stage: { chronicle: ctx.chronicle, warnings: ctx.warnings, events: ctx.events } };
 }

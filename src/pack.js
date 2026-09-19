@@ -9,7 +9,11 @@ import { QUIET_TICKS } from './gate.js';
 //   "面板分了两张表、包里还是一栏"（本仓最贵的那类 bug，见 abstract.js 的 resolveScales 头注）。
 // ★leg64：法则块的三道上界与类别词表**读真源**（`abstract.js` 定义处）——不在本文件另抄一份数字，
 //   否则"面板报的上界"与"包里真用的上界"会各说各话（leg63 那句不准确的文案就是这么来的）。
-import { resolveScales, classifyRulesByKind, RULE_PACK_TOP, RULE_PACK_STR_MAX, RULE_PACK_CHAR_TOP } from './abstract.js';
+// ★★★leg71（丙案）：**真源换家**——"法则怎么分类"与那三道上界已搬到 `abstract-tier.js`。
+//   本文件因此**不再 import 3367 行的抽取器**（只需要"尺子怎么读、法则怎么分类"，不需要"书怎么抽"）。
+//   ★这是本棒要的那个效果：消费者关系第一次变正确。
+import { resolveScales } from './abstract.js';
+import { classifyRulesByKind, RULE_PACK_TOP, RULE_PACK_STR_MAX, RULE_PACK_CHAR_TOP } from './abstract-tier.js';
 // K44/第十九棒（full-roster-lens-spec C2/C7 拍板）：实体段=**镜头选择器**——
 //   全量棋盘上按「四段确定性序：①例外保送（被点名/在飞盘算属主/近 2 tick 活跃）②手上有在办盘算 ③近 5 轮出手 ④实体 id 序」排序、30k 内取前缀；
 //   势力实体附「麾下成员」简表（parent 派生反查，含分支成员）；分量数字仍不入包（P3 不变）。
@@ -382,8 +386,17 @@ export const SCALE_STR_MAX = 30;
 //   体积上界：表名 ≤ 16×20=320 字符，其余与旧口径同尺 ⇒ 最坏 ≈ (8+24)×(30+8)+320 ≈ 1,536 字符（原 1,216，+26%）。
 export const SCALE_TABLE_TOP_PACK = 16;
 export const SCALE_NAME_MAX_PACK = 20;
-export function buildScaleAnchor(canon) {
-    if (!canon || typeof canon !== 'object') return null;
+// ★★★leg69（A1）：**块级截断的留痕** —— 病：本函数与 `buildRuleAnchor` 都在"自己的预算"里
+//   **静默 `break`**（档 ≤`TIER_TOP` / 维 ≤`DIM_TOP` / 表 ≤`SCALE_TABLE_TOP_PACK` / 判据 ≤`RULE_PACK_TOP`），
+//   包里没有任何"一共几项、只给了几项"的读数 ⇒ 真账实测「34 张表 214 档 ⇒ 进包 3 张 24 档、丢 88.8%」
+//   只能靠人肉比对（而**整包级**的 `trimPack` 是有痕迹的：`pack.trimmed`）。
+//   治法（用户拍板「新增一个只读键」）：把"口径"抽成**一个内部核心** `scaleAnchorCore(canon) → { anchor, fit }`，
+//   公开的 `buildScaleAnchor` 退化为**薄壳**（`.anchor`，**返回形状逐字节不变** ⇒ 5 处调用点 + 各形状断言零扰动），
+//   另开 `buildScaleAnchorWithFit` 给"要读数"的消费口（面板 / 出包）。
+//   ★**为什么必须抽核心、不许各算一份**：截断规则一旦有第二份复制品，读数迟早与实物漂移
+//     ——那正是本仓"一个数两把尺子"的老病（`render.js` 原先自己数了一遍 `scaleFit`，本棒一并收口）。
+export function scaleAnchorCore(canon) {
+    if (!canon || typeof canon !== 'object') return { anchor: null, fit: null };
     const cut = (s) => {
         const t = String(s ?? '').trim();
         return t.length > SCALE_STR_MAX ? t.slice(0, SCALE_STR_MAX) : t;
@@ -435,17 +448,26 @@ export function buildScaleAnchor(canon) {
     }
     // 没有概念表可分的（老账推导失败/空 canon）⇒ 落回旧两列平铺，行为与 leg61 逐字节一致。
     if (!scales.length) {
-        const flatDims = (Array.isArray(canon.dims) ? canon.dims : [])
+        // ★leg69（A1）：先建**全量**、再 `slice`（原写法把 `slice` 串在链尾 ⇒ 切掉多少无从得知）。
+        //   ⚠返回对象的**键序**必须与旧写法逐字节相同 ⇒ 下面仍按 `out` 的 `维度`→`档位` 顺序落键。
+        const allDims = (Array.isArray(canon.dims) ? canon.dims : [])
             .map((d) => { const item = { 名: cut(d?.name) }; const range = cut(d?.range); if (range) item.范围 = range; return item; })
-            .filter((d) => d.名).slice(0, DIM_TOP);
-        const flatTiers = (Array.isArray(canon.powerScale) ? canon.powerScale : [])
+            .filter((d) => d.名);
+        const allTiers = (Array.isArray(canon.powerScale) ? canon.powerScale : [])
             .map((p) => { const item = { 档: cut(p?.level) }; const note = cut(p?.note); if (note) item.标定 = note; return item; })
-            .filter((t) => t.档).slice(0, TIER_TOP);
-        if (!flatDims.length && !flatTiers.length) return null;
+            .filter((t) => t.档);
+        const flatDims = allDims.slice(0, DIM_TOP);
+        const flatTiers = allTiers.slice(0, TIER_TOP);
+        const flatFit = {
+            表: null,                                            // 平铺路没有"表"这一层（旧两列直铺）
+            档: { 进包: flatTiers.length, 共: allTiers.length },
+            维: { 进包: flatDims.length, 共: allDims.length },
+        };
+        if (!flatDims.length && !flatTiers.length) return { anchor: null, fit: null };
         const out = {};
         if (flatDims.length) out.维度 = flatDims;
         if (flatTiers.length) out.档位 = flatTiers;
-        return out;
+        return { anchor: out, fit: flatFit };
     }
     // 全局上限兜底（与旧口径同尺：维度 ≤ DIM_TOP · 档位 ≤ TIER_TOP，跨表累计）。
     //   ★★三条排序纪律（**三条都是实测踩出来的**，改这段之前逐条读）：
@@ -493,8 +515,32 @@ export function buildScaleAnchor(canon) {
         }
         if (row.档位?.length || row.维度?.length) capped.push(row);
     }
-    if (!capped.length) return null;
-    return capped;
+    if (!capped.length) return { anchor: null, fit: null };
+    // ★leg69（A1）：读数与实物同源 —— `进包` 直接数 `anchor` 本体的元素，`共` = 截断前 `scales` 里的总量。
+    //   （`scales` 里的形状已与包内同形 ⇒ 两边的"一项"是同一个东西，不是两把尺子。）
+    const count = (list, key) => list.reduce((n, t) => n + ((t[key] || []).length), 0);
+    return {
+        anchor: capped,
+        fit: {
+            表: { 进包: capped.length, 共: scales.length },
+            档: { 进包: count(capped, '档位'), 共: count(scales, '档位') },
+            维: { 进包: count(capped, '维度'), 共: count(scales, '维度') },
+        },
+    };
+}
+
+/** 薄壳：**返回形状与 leg61/leg62 逐字节相同**（5 处调用点 + 形状断言零扰动）。 */
+export function buildScaleAnchor(canon) {
+    return scaleAnchorCore(canon).anchor;
+}
+
+/**
+ * 要读数的消费口（面板 / 出包）走这个：`{ anchor, fit }`，`anchor` 与 `buildScaleAnchor` 的返回值**同一个东西**。
+ * `fit = { 表: {进包,共}|null, 档: {进包,共}, 维: {进包,共} }`（平铺路没有"表"这一层 ⇒ `表: null`）。
+ * ★两种"没东西"都返回 `{ anchor: null, fit: null }`（无 canon / 净化后为空）——与薄壳的 `null` 一一对应。
+ */
+export function buildScaleAnchorWithFit(canon) {
+    return scaleAnchorCore(canon);
 }
 
 // ★★★leg64 第三轮（用户问「有这么多模型该怎么检索，难道直接全塞吗？」→ 拍板**递目录 + 按需查**）：
@@ -551,10 +597,17 @@ export function buildScaleCatalog(canon, packedNames) {
 //       ★★这两类是**用户拍板的"都要"**。本棒第一版只进判据、把世界观当兜底残渣扔掉，
 //         实机 318 条那份账当场证明那是错的（详见 `RULE_CLASS_GUIDE` 头注）。
 //     · **文风禁令**（三国 32 条里 11 条 `绝对禁止现代口语语法`）= 那是**怎么写**，不是**判什么/世界是什么**；
+//       ★★★leg74（用户令「我不是说不要文风禁令了吗？」→ 拍板「连账本一起清掉」）：这一类现在**连账本都不进**了
+//       ——`pruneJunkRules` 在收账/并集/载入三处把它摘掉（唯一实现在 `abstract-tier.js`）。
+//       本条注释原来写的"留账给面板"是 leg64 的旧口径，**已被 leg74 取代**（别再照它改回去）。
 //     · **变量指令**（`必须全量 replace` · `delta -1`）= **MVU 脚本那一层的活**，进叙事提示词是纯噪声
 //       （用户 leg63 原话「这不是重抽设定吗？为什么要抽属性了」是同一类越界）；
-//     · **其他**（格言 `功成身退天之道`）= 不是判定锚，也不是世界事实。
-//   ⇒ **只进那两类**；其余三类**一条都不删**，全留账给面板（用户拍板）。
+//     · **其他**（格言 `功成身退天之道`）= 不是判定锚，也不是世界事实
+//       ★leg75：用户重抽后又在面板上看到「其他（2 条）」是**安装/配置说明**
+//       （`数据库配置：安装：下载最新版本数据库…` · `表格模板导入：配置方法：状态栏倒数第三个按钮`）
+//       ⇒ 拍板「把这些全给我删干净了」。
+//   ⇒ 只进那两类（`RULE_CLASSES_PACK`）；★★leg75 起**其余三类一条都不留**（既不进包、也不进账本）
+//     ——丢弃凭模型标注、记账边界确定性丢弃，不猜内容（见 `pruneJunkRules` 头注与 `RULE_CLASSES_DROP`）。
 //
 //   体积纪律（与 `buildScaleAnchor` 同尺，**上界必须有**——leg63 §1.5 量到的病正是
 //   "`rules` 没有任何上界判据"，而 `刻度` 有 表≤16/档≤24/维≤8）：条数 · 单条长度 · 总字符，三道闸。
@@ -564,8 +617,9 @@ export function buildScaleCatalog(canon, packedNames) {
 //   ★老账口径（用户拍板）：**没有 `ruleKinds` 就是没有**（与 leg63 的 `源` 同一条**零迁移**纪律：
 //     不猜、不重抽、不按关键词瞎分类）⇒ 老账一块都不进包，面板照旧全平铺并**如实报**"0 条进包"。
 //     为什么不做"关键词猜判据"：那正是本仓明禁的过拟合（换本书就废），且猜错会把散文灌进每轮包。
-export function buildRuleAnchor(canon) {
-    if (!canon || typeof canon !== 'object') return null;
+/** 法则块的**唯一口径**（照 `scaleAnchorCore` 的先例：截断规则只许有一份）。 */
+export function ruleAnchorCore(canon) {
+    if (!canon || typeof canon !== 'object') return { anchor: null, fit: null };
     // ★分类法**不在本文件写**——走 `classifyRulesByKind`（面板读的是同一个函数 ⇒ 报的和干的一致）。
     const { 判据 } = classifyRulesByKind(canon.rules, canon.ruleKinds);
     const out = [];
@@ -578,7 +632,19 @@ export function buildRuleAnchor(canon) {
         chars += cut.length;
     }
     // 空着就是空着（与 env/刻度 同一条纪律）：一条判据都没有 ⇒ 键不出现，老账与旧行为**逐字节相同**。
-    return out.length ? out : null;
+    if (!out.length) return { anchor: null, fit: null };
+    // ★leg69（A1）：`共` = **判据这一类**的总数（分类之后、三道闸之前）——口径与面板"几/几进包"同一把尺。
+    return { anchor: out, fit: { 判据: { 进包: out.length, 共: 判据.length } } };
+}
+
+/** 薄壳：**返回形状不变**（`null` / `string[]`）。 */
+export function buildRuleAnchor(canon) {
+    return ruleAnchorCore(canon).anchor;
+}
+
+/** 要读数的消费口走这个：`{ anchor, fit }`，`fit = { 判据: {进包,共} }`。 */
+export function buildRuleAnchorWithFit(canon) {
+    return ruleAnchorCore(canon);
 }
 
 // ★★★leg64 第四轮（用户令「做吧」）：**按需查表**——模型"点名要"某几张尺的入口。
@@ -681,7 +747,7 @@ export function buildScaleOnDemand(canon, names) {
 // 已结算盘算不再喂给模型（防满步重播，活档实测发现）
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
 // leg25：出包末尾**强制整包预算**（超限按固定剪枝序裁，包内留 `trimmed` 痕迹；见 trimPack）
-export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } = {}) {
+export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, turnFacts = null } = {}) {
     // K44：镜头选择器——全量棋盘有序入镜（保送+分量序），预算内前缀；分量不随行泄漏（P3）
     // 细案 spec-entity-field-lookup §3（用户 2026-09-11 批准）：**选择权归 LLM 时**传 picks——
     //   名单改用"本轮上场选择器"选的实体（引擎只做校验，见 entity-lookup.js），不再按预算截前缀。
@@ -746,10 +812,23 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
     //            ③**信息最少化**：id + 谁 + 目标 + 起因型（+ 起因 ref）——详情用 id 回查，不抄全文。
     const closedEvents = (ssot.events || []).filter((e) => e.closed).slice(-EVENT_LEDGER_TAIL).map((e) => ({
         id: e.id, title: e.title, source: e.source,
+        // ★★★leg100（用户令「**可以按甲吧**」）：**给"已经收掉的事"盖一个记号**——它此前与
+        //   `pendingEvents`（还没结束的事）**形状完全一样**（都是 id+title+source），模型分不出
+        //   "哪个能动、哪个是墓碑"⇒ 真机上它就从这份**归档**里挑了两个号去收场（`ev_6_4`/`ev_7_2`，
+        //   见 `docs/session-handoff-2026-09-21-leg100.md` §0 的真机取证）。
+        //   ★为什么用**独立的一格**而不是往 title 里塞前缀：`trimPack` 的 ③ 级**只留 `{id}`**
+        //     （见 `trimPack` 那段注释）⇒ 塞进 title 的字会被裁掉，而"只剩一串光秃秃的号"**正是**
+        //     最像候选池的形态。⇒ 记号必须是**独立一格**，这样裁剪后它仍然活着（`{id, closed}`）。
+        //   ★键序锁（`lens.test.js`）：本笔**只加一格、不动栏名**——栏名动了会连带动
+        //     `prompts.js` 第 9 条、台账与两条键序锁，收益不抵风险。
+        //   ★与 `closedRoots` 的分工**一个字没动**（见 `computeClosedRoots` 头注：那个才是"可以动手接的"）。
+        closed: true,
     }));
     const dyn = ssot.context?.setting?.dynamic;   // K29：设定大势块（只读注入；冻结层不入包——体积纪律 A-8）
-    // ★★leg60（交接第 2 件）：**刻度块**——A-8 体积纪律的**唯一一处窄口**（见 `buildScaleAnchor` 头注）。
-    const scale = buildScaleAnchor(ssot.context?.setting?.frozen?.canon);
+    // ★★leg60（交接第 2 件）：**刻度块**——A-8 体积纪律的**唯一一处窄口**（见 `scaleAnchorCore` 头注）。
+    //   ★leg69（A1）：改走 `WithFit` 口 —— `anchor` 与原先**同一个东西**，另外拿到块级截断读数（见下 `刻度裁掉`）。
+    const scaleFitRes = buildScaleAnchorWithFit(ssot.context?.setting?.frozen?.canon);
+    const scale = scaleFitRes.anchor;
     // ★★★leg64 第三轮：**刻度目录**——"书里还有哪些尺"（用户拍板「递目录 + 按需查」）。
     //   为什么必须与 `刻度` 同源算：目录排除的正是**已经进包的那几张**（`scale` 的 `表` 名就是
     //   `buildScaleAnchor` 截断后的名字，目录用同一个 `cutName` ⇒ 两边认得出是同一张）。
@@ -762,10 +841,23 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
     //   与 `recalled` 同一条生命周期口径：**每轮由账上现算**，调用方在新一轮开头清掉请求
     //   ⇒ 递出去的那一轮可见、之后自然消失（不做跨轮囤积）。见 `buildScaleOnDemand` 头注。
     const scaleWanted = buildScaleOnDemand(ssot.context?.setting?.frozen?.canon, ssot.meta?.scaleRequests);
-    // ★★★leg64（交接 §3-A「规则进包」）：**法则块**——只取「判断依据」那一类（见 `buildRuleAnchor` 头注）。
+    // ★★★leg64（交接 §3-A「规则进包」）：**法则块**——只取「判断依据」那一类（见 `ruleAnchorCore` 头注）。
     //   与 `刻度` 并列进同一个 `setting` 块：一个是"书里的尺子"，一个是"书里的判定原则"，
     //   都是**冻结的短表**（编译一次、之后每轮逐字相同），都违反 A-8 而那是有意的（它们是锚）。
-    const ruleAnchor = buildRuleAnchor(ssot.context?.setting?.frozen?.canon);
+    const ruleFitRes = buildRuleAnchorWithFit(ssot.context?.setting?.frozen?.canon);
+    const ruleAnchor = ruleFitRes.anchor;
+    // ★★★leg69（A1）：**块级截断的留痕**（用户拍板「新增一个只读键」）——原先这两块在自身预算里
+    //   **静默 `break`**（真账实测 34 张表 214 档 ⇒ 进包 3 张 24 档、丢 88.8% 只能靠人肉比对）。
+    //   口径三条：
+    //     ① **只在真丢了东西时挂键**（与 `刻度`/`法则`/`trimmed` 同一条：空着就是空着）⇒
+    //        不丢东西的世界**逐字节与旧版相同**（本仓零迁移纪律）；
+    //     ② 键名与包内其余键同风格（中文短语），内容 = 两个 `WithFit` 的读数（机器可读，模型/调试者都看得见）；
+    //     ③ **只报"被块级预算切掉多少"**，不报被 `trimPack` 整包切掉的（那是 `trimmed` 的活，别混）。
+    const dropped = {
+        ...(scaleFitRes.fit && Number(scaleFitRes.fit.档?.共) > Number(scaleFitRes.fit.档?.进包) ? { 刻度: { ...scaleFitRes.fit, 原因: '块级预算（表≤16/档≤24/维≤8）' } } : {}),
+        ...(ruleFitRes.fit && Number(ruleFitRes.fit.判据?.共) > Number(ruleFitRes.fit.判据?.进包) ? { 法则: { ...ruleFitRes.fit, 原因: '块级预算（条≤160/单条≤500字/总≤8000字）' } } : {}),
+    };
+    const scaleDropped = Object.keys(dropped).length ? dropped : null;
     // K38 补差包（敲定稿 C 条）：对话依据册摘要进包——"谁反复被点名"模型看得见（dialogueFact 源/镜头依据；
     // 只取前 TOP 条，计数+最近提及轮；依据册总量留在账上）
     const db = ssot.meta?.dialogueBook;
@@ -831,7 +923,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
         //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
         //   ★leg62：`scale` 现在是**概念表列表**（一把尺一个元素，见 `buildScaleAnchor` 头注），
         //     故这里由调用点写 `刻度` 这个键（改前 `buildScaleAnchor` 自己返回 `{刻度:[…]}` ⇒ 这里会嵌成两层）。
-        setting: (dyn || scale || ruleAnchor || scaleCatalog || scaleWanted) ? {
+        setting: (dyn || scale || ruleAnchor || scaleCatalog || scaleWanted || scaleDropped) ? {
             ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
             ...(scale ? { 刻度: scale } : {}),
             // ★leg64 第三轮：**目录**（只表名 + 规模，不带档位内容）——治"60 张尺模型不知道存在"。
@@ -839,6 +931,11 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
             // ★leg64 第四轮：**点名要来的整张表**（`刻度补` = 补料；空着就是空着）。
             ...(scaleWanted ? { 刻度补: scaleWanted.tables } : {}),
             ...(ruleAnchor ? { 法则: ruleAnchor } : {}),   // ★leg64：判据进包（老账/无判据 ⇒ 键不出现）
+            // ★leg69（A1）：块级截断读数（**只在真丢了东西时出现**）。
+            //   ★位置纪律：**缀在它所描述的两块之后**——本仓有"包内键序"的锁（`lens.test.js` 立、
+            //     leg32c/leg32g 各续），把新键插在中间会动到既有键的相对位置；缀尾只做加法。
+            //     且它只在"真丢了"时出现 ⇒ 不丢东西的世界（含 golden 夹具）**键集合一字不变**。
+            ...(scaleDropped ? { 刻度裁掉: scaleDropped } : {}),
         } : undefined,
         positions: ssot.context?.positions,
         entities,
@@ -870,6 +967,13 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null } 
     //   为什么与 `departed` 口径不同（那个恒为数组）：`departed` 受 `lens.test.js` 的键序锁约束（它的世界里
     //   有没有离场者都会走到同一分支）；这一段是**本回合真的检索到**才存在 ⇒ 挂 `undefined` 键没有意义。
     if (recalledText) pack.recalled = recalledText;
+    // ★★★leg89：**本轮正文里"已经发生过的事"**（标签提取，设计见 `docs/spec-tagged-actions-extraction.md`）。
+    //   为什么它必须是新键、且**只做加法缀在最末**：本文件的键序被 `lens.test.js` 逐字钉住
+    //   （`pack.js:924/934` 都写着这条纪律）⇒ 中间插键会咬。缀尾 + **没抽到就不留键**
+    //   （照 `recalled` 那条口径）⇒ 没标签的老聊天**逐字节回到今天**。
+    //   ★它进的是**主调用的输入**，不是世界步：世界步仍由模型提议、引擎结算门控（红线不破）。
+    //   ★`elapsed` 是**账外的料**——引擎一个字都不解析它（账按轮走，故事按时间走）。
+    if (turnFacts) pack.turnFacts = turnFacts;
     // leg25（死代码接线）：**总预算在这里强制**。此前 `trimPack` 全仓生产 0 调用——
     //   lensList 只按 lensMaxTokens 截**实体段**，agendas/pendingEvents/setting/positions **不参与任何裁剪**，
     //   30k 预算等于纸面数字（余量正被名册增长吃掉）。现改为：出包即自检**整包**预算，超限即按固定剪枝序裁。
@@ -923,8 +1027,10 @@ export function trimPack(pack, budgetTokens = EVOLUTION_BUDGET_TOKENS) {
         if (pack.__relight) pack.entities = pack.__relight('idOnly');
     });
     // ③ 最近关闭事件：本 tick 已不是主料（防满步重播），只留 id 供回溯
+    //   ★leg100：**记号 `closed` 必须跟着留**（不能只留 `{id}`）——那一格是本笔给"归档"盖的戳，
+    //     而"只剩一串 id"恰恰是最容易被当成候选池的形态（真机上就是这么出的事，见 `closedEvents` 处注释）。
     stage('recentClosedEvents', () => {
-        if (pack.recentClosedEvents?.length) pack.recentClosedEvents = pack.recentClosedEvents.map((e) => ({ id: e.id }));
+        if (pack.recentClosedEvents?.length) pack.recentClosedEvents = pack.recentClosedEvents.map((e) => ({ id: e.id, closed: true }));
     });
     // ④ 未决事件详情：id+title 保住"有事在飞"，砍掉 source/position 细节
     stage('pendingEvents', () => {

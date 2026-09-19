@@ -19,7 +19,25 @@ export function isSettingRef(s) {
 
 // ---- 事件 id 契约共享解析器（ev_<tick>_<n> / ev_pump_<tick>_<n> / m_<n>——取首个数字段）----
 // 单一契约点：settle 的 bornTickOf 与本处同源（防两处各自演化）。
+// ★★★leg99 修：**开局种子 `ev_seed_N` 算第 0 轮**（此前"取首个数字段"把它读成了出生轮 `N`）。
+//   病根（leg98 §9 登记、leg99 量清）：`ev_seed_N` 里的 `N` 是**播种时的枚举号**，不是轮次——
+//   出处 `src/seed-roots.js:149` 的 `while (taken.has(\`ev_seed_${n}\`)) n += 1;`（只保证 id 不撞车）。
+//   ⇒ 旧法把种子的"出生轮"读成 1…8 ⇒ 它们在**当前轮 12** 时距当前 4~10 轮 ⇒ 被算进"近 10 轮"窗口。
+//   ★玩家看得见的那一笔（leg99 装置 `F:/deepseek/tmp/prototypes/leg99-born-impact.mjs`，真机账 大荒z·第12轮）：
+//     「近 10 轮事件」这个数  **83（旧·含 7 件种子）→ 76（新）**。
+//   ★两个读数**实测不受影响**（同一装置量的，所以这不是"报批级"改动）：
+//     · 张力强度 freq 腿：两口径都早被 `TENSION_FREQ_DIV`=4 归一饱和在 1.000 ⇒ 无差；
+//     · 乱象档位：把种子整个剔掉再问 `unrestGearOf`，**档位照旧**「大乱」⇒ 不变。
+//   ★这是**回到本仓早已写定的口径**、不是新口径：`src/panorama.js:22` 的注释与
+//     `test/panorama.test.js:148`（`bornTick('ev_seed_3') === 0`）一直这么写，两把尺子此前不一致。
+//   ★已知残余（如实登记，**本笔不治**）：`src/memory-bridge.js:282,289` 与 `src/pack.js:220,801`
+//     各自 **copy 了一份同族逻辑**（前者明写"与 settle/setting 同源"、后者连注释都停在 `split('_')[1]`），
+//     ⇒ 它们仍把种子读成第 N 轮。影响面实测很小（`pack.js:220` 只是已闭环根排序的次序、
+//     `:801` 只对 `source.type==='state'` 生效 ⇒ **种子走不到那一支**），故本笔不动它们，
+//     只在此处登记；把四处**收敛成一处实现**是模块图改动，另案。
 export function eventBornTick(id) {
+    // 种子先判：它的数字段是枚举号、不是轮次（判据在 test/setting.test.js）
+    if (/^ev_seed_\d+$/.test(String(id || ''))) return 0;
     const seg = String(id || '').split('_').find((s) => /^\d+$/.test(s));
     const n = seg === undefined ? NaN : Number(seg);
     return Number.isInteger(n) && n >= 0 ? n : -Infinity;   // 解析失败按"老账"（不占活跃度窗口）

@@ -179,7 +179,8 @@ return ctx.renderExtensionTemplateAsync('third-party/story-world-v2', 'settings'
 
 ### ★ 其余旧待办（沿用 leg65 交接 §3，未动）
 `rules`/`刻度` 的**进包体积仍未落账**（包里没有"被截断"的痕迹，面板报了）·
-`sourceText` 死路 · 账态不一致（量真账先记抽取时间戳）· `INIT_SOURCE_HARD_CEILING` ·
+`sourceText` 死路 · ~~账态不一致（量真账先记抽取时间戳）~~（★**已撤回：假账**，见 `leg64.md` §3-D；
+"先记时间戳"那条纪律**仍然有效**，但它不是待办——本行是漏改，leg69 更正）· `INIT_SOURCE_HARD_CEILING` ·
 `present` 数组全仓没人读 · 「只抽刻度」抽完不能存 · 等一串。
 
 ---

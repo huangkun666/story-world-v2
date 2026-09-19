@@ -260,7 +260,7 @@ leg63/64 两棒**零真调用**，整个项目**从没验过"装起来能不能�
 ### ★ D. 其余旧待办（沿用 leg65 交接 §3，未动）
 
 进包体积无落账痕迹（`buildScaleAnchor`/`buildRuleAnchor` 都不写 `trimmed`）· `sourceText` 死路 ·
-账态不一致 · `INIT_SOURCE_HARD_CEILING` · `present` 数组全仓没人读 · 「只抽刻度」抽完不能存 · 等一串。
+~~账态不一致~~（★**已撤回：假账**，见 `leg64.md` §3-D 的划掉那节）· `INIT_SOURCE_HARD_CEILING` · `present` 数组全仓没人读 · 「只抽刻度」抽完不能存 · 等一串。
 
 ---
 

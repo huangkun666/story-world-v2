@@ -163,7 +163,8 @@ test('leg25: 超预算输入 → 按固定剪枝序裁剪、estTokens 落回预�
         assert.equal(p.pack.entities.length, 900, '镜头人数不变——裁的是细节，不是"谁在棋盘上"');
     }
     if (p.pack.trimmed.includes('recentClosedEvents')) {
-        assert.deepEqual(Object.keys(p.pack.recentClosedEvents[0]), ['id']);
+        // ★leg100：③ 级不再只留 `{id}`——**"已了结"的记号要跟着留**（"只剩一串号"正是最像候选池的形态）。
+        assert.deepEqual(Object.keys(p.pack.recentClosedEvents[0]), ['id', 'closed']);
     }
     if (p.pack.trimmed.includes('pendingEvents')) {
         assert.deepEqual(Object.keys(p.pack.pendingEvents[0]), ['id', 'title']);

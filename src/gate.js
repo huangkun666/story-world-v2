@@ -128,10 +128,15 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         //   本棒实测：漏了 `entityUpdates` ⇒ 字段写回**永远不落账**，而 25 条新用例里 10 条红）。
         //   `entityUpdates` = **因果变更**，不是"主动作"：它由一件已落账的事驱动（cause 必填且须未闭环，
         //   `check-step` 已核），与 `entityFates`（覆灭）同性质 ⇒ 照它**原样透传**，不进静默门。
+        // ★★★leg95：同一个坑**又踩了一次**（历史押韵）：新增 `eventClosures` 时忘了加进这一行，
+        //   而症状与上面那句一字不差——"模型判定的收场**永远不落账**"，`event-close.test.js` 新判据当场红。
+        //   同一条理由透传：收场提议是**对已落账事情**的判断（`check-step` 已核号在册且未收场），
+        //   不是"谁出的手"⇒ 不进静默门（静默的说的是"这个人这轮不许主动作"，与他能不能判旧事收场无关）。
         step: {
             actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities,
             entityFates: step.entityFates || [],
             entityUpdates: step.entityUpdates || [],
+            eventClosures: step.eventClosures || [],
         },
         silent: [...silentSet],
         lifted,

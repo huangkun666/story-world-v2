@@ -7,9 +7,43 @@
 // K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll, renderVolumeReadHtml, renderChainViewHtml, LABELS, PANEL_BUILD, makeEntsView, makeChronicleView } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml, renderChainViewHtml } from '../src/render.js';
+// ★★★leg85（丙案 · `src/render.js` 的第一个切口）：`LABELS` / `PANEL_BUILD` 这两个**共用底**的符号
+//   已随那一族搬进 `src/render-base.js` ⇒ 本文件改指新家（**不搞 re-export**：那会让"它到底住哪"
+//   重新变模糊，正是本仓 leg71 立规矩要治的病）。`test/render.test.js` 那边同批改指向。
+import { LABELS, PANEL_BUILD } from '../src/render-base.js';
+// ★★★leg79（丙-web 第四格）：视图态族（编年/实体两页的视图态 + 复位 + 两枚词表 + 组合期标志）
+//   整族搬进 `web/view-state.js`。★本文件**不再** import `makeEntsView`/`makeChronicleView`
+//   ——那两个工厂现在由新模块直接问渲染层取（默认值的真源照旧只有一份，只是取它的地方少了一处）。
+//   ★够到那一族一律走**受控口** `viewState`（见下面建 hub 那一段）。
+import { createViewStateHub } from './view-state.js';
+// ★★★leg73（丙-web · 第二格）：快照容错子系统整族搬进 `web/snapshot-store.js`。
+//   ★判据锁死：**只取回工厂**（取回集合"不多不少"）——其余一律经 `snapHub` 的方法取用。
+import { createSnapshotHub } from './snapshot-store.js';
+// ★★★leg78（丙-web · 第三格）：热账（hot-meta）读写落盘子系统整族搬进 `web/hot-ledger.js`。
+//   本文件从此**不再持有一格热账状态**（11 格全在新家）。
+import { createHotLedgerHub } from './hot-ledger.js';
+// ★★★leg82（丙-web · **第六格 · 最后一格**）：**参数族**整族搬进 `web/param-panel.js`。
+//   ★判据锁死：**只取回工厂**（取回集合"不多不少"）——其余一律经 `paramApi` 的**受控口**取用
+//     （清单见新家 `return {...}`：hub 四类口 + 自证面/撤销/写账补镜像 + 面板 DOM 镜像 + 忙闩 + 复位）。
+//   ★旧家不再留任何"参数族的实现"：hub 装配、自证面、撤销、写格留痕、忙闩、DOM 镜像、最近世界
+//     全部只有新家那一份（判据跑在**剥注释后的源码**上——注释里可以留档、代码里不许再有定义）。
+import { createParamApi } from './param-panel.js';
+// ★★★leg89：**注入面**整族单独一个模块（`web/inject.js`）——插件第一次"会动你的对话"。
+//   ★它只认识"字符串 + 注入口"，不认识引擎：标签规范与名册那两段的组装是**纯函数**
+//     （`tagSpecText`/`rosterText`/`buildInjections`，Node 可直接测）；本文件只负责
+//     "什么时候设、拿哪个世界设"，以及把读数报出来。设计见 `docs/spec-tagged-actions-extraction.md` §6。
+import { createInjector } from './inject.js';
+import { mergedMainHtml } from './page-compose.js';   // ★leg98 补四：并页那一页怎么拼（页头＋信息带升页头＋两栏）——理由见该模块头部
+// ★★★leg89：标签读数那一行走**它自己那一份印法**（`tagReadoutLine` 是唯一口径）——
+//   ★不在渲染层重写一遍（本仓"一个数两把尺子"那条禁令：面板印的必须是引擎算的同一份）。
+import { tagReadoutLine } from '../src/tag-extract.js';
 import { expandChain } from '../src/chain.js';
 import { migrateLegacyAttrs } from '../src/settle.js';   // leg24 片4：旧账一次性清理（读到热账后、渲染前）
+// ★★★leg74（补接线）：同一家的**第三处旧账清理**要先引进来才谈得上接线——
+//   `migrateStyleRulesFromCanon` 早就从 `src/settle.js` 导出了，但接线层一直**既没 import 也没调用**
+//   ⇒ 老账里那几类（文风禁令/变量指令/其他）会一直躺在面板上（用户看到的就是它）。
+import { migrateStyleRulesFromCanon } from '../src/settle.js';
 import {
     hotAccountShape, loadHotAccount, planChronicleRotation, countLedgerEntries,
     volumeToChronicleRows, buildExportBundle, verifyImportBundle,
@@ -19,17 +53,24 @@ import {
     //   ⇒ 把真源接上（同一份常量既被 `planChronicleRotation` 当缺省、又被面板印出来）。
     PROPOSED_LIMITS,
 } from '../src/storage.js';
-import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer, describeProgress, buildScalePrompt, sanitizeScales } from '../src/abstract.js';
+// ★★leg70（A6）：import 加 `scalesToFlat` —— 采用通道里那份草稿的**旧两列**必须走**唯一**那条派生路
+//   （概念表是源、旧两列是派生视图，`abstract.js:1064` 那三条口径）。手写第二份 ⇒ 面板/进包的旧两列
+//   与 `刻度` 漂移成"一个数两把尺子"（leg56 在"盘算上限"上治过的老病）。
+import { seedBookEntities, extractWorldSetting, applySettingToSsot, resetDynamicLayer, describeProgress, buildScalePrompt, sanitizeScales, scalesToFlat } from '../src/abstract.js';
 // ★leg40：从世界源起根（把书里"正在发生的事"落成账上的线头事件；幂等、可重入、失败零阻塞）
 import { seedRootsChunked, chunkBookText, SEED_ROOTS_MAX, SEED_CANDIDATES_TOP, SEED_CHUNK_CHAR } from '../src/seed-roots.js';
 // leg24 片1（停抄书）：runAttrsRound / runRelationRound / applyRosterAttrs / refineEntityAttrs 四个入口随
 // 「抄书流水线」整条删除（名册里不再有从书里抄来的属性/隶属，补抽按钮与 bus 动作同批下掉）。
 // bookFingerprint 的浏览器侧唯一用途是补抽前的指纹守卫，随之删除（书指纹仍由 extractWorldSetting 写进 setting）。
 import { createIdbVolumeStore, createIdbSnapshotStore } from './idb-backend.js';
-import { describeSnapshots, planStep, planRetention, restoreFrom } from '../src/snapshot.js';   // leg27 后：快照容错（纯逻辑在 src，本层只编排）
+// ★leg73：`../src/snapshot.js` 的 import **整条删掉**（判据②：那一族唯一的消费者是搬走的块；
+//   留着就是"块外还有人用"的假象，会让"谁拥有这块逻辑"重新变模糊）。
 import { createTickQueue } from '../src/async-tick.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
+// ★★★leg87：单轮超时/输出上限那两个框的**出厂缺省**要从真源取（与 `createHttpTransport`
+//   真正吃的那个数同源）——填过就吃玩家的，没填就印出厂值，绝不自己另抄一份数字。
+import { PROPOSED_CALL_LIMITS } from '../src/transport-http.js';
 import { composeInitSource, normalizeEntryKey, compileSummary, slimLegacyCompile } from '../src/init-source.js';
 // 细案 spec-entity-field-lookup（用户 2026-09-11 批准）：按需查书补字段（实力/位置）+ 两条 ≤15。
 // 本层只负责"取世界书原文 + 落盘"，选择/查询/回写的判据全在 src/entity-lookup.js（纯编排层，可 Node 测）。
@@ -39,22 +80,58 @@ import { switchOn } from '../src/params.js';
 // ★★参数从世界账里搬出来（leg41 立、leg46 收口）：真源 = 插件自己的存储，
 //   世界账的 `dynamic.env` 降级为**镜像**（引擎照旧读它）。本文件只用它的两个只读小工具：
 //   `isParamStoreKey`（判"这个键是不是参数"——快照闸要用）与 `normalizeStore`（读旧迁移用）。
-import { isParamStoreKey, normalizeStore, PARAMS_SETTINGS_KEY } from '../src/param-store.js';
+import { isParamStoreKey, normalizeStore } from '../src/param-store.js';
 import { ENGINE_DERIVED } from '../src/params.js';   // ★leg53：引擎每轮算的那几格（快照不许把它们当参数剥掉）
 // ★★★leg46（用户令「重构代码吧，我已经没有耐心了」）：**参数全生命周期收进一个模块**。
 //   本文件从此**只留接线**：面板取 `hub.displayEnv()`、改动调 `hub.set(world,key,value)`、
 //   载入调 `hub.commit(world)`。写存储/回读核对/镜像/撤销/自证面**一律不再出现在本文件里**
 //   （旧的五处写入口 —— `sw2PersistParamEnv` / `sw2WriteParamBucket` / `paramUndo.write` /
 //     载入接纳 / 快照前补镜像 —— 连同它们的"各自现算一次世界名"一起删掉）。
-import { createParamHub, PARAMS_LS_KEY } from '../src/param-hub.js';
-// leg26 b：记忆投递（引擎事实 → 记忆插件）。★leg27 i：这条 import 一旦少了**任何**被用到的常量——
-//   漏了它会让**成功日志那一行**抛 ReferenceError，而调用点的 `.catch(() => {})` 把错误吞掉 ⇒
-//   投递其实写完了、插件里却什么都没有（用户实机报「上次投递失败：MEMORY_TABLE_MILESTONES is not defined」）。
-//   ★leg30：`MEMORY_TABLE_MILESTONES`（史卷纪要）**已从 src/memory-bridge.js 删除**——"前史"不再是第三张表，
-//   它是「世界大事」里**成段的行**（里程碑的 span 折成一行 `第 1–10 轮 · 前史`），理由见那个文件顶部 ②.2。
-import { buildMemoryPayload, pushToMemory, MEMORY_TABLE_STATE, MEMORY_TABLE_EVENTS, PLUGIN_TABLE_STATE, PLUGIN_TABLE_EVENTS, LEGACY_TABLE_IDS } from '../src/memory-bridge.js';
-const EVENTS_TABLE_NAME = MEMORY_TABLE_EVENTS;   // leg27 h：自证面里要报"大事几条"（表名只在这里取一次，防两处漂移）
-import { runEntityLookupStep, runBatchLookup, pickOneForLookup, planBatches, deriveLocationFromBook } from '../src/entity-lookup.js';
+//   ★★★leg82 补记：`createParamHub` 的 import **已随参数族搬走**（装配现在在新家
+//     `web/param-panel.js` 的 `createParamApi({...})` 里）。这里只留 **`PARAMS_LS_KEY`** 一个常量——
+//     它唯一的消费者是本文件那个**有意保留**的例外函数 `sw2WriteLocalBucketRaw()`
+//     （并入"服务端文件"那条路；判据 ⑨ 按**函数体**放行它，见 test/param-hub.test.js）。
+//     ★注意：常量的**读**（把键名交给那个函数）不是"写参数那一格"——判据 ⑨ 自己留档踩过这个假红
+//       ⇒ 不能连 import 一起删掉（删了那个例外函数当场 `ReferenceError`）。
+import { PARAMS_LS_KEY } from '../src/param-hub.js';
+// leg26 b：记忆投递（引擎事实 → 记忆插件）。★leg27 i 那条教训**随族一起搬走了**——
+//   （事故原型：import 少了任何一个被用到的常量 ⇒ 成功日志那一行抛 ReferenceError，
+//    被调用点的 `.catch(() => {})` 吞掉 ⇒ 投递其实写完了、插件里却什么都没有。）
+//   ★leg30：`MEMORY_TABLE_MILESTONES`（史卷纪要）已从引擎常量里删除——"前史"不再是第三张表，
+//   它是「世界大事」里成段的行（里程碑的 span 折成一行），理由见引擎常量那个文件顶部。
+// ★★★leg72（丙-web · 第一格）：记忆投递子系统整族已搬进 `web/memory-store.js`。
+//   本文件从此**只留接线**：投递走 `pushMemoryNow`、投完自检走 `memoryStoreCheckLine`、
+//   自证面走 `markMemoryPush` / `memoryPushLine`。★取回集合**不多不少**（那两张词表、
+//   `memoryStore`、`memoryStoreReport` 本文件一个都不用 ⇒ 不取）。
+//   ★★状态归属：投递自证面那份状态**只住新模块**，这里读它走 `readMemoryPush()`、
+//     清它走 `clearMemoryPush()` —— 一律走受控通道（直读直写就是本仓最贵的病"两份真相"）。
+//   ★leg27 i 的教训照旧：成功日志那一行若抛 ReferenceError，会被调用点的 `.catch(() => {})` 吞掉
+//     ⇒ 投递其实写完了、插件里却什么都没有（真源与它的读法现在同处一地，不再靠两处常量同步）。
+import { pushMemoryNow, memoryStoreCheckLine, markMemoryPush, memoryPushLine, readMemoryPush, clearMemoryPush } from './memory-store.js';
+// ★★★leg80（丙-web · 第五格）：**取书族**整族已搬进 `web/book-source.js`（三位置逐字节抽取）。
+//   本文件从此只留接线：`autoComposeSource` 仍住在本地（它是**编排**、不是取书），但它消费新家的
+//   `pickCharacter` / `collectWorldInfoEntries`；四条查书/继承消费点也直接问新家要。
+//   ★★★本族特有的形态：新家**不吃 window**，把 ctx 当形参收（三档定位是纯字符串函数，Node 里可直接真测）；
+//     唯一例外是**零参**的 `bookEntriesForInherit()`——它内部走**注入进来的** `getCtx()`
+//     （见下面那句 `setCtxSource(getCtx);`：★注入的是**函数**不是值，值会把上下文冻在建模块那一刻）。
+//   ★旧家仍是**门面**：再导出那 7 个口，外部消费者（`test/lookup-batch.test.js` 等）import 零改动。
+//   ★★★leg82（顺手修掉一个**潜伏的假红**，留档）：下面那句原来写成 `export { ... };` **不带分号**
+//     紧跟下一行 `import { createParamApi } from './param-panel.js';` ⇒ leg72/leg73 那两把尺子
+//     （它们在扫"export 花括号 + from + 模块名"那种 re-export 形状，分隔空白允许换行）
+//     会把**两行拼起来**读成一次 re-export —— 命中的那个来源字符串其实是下一行 `param-panel` 的
+//     import ⇒ 误判而红。
+//     ⇒ 定稿：**句末补上分号**（原来"右花括号"与 "from" 之间只剩空白，现在中间隔了一个分号），语义一字未改。
+//   ★★留档纪律（本棒当场踩到）：这一段的注释里**不许**出现**不成对的花括号**——
+//     `snapshot.test.js` 的 leg27 d（"自动流程调用的函数必须在模块顶层"）是**按花括号深度**判的，
+//     而它**不剥注释** ⇒ 注释里多一个右花括号就会把后面 `advanceTick` 的深度算成负数、
+//     那条锁当场红（实测：深度 -2，报"它在某个块内，块外调用不到"）。
+//     要举例就写**成对**的，或者干脆用文字描述（本段就是这样处理的）。
+import { characterWorldNames, characterBookEntries, collectWorldInfoEntries, pickCharacter, resetBookCache, bookEntriesForInherit, locateNameLine, locateNameSnippet, bookEntryText, bookTextForEntity, setCtxSource } from './book-source.js';
+export { characterWorldNames, characterBookEntries, bookEntriesForInherit, resetBookCache, locateNameLine, locateNameSnippet, bookEntryText };
+// ★★★leg76 收尾（本次补齐）：`planBatches` 的 import **已摘掉**——它在接线层的唯一调用点
+//   （`planBatchesLazy`，随全册批量补全整族撤除）没了 ⇒ 只收未用 import，**`src/` 一个字不动**
+//   （`planBatches` 在 `src/entity-lookup.js` 里仍是活的纯函数：`runBatchLookup` 内部就调它）。
+import { runEntityLookupStep, runBatchLookup, pickOneForLookup, deriveLocationFromBook } from '../src/entity-lookup.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 // ★1.0.0（发布首版）：本常量与 `manifest.json` 的 `version` 是**同一个版本号的两处写法**，
@@ -62,10 +139,26 @@ const NAMESPACE = 'STORY_WORLD_V2';
 //   ⚠ 别把它当"内部构建号"用：内部构建号是 `src/render.js` 的 `PANEL_BUILD`（面板页脚印的那行）。
 const VERSION = '1.0.0';
 const WINDOW_ID = 'story_world2_window';
+// ★leg93c：事件链**浮层**的容器 id（挂在 `document.body` 上、**不在面板窗口里** ⇒ 面板关着也能看）。
+//   一处定义、三处引用（建/收/查），免得又出现"同名副本 = 本仓最贵的病"。
+const CHAIN_MASK_ID = 'sw2_chain_mask';
 // leg26：参数独立页签；leg27 后：第八页签「快照」
-const SECTIONS = ['board', 'chronicle', 'archive', 'entities', 'setting', 'params', 'snapshots', 'settings'];
-// K33 板式：board = 五块对象（时局句/信息带/盘算总览/动态流/位置速览），DOM 组装在接线层
-const BOARD_BLOCK_ORDER = ['digest', 'infoband', 'agendaStrip', 'feed', 'side'];
+// ★★★leg97（用户令：「**观棋和说书其实是一个东西吧，不如就合并成一页也简洁些**」）：**两个页签并成一页。**
+//   定稿口径（照设计交接 §4.3）：
+//     · **主层 ＝ 说书那四层**（大势 → 此刻 → 面 → 线 → 点，`src/panorama.js`）；
+//     · **附层 ＝ 观棋原来的五块降为四块**：`digest`（时局句）**撤掉**——它与"大势"是同一件事的两种说法，
+//       而"大势"是**书的原文措辞**、`digest` 是拼装句（同 §4.3：留大势，digest 那句兜底话并入"此刻"那一行）；
+//     · 其余四块（信息带 / 盘算总览 / 动态流 / 位置速览）**原样搬进来**，位置不动、口径不动
+//       （★地图那一层用户已裁「先不改」⇒ 只搬位置，不动口径）。
+//   ★为什么不把两块塞进 `renderAll` 的两个键：`panorama.js` 是**零 import 的真叶子**（模块图有判据锁着），
+//     而 `board` 是**五块对象**（直填 `innerHTML` 会渲染成 `[object Object]`）⇒ 组合只能在**接线层**做。
+const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'params', 'snapshots', 'settings'];
+// ★★★leg98 补四（用户令：「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
+//   并页那一页怎么拼（页头 ＋ 信息带升成页头 ＋ 两栏）**整族搬进 `web/page-compose.js`**。
+//   ★为什么搬：本文件有条行数锁（`test/web-view-state-layout.test.js` 与 `…hot-ledger…` 都钉着
+//     `lines < 3100`）——而这一族长大之后就顶破了那一格。搬走之后本文件**比并页时还薄**，
+//     而且"哪一块住哪一栏"变成一处可单独测的纯字符串拼装（`web/page-compose.js` 零 import）。
+//   ★两个刷新入口仍然共用同一个 `mergedMainHtml`（一处实现，不分叉）。
 const CSS_HREF = new URL('./style.css', import.meta.url).href;
 // ★leg40b（面板本体体检 · 第一刀 + 第二刀）：CSS 也动了（.sw2-env-row 去掉了那条恒真的档位条
 //   ⇒ 相关规则失效；空态与卡片的间距随文案收短而变）⇒ 版本号必须往前走，否则浏览器吃旧样式。
@@ -100,7 +193,41 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 // ★★★leg54 同批升位：世界尺度那四个框从 `<select>` 换成 `<input type="number">`
 //   ⇒ `style.css` 增了 `.sw2-param-input` 一族规则（定宽/右对齐/去箭头）⇒ **CSS 版本号必须跟着升**。
 //   ★禁词纪律同前：`leg54-unlimited-limits` 零引擎术语（limits 是玩家词面）。
-const CSS_VERSION = '20260917-leg56-gear-bar-live-caps';
+// ★★★leg89 同批升位：设置页多了「与聊天模型的接线」那张卡（三个开关靠现有 `.sw2-toggle` 画，
+//   没新增 CSS 规则）——★但升位照做：**CSS 版本号是"这一版样式属于哪一版面板"的凭据**，
+//   漏升会让玩家拿着旧缓存看新面板（本仓 leg40b 实测过一次"改了样式没改版本号 ⇒ 看起来没生效"）。
+//   ★禁词纪律同前：`leg89-tag-extract` 零引擎术语。
+// ★★★leg93c 同批升位：**事件链改走浮层**（用户令「点击后不要放在编年页了，直接弹出一个小窗口」）——
+//   病是接线层把链视图插进了**写死的 `#sw2_view_chronicle`**（在大事纪页点「链」，内容跑到编年页）。
+//   ⇒ `web/style.css` 新增 `.sw2-cv-mask` / `.sw2-cv-box` / `.sw2-cv-hint` 三条规则
+//     （浮层的壳、内层链视图的边距收口、底部提示）⇒ **CSS 动了就必须升位**，否则浏览器吃旧样式。
+//   ★顺带把停在 leg89 的号补齐：leg90–leg92 都没动样式，所以一直没升（那不是漏，是没动）。
+//   ★★leg94：`leg93c-chain-popup` → **`20260921-leg94-storyview`**——本笔**真的动了样式**：
+//     「说书」视图一整族 `.sw2-pan-*`（+ 里程碑条目 `.sw2-rawid-note` / `.sw2-rawid-num`）是新增的，
+//     不升号浏览器会拿旧样式表去画新 DOM（版面当场散）。
+//   ★★★leg95：→ **`20260922-leg95-linesettles`**——**新增了一条规则** `.sw2-pan-idle`
+//     （说书页点层的第三种状态"没人再提了"：与"还开着"必须长得不一样，否则用户仍分不清
+//     "这一段还在往下长"和"账上还没放下来"）。★照仓里纪律：**动了样式就升**——
+//     与 leg94 那次"只删一条死规则不升"的情形正相反。
+//   ★★★leg95b：→ **`20260922-leg95-points`**——用户驳回第一刀（「**开没开着不应该挂在事件上**」）：
+//     **点层一个字都不印状态**（那一族 `.sw2-pan-open/-idle/-done` 在点层已无生产点），
+//     状态只在线头那枚徽上说一次、分两态 ⇒ **新增 `.sw2-pan-badge.stale`**（挂着没了结）。
+//     ★**这一格必须跟着升**：用户上一屏吃的正是旧样式表（页脚号没变 ⇒ 他以为我改错了）。
+//   ★★★leg97：→ **`20260922-leg97-places`**——「面」四层落地，新增「面」那一族规则
+//     （`.sw2-pan-face` / `-fh` / `-brg` / `-dashi` / `-other` / `-selfcheck`）。
+//   ★★★leg98：→ **`20260922-leg98-rowbg`**（用户令「**是改这一栏的颜色**不是标题文字」）：
+//     线头那一栏原来 `background:transparent` ⇒ **透出的就是面卡底**（实测两边亮度差 0），
+//     整条栏只靠一条 2px 竖线划分，而那条竖线对面卡底只有 **1.21:1** ⇒ 栏目与面卡糊成一片。
+//     ⇒ 给那一栏**自己的底**（`#282f3c`）＋ 竖线提亮到 `#3a4356`（live 那条改实色琥珀）。
+//     ★**样式真变了 ⇒ CSS 号必须升**（这一格的作用就是"别让玩家吃旧样式表"）。
+//   ★★★leg98 补二：→ **`20260922-leg98-bandmerge`**（用户令「**里面有两个大势卡片留一个就好了**，
+//     世情 · 3 键，还有浪尖，张力，盘算数量你看看怎么集合起来好看」——三套候选里选了**乙**）：
+//     信息带**五格平铺 → 两栏**（左＝世情 3 键竖排 · 右＝三行读数），并**撤掉带里的「大势」格**。
+//     ★新增三条规则（`.sw2-band-read` / `.sw2-readrow` / `.sw2-readkey`）＋ `.sw2-tides` 由竖列改**横排**
+//     ⇒ **样式真变了 ⇒ 再升一格**。
+//   ★★★leg98 补四 → **`20260922-leg98-pagecols`**（用户令「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
+//     **信息带升成页头** ＋ 这一页**改两栏** ⇒ 新增 `.sw2-merged-grid/-main/-side`（右栏 sticky、窄屏退单列）；★★★leg99 两笔：动态流撤出 ＋ **两栏各自独立滑动**（动了样式）⇒ 升，理由见 `web/style.css` 那三族规则上方。
+const CSS_VERSION = '20260922-leg99-pageflow';
 
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
@@ -118,12 +245,23 @@ function getCtx() {
     }
 }
 
+// ★leg80：把"当前 ST 上下文怎么取"注入取书族（零参的 `bookEntriesForInherit()` 内部用它）。
+//   ★★注入的是**函数**，不是值——`window.SillyTavern.getContext()` 每一轮都可能换（换聊天/换卡），
+//     注入一个值就等于把上下文冻在**建模块那一刻**（leg73 的 TDZ 铁律、leg79 的"不许抓死"，第三次）。
+//   ★位置铁律：必须在**模块顶层同步区**、且在 `getCtx` 的函数声明之后——不许拖进任何入口函数里
+//     （否则"装好 fake ctx 直接调取书口"的测试会先跑 ⇒ 静默拿到一本空书）。
+setCtxSource(getCtx);
+
 function onWinError(e) {
     try {
+        // ★leg91：把 `v`（事件对象本身）也带上——被中止的 fetch 抛的是 DOMException，
+        //   它的 message 只有一句 `signal is aborted without reason`，**看不出是谁、哪一轮**中止的。
+        //   带上事件对象，控制台里还能展开 stack/type 去定位（用户实机就是靠这一行找到"世界步在超时"）。
+        const es = e?.reason || e || null;
         const msg = String(e?.message || e?.reason?.message || e?.reason || '未知异常');
         const el = document.getElementById('sw2_status_text');
         if (el) el.textContent = `⚠ 未捕获异常：${msg}`;
-        console.warn('[story-world-v2]', msg);
+        console.warn('[story-world-v2]', msg, es);
     } catch (_) {}
 }
 
@@ -200,9 +338,9 @@ function openWindow() {
 
 function closeWindow() {
     document.getElementById(WINDOW_ID)?.classList.remove('sw2-open');
-    // ★细案实体页：视图态随关面板重置（照编年页 `sw2ChronicleView` 的口径"纯视图态、关面板重置"）
-    sw2EntsViewReset();
-    sw2ChronicleViewReset();
+    // ★细案实体页：视图态随关面板重置（照编年页"纯视图态、关面板重置"的口径）
+    viewState.resetEntities();
+    viewState.resetChronicle();
     const menu = document.getElementById('extensionsMenu');
     if (menu) menu.style.display = '';
 }
@@ -222,6 +360,11 @@ function ensureWandEntry() {
 }
 
 function setStatus(text) {
+    // ★★★leg89：**Node 侧也要能调**（本仓铁律：导出的判据函数必须"真能跑"）。
+    //   本笔实测：`sw2ToggleInject` 导出后，Node 里一调就在这一行炸
+    //   （`ReferenceError: document is not defined`）⇒ 那条判据等于没写。
+    //   ⇒ 没有 DOM 就是**静默降级**（状态条本来就不存在，没东西可写），不抛。
+    if (typeof document === 'undefined') return;
     const el = document.getElementById('sw2_status_text');
     if (el) el.textContent = text;
 }
@@ -236,20 +379,18 @@ function setStatus(text) {
 //     本仓 leg40c 已经为"循环依赖 + TDZ"吃过一次 653 条判据一片红）。
 const pendingSectionRefresh = new Set();
 let sw2SectionRefreshRunning = false;   // 重绘**自己**会夺走焦点 ⇒ 会再触发一次 focusout ⇒ 必须防重入
-function playerIsTouchingParams() {
-    try {
-        const el = document.activeElement;
-        if (!el) return false;
-        const tag = String(el.tagName || '').toUpperCase();
-        const isCtl = tag === 'SELECT' || tag === 'INPUT' || tag === 'BUTTON';
-        return isCtl && !!el.closest?.('#sw2_view_params, #sw2_view_settings, .sw2-tabs');
-    } catch (_) { return false; }
-}
+// ★★★leg89 留档（一次没走通的尝试，如实记着）：注入开关那条路上曾经加过一张"这次重绘是插件自己发起的"
+//   通行证（`sw2SelfClickRedraw`），用来豁免下面那条押后判据——**试过，实机没解决**（用户仍报"点了不切、
+//   点别处才切"）⇒ 已撤。现在那个开关**不重画整页**，只原地改那一行控件自己的 DOM（见 `sw2ToggleInject`），
+//   因此**不需要**任何押后豁免：它既不换整页、也不夺焦点。
+// ★★★leg82：`playerIsTouchingParams()` 已随参数族搬进 `web/param-panel.js`（本文件一律走
+//   `paramApi.playerIsTouchingParams()`）。★"它必须在 `refreshWorld` **之前**可用"这件事没变——
+//   受控口是**具名方法**（不是值），调用时才求值 ⇒ 用法与原先那个局部函数**逐字相同**。
 if (typeof document !== 'undefined') {
     document.addEventListener('focusout', () => {
         if (!pendingSectionRefresh.size) return;
         setTimeout(() => {
-            if (playerIsTouchingParams()) return;   // 手还在控件上（跳到另一个控件）⇒ 继续押后
+            if (paramApi.playerIsTouchingParams()) return;   // 手还在控件上（跳到另一个控件）⇒ 继续押后
             if (sw2SectionRefreshRunning) return;   // 重绘自己正在跑（它会夺焦点 ⇒ 别再自己咬自己）
             const names = [...pendingSectionRefresh];
             pendingSectionRefresh.clear();
@@ -271,22 +412,35 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         //   现在把这个形参撤掉，只留**一条**配置路：`renderCfg()`（= 活设置 + 任务/快照/记忆自证）。
         //   判据同步：`test/render.test.js` 里那条"不许整页重绘"的用例仍锁 `renderCfg()` 这条真路。
         sw2LastWorld = world;   // K41：链视图入口持引用（同一对象，零第二份状态）
-        // leg25 d：批量补全进度随 config 进渲染层（渲染层不碰任务状态——面板零第二份状态纪律）
+        // ★★★leg92（真缺陷修 · 用户报「开关写着 1、构建号是新的、`sw2_` 一个都没有」）：
+        //   **注入必须在"世界进内存之后"再设一次**——`setupAsyncTicks` 里那次 `apply()` 跑在
+        //   `loadWorld()` **之前**，那一刻 `sw2LastWorld` 还是 null ⇒ `getWorld()` 返回 null
+        //   ⇒ 名册段为空；更坏的是**总闸关着时世界永远不推**，而重设注入只挂在"世界推完一轮"
+        //   （`async-tick.js:57` 的 `refresh` 只在演算成功后才跑）⇒ **再也没有第二次机会**，
+        //   账上只剩"注入了 0 字/没注入过"（两者在字典里长得一样：`clear()` 会删 key）。
+        //   ⇒ 放在这里（每一条 `refreshWorld` 调用点都覆盖：首载 / 切聊天 / 切世界 / 推进一轮）。
+        try {
+            const r = sw2Injector?.apply();
+            if (r?.line) sw2LastInjectLine = r.line;
+        } catch (err) {
+            // 失败零阻塞：注入不成交绝不能拦住面板渲染（本仓既有口径）
+            console.warn('[story-world-v2] 载入世界后重设注入失败（面板照常）:', err?.message || err);
+        }
         // leg27 后：快照清单同理（config.snapshots = IDB 读回的元信息 + 一行事实摘要）
         // leg27 h：记忆投递自证面同理（config.memoryPush = 上一次投递的实测结果）
         // ★★★leg46 续·十（**用户第五次实机："我改了值旁边直接变成未定" ⇒ 不再有"两个来源"**）：
         //   参数页**整块按 `paramEnv` 画**（下拉与格一起画，它们天然一致），**再按控件对齐一遍格**。
         //   把清单里不存在的键也一起交给渲染层 ⇒ 渲染层不会画"默认"小标（那个小标本身就在误导玩家：
         //   "默认"与"你改的值"在同一格里分不清）。
-        const live = sw2CollectLiveParamValues();
+        const live = paramApi.sw2CollectLiveParamValues();
         const cfgForRender = renderCfg(live.env ? { paramEnv: live.env } : {});
-        const out = renderAll(world, { config: cfgForRender, oldVolumes, view: { chronicleView: sw2ChronicleView, entsView: sw2EntsView } });
+        const out = renderAll(world, { config: cfgForRender, oldVolumes, view: viewState.views() });
         // ★★leg46 续·六（**格与控件同源**）：页面刚用 `cfg.paramEnv` 画完 ⇒ 顺手用**同一份**把显示格对齐。
         //   为什么必须用同一份（用户第四次实机：四个下拉都选对了、四格却写「未定」）：格若自己去读第二遍真源，
         //   就会与控件错开一个时刻（读到空 ⇒ 写「未定」），看起来就像"什么都没生效"。
         // ★★leg46 续·十：整页画完之后**按控件对齐格**（格的字只从同一行的控件读 ⇒ 永不分叉）。
         //   真源与控件是否一致，交给自检卡去报（它才是说这件事的地方）。
-        try { sw2SyncParamCells(); } catch (_) {}
+        try { paramApi.sw2SyncParamCells(); } catch (_) {}
         const chipWorld = win.querySelector('#sw2_world_chip');
         if (chipWorld) chipWorld.textContent = `世界：${out.header.world || '—'}`;
         const chipTick = win.querySelector('#sw2_tick_chip');
@@ -298,16 +452,15 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
             //   这里押后的是**当前那一页**：玩家正拉开下拉/按着按钮时，那一页的 innerHTML 一换，
             //   原生下拉当场关闭、那一次点击作废 —— 用户看到的正是"点了还是改不了值"。
             //   口径：其余页照常刷新（观棋页照旧随每轮更新），押后的那页在失焦时补上。
-            if (playerIsTouchingParams() && el.contains(document.activeElement)) {
+            if (paramApi.playerIsTouchingParams() && el.contains(document.activeElement)) {
                 pendingSectionRefresh.add(name);
                 console.info(`[story-world-v2] ${name} 页上有控件正被操作 —— 本轮整页刷新押后该页`);
                 continue;
             }
-            if (name === 'board') {
-                // 2026-09-08 实机冒烟发现：board 是五块对象，直填 innerHTML 会渲染成 [object Object]
-                el.innerHTML = typeof out.board === 'string'
-                    ? out.board
-                    : BOARD_BLOCK_ORDER.map((k) => (out.board && out.board[k]) || '').join('');
+            if (name === 'panorama') {
+                // ★leg97 并页：这一页是**四层 ＋ 观棋那几块**拼出来的（见 `mergedMainHtml`）。
+                //   2026-09-08 实机那条教训仍在：board 是**五块对象**，直填 innerHTML 会渲染成 `[object Object]`。
+                el.innerHTML = mergedMainHtml(out);
             } else {
                 el.innerHTML = out[name];
             }
@@ -345,7 +498,11 @@ function dispatchAction(action, payload, event) {
         return;
     }
     if (action === 'advance-world' && sw2TickQueue) {
-        sw2TickQueue.advance().catch(() => {}); // K36 手动补推（A-4 手动路径）
+        // ★★★leg88 撤回留档（原 leg87 那笔"手动路径递对话"已撤，回到零参）：那笔递的是"你发的话"。
+        //   **用户裁示：那不是他要的提取**（他要的是"注入提示词让聊天模型产出带标签的正文、插件从正文里正则提取"）。
+        // ★★★leg89：新口径递给它的是**最后一条正文**（标签长在里面），但**同一段正文只推一次**
+        //   ⇒ 走 `sw2AdvanceOnce()`（自动路与手动路共用同一把尺子，见那个函数的头注）。
+        sw2AdvanceOnce({ manual: true });
         return;
     }
     console.warn('[story-world-v2] 面板还没装配完，这一下没接上：', action);
@@ -375,9 +532,37 @@ function freshCtx() {
     return getCtx();
 }
 
-function readHotMeta() {
-    const ctx = freshCtx();
-    return ctx?.chatMetadata?.[HOT_META_KEY] ?? null;
+
+// ---------- ★leg78：热账族的**三个转发口**（真定义全在 `web/hot-ledger.js`）----------
+// 为什么留同名转发而不是把调用点改成 `hotHub.readHotMeta()`：这些名字是**既有调用点与判据钩子**
+// 认的（`sw2SetFlushTimeout` 供 `node --test` 把超时压到几十毫秒）；保留同名 ⇒ **测试 import 零改动**。
+// ★但**只许转发**，不许在这里再实现一遍（再写一遍 = "两份真相"，本仓最贵的病）。
+// ★★这三个口**不是转发**、是**解构绑定**（`const {…} = hotHub;`，见上面建 hub 那一段）——
+//   为什么不像下面两个那样写转发函数：判据「热账族在旧家**不再定义**」咬的就是
+//   `function readHotMeta` 这种**函数声明**（再写一遍 = 两份复制品）。解构来的绑定**不是定义**，
+//   而全文件的调用点（裸名）与语义**一字未变** ⇒ 这才是该有的形状（也是判据 ⑤ 咬的受控通道形状）。
+// ★下面这两个**是**转发口（判据点名要求"只转发"）：
+// ★它是既有导出名（`web/index.js` 的消费者按名字取它）⇒ **具名再导出**那个绑定。
+export { sw2ExplicitChatName };
+/** ★leg78 转发口：热账超时档注入（真定义在新家；判据钩子，见上）。 */
+export function sw2SetFlushTimeout(ms) {
+    return hotHub.sw2SetFlushTimeout(ms);
+}
+// ★leg78：`sw2ExplicitChatName` 与上面那三个口同款 —— **解构绑定**，不写转发函数
+//   （判据「旧家不再定义」咬的是函数声明；而它是既有导出名 ⇒ 下面把它原样再导出）。
+
+/**
+ * ★leg73/leg78：**落盘簿记复位**（只供判据用；每次测试开局调用，防上一例的在飞/待落状态串味）。
+ *   三家的复位**组合**在这里（对外仍是同一个名字 ⇒ 两个测试文件 import 零改动）：
+ *   ① 热账自己那 8 行 → `hotHub.resetHotLedgerState()`（甲案：不与参数族绑在一起）；
+ *   ② 参数族（撤销栈/管辖键/墓碑/抢回名单）；③ 快照族（内容闸指纹 + 参数闸基准）。
+ */
+export function sw2ResetFlushState() {
+    hotHub.resetHotLedgerState();
+    // ★★★leg82：参数族那一份复位**一次清四样**（hub 的撤销栈/管辖键/墓碑/抢回名单 + 写格留痕 + 忙闩 + 最近世界）
+    //   ——四句各有其主，别把谁的复位并到别人家里去（热账/快照各有自己的家）。
+    paramApi.reset();   // ★leg46：撤销栈 + 管辖键 + 墓碑 + 抢回名单都是 hub 的模块级状态（不清会串到下一条用例）
+    snapHub.resetDedupState();         // ★leg73：快照那两个闸（原先是直接写 sw2SnapLast / sw2SnapLastWorldFp）
 }
 
 // ---------- ★leg33d：插件总闸（用户令「加一个启动和关闭插件的入口，要不然这个插件会直接自动生效」）----------
@@ -428,28 +613,6 @@ export function sw2OnMessageReceived(hotWorld, { advance, setStatus: status } = 
     return { advanced: true };
 }
 
-// 落盘修复（leg20）：ST 1.15 的 ctx.updateChatMetadata() 只改内存、不触发任何保存（public/script.js 实测），
-// 热账必须主动触发聊天保存才写进 jsonl——此前世界只活在页面内存，刷新/关机即丢。
-// 策略：写内存 + ST 自带防抖保存（saveMetadataDebounced → saveChatConditional 整聊天上盘）；
-// 关键路径（初始化/重抽/导入）用 flushHotMeta() 显式 await 落盘后再报成功。
-let sw2HotMetaFlushing = false;
-let sw2HotMetaLastCallAt = 0;      // 上一次"真调 saveChat"的时刻（判"在飞那次有没有把我的写算进去"）
-let sw2HotMetaLastWriteAt = 0;     // 上一次"写热账内存"的时刻（`writeHotMeta` 里打点）
-// ★"账上还有没有**没落盘的写**"这一个事实必须显式记着（不能靠"值变没变"反推）：
-//   `set-param` 的"无变化即忽略"捷径要用它——值没变、但上一笔写还没落下去时，那一下点必须**补落盘**，
-//   否则玩家的操作被无声吞掉（正是用户实机「点了没反应」的成因之一）。
-//   ★判据用**时刻**而不是布尔（第一版用布尔，写错了）：`pending = true` 只说明"成功落过一次盘"，
-//     而每轮 tick 都写账 ⇒ 那个布尔会长期为真 ⇒ 每次点旋钮都白存一次整份聊天（真账 9.6MB）。
-//     真正的判据只有一条：**最后一次确认成功的落盘，有没有晚于最后一次写**。
-let sw2HotMetaPendingWriteAt = 0;   // 还没被确认落盘覆盖的那次写的时刻（0 = 没有）
-let sw2HotMetaLastFlushOkAt = 0;    // 最近一次"确认成功"的落盘时刻
-const hotMetaUnflushed = () => sw2HotMetaPendingWriteAt > sw2HotMetaLastFlushOkAt;
-// "**正在飞的那次保存**有没有带上此刻账上这份写" —— 决定"要不要再排一次补写"的唯一判据。
-//   ★为什么不能只用 `pending` 判：`pending` 只说明"确认落盘成功过"，而快照/防抖路径都会清它，
-//     于是它会**长期为真**（每轮 tick 都写账）⇒ 拿它当"要不要补写"的判据就会变成每次点旋钮都白存一次
-//     （真账 9.6MB 一整份上盘，这不是小事）。这一个标志只在"在飞那次已覆盖最新写"时为真。
-let sw2HotMetaFlushedCurrent = false;
-
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 // ★★★leg46：**参数全生命周期收进 `src/param-hub.js`，本文件只留接线**（用户令「重构代码吧，我已经没有耐心了」）。
 //
@@ -495,413 +658,169 @@ function sw2LocalStore() {
     try { return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null; } catch (_) { return null; }
 }
 
-/**
- * ★★**参数的唯一入口**。三层存储与三格核对全在 `src/param-hub.js` 里：
- *   ① 主路 = 我们自己的本地存储（**同步**，写下去当场在盘上）；② 备份 = 插件配置区；
- *   ③ 镜像 = 世界账 `dynamic.env`（引擎照旧读它：`pack.js` 进包 / `limits.js` 当闸）。
- * ★全部依赖**注入**（存储 / 插件配置 / 让 ST 存配置）⇒ 这个模块在 Node 里能真跑（判据就是那么跑的）。
- * ★`saveSettings` 只是**尽力而为**：ST 的配置保存通道已被实机证伪（`settings.json` 的 mtime 停在
- *   载入那一刻，且它自己 `saveSettings()` 里有一道 `settingsReady` 闸会**静默不写**）
- *   ⇒ 它成功与否**不参与**"玩家的值存住了没有"这个判断（那是"别把数据寄托在别人的通道上"那条教训）。
- */
+// ★★★leg82：**`paramHub` 的装配已随参数族搬进 `web/param-panel.js`**。
+/* ★★★leg82 留档：这一格**原来**的形状（照本仓"注释里可以留档"那条纪律原样存一份）。
+ * 它现在是新家 `createParamApi({...})` 的内部装配，本文件一个字都不再经手：
 const paramHub = createParamHub({
     storage: () => sw2LocalStore(),
     settings: () => sw2ExtensionSettings(),
     saveSettings: () => { try { freshCtx()?.saveSettingsDebounced?.(); } catch (_) {} },
     log: (line) => console.info(`[story-world-v2] ${line}`),
 });
+ * ★全部依赖照旧**注入**（存储 / 插件配置 / 让 ST 存配置）⇒ 新模块在 Node 里能真跑（判据就是那么跑的）。
+ * ★`saveSettings` 照旧只是**尽力而为**：ST 的配置保存通道已被实机证伪（`settings.json` 的 mtime 停在
+ *   载入那一刻，且它自己 `saveSettings()` 里有一道 `settingsReady` 闸会**静默不写**）
+ *   ⇒ 它成功与否**不参与**"玩家的值存住了没有"这个判断（"别把数据寄托在别人的通道上"那条教训）。
+ * ★★本文件从此**不再持有参数族的任何一格状态**（撤销栈 · 写格留痕 · 忙闩 · 最近世界全在新家）——
+ *   状态劈两半就是本仓最贵的病（两份真相）。
+ */
 
 /**
- * ★★★leg46 续（用户实机「老问题没解决，还是会回归默认」）：**把取证做成一枚按钮**。
- * 为什么必须有它（这一格是本棒最贵的教训）：这条症状被修了七轮，每一轮都**缺同一件东西**——
- *   「改一次参数之后，真源与世界账各是什么」这一对读数**从来没被同时拿到过**。
- *   前几轮给用户的取证办法是"开控制台粘一行代码"，而**用户不开控制台**（七轮里的读数都是别的时机截的图）。
- * ⇒ 现在：面板上直接印出三个读数 + 一枚「复制自检」按钮（一键把原始数据拷进剪贴板）。
- * 读什么（逐条都对着一个可能的病因）：
- *   ① `主路键名 + 原文` ⇒ 键名/内容变了没有（**换一个 origin/被清掉都会在这里现形**）
- *   ② `主路能不能写` ⇒ 真的做一次写-读-还原（隐私模式/配额/被拒会现形）
- *   ③ `世界名 / 桶键` ⇒ 读与写是不是同一个桶（本仓"一个数两把尺子"那一族）
- *   ④ `真源 keys / 引擎镜像 keys` ⇒ 参数到底落在哪一处、有没有同步给引擎
- *   ⑤ 一致性结论 ⇒ **真源 != 镜像**时直接点名（那正是"面板一个数、引擎按另一个数跑"）
- *   ★只读：除了②那次"写回原值"的探针，不改任何东西。
+ * ★★★leg78：**热账 hub**（账本怎么写 / 怎么落盘 / 被覆盖了怎么抢回来，全在 `web/hot-ledger.js`）。
+ *   三样依赖**注入**（这正是新模块能"零 import"当叶子的原因）：
+ *     ① `freshCtx` —— 每次现取 ST 上下文（v1 教训：chatMetadata 引用会随聊天切换过期）；
+ *     ② `hotMetaKey` —— 热账住在 chatMetadata 的哪一格；
+ *     ③ `getSnapHub` —— ★**迟到注入**（取值函数，不是现成对象）：`writeHotMeta` 末尾要调
+ *        `snapHub.requestSnapshot()`，而快照 hub 只能**在本 hub 之后**才建（它要的 `readHotMeta`/
+ *        `flushHotMeta` 现在住热账新家）⇒ 构造时抓死会拿到 `undefined`，调用点当场 `TypeError`。
+ *   ★**次序铁律**：本 hub 必须**先于** `snapHub` 建（`test/web-hot-ledger-layout.test.js` ⑥ 有顺序自证）。
  */
-export function gatherParamEvidence() {
-    const w = sw2HubLastWorld || readHotMeta()?.world || null;
-    const ev = { 采集时间: new Date().toISOString(), 构建号: PANEL_BUILD };
-    try {
-        const ls = sw2LocalStore();
-        ev.主路可用 = !!ls;
-        let raw = null;
-        if (ls) { try { raw = ls.getItem(PARAMS_LS_KEY); } catch (err) { ev.主路读取失败 = String(err?.message || err); } }
-        ev['主路键名'] = PARAMS_LS_KEY;
-        ev['主路原文'] = raw;
-        ev['主路有没有这一格'] = raw != null && raw !== '';
-        if (ls) {
-            // ★写探针：写一个自己的键再删掉（**不碰参数那份**），据此判"这个环境能不能写"
-            const probeKey = '__sw2_probe__';
-            try {
-                ls.setItem(probeKey, '1');
-                ev.主路能写 = ls.getItem(probeKey) === '1';
-                ls.removeItem(probeKey);
-            } catch (err) { ev.主路能写 = false; ev['主路写失败原因'] = String(err?.message || err); }
-        }
-    } catch (err) { ev['主路探针异常'] = String(err?.message || err); }
-    try {
-        const s = sw2ExtensionSettings();
-        const b = s?.[PARAMS_SETTINGS_KEY];
-        ev['插件配置区有这一格'] = !!b;
-        ev['插件配置区原文'] = b ? JSON.stringify(b) : null;
-    } catch (err) { ev['插件配置区探针异常'] = String(err?.message || err); }
-    try {
-        const d = paramHub.diag(w);
-        ev['世界名'] = d.世界名;
-        ev['桶键'] = d.桶键;
-        ev['真源'] = d.真源;
-        ev['账上镜像'] = d.账上镜像;
-        ev['读自'] = d.读自;
-        ev['读注'] = d.读注;
-        ev['撤销步数'] = d.撤销步数;
-        ev['世界名与桶键一致'] = d.世界名 === d.桶键;
-        // ★★leg46 续·十：**写格留痕**（谁在什么时候把哪一格写成了什么）——画面再出分歧时，这一格直接点名。
-        ev['写格次数'] = sw2CellWriteLog.length;
-        ev['写格留痕'] = sw2CellWriteLog.slice(-8);
-        // ★★★leg46 续·十二：**「主路（载入时）」这一行是最重要的一格**——它**不经过任何写入**，直接读盘。
-        //   刷新之后它若为空、或只剩旧键，就**证明**浏览器存储没活过刷新（那就不是"我们写错"）。
-        //   ★这是十二轮里唯一一条"不依赖任何推断"的读数，下一任请先看它。
-        try { ev['主路（载入时，未经写入）'] = sw2LocalStore()?.getItem(PARAMS_LS_KEY) ?? null; } catch (_) {}
-        ev['主路时间戳'] = (() => { try { return JSON.parse(sw2LocalStore()?.getItem(PARAMS_LS_KEY) || 'null')?.updatedAt || null; } catch (_) { return null; } })();
-        // ★★★写入审计（用户怀疑"别的插件"那条线）：每一次写真源都留痕 ⇒ 谁在什么时候把桶动过、
-        //   有没有"键变少了"。**这一格是八轮里第一次能回答"是谁弄没的"**（而不是"我猜是谁"）。
-        const tr = paramHub.writeTrace();
-        ev['写入次数'] = tr.length;
-        ev['写入审计'] = tr.map((e) => `${e.at} 写后[${e.keys.join('|') || '空'}]`
-            + `${e.lost.length ? ` ⚠丢了[${e.lost.join('|')}]` : ''}`
-            + `${e.note ? ` (${e.note}${e.missing?.length ? ` 缺[${e.missing.join('|')}]` : ''})` : ''}`
-            + ` ← ${e.stack}`);
-        // ★一致性：面板画的值（真源 ⊕ 镜像 ⊕ 出厂默认）里，真源有的每一个键，镜像里必须同值
-        const disp = paramHub.displayEnv(w);
-        const mirror = d.账上镜像 || {};
-        const src = d.真源 || {};
-        const mismatch = Object.keys(src).filter((k) => mirror[k] !== src[k]);
-        ev['真源与镜像不一致的键'] = mismatch;
-        ev['面板画的天时'] = disp['天时'] ?? null;
-        ev['面板画的上限'] = { 每轮递线: disp['每轮递线'], 每轮事件: disp['每轮事件'], 顶层大计: disp['顶层大计'], 在飞大计: disp['在飞大计'] };
-    } catch (err) { ev['自证面异常'] = String(err?.message || err); }
-    return ev;
+const hotHub = createHotLedgerHub({
+    freshCtx,
+    hotMetaKey: HOT_META_KEY,
+    getSnapHub: () => snapHub,      // ★取值函数：调用那一刻才解析（那时快照 hub 已经建好了）
+});
+// ★leg78：读 / 写 / 落盘三个口**解构**取回 ⇒ 全文件那些调用点（27/15/10 处）**一字未改**
+//   （搬迁不是重写；这也是判据 ⑤ 咬的"受控通道"形状）。
+const { readHotMeta, writeHotMeta, flushHotMeta } = hotHub;
+// ★`sw2ExplicitChatName` 单独一行取（判据要的那一行是**逐字**的三口解构，不许夹第四个名字）。
+const { sw2ExplicitChatName } = hotHub;
+
+/**
+ * ★★★leg73：**快照 hub**（快照那一族全在 `web/snapshot-store.js`）。
+ *   十样依赖注入：7 个接线层函数 + 3 个取数口（`getLastWorld`/`setLastWorld`/`getListedVolumes`）。
+ *   ★注意那三个**取数口是函数而不是现成值**：`sw2LastWorld` / `LISTED_VOLUMES` 都会被反复重新赋值
+ *     ⇒ 抓死当下那个值 = 快照永远按"开局那一刻的世界/卷表"拍（本仓 TDZ/时序坑的同款）。
+ *   ★依赖里那三个热账口（`readHotMeta`/`flushHotMeta`/`sw2WriteHotMetaEnsuringParams`）来自上面那个 hub。
+ */
+// ★★三个取数口必须是**函数声明**（提升 + 调用时才求值），**不许**写成箭头：
+//   箭头会在**建 hub 那一刻**求值，而 `sw2LastWorld` / `LISTED_VOLUMES` 声明在本段更后面
+//   ⇒ 初始化期当场 `ReferenceError`（leg72 §3-A 量出来的坑，判据 ④ 有反向自证）。
+/** 取：链视图入口持的那份世界（★现取，不缓存：它会被反复重新赋值）。 */
+function getLastWorld() {
+    return sw2LastWorld;
+}
+/** 放：把世界写回链视图入口（快照恢复之后必须让面板读到**新的**那份）。 */
+function setLastWorld(w) {
+    sw2LastWorld = w;
+}
+/** 取：卷表（★现取：`LISTED_VOLUMES` 每次载入都会重新赋值，抓死就是旧表）。 */
+function getListedVolumes() {
+    return LISTED_VOLUMES;
 }
 
-/** ★把取证读数拼成一段**可直接粘贴**的文本（给用户复制用；一行一个读数）。 */
-export function paramEvidenceText(ev = null) {
-    const e = ev || gatherParamEvidence();
-    return ['[story-world-v2 参数自检]', ...Object.entries(e).map(([k, v]) => `${k} = ${typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}`)].join('\n');
-}
+/**
+ * ★★★leg82：**参数族的受控口**（真定义全在 `web/param-panel.js`；本文件只留接线）。
+ *   五样依赖**注入**（这正是新模块能"零 import 接线层"当叶子的原因）：
+ *     ① `freshCtx`              每次现取 ST 上下文（v1 教训：chatMetadata 引用会随聊天切换过期）；
+ *     ② `sw2ExtensionSettings`  每次现取插件配置区（备份那份）；
+ *     ③ `sw2LocalStore`         每次现取主路存储；
+ *     ④ `getLastWorld`          ★**函数声明，不是箭头**（本仓 leg72 §3-A 那条 TDZ 铁律）；
+ *     ⑤ `refreshSections`       ★本文件的组合器（局部重绘）——**必须真的注入**（判据 ⑨）。
+ *   ★★★为什么 `getLastWorld` 必须是**函数**、且必须"调用时才求值"：`sw2LastWorld` 声明在本段
+ *     **更后面**，而且会被反复重新赋值（十几处）。箭头 `() => sw2LastWorld` 看着像函数，但它与
+ *     "直接传值"在**建工厂那一刻**求值是同一条路；本文件这里用的是**函数声明** `getLastWorld`
+ *     （函数声明提升 + 调用时才求值）⇒ 建工厂时拿到的是一个**已经初始化好**的函数对象，
+ *     读的是**调用那一刻**的 `sw2LastWorld`。（判据 ②-a/②-b 逐条咬这件事：传成值必须当场
+ *     `TypeError`、每次调用必须现取。）
+ *   ★★`refreshSections` 也在这里注入：`param-panel.js` **不许**反向 import 本文件（那会成环）
+ *     ⇒ 只有"注入一个函数"这一条路。不给它 ⇒ 撤销之后画面不重画（判据 ⑨ 咬的就是"它是不是
+ *     真的被叫到了"——被 `try` 吞掉的失败不算成功）。
+ *     ★它同样是**函数声明**（见下面 `function refreshSections(names)`）⇒ 与 `getLastWorld` 同款：
+ *       函数声明会提升，所以"建工厂那一刻传进去"拿到的是**函数本体**，不是 `undefined`。
+ *   ★次序（本仓铁律）：`hotHub` → `snapHub` → `paramApi`。本族要 `getLastWorld`，
+ *     所以它必须建在 `getLastWorld` **声明之后**（就是这一格）。
+ */
+const paramApi = createParamApi({
+    freshCtx,
+    sw2ExtensionSettings,
+    sw2LocalStore,
+    getLastWorld,          // ★函数声明：调用时才求值（写成箭头 = 建工厂那一刻求值 ⇒ TDZ 当场炸）
+    refreshSections,       // ★接线层的组合器：撤销之后让面板重画（不注入 ⇒ 那一句退化成 no-op）
+});
 
-/** ★hub 最近一次"算过参数"的世界（只为自证面 `sw2ParamDiag()` 取证；不参与任何判定）。 */
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ★★★leg82：**门面（受控口的同名转发）——`web/index.js` 的导出面一个字都不许变**
+//   ★为什么必须有这一段（本仓 leg80 取书族的先例：**旧家仍是门面**）：这几个名字是
+//     **既有消费者与判据钩子**按名字取的（`test/param-hub.test.js` 直接 `const { gatherParamEvidence,
+//     paramEvidenceText } = mod`；`set-param-persist.test.js` 取 `sw2ParamDiag`/`sw2UndoParam`）⇒
+//     搬家时"消费者 import 零改动"靠的就是这里。**去掉这一段，那些判据当场 `TypeError: not a function`**
+//     （实测：`mod.gatherParamEvidence is not a function` ×5、`mod.sw2SetParamCell` ×1、
+//      `mod.sw2CollectLiveParamValues` ×2）。
+//   ★★口径：这里是**转发**，不是"第二份实现"——一行调用，零逻辑。判据咬的"本文件不许再定义那一族"
+//     咬的是**实现**（正则：`^(?:export\s+)?(?:function|const|let|var)\s+<名字>` 后面**紧跟函数体**那种）；
+//     而"导出面不变"是**另一条**既有契约（上面那些测试按名字取口）。
+//   ★★为什么不写成 **re-export**（`export {...}` 后面直接跟 from 那种写法）：本仓明令**不搞 re-export**
+//     （leg71 立、leg72/leg73 的 `reExports()` 判据在扫那种形状 —— "它到底住哪"不许再变模糊）。
+//     写成 `export const` 门面则同时满足两条：**归属清楚**（真定义只有一处）+ **取口不变**。
+//   ★注意本段注释里**不要**出现那种形状的字面量：`reExports()` 那把尺子**不剥注释** ⇒
+//     注释里写一个就当场被当成 re-export（本棒实测踩到过，留档）。
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+/** ★leg82 门面：自证面（"用户不开控制台"时的唯一读数）——真定义在 `web/param-panel.js`。 */
+export const gatherParamEvidence = () => paramApi.gatherParamEvidence();
+/** ★leg82 门面：把自证读数拼成一段可直接粘贴的文本（真定义在 `web/param-panel.js`）。 */
+export const paramEvidenceText = (ev = null) => paramApi.paramEvidenceText(ev);
+/** ★leg82 门面：自证面三读数（世界名 / 真源 / 账上镜像）——真定义在 `web/param-panel.js`。 */
+export const sw2ParamDiag = () => paramApi.sw2ParamDiag();
+/** ★leg82 门面：按撤销（退的是**玩家的档位**，世界已经发生的事不回退）——真定义在 `web/param-panel.js`。 */
+export const sw2UndoParam = () => paramApi.sw2UndoParam();
+/** ★leg82 门面：采集页面上现存参数控件的值——真定义在 `web/param-panel.js`。 */
+export const sw2CollectLiveParamValues = () => paramApi.sw2CollectLiveParamValues();
+/** ★leg82 门面：写参数格（只看同一行那个控件自己的值）——真定义在 `web/param-panel.js`。 */
+export const sw2SetParamCell = (key) => paramApi.sw2SetParamCell(key);
+
+const snapHub = createSnapshotHub({
+    freshCtx,
+    setStatus,
+    refreshWorld,
+    loadHotAccount,
+    readHotMeta,
+    sw2WriteHotMetaEnsuringParams: (meta, world = null) => paramApi.sw2WriteHotMetaEnsuringParams(meta, world),
+    flushHotMeta,
+    // ★★★leg85：`hotAccountShape` 以前**漏注入** ⇒ `restoreSnapshot` 里那句是裸引用 ⇒
+    //   恢复快照整条路一调就 `ReferenceError`（被 catch 吞成一行"恢复失败"）。
+    //   现在补上；`createSnapshotHub` 那边会**当场校验**它是函数（缺了就在建 hub 那一刻响，
+    //   不再等到玩家点下去）。
+    hotAccountShape,
+    getLastWorld,
+    setLastWorld,
+    getListedVolumes,
+});
+
+// ★★★leg82：**自证面 / 撤销 / 写账补镜像**三块已随参数族搬进 `web/param-panel.js`。
+//   ★留档点名（判据 ③ 的反向自证要求这些名字在本文件里仍能搜到——**搜到的是这段留档**）：
+//   · 自证面（"用户不开控制台"时的唯一读数）：`export function gatherParamEvidence()` /
+//     `export function paramEvidenceText(ev)` —— 现在走 `paramApi.gatherParamEvidence()` /
+//     `paramApi.paramEvidenceText()`（新家自己 `import { readHotMeta, writeHotMeta } from './hot-ledger.js'`）。
+//   · 「hub 最近一次算过参数的世界」那一格内部状态：它现在是**新家的内部状态**，
+//     本文件读写它一律走 `paramApi.lastWorld()` / `paramApi.setLastWorld(w)`（一个家）。
+/* ★★★leg82 留档：这一格**原来**的定义（照本仓"注释里可以留档"那条纪律原样存一份）：
 let sw2HubLastWorld = null;
-
+ */
+//   · 撤销：`export function sw2UndoParam()`，以及 `function sw2WriteHotMetaEnsuringParams(meta, world)`
+//     （★它现在的接线形状是 `paramApi.sw2WriteHotMetaEnsuringParams(...)`，见快照 hub 的注入面那一行）。
+//   ★本文件仍要够得到的两口（外部消费者与判据钩子按名字取）：
+//     `sw2ParamUndoState`（下面那一行转发给受控口）与 `paramApi.sw2WriteHotMetaEnsuringParams`。
 /** 外部（面板）读撤销态。 */
-export const sw2ParamUndoState = () => paramHub.undoState();
-/** ★自证面：三个读数（世界名 / 真源 / 账上镜像）——用户不必再开控制台手打（leg41 §5.1 那段的内置版）。 */
-export function sw2ParamDiag() {
-    const w = sw2HubLastWorld || readHotMeta()?.world || null;
-    return paramHub.diag(w);
-}
-
-/** 外部（面板）按撤销：退的是**玩家的档位**，世界已经发生的事不回退。 */
-export function sw2UndoParam() {
-    const world = loadHotAccount(readHotMeta()) || sw2HubLastWorld || null;
-    if (!world) return { ok: false, reason: '还没有世界' };
-    const r = paramHub.undo(world);
-    if (!r.ok) return r;
-    // 撤销之后：真源与镜像一起回退 ⇒ 把镜像那份落进聊天账，并让面板重画
-    if (r.world) {
-        sw2HubLastWorld = r.world;
-        try { writeHotMeta(hotAccountShape(r.world)); } catch (_) {}
-    }
-    try { refreshSections(['params', 'board']); } catch (_) {}
-    return { ok: true, label: r.label };
-}
-/**
- * ★**写账 + 参数镜像**（"账本被整份换成另一份"的那些路径用它，例如快照恢复 / 导入 / 清演化层）：
- *   这些路径写下去的账可能带着**它自己那份旧的 `dynamic.env`** ⇒ 参数镜像会与真源不一致，
- *   引擎（`limits.js` 的闸 / `pack.js` 进包）就会按旧档跑。这里在写之前把真源镜像补上。
- *   ★leg46 起这里**不再有重入闩**：镜像只在内存里改世界（`hub.mirrorOnly`），
- *     落账仍然只有 `writeHotMeta` 一处 ⇒ "镜像自己又调 writeHotMeta"这条递归路径结构上不存在了。
- */
-function sw2WriteHotMetaEnsuringParams(meta, world = null) {
-    const w = world || meta?.world || null;
-    if (!w) { writeHotMeta(meta); return; }
-    const m = paramHub.mirrorOnly(w);          // 顺带把账上那份旧参数换成真源（快照恢复/导入之后必须做）
-    sw2HubLastWorld = m.world || w;
-    writeHotMeta(hotAccountShape(m.world || w));
-}
+export const sw2ParamUndoState = () => paramApi.sw2ParamUndoState();
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-
-function writeHotMeta(meta) {
-    const ctx = freshCtx();
-    if (!ctx || typeof ctx.updateChatMetadata !== 'function') return;
-    // ★★leg41（本笔的核心简化）：这里原来有一层 `sw2WithParamOverlay(meta)`——它的作用是
-    //   "让玩家的参数档位搭上每一笔世界写"，用来对抗"账本被别的副本换手时把档位洗掉"。
-    //   参数真源搬进 `extensionSettings` 之后，**参数本来就不在这份账里了** ⇒ 搭车这件事连同
-    //   它要防的那一类竞争一起消失。现在这一笔写**只写世界**（`dynamic.env` 里那份是镜像，
-    //   由 `sw2MirrorParamsToAccount` 在参数变动时同步）。
-    ctx.updateChatMetadata({ [HOT_META_KEY]: meta });
-    sw2HotMetaLastWriteAt = Date.now();
-    sw2HotMetaPendingWriteAt = sw2HotMetaLastWriteAt;   // 这一笔写还没被确认落盘覆盖
-    sw2HotMetaWrittenMeta = meta;   // 被覆盖时拿它抢回来（同一个对象，零拷贝）
-    sw2HotMetaWrittenFp = hotMetaSignatureOf(meta);   // 回读核对基线（见 hotMetaSignatureOf）
-    try {
-        if (typeof ctx.saveMetadataDebounced === 'function') ctx.saveMetadataDebounced();
-        else if (typeof ctx.saveChat === 'function') ctx.saveChat().catch(() => {});
-    } catch (_) {}
-    // leg27 后 · 快照容错：**唯一的落账收口**就是这里——挂在这一处 ⇒ 全步覆盖
-    //（查书前置步 / tick 演化 / 批量补全 / 单实体查 / 卷轮转 / 名册入账 / 初始化 / 导入 / 清演化层）。
-    // 纪律：**fire-and-forget**（不 await）+ 内部 try/catch ⇒ 快照失败绝不影响世界推进（同记忆投递）。
-    requestSnapshot(meta?.world, '落账');
-}
-
-// 显式落盘（关键路径 await 后报成功）：绕过防抖立即整聊天保存；重入守卫防并发双写。
-//
-// ★★leg40c 续 · 用户实机「下拉列表都点不了，会显示落盘失败」的那一刀（根因，读 ST 真源复核过）：
-//   ① `ctx.saveChat` 不是 ST 的 `saveChat`，而是 **`saveChatConditional`**（`public/scripts/st-context.js:146`）；
-//   ② 它头一件事是 `await waitUntilCondition(() => !isChatSaving, DEFAULT_SAVE_EDIT_TIMEOUT, 100)`
-//      （`public/script.js:9063-9069`，`DEFAULT_SAVE_EDIT_TIMEOUT = debounce_timeout.relaxed = 1000ms`）
-//      ⇒ **另一次聊天保存在飞时，它要等最多 1 秒**；超时只 `console.warn` 后 **return**（**不抛错**）；
-//   ③ 它把内层 `saveChat()` 的异常**catch 掉只打 console.error**（`script.js:9086-9087`）⇒ **不往上传**。
-//   于是旧实现（本函数）有两个真缺陷，症状正是用户看到的那两条：
-//   · **假失败**：`sw2HotMetaFlushing` 为真时**直接 `return false`**，调用方照着打
-//     「⚠ 落盘失败（见控制台）」——可控制台里既没有异常、稍后防抖那次还把数据写下去了。
-//     用户看到的「一改就报落盘失败」就是这一条（实测：在飞窗口里连改两个参数，第二个必报）。
-//   · **静默丢写**：在飞窗口里改的参数，那次在飞的保存**开始于这次写之前** ⇒ 盘上没有它；
-//     旧实现既不重存也不追加，只能指望之后某次防抖/下一轮 tick 顺手带上（**无保证**）。
-//   ⇒ 定稿口径三条（都能机械核，判据见 `test/set-param-persist.test.js`）：
-//     **甲** 返回三态而非布尔：`{ ok: true }` 已落盘 · `{ ok: true, queued: true }` 排队补写 ·
-//        `{ ok: false, reason: 'timeout'|'no-ctx'|'no-save-chat'|'throw' }` 真失败。**再没有第四种含糊态**。
-//     **乙** 在飞 ⇒ **排队补写**（在飞那次完成后自动再存一次，把"在飞之后写的"补下去）——
-//        ★只在「在飞那次的保存**开始于**本次写之前」时才补（`lastCallAt < lastWriteAt`），
-//        否则就是无谓的一次重复上盘（真账 9.6MB 聊天，白存一次是实打实的代价）。
-//     **丙** **绝不无限等**：单次等待超过 `SW2_FLUSH_TIMEOUT_MS` 就如实报超时并把结果交回调用方
-//        （旧实现会把 `set-param` 的 `await` 一直挂着 ⇒ 状态条永不更新 ⇒ 界面像"点了没反应"）。
-//
-// ★★leg40c 续·二（用户实机「点跑一轮后参数的值又会回到默认」的**真因**——上一版只治了一半）：
-//   ★**铁证**（用户真账备份序列）：`22:12:24` 与 `22:13:25`（第 1 轮）两份热账的 `dynamic.env`
-//   **都没有**任何档位键 ⇒ 玩家那次「已落盘」**是空话**，值只活在内存里；下一轮落账/载入
-//   拿别的世界副本一覆盖就"回到默认"。
-//   ★**为什么空话**：`saveChatConditional`（= `ctx.saveChat`）**第一道闸**是
-//   `await waitUntilCondition(() => !isChatSaving, 1000ms)`；超时它只 `console.warn` 后
-//   **`return`——既不抛错也不写盘**；内层 `saveChat()` 的异常又被它 catch 掉（只打 console.error）
-//   ⇒ **返回值里没有任何信息**。上一版把 `ok:true` 的口径写成"ST 的保存路径没有报错"，
-//   于是这个洞原样留着：**报成功、盘上没有**。
-//   ⇒ 治法：**别问返回值，去问账本**——显式落盘后**回读聊天元数据**核对指纹（`savedAt|tick`）：
-//     ①对得上 ⇒ 报「已落盘」；②对不上 ⇒ **当场重试**（最多 `SW2_FLUSH_TRIES` 次、退避 0/150/400ms，
-//     足够躲开那道 1 秒闸）；③试完仍对不上 ⇒ **绝不报成功**，如实说"只在内存里、刷新会丢"。
-//   ★诚实边界（仍在，但不再扭曲结论）：回读对得上**不能**证明"字节真到了磁盘"（可能是另一次保存
-//     把同一份数据带上去了）；但**对不上一定说明没成**。我们只把"对得上"当成功——宁可多存一次。
-//
-// 超时档（丙）：**绝不无限等**。为什么必须有它：真账 9.6MB 聊天的整份上盘是秒级，而 ST 的
-//   `saveChatConditional` 在"另一次保存在飞"时要等最多 1 秒、超时**静默返回**（不抛错）⇒
-//   旧实现把 `set-param` 的 await 一直挂在这儿，状态条**永不更新** = 界面像"点了没反应"。
-export const SW2_FLUSH_TIMEOUT_MS = 10_000;
-let sw2FlushTimeoutMs = SW2_FLUSH_TIMEOUT_MS;
-// 重试次数与退避（第 1 次不等；后两次让开 ST 那道 1 秒闸）
-export const SW2_FLUSH_TRIES = 3;
-const SW2_FLUSH_BACKOFF_MS = [0, 150, 400];
-// 供判据注入（`node --test` 里把超时压到几十毫秒，真跑超时分支而不必等 10 秒）
-export function sw2SetFlushTimeout(ms) {
-    sw2FlushTimeoutMs = Number.isFinite(ms) && ms > 0 ? ms : SW2_FLUSH_TIMEOUT_MS;
-}
-
-// 排队补写用的**一条**链（不堆第二条：多人同刻写入也只需要"最后一次再存一遍"）
-let sw2FlushChain = Promise.resolve();
-let sw2FlushChainBusy = false;
-
-// ★★leg40c 续·五（用户实机「根本没落盘，刷新也回默认」）：**落盘要自己带文件名**。
-//   读 ST 真源发现的那一格（`public/script.js:7105-7127`）：
-//     `saveChat` 的文件名取 `characters[this_chid]?.chat`；**取不到就 `console.warn` 后直接 `return`**
-//     ——**不写盘、不抛错**。而 `ctx.saveChat` 又是 `saveChatConditional`（它把内层异常也 catch 掉）
-//     ⇒ 从插件侧看**永远"成功"**，盘上却什么都没写。这正是"改了就回默认"的最后一块拼图。
-//   ⇒ 两条治法：
-//     ① 保存时**显式带 `chatName`**（取 `ctx.chatId`，它与 ST 内部 `getCurrentChatId()` 同源）
-//        ⇒ **不再依赖 `characters[this_chid].chat` 那个可能为空的字段**；
-//     ② **计时闸**：一次真的整份上盘不可能在 10ms 内回来；**回得太快就当"它静默跳过了"**，
-//        拒绝报成功并交给重试环（这道闸也顺带兜住别的静默 return 分支）。
-const SW2_SAVE_MIN_MS = 10;
-export function sw2ExplicitChatName() {
-    const ctx = freshCtx();
-    try {
-        const id = ctx?.chatId ?? ctx?.getCurrentChatId?.();
-        return typeof id === 'string' && id.trim() ? id.trim() : null;
-    } catch (_) { return null; }
-}
-/** 调一次 ST 的保存（显式带文件名）；返回 { ms, fast } —— `fast` 为真 = 疑似静默跳过。 */
-async function sw2CallSaveChat(ctx) {
-    const chatName = sw2ExplicitChatName();
-    const t0 = Date.now();
-    await (chatName ? ctx.saveChat({ chatName }) : ctx.saveChat());
-    return { ms: Date.now() - t0, fast: Date.now() - t0 < SW2_SAVE_MIN_MS };
-}
-
-// 我们最后写进账本那份形状的签名（判"账本还是不是我写的那一份"）。
-//   ★为什么不用整个 JSON：真账 9.6MB，每次落盘串一遍是实打实的开销。
-//   ★为什么**必须**带上 `env` 的键集（判据当场抓过一版）：用户那一天的症状正是
-//     "档位键被吃掉了"，而那时 tick 没变 ⇒ 只看 `savedAt|tick` 会**假阳**（以为还是我那份）。
-//     ⇒ 签名 = `savedAt|tick|编年行数|事件末位 id|env 键集`，全是 O(1) 的取数，且**覆盖了会被吃掉的那部分**。
-function hotMetaSignatureOf(meta) {
-    if (!meta || typeof meta !== 'object') return null;
-    const w = meta.world || {};
-    const ev = Array.isArray(w.events) && w.events.length ? String(w.events[w.events.length - 1]?.id ?? '') : '';
-    const ch = Array.isArray(w.chronicle) ? w.chronicle.length : 0;
-    const keys = Object.keys(w?.context?.setting?.dynamic?.env || {}).sort().join(',');
-    return `${meta.savedAt}|${w?.meta?.tick ?? ''}|${ch}|${ev}|${keys}`;
-}
-function hotMetaFingerprint() {
-    return hotMetaSignatureOf(readHotMeta());
-}
-let sw2HotMetaWrittenFp = null;   // `writeHotMeta` 写下去那一份的签名（回读核对基线）
-let sw2HotMetaWrittenMeta = null; // 写下去的那一份本体（被别的副本覆盖时**拿它抢回来**）
-
-/**
- * ★★leg40c 续·二：**把被抢走的账本抢回来**（用户实机「点跑一轮后参数又回到默认」的正面治法）。
- * 病：我们写下的档位，被"另一份世界副本"回写热账时吃掉了（下一个 tick 拿旧世界覆盖、聊天被重载…）
- *   ⇒ 玩家看到的就是"回到默认"。只在判别层重试是不够的——**重存的还是被覆盖后的那份**。
- * 治法：保存之前先看账本还是不是我写的那一份；不是 ⇒ **用我写的那份重新覆盖回去**，再存。
- * ★为什么不需要"别覆盖人家更新的写"那道闸（第一版加了，结果**自己把自己锁死**、判据当场抓红）：
- *   现在账本**不等于我那份**就已经说明"我被换掉了"；若这时账本内容正确，那它就是**更新的正确版本**，
- *   重存一遍无害（幂等）。故只按"内容是不是我那份"判，不掺时间戳。
- * @param {{fp:string, meta:object}} want 本次落盘开始时冻结的基线
- * @returns {boolean} 抢回来了没有
- */
-function reassertWrittenMetaIfClobbered(want) {
-    const fp = hotMetaFingerprint();
-    if (!want?.fp || fp === want.fp) return false;                    // 账本还是我那份
-    const ctx = freshCtx();
-    if (!ctx || typeof ctx.updateChatMetadata !== 'function' || !want.meta) return false;
-    console.warn('[story-world-v2] 账本被别的副本覆盖 —— 用我们写的那一份抢回来（否则玩家刚改的档位就"回到默认"了）', { 被换成: fp, 抢回: want.fp });
-    ctx.updateChatMetadata({ [HOT_META_KEY]: want.meta });
-    sw2HotMetaLastWriteAt = Date.now();       // 记账：这一下也是一次"写"
-    sw2HotMetaPendingWriteAt = sw2HotMetaLastWriteAt;
-    return true;
-}
-
-async function flushHotMeta() {
-    const ctx = freshCtx();
-    if (!ctx) return { ok: false, reason: 'no-ctx' };
-    if (typeof ctx.saveChat !== 'function') return { ok: false, reason: 'no-save-chat' };
-    if (sw2HotMetaFlushing) {
-        // 在飞：不假装成功、也不假装失败——排一次补写，如实回报"排队中"
-        // ★要不要补写的判据 = **在飞的那次保存有没有带上最新的写**（`sw2HotMetaFlushedCurrent`）：
-        //   带上 ⇒ 不补（省一次无谓的整份上盘）；没带上（含"在飞那次是报过超时还挂着的那一次"）⇒ 补。
-        //   `inFlightCoversMyWrite` 只作日志佐证，不作判据（时刻比较不严谨）。
-        const inFlightCoversMyWrite = sw2HotMetaLastCallAt >= sw2HotMetaLastWriteAt;
-        console.info('[story-world-v2] 热账保存已在飞 —— 本次写入排队补落盘', {
-            在飞那次是否已含本次写: inFlightCoversMyWrite,
-        });
-        if (!sw2HotMetaFlushedCurrent && hotMetaUnflushed() && !sw2FlushChainBusy) {
-            sw2FlushChainBusy = true;
-            sw2FlushChain = sw2FlushChain
-                .then(() => new Promise((r) => { setTimeout(r, 0); }))
-                .then(() => flushHotMeta())
-                .then((r) => { if (!r.ok) console.warn('[story-world-v2] 排队补落盘未成', r.reason); })
-                .catch((err) => { console.warn('[story-world-v2] 排队补落盘抛错', String(err?.message || err)); })
-                .finally(() => { sw2FlushChainBusy = false; });
-        }
-        return { ok: true, queued: true };
-    }
-
-    sw2HotMetaFlushing = true;
-    sw2HotMetaFlushedCurrent = false;   // 这一次保存**还没**证明带上最新写（成功才置真）
-    let lastErr = null;
-    // ★冻结本次落盘的基线（见 `reassertWrittenMetaIfClobbered` 的 `want` 说明）
-    const want = { fp: sw2HotMetaWrittenFp, meta: sw2HotMetaWrittenMeta };
-    try {
-        // ★★回读核对的重试环（见本函数头注释：`saveChatConditional` 会**静默不写**）
-        for (let attempt = 1; attempt <= SW2_FLUSH_TRIES; attempt += 1) {
-            if (attempt > 1) {
-                const wait = SW2_FLUSH_BACKOFF_MS[Math.min(attempt - 1, SW2_FLUSH_BACKOFF_MS.length - 1)];
-                await new Promise((r) => { setTimeout(r, wait); });
-                console.info(`[story-world-v2] 热账落盘核对未过 —— 第 ${attempt}/${SW2_FLUSH_TRIES} 次重试`);
-            }
-            reassertWrittenMetaIfClobbered(want);   // ★被别的副本覆盖 ⇒ 先抢回来（否则重存的还是被覆盖掉的那份）
-            sw2HotMetaLastCallAt = Date.now();
-            let timer = null;
-            let saveMs = null;
-            try {
-                const raced = await Promise.race([
-                    sw2CallSaveChat(ctx),
-                    new Promise((r) => { timer = setTimeout(() => r('__sw2_timeout__'), sw2FlushTimeoutMs); }),
-                ]);
-                if (raced === '__sw2_timeout__') throw new Error(`saveChat 超过 ${sw2FlushTimeoutMs}ms 未返回`);
-                saveMs = raced.ms;
-                // ★太快 = ST **静默跳过**了写盘（`saveChat` 的 `fileName` 为空就 `return`；见 sw2CallSaveChat 注释）
-                if (raced.fast) throw new Error(`saveChat 只花了 ${raced.ms}ms 就返回（整份上盘不可能这么快 ⇒ 疑似被静默跳过）`);
-            } catch (err) {
-                const reason = String(err?.message || err);
-                lastErr = /未返回/.test(reason) ? 'timeout' : /静默跳过/.test(reason) ? 'skipped' : 'throw';
-                console.warn('[story-world-v2] 热账落盘未确认', reason);
-                continue;   // 交给重试环（退避后再试）
-            } finally {
-                clearTimeout(timer);
-            }
-            // ★核对：账本还是**我写下去的那一份**吗。
-            //   ★★诚实边界（这一格反复踩过，写死）：`readHotMeta()` 读的是**内存副本**，而账本正是我们
-            //     刚写进去的 ⇒ 只要没人拿别的副本覆盖它，这里**必然相等** —— 所以它能抓的是
-            //     **"账本被换成了别的副本"**（下一个 tick 拿旧世界覆盖、聊天被重载等），
-            //     **抓不到**"ST 静默没写盘"（那件事从浏览器侧根本判不了：内存与磁盘无法区分）。
-            //     ⇒ 故语义定成：相等 ⇒ "我们写下去的账本还在"（可报已落盘）；
-            //       不相等 ⇒ 账本被人换了 ⇒ **抢回来 + 重存**（这才是重试环真正拦得住的那一类）。
-            const after = hotMetaFingerprint();
-            if (want.fp && after === want.fp) {
-                console.info('[story-world-v2] 热账已落盘', new Date().toISOString(), { 耗时ms: saveMs });
-                sw2HotMetaLastFlushOkAt = Date.now();   // 这一刻之前的写都算已上盘
-                sw2HotMetaFlushedCurrent = true;
-                return { ok: true };
-            }
-            lastErr = 'replaced';
-            // ★★leg41：这里原来还有三件"抢参数"的动作（`sw2PinParamsOnLiveAccount` 钉 + 本地兜底 +
-            //   延后重试）。它们全部为"参数住在世界账里"而存在——真源搬进插件配置后，
-            //   账本被谁换手都动不到玩家的档位 ⇒ 这三个动作连同它们要防的竞争一起撤掉。
-            //   注意：**世界账自己的核对与重试保留**（它对"世界"仍然有用：tick 的落账不该被静默吞掉）。
-            console.warn('[story-world-v2] 热账在我写完之后被换成了别的副本 —— 重存一次', { 期望: want.fp, 实际: after });
-        }
-        // 试完仍对不上 ⇒ **如实报**（世界这一笔可能只在内存里；参数不受影响——它有自己的家）
-        return { ok: false, reason: lastErr || 'replaced' };
-    } finally {
-        // ★超时也必须**放出这一格**（自愈）：旧式的"在飞"标志在超时分支里若不放开，一次卡住的保存
-        //   会把此后每一次改参数都变成"排队"⇒ **一次卡死永久卡死**（判据实测抓到过这一版：
-        //   超时那一轮之后，下一轮报的还是"另一次保存还在飞"）。
-        //   放开它不会造成并发双写失控：真正写下去的那次早已开始，它带的是**当时**那份账；
-        //   后来的写由这次（或排队那次）负责。ST 侧 `isChatSaving` 自己会把并发收敛掉。
-        sw2HotMetaFlushing = false;
-    }
-}
-
-/** ★只供判据用：清掉本模块的落盘簿记（每次测试开局调用，防上一例的在飞/待落状态串味）。 */
-export function sw2ResetFlushState() {
-    sw2HotMetaFlushing = false;
-    sw2HotMetaFlushedCurrent = false;
-    sw2HotMetaLastCallAt = 0;
-    sw2HotMetaLastWriteAt = 0;
-    sw2HotMetaPendingWriteAt = 0;
-    sw2HotMetaLastFlushOkAt = 0;
-    sw2FlushChainBusy = false;
-    sw2FlushChain = Promise.resolve();
-    paramHub.reset();   // ★leg46：撤销栈 + 管辖键 + 墓碑 + 抢回名单都是 hub 的模块级状态（不清会串到下一条用例）
-    sw2HubLastWorld = null;
-    sw2SnapLast = [];                  // ★同上：快照内容闸的指纹
-    sw2SnapLastWorldFp = null;         // ★同上："只有参数变了"那道闸的基准（不清会让下一条用例判不出来）
-}
-
-// ★leg40c 续·六 的"延后重试（3 秒 × 最多 2 次）"已在 leg41 **整段删除**（用户令「可以你做吧」）：
-//   它存在的唯一理由是"参数档位可能没落成盘、下次载入要补"——而参数真源搬进插件配置、
-//   走 ST 自己的 `saveSettingsDebounced` 之后，**参数根本不再依赖聊天落盘** ⇒ 这个重试没有对象了。
-//   （保留它会变成"每 3 秒把整份 9.6MB 聊天存一遍"的隐患——它自己那条注释就写着这是真隐患。）
-//   ★判据里锁了"这四样都不许回潮"：`SW2_FLUSH_RETRY_DELAY_MS` / `sw2PlanFlushRetry` /
-//     `sw2_pending_params` / `sw2ParamOverlay`。
 
 /** 落盘结果 → 状态条那半句（**只有三种话，且只有一种带 ⚠**）。 */export function flushOutcomeText(r) {
     if (r?.ok && !r.queued) return ' · 已落盘';
     if (r?.ok && r.queued) return ' · 已改（另一次保存还在飞，已排队补落盘）';
-    const why = r?.reason === 'timeout' ? `超过 ${Math.round(sw2FlushTimeoutMs / 1000)} 秒未返回`
+    // ★★leg78：这一格原先**直接读热账的私有状态** `sw2FlushTimeoutMs`（跨块读状态 ⇒ 搬走后当场
+//   `ReferenceError`，本棒当场踩到过）⇒ 定稿走**受控口** `hotHub.flushTimeoutMs()`。
+    const why = r?.reason === 'timeout' ? `超过 ${Math.round(hotHub.flushTimeoutMs() / 1000)} 秒未返回`
         : r?.reason === 'no-ctx' ? '拿不到聊天上下文'
             : r?.reason === 'no-save-chat' ? '这一版 ST 没有可用的保存入口'
                 // ★leg40c 续·五：ST 的保存**静默跳过**了（回得太快 / 文件名取不到就 return）
@@ -910,202 +829,6 @@ export function sw2ResetFlushState() {
                     : r?.reason === 'replaced' ? `账本被别的副本覆盖了（试了 ${SW2_FLUSH_TRIES} 次没抢回来）`
                         : '保存报错（见控制台）';
     return ` · ⚠ 这次没能确认落盘（${why}）`;
-}
-
-// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-// leg27 后 · 快照容错（细案 docs/spec-snapshot-fault-tolerance.md；用户拍板：IDB 独立库 / 保留 15 步 / 只回世界账）
-//   纯逻辑在 `src/snapshot.js`（可 Node 测），存储适配在 `web/idb-backend.js`（照旧卷同层同纪律）。
-//   本段只做编排：**何时拍** + **基准从哪来** + **失败怎么吞**。
-let sw2SnapChain = { seq: 0, anchorId: null, anchorSeq: null, anchorWorld: null };
-let sw2SnapQueue = Promise.resolve();   // 写串行（IDB 异步，不串行会竞态丢份）
-let sw2SnapLast = [];                   // 最近两份快照的**逐字节指纹**（去重用，最多两串）
-let sw2SnapInited = null;               // 链是否已与 IDB 对齐（null=未对齐）
-
-// ★leg27 e（用户实拍：s1 时间最新、s12 最旧，**id 序列与时间完全对不上**）：
-//   病 = **`seq` 只活在内存里，刷新即归零，而 IDB 里的旧快照还在**。
-//   IDB 键是 `${chatId}:${id}` ⇒ 刷新后新链又从 `s1` 开始 ⇒ **新快照把旧快照按 id 一份份覆盖**，
-//   各条链交织在一起（"越新的 id 时间越早"），且**重复份永远清不掉**（用户看到的"一下子多了这么多"）。
-//   ⇒ 治法：**加载时把链与 IDB 对齐**——`seq` 取盘上最大序号，**凭空续号、绝不回头覆盖**。
-//   对齐后 `anchorWorld` 为空 ⇒ 下一份自愿落 full（`planStep` 的既有规则），链头永远完整。
-async function ensureSnapshotChain() {
-    if (sw2SnapInited) return sw2SnapInited;
-    sw2SnapInited = (async () => {
-        try {
-            const metas = await snapshotStore().list();
-            const seqs = metas.map((s) => { const m = /^s(\d+)$/.exec(String(s.id ?? '')); return m ? Number(m[1]) : 0; });
-            const maxSeq = seqs.length ? Math.max(...seqs) : 0;
-            if (maxSeq > sw2SnapChain.seq) sw2SnapChain = { ...sw2SnapChain, seq: maxSeq };
-            console.info(`[story-world-v2] 快照链已对齐：盘上 ${metas.length} 份 · 最大序号 s${maxSeq}（新快照从 s${maxSeq + 1} 起，不再覆盖旧的）`);
-        } catch (err) {
-            console.warn('[story-world-v2] 快照链对齐失败（本次按新链处理）', String(err?.message || err));
-        }
-        return true;
-    })();
-    return sw2SnapInited;
-}
-
-function snapshotStore() {
-    const ctx = freshCtx();
-    const chatId = String(ctx?.chatId ?? ctx?.chatMetadata?.chat_id_hash ?? 'default');
-    return createIdbSnapshotStore(chatId);
-}
-
-/** 拍一份快照（异步 · 串行 · 零阻塞）。reason 只作可读标注，判据不放它身上。 */
-//   ★★leg41（用户实机「参数改了好像还会生成快照极其不友好」）：**参数改动不再拍快照**。
-//   为什么（v1 的先例）：v1 的持久快照只给"大操作"（生成/修订/体检）与受控编辑，5 份窗口就够用；
-//     而 v2 把快照钩在**唯一落账收口**上，于是"改一个旋钮"也走这条路——`dynamic.env` 一变，
-//     世界就逐字节变了，过不了下面那道内容闸 ⇒ **拧一次旋钮烧掉一个快照位**（15 份窗口被旋钮吃掉）。
-//   口径（能机械核）：把**参数键全部摘掉**之后两份世界**逐字节相同** ⇒ 这一步只有参数在动，
-//     **不是世界动了** ⇒ 不拍。此时参数的真源在插件配置里（本笔刚搬的家），快照本来也管不到它。
-// ★★★leg53：**引擎每轮算的那几格不算"参数"**。
-//   为什么必须加这一条（本棒实测的真事故形状）：`动乱度` 现在由 `src/unrest.js` 每轮从账上派生，
-//   而本函数下面按 `isParamStoreKey` 剥"参数键"——它会**连引擎派生的那一格一起剥掉**
-//   ⇒ `isParamOnlyChange` 会把"乱象变了"误判成"只有参数在动" ⇒ **不拍快照** ⇒ **回档丢状态**。
-//   口径：`isParamStoreKey`（形状上属于参数表）≠ **"该被当参数剥掉"**——派生结果**是世界状态**。
-function stripParamKeys(world) {
-    const copy = JSON.parse(JSON.stringify(world));      // 深拷贝：绝不动真账一个键
-    const env = copy?.context?.setting?.dynamic?.env;
-    if (!env || typeof env !== 'object') return copy;
-    for (const k of Object.keys(env)) {
-        if (ENGINE_DERIVED.includes(k)) continue;        // ★派生结果留在指纹里（它是世界状态）
-        if (isParamStoreKey(k)) delete env[k];
-    }
-    return copy;
-}
-let sw2SnapLastWorldFp = null;   // 上一份"摘掉参数键"的世界指纹（判"只有参数在动"的基准）
-function isParamOnlyChange(world) {
-    try {
-        const env = world?.context?.setting?.dynamic?.env;
-        if (!env || !Object.keys(env).some((k) => isParamStoreKey(k))) return false;   // 没有参数键 ⇒ 不适用
-        if (!sw2SnapLastWorldFp) return false;           // 没有上一份可比 ⇒ 老实拍（链头必须有）
-        return JSON.stringify(stripParamKeys(world)) === sw2SnapLastWorldFp;
-    } catch (_) { return false; }
-}
-function requestSnapshot(world, reason) {
-    if (!world || typeof world !== 'object') return;
-    const snapshot = JSON.parse(JSON.stringify(world));   // 立即取副本（后续可能被就地改）
-    // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-    // ★leg27 d（用户实拍「**怎么一下子多了这么多，落账太细了还是 tick 吧**」，一屏 12 份、其中 11 份
-    //   「增量 · 0KB」、tick 全是「第 0 轮」、时间戳挤在同一秒）：
-    //   病的准确名字 = **"落账"不等于"世界动了"**。`writeHotMeta` 是**内存与盘面同步**的收口，
-    //   它会在"账本逐字节没变"时也被调用（名册落账/位置继承/迁移/快照回填/初始化那一串）。
-    //   我原来挂在它上面 ⇒ **对同一份世界反复拍快照**，其中还有**逐字节相同**的纯重复。
-    //   ⇒ 加**内容闸**：与上一份逐字节相同 ⇒ 直接不拍（"一步"的定义 = **世界真的变了**）。
-    //   这一闸同时把"落账太细"与"重复份"一起治掉：一个 tick 推进 = 一次真变化 = 一份快照。
-    const fp = JSON.stringify(world);
-    if (sw2SnapLast.includes(fp)) return;
-    // ★leg41：**只有参数键在动 ⇒ 这不是"世界动了"**，不拍（理由见上面那段"参数改动不再拍快照"）。
-    //   ★它必须放在"记指纹"**之前**：否则一次纯参数写会把 `sw2SnapLastWorldFp` 冲掉，
-    //   下次真世界变化反而比不上了（判据里专门锁了这一条）。
-    if (isParamOnlyChange(world)) {
-        console.info('[story-world-v2] 只有参数档位变了（世界本体逐字节没变）⇒ 不拍快照');
-        return;
-    }
-    sw2SnapLast = [fp, ...sw2SnapLast].slice(0, 2);
-    sw2SnapLastWorldFp = JSON.stringify(stripParamKeys(world));
-    sw2SnapQueue = sw2SnapQueue.then(async () => {
-        try {
-            await ensureSnapshotChain();      // ★异步边界上再保一次（防 loadWorld 的第一次对齐竞态）
-            const p = planStep({
-                seq: sw2SnapChain.seq,
-                tick: world?.meta?.tick ?? null,
-                world: snapshot,
-                prevAnchorWorld: sw2SnapChain.anchorWorld,
-                prevAnchorId: sw2SnapChain.anchorId,
-                anchorSeq: sw2SnapChain.anchorSeq,
-                reason: String(reason || '落账'),
-            });
-            await snapshotStore().put(p.snapshot);
-            sw2SnapChain = { seq: p.nextSeq, anchorId: p.anchorId, anchorSeq: p.anchorSeq, anchorWorld: snapshot };
-            // 保留窗口 15 步 · 锚点完整性由 planRetention 保证：丢锚就丢它名下的 delta
-            const metas = await snapshotStore().list();
-            const plan = planRetention({ snapshots: metas });
-            if (plan.drop.length) await snapshotStore().drop(plan.drop);
-            console.info(`[story-world-v2] 快照 ${p.snapshot.id}（${p.snapshot.kind}${p.mode ? `·${p.mode}` : ''} · ${p.snapshot.bytes} 字节）· ${p.snapshot.reason} · 现有 ${metas.length - plan.drop.length} 份`);
-        } catch (err) {
-            // 失败零阻塞：只进控制台（世界推进永远优先）
-            console.warn('[story-world-v2] 快照失败（不影响世界推进）', String(err?.message || err));
-        }
-    });
-}
-
-/** 面板用：读快照清单 + 一行事实摘要（失败返回空，不抛） */
-export async function snapshotList() {
-    try {
-        const metas = await snapshotStore().list();
-        return { ok: true, list: metas, text: describeSnapshots(metas) };
-    } catch (err) {
-        return { ok: false, list: [], text: `快照不可读：${err?.message || err}` };
-    }
-}
-
-/**
- * 回到某一步（**只回世界账**，用户拍板；对话记录不动）。
- * 三条纪律：①恢复前**先给当前状态拍一份**（防"恢复错了回不来"）②链不可恢复 ⇒ 明确拒绝、世界原样不动
- * ③恢复后落盘 + 重绘 + 把该份钉住（keepId）不被窗口剪掉。
- */
-export async function restoreSnapshot(targetId) {
-    try {
-        const store = snapshotStore();
-        const all = await store.listAll();
-        const r = restoreFrom({ snapshots: all, targetId });
-        if (!r.ok) return { ok: false, error: r.error };
-        const current = loadHotAccount(readHotMeta()) || sw2LastWorld;
-        if (current) requestSnapshot(current, '恢复前自保');       // ②自保（异步，不阻塞这次恢复）
-        // ★leg41：恢复的是**世界账**（参数不在里面）⇒ 写回前先把真源镜像补上，
-        //   否则恢复后引擎会按"快照里那份旧 env"跑（面板写 12、闸按 6 —— 正是本仓禁的"一个数两把尺子"）。
-        sw2WriteHotMetaEnsuringParams(hotAccountShape(r.world), r.world);
-        const flushed = await flushHotMeta();
-        sw2LastWorld = loadHotAccount(readHotMeta()) || r.world;
-        refreshWorld(sw2LastWorld, { oldVolumes: LISTED_VOLUMES });
-        // 钉住该份 + 它需要的锚（keepId 闭包）
-        try {
-            const metas = await store.list();
-            const plan = planRetention({ snapshots: metas, keepId: String(targetId) });
-            if (plan.drop.length) await store.drop(plan.drop);
-        } catch (_) {}
-        const t = r.world?.meta?.tick;
-        return { ok: true, tick: t, plan: r.plan, flushed };
-    } catch (err) {
-        return { ok: false, error: String(err?.message || err) };
-    }
-}
-
-export async function clearSnapshots() {
-    try {
-        const n = await snapshotStore().clear();
-        // 三个内存态一起清：链、去重指纹、**对齐标记**（清了盘就必须允许重新对齐，否则新链又从头覆盖）
-        sw2SnapChain = { seq: 0, anchorId: null, anchorSeq: null, anchorWorld: null };
-        sw2SnapLast = [];
-        sw2SnapInited = null;
-        return { ok: true, removed: n };
-    } catch (err) {
-        return { ok: false, error: String(err?.message || err) };
-    }
-}
-
-/**
- * 重置快照（清空 + 立刻给当前世界拍一份新链头）。
- * 用途（用户实拍 12 份的来源）：盘上混着**旧代码/丢账时拍下的**快照——内容不可信、id 也乱。
- * 一键丢掉那些、从"现在这份干净世界"重新起链。
- */
-export async function resetSnapshots() {
-    const cleared = await clearSnapshots();
-    if (!cleared.ok) return cleared;
-    const current = loadHotAccount(readHotMeta()) || sw2LastWorld;
-    if (current) await requestSnapshot(current, '重置后链头');
-    return { ok: true, removed: cleared.removed };
-}
-
-async function refreshSnapshots({ silent = true } = {}) {
-    try {
-        await ensureSnapshotChain();          // ★先对齐（否则新链会从头覆盖旧链）
-        const r = await snapshotList();
-        sw2SnapshotCache = { list: r.list, text: r.text };
-        if (sw2LastWorld) refreshWorld(sw2LastWorld, { oldVolumes: LISTED_VOLUMES });
-    } catch (err) {
-        if (!silent) setStatus(`⚠ 快照刷新失败：${err?.message || err}`);
-    }
 }
 
 function volumeStore() {
@@ -1117,35 +840,115 @@ function volumeStore() {
 // K36：轮次队列（setupAsyncTicks 装一次；dispatchAction 的手动补推要用它）
 let sw2TickQueue = null;
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ★★★leg79/leg81（丙-web · **第四格**）：**视图态族已整族搬进 `web/view-state.js`**。
+//   本族的**八个状态**（两个视图对象 / 两枚词表 / 两个复位 / 两个组合期标志）**只住新模块**，
+//   本文件**一个字都不许再直接读写**（本仓最贵的病是"两份真相"）。
+//   ★★本族特有的坑（别改成抓死）：**视图对象必须现取**——`viewState.chronicle()` / `viewState.entities()`。
+//     为什么：消费点是对**对象内字段**的就地写（`view.layer = v` / `view.filters.push(v)` / `view.page += 1`），
+//     而 `reset()` 会**换掉模块级绑定** ⇒ 谁把对象抓进变量，复位之后那些就地写就落到**被丢弃的旧对象**上
+//     （面板看起来"点了没反应"，且**不抛错、不报警**）。
+//   ★★本族**零注入形参**：它谁也不调（连上下文都不碰，比热账族更叶子）⇒ `createViewStateHub()` 无 deps。
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+const viewState = createViewStateHub();
+
 // ---------- K34/K36：会话态（模块级 · 面板零第二份状态） ----------
 let sw2LastSettings = null;
 let sw2PrevChronicle = null;      // 上一渲染的编年行数（第十三棒：进展计数用）
-// ★细案 spec-chronicle-page-ia（leg50）：编年页的**唯一一份**视图状态
-//   （数据逻辑全在 `src/render.js` 的纯函数里：`selectChroniclePage` / `classifyChronicle`；
-//    这里只存状态，一行数据逻辑都不写——与 `sw2EntsView` 完全同款：纯视图态、不落 SSOT、不落盘、
-//    重绘保留、关面板重置）。★默认值只有一份真源（`makeChronicleView()`）。
-//   ★本笔**退场**了旧的 `sw2ChronicleFilter`（五筛 kind Set）——五筛是引擎词，玩家读不懂（细案 §3.5）。
-let sw2ChronicleView = makeChronicleView();
-function sw2ChronicleViewReset() { sw2ChronicleView = makeChronicleView(); }
-// ★leg50 编年页搜索框的组合期标志（模块级 `let`：三支监听要共享它）
-let sw2ChronicleComposing = false;
+// ★★★leg79/leg81（丙-web · **第四格**）：**编年页视图态整族已搬进 `web/view-state.js`**。
+//   原先这里住着 `sw2ChronicleView` / `sw2ChronicleViewReset` / `sw2ChronicleComposing` 三样，
+//   而 `sw2LastWorld` / `sw2SnapshotCache` / `sw2LastPicks` **正夹在它中间**（不是连续块）
+//   ⇒ 本棒按"四处抽取"只取视图态那几处，那三样**一个字不动**（它们不属于视图态语义）。
+//   ★够到那一族一律走**受控口** `viewState`（见下面建 hub 那一段）：视图对象**现取**，
+//     绝不许抓进变量（复位会换绑，抓死 = 就地写落到被丢弃的旧对象上 = "点了没反应"且不报错）。
 let sw2LastWorld = null;          // K41：链视图入口持引用（同一对象，零第二份状态）
-let sw2SnapshotCache = null;      // leg27 后：快照清单（IDB 读回的元信息 + 摘要文案）——随 config 进渲染层，面板零第二份状态
+// ★leg73：`sw2SnapshotCache` 已随快照族搬进 `web/snapshot-store.js`（状态只许有一个家）；
+//   面板要那份清单 ⇒ 走受控口 `snapHub.readSnapshotCache()`（见下面 `renderCfg` 与复位那段）。
 let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单（选人调用失败时退回它，再退兜底名单）
+// ★★★leg89：**标签读数的会话级自证面**（`{tagReadout, tagFacts}`）——不落账、不入卷，
+//   只活在内存里（与 `sw2LastPicks` 同性质）：它是"这一轮正文长什么样"的读数，不是世界状态。
+//   ★为什么不像 `picks` 那样写进世界：世界步没有"标签"这一格（`worldStepSchema` 顶层 `additional:false`），
+//     硬塞进去要么炸校验、要么变成一条**永远不会被清理的过期货**（leg34 那次"过期检索冒充新检索"的同款病）。
+let sw2LastTagFacts = null;
+let sw2LastInjectLine = null;
+/** ★leg92：注入器**跑过的证据**（`{count,lastOk,lastOff,lastChars,lastAt}`）——见 `inject.js` 的 `runs`。 */
+let sw2LastInjectRuns = null;
+/** ★leg89：注入器（`setupAsyncTicks` 里装配；装配前为 null ⇒ 注入面整体不存在 = 与今天逐字节相同）。 */
+let sw2Injector = null;
+/** 注入开关的人话名（状态条与设置页共用；★玩家可见文本，零引擎术语）。 */
+const INJECT_SWITCH_LABEL = {
+    injectTagSpec: '让聊天模型按标签写行动',
+    injectRoster: '把名号表递进对话',
+    injectWorldTide: '把上轮世界动向递进对话',
+};
+/** 开关的读法：**只有显式 '1' 算开**（与 `switchOn`/`autoAdvanceOn` 全仓同口径）。 */
+function injectSwitchOn(key) {
+    return String(modelSettings()?.[key] ?? '') === '1';
+}
+// ★★★leg89：**"这条正文推进过了吗"的守卫**——一输入一推进。
+//   为什么必须有：自动路（`MESSAGE_RECEIVED`）与手动路（面板「推进一轮」）**是两条独立的入口**，
+//   总闸开着时先自动推一次，玩家再按一次「推进一轮」——两次读到的**是同一段正文**
+//   ⇒ 同一批标签被提两遍、同一批"已经发生的事"往世界模型里塞两遍（世界可能把它当两轮用）。
+//   旧口径没这个问题：`advance()` 零参 ⇒ 两处都没有正文可提（两处都恒为空），这个坑**是新接线带出来的**。
+//   ⇒ 口径：**同一段正文本轮只推进一次**；新消息来了（文本变了）自然放行。
+//   ★它**不是**"防重入"（那是 `async-tick.js` 的 `busy` 闩，管的是并发）：这里管的是**同一原料不许提两次**。
+let sw2LastAdvancedMes = null;
+/**
+ * ★★★leg89：**读聊天正文**——"正则提取聊天llm输出的各角色的行动"里，正文从哪来。
+ *   ★现取（`freshCtx()` 每调一次取一次）：抓死会读到上一个聊天的最后一条（本仓 leg79 的"不许抓死"，第四次）。
+ *   ★取**最后一条**：`MESSAGE_RECEIVED` 是在消息**已经进 `chat`** 之后才发的 ⇒ 最后一条就是刚到的正文。
+ *   ★拿不到就返回空串——**不猜、不退回更早的消息**（"这一轮没有正文"与"拿上一条冒充"是两件事）。
+ */
+export function sw2LatestMessageText(ctx) {
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat) || !chat.length) return '';
+    const last = chat[chat.length - 1];
+    return typeof last?.mes === 'string' ? last.mes : '';
+}
 
-// ★细案 spec-entities-page-ia：实体页的**唯一一份**视图状态
-//   （数据逻辑全在 `src/render.js` 的纯函数里：`selectEntityPage` / `entsHitCounts`；这里只存状态，
-//    一行数据逻辑都不写——本仓"零第二份状态"纪律，与上面的 `sw2ChronicleView` 完全同款：
-//    纯视图态、不落 SSOT、不落盘、重绘保留、关面板重置）
-//   ★终审 M10：默认值**只有一份真源**（渲染层的 `makeEntsView()`）——原先这里与 `src/render.js` 的
-//     `ENTS_DEFAULT_VIEW` 各写一份字面量、靠人同步（本笔加 `scope` 字段时正是两处都要改）。
-let sw2EntsView = makeEntsView();
-const SW2_ENTS_KINDS = new Set(['all', 'faction', 'character']);
-const SW2_ENTS_FILTERS = new Set(['busy', 'recent', 'named', 'orphan']);
-function sw2EntsViewReset() { sw2EntsView = makeEntsView(); }
-// ★终审 C1：中文输入法**组合期**标志（模块级：`compositionstart`/`compositionend`/`input` 三支监听共享）。
-//   组合期一律不写状态、不重绘（`refreshSections` 换掉搜索框节点 = 组合被中途打断 = 玩家打不出字）。
-let sw2EntsComposing = false;
+/**
+ * ★★★leg89：**"这条正文该不该推"的判据**——从 `sw2AdvanceOnce` 里提出来，为的是**能真测**
+ *   （本仓铁律：要真 ctx 的接线，要么提成可导出函数真跑，要么写注入 fake 的测试）。
+ *   三条口径：
+ *   · 没有正文（空串/null）⇒ **该推**：那是"手动补推/老聊天"的正常情形（旧行为就是零参推进）；
+ *   · 与上一次推进过的**同一条** ⇒ **不该推**（同一段正文提两遍 = 同一批标签喂两遍）；
+ *   · 其余 ⇒ 该推。
+ * @returns {{go: boolean, reason?: string}}
+ */
+export function sw2ShouldAdvance(mes, lastMes) {
+    const cur = typeof mes === 'string' ? mes : '';
+    if (!cur) return { go: true, reason: 'no-dialogue' };
+    if (lastMes && cur === lastMes) return { go: false, reason: 'same-message' };
+    return { go: true };
+}
+
+/**
+ * ★★★leg89：**一输入一推进**——自动路（收到消息）与手动路（面板「推进一轮」）**共用这一格**。
+ *   · 拿到最后一条正文；**与上一次推进过的那条相同 ⇒ 跳过**（如实出声，不是静默丢）。
+ *   · 没有正文（拿空串）⇒ **照常推进**：那是"手动补推/老聊天"的正常情形，
+ *     旧行为就是零参推进（`dialogue = ''` ⇒ 没有标签可提，世界以自身状态演）——不许因为新功能把它堵死。
+ *   · 返回值照 `createTickQueue` 的口径透出（`{ok, skipped:'same-message'|'busy'|…}`），便于判据真跑。
+ */
+export function sw2AdvanceOnce({ manual = false } = {}) {
+    if (!sw2TickQueue) return { ok: false, skipped: 'no-queue' };
+    const mes = sw2LatestMessageText(freshCtx());
+    const verdict = sw2ShouldAdvance(mes, sw2LastAdvancedMes);
+    if (!verdict.go) {
+        setStatus(manual
+            ? '⏭ 这一条消息已经推过一轮了（同一段正文不重复提取）——想再推，等新的一条消息'
+            : '⏭ 这一条已经推过了（跳过重复提取）');
+        return { ok: false, skipped: 'same-message' };
+    }
+    sw2LastAdvancedMes = mes || null;
+    return sw2TickQueue.advance(mes).catch((err) => {
+        console.warn('[story-world-v2] 推进异常：', err?.message || err);
+        return { ok: false, error: String(err?.message || err) };
+    });
+}
+
+// ★★★leg79/leg81：**实体页视图态整族也已搬进 `web/view-state.js`**
+//   （`sw2EntsView` / `SW2_ENTS_KINDS` / `SW2_ENTS_FILTERS` / `sw2EntsViewReset` / `sw2EntsComposing`）。
+//   ★两张筛选词表随状态同住一处（判据咬：词表只许在新家定义）；够到它们走 `viewState.*` 受控口。
 
 function modelSettings() {
     const ctx = freshCtx();
@@ -1169,7 +972,36 @@ function writeSetting(key, value) {
     try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
 }
 
-const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model', playerDesc: 'sw2_player_desc' };
+// ★★★leg87：`playerDesc: 'sw2_player_desc'` **已删**——那张「你的开档描述」卡连同这段绑定一起撤
+//   （依据：那段字写进 `meta.playerDesc` 后全仓零处读，见 `src/render.js` 设置页那段留档）。
+// ★★★leg87：单轮超时/输出上限两个框**改走 `data-settings`，不再写在这张按 id 找键的表里**。
+//   为什么另立一条路：这两个键的值**必须是数字**（`createHttpTransport` 拿它当毫秒/整数用），
+//   而这条老路的 `writeSetting(key, e.target.value)` 会把 `'120'` 这样的**字符串**原样写进设置
+//   ⇒ 引擎侧 `setTimeout(…, '120000')` 靠隐式转换侥幸能跑，"空框/中文/负数"则静默变成 NaN。
+//   ⇒ 口径：**声明在 markup 上（`data-settings="键名"`），校验在唯一一处**（下面 onField 里那段）。
+const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model' };
+
+// 数字型设置键的范围（唯一真源：reading 端——渲染层只画 min/max 提示，**拦截在这里**）。
+//   ★为什么拦：这两个数直接进引擎（`resolveBrowserTransport` → `createHttpTransport` 的
+//     `timeoutMs`/`maxTokens`）⇒ 落一个 NaN 或负数进去 = 每轮调用当场失败，而玩家只会看到"演算失败"。
+const SETTINGS_NUM_RANGE = { callTimeoutSec: [5, 600], callMaxTokens: [1024, 131072], tagMaxActions: [1, 200] };
+// ★★★leg89：数字键的**人话名**（原来那两条是三层嵌套三元表达式——加第三个键就会写成读不懂的东西）。
+//   出现在状态条上，所以是玩家可见文本：零引擎术语。
+const SETTINGS_NUM_LABEL = {
+    callTimeoutSec: '单轮超时（秒）',
+    callMaxTokens: '单轮输出上限（token）',
+    tagMaxActions: '单轮注入行动条数上限',
+};
+/** 数字设置的归一：合法 ⇒ 整数；非法/越界 ⇒ null（调用方**不写盘**并如实出声，绝不写 NaN）。 */
+export function sw2NormalizeNumericSetting(key, raw) {
+    const range = SETTINGS_NUM_RANGE[key];
+    if (!range) return null;
+    const s = String(raw ?? '').trim();
+    if (!/^\d+$/.test(s)) return null;          // 空串/负号/小数/中文一律不受理（不猜、不四舍五入）
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < range[0] || n > range[1]) return null;
+    return n;
+}
 
 function nextPlayerId(entities = []) {
     let max = 0;
@@ -1294,98 +1126,15 @@ export function initWorldOverwriteNotice(brief) {
     return lines.join('\n');
 }
 
-export function characterWorldNames(character) {
-    const out = [];
-    const seen = new Set();
-    const push = (v) => {
-        const s = String(v ?? '').trim();
-        if (s && !seen.has(s)) { seen.add(s); out.push(s); }
-    };
-    push(character?.world);                            // 卡上写的 ST 世界信息名
-    push(character?.data?.extensions?.world);          // 另一种 ST 卡格式（数据段）
-    push(character?.extensions?.world);                // data.extensions 之外的 extensions 段
-    return out;
-}
-
-export function characterBookEntries(character) {
-    const book = character?.character_book || character?.data?.character_book;
-    const raw = book?.entries;
-    const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
-    return list.filter((e) => e && typeof e === 'object').map((e, i) => ({
-        uid: e.id ?? i,
-        key: Array.isArray(e.keys) ? e.keys : (e.key ?? []),
-        keysecondary: e.secondary_keys ?? [],
-        comment: e.comment ?? '',
-        content: String(e.content ?? ''),
-        disable: e.enabled === undefined ? Boolean(e.disable) : !e.enabled,
-    })).filter((e) => e.content);
-}
-
-// 世界书条目收集（三条来源：卡内置书 / 具名世界书 / 旧版 worldInfo 数组）——去重按"键+正文"指纹，
-// 同一本书被两条路取到时只算一次（leg25 e 实测：同一本书读两遍 499526 → 301538 字符）。
-async function collectWorldInfoEntries(ctx, character) {
-    const legacy = ctx?.worldInfo;
-    if (Array.isArray(legacy)) return { entries: legacy, worldSources: null, readable: true };
-    if (legacy && typeof legacy === 'object' && Array.isArray(legacy.entries)) return { entries: legacy.entries, worldSources: null, readable: true };
-    const names = [];
-    const seenName = new Set();
-    const push = (n) => { if (n && typeof n === 'string' && n.trim() && !seenName.has(n)) { seenName.add(n); names.push(n.trim()); } };
-    push(character?.world); // 卡上写的世界信息名（v1 同款：单卡 z 情形靠它）
-    const chatWi = ctx?.chatMetadata?.['world_info']; // 聊天级挂载（ST assignLorebookToChat 写 chat_metadata.world_info）
-    if (typeof chatWi === 'string') push(chatWi); else if (Array.isArray(chatWi)) for (const n of chatWi) push(n);
-    for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
-    for (const n of Object.keys(ctx?.extensionSettings?.world_info ?? {})) push(n);
-    const fpOf = (e) => {
-        const content = String(e?.content ?? '').trim();
-        if (!content) return null;
-        return `${normalizeEntryKey(e)}\u0000${content}`;   // 契约来自 init-source（键归一 + 正文）
-    };
-    const entries = [];
-    const seenFp = new Set();
-    let dupEntries = 0;
-    const addEntry = (e) => {
-        if (!e || typeof e !== 'object') return;
-        const fp = fpOf(e);
-        if (fp) {
-            if (seenFp.has(fp)) { dupEntries += 1; return; }
-            seenFp.add(fp);
-        }
-        entries.push(e);
-    };
-    for (const e of characterBookEntries(character)) addEntry(e);   // 卡内置书：不花 loadWorldInfo，先收
-    let loadedAny = false;
-    const worldSources = [];
-    for (const name of names) {
-        try {
-            const w = typeof ctx?.loadWorldInfo === 'function' ? await ctx.loadWorldInfo(name) : null;
-            const raw = w?.entries;
-            const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : null);
-            const ok = Boolean(list?.length);
-            if (ok) loadedAny = true;
-            worldSources.push({ name, ok, entries: list?.length ?? 0 });
-            if (list) for (const e of list) addEntry(e);
-        } catch (err) {
-            worldSources.push({ name, ok: false, entries: 0 });
-        }
-    }
-    return { entries, worldSources, readable: loadedAny || entries.length > 0, dupEntries };
-}
-
-function pickCharacter(ctx) {
-    if (ctx?.character && typeof ctx.character === 'object') return ctx.character; // 已解析好的 ST 卡
-    const chars = ctx?.characters;
-    if (!Array.isArray(chars)) return null;
-    if (ctx?.groupId != null) {
-        const g = Array.isArray(ctx.groups) ? ctx.groups.find((x) => String(x?.id) === String(ctx.groupId)) : null;
-        const avatars = Array.isArray(g?.members) ? g.members : [];
-        for (const av of avatars) { const m = chars.find((c) => c?.avatar === av); if (m) return m; }
-        return null;
-    }
-    const chid = Number(ctx?.characterId);
-    if (Number.isInteger(chid) && chid >= 0 && chars[chid]) return chars[chid];
-    return null;
-}
-
+// ★★★leg80（丙-web · 第五格）：**取书族已整族搬进 `web/book-source.js`**——
+//   卡读取（`characterWorldNames` / `characterBookEntries`）· ST ctx 取书（`collectWorldInfoEntries(ctx, character)` /
+//   `pickCharacter(ctx)`）· 取书缓存（私有 `sw2BookCache` + `resetBookCache()`）· 三个消费者口 ·
+//   名号定位三档（`locateNameLine` / `locateNameSnippet` / `bookEntryText`，纯字符串函数）+ 私有 `escapeRegExp`。
+//   ★依赖方向单向（叶子）：本文件 → `web/book-source.js` → `../src/init-source.js`。
+//   ★留档（这一族为什么值得单独成家）：旧法里 `lookupOneEntity` 调的是**全仓从未定义**的
+//     `bookEntriesCached()`（真名是 `worldBookCached`）⇒ 点面板行的「查/重查」当场 `ReferenceError`；
+//     位置继承那三条路也因此断了两条（`bookEntries` 压根没送进收口）⇒ 用户真账 563 实体的
+//     `location` 全是占位值「未明」。这些口现在只有新家一处实现，接线层只负责**把书递进去**。
 export async function autoComposeSource() {
     const ctx = getCtx();
     const character = pickCharacter(ctx);
@@ -1485,6 +1234,79 @@ function refreshSettingsHints() {
     if (el) el.placeholder = s.apiKey ? '（已保存 · 留空=不改）' : '（本机读取，不打印）';
 }
 
+/**
+ * ★★★leg89：**注入开关的写通道**（用户令：开三个开关控制"插件要不要动你的对话"）。
+ *
+ * ★★为什么它**不是** `onField` 里的一格（本笔踩过，留档）：
+ *   第一版把判据挂在 `bindSettingsForm` 的 `input`/`change` 委托上（`data-settings-bool`）——
+ *   **按钮点击根本不派发 `input`/`change`** ⇒ 处理器一次都跑不到，玩家看到的是"点了没反应、
+ *   状态栏一个字都没有"。而本仓**所有按钮走的是 `click` 委托 + `data-action` + 动作总线**
+ *   （`bindActions` → `dispatchAction`）——它接的是 `click`，所以那条路才通。
+ *   ⇒ 定稿：这个开关走**与其它按钮同一条路**（`data-action="inject-toggle"`），
+ *     并且判据提成**这个导出函数**（本仓铁律：要真 ctx 的接线，要么提成可导出函数真跑，
+ *     要么写注入 fake 的测试 —— 这样它**能在 Node 里被真测**，不再是"只有人手点才知道"）。
+ *
+ * 做四件事，顺序固定（每一步的**理由**都写死在这儿）：
+ *   ① 写盘（`extension_settings.story_world_v2`，与地址/密钥/数字键同一条路）；
+ *   ② 立刻重设注入（开了却要等一轮才生效 ⇒ 玩家会以为没开）；
+ *   ③ **重画设置页**——"开/关"那个字与按钮高亮**只活在渲染产物里**（数字框不靠重绘，开关靠）
+ *      ⇒ 不重画就是"点了没反应"（这是本笔第二个坑）；
+ *   ④ 状态条**报真数**（注入口取不到时如实说跳过，不许假装成功）。
+ * @returns {{ok:boolean, on:boolean, line:string}} 便于判据与调用方留痕（不靠副作用判断）
+ */
+export function sw2ToggleInject(key, on) {
+    if (!key) return { ok: false, on: false, line: '没有开关名' };
+    const want = Boolean(on);
+    writeSetting(key, want ? '1' : '0');
+    let res = null;
+    try {
+        res = sw2Injector?.apply() || null;
+        if (res?.line) sw2LastInjectLine = res.line;
+        // ★leg92：把"跑过几次"也带出来——"开关是 1 却没有注入"时，这一格是唯一能分开
+        //   "没跑"与"跑了但注入 0 字"的证据（用户报的那个真缺陷就藏在这两者的差别里）。
+        if (res?.runs) sw2LastInjectRuns = res.runs;
+    } catch (err) {
+        console.warn('[story-world-v2] 切换注入开关后重设失败（不影响别的事）:', err?.message || err);
+    }
+    try {
+        // ★★★leg89（用户实机四次：「点了不切，点别处才切」）——**不再重画整页**。
+        //   原来这里调 `refreshSections(['settings'])`（整页 innerHTML 换掉），它要穿过本仓两道护栏
+        //   （`playerIsTouchingParams` 的押后判据 + `sw2SectionRefreshRunning` 的防重入），
+        //   任何一道不合我意，画面就晚一拍——而玩家看到的正是"点了不切、点别处才切"。
+        //   ⇒ 定稿：**只改这一处控件自己的 DOM**（三行里那一行：那个"开/关"字 + 两枚按钮的高亮）。
+        //     它不换整页 ⇒ 不经过任何押后/防重入判据，也**不夺焦点**（玩家点的那枚按钮原地不动）。
+        //   ★为什么不这么做就会一直错：`refreshWorld` 里本来就有一处"整页刷新"会顺带把设置页画对
+        //     （带着新一轮的读数）——所以"点别处才切"说明**另有东西把它画对了**，而我这处只是白等。
+        //   ★失败零阻塞：找不到那个节点就什么都不做（开关本身早就写盘了）。
+        const onText = want ? '开' : '关';
+        for (const row of document.querySelectorAll(`[data-inject-switch="${key}"]`)) {
+            const box = row.closest('.sw2-actions-inline');
+            const label = box?.querySelector('.sw2-param-val');
+            if (label) label.textContent = onText;
+            for (const b of box?.querySelectorAll?.('[data-inject-switch]') || []) {
+                const isOnBtn = String(b.getAttribute('data-value') ?? '') === '1';
+                b.classList.toggle('sw2-primary', isOnBtn === want);
+            }
+        }
+    } catch (err) {
+        console.warn('[story-world-v2] 注入开关原地改字失败（开关本身已生效）:', err?.message || err);
+    }
+    const label = INJECT_SWITCH_LABEL[key] || key;
+    if (!want) {
+        const line = `已关闭 · ${label}（世界账没动）`;
+        setStatus(line);
+        return { ok: true, on: false, line };
+    }
+    if (res?.ok) {
+        const line = `已打开 · ${label} → 已注入 ${res.tagsChars + res.worldChars} 字（立刻生效）`;
+        setStatus(line);
+        return { ok: true, on: true, line };
+    }
+    const line = `⚠ ${res?.line || '注入口取不到'}——开关记下了，但这一段这一轮没注入`;
+    setStatus(line);
+    return { ok: false, on: true, line };
+}
+
 function bindSettingsForm() {
     const win = document.getElementById(WINDOW_ID);
     if (!win || win.dataset.sw2SettingsBound) return;
@@ -1516,13 +1338,36 @@ function bindSettingsForm() {
             return;
         }
         const key = Object.keys(SETTINGS_INPUTS).find((k) => SETTINGS_INPUTS[k] === e.target?.id);
-        if (!key) return;
-        const v = e.target.value;
-        if (key === 'apiKey') {
-            if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不改（防一次误清）
+        if (key) {
+            const v = e.target.value;
+            if (key === 'apiKey') {
+                if (v && v.trim()) writeSetting('apiKey', v.trim()); // 留空=不改（防一次误清）
+                return;
+            }
+            writeSetting(key, v);
             return;
         }
-        writeSetting(key, v);
+        // ★★★leg87：数字型设置（单轮超时/输出上限）走**声明式**这一格（`data-settings="键名"`）。
+        //   为什么与上面那条分开：上面那条把值原样写盘（字符串），数字键必须过校验——
+        //   非法值（空框 / 负数 / 中文）**不写盘、当场如实出声**（静默写 NaN = 每轮调用失败且看不出为什么）。
+        const numKey = e.target?.getAttribute?.('data-settings');
+        if (numKey) {
+            const n = sw2NormalizeNumericSetting(numKey, e.target.value);
+            if (n == null) {
+                const [lo, hi] = SETTINGS_NUM_RANGE[numKey] || [];
+                setStatus(`⚠ 「${SETTINGS_NUM_LABEL[numKey] || numKey}」要填 ${lo}–${hi} 之间的整数——这一下没有写入（世界账没动）`);
+                return;
+            }
+            writeSetting(numKey, n);
+            setStatus(`已保存 · ${SETTINGS_NUM_LABEL[numKey] || numKey} → ${n}`);
+            return;
+        }
+        // ★★★leg89：**标签注入的三个开关**（渲染层画成"开/关两枚按钮"，
+        // ★★★leg89 更正（本笔第二个坑，如实留档）：注入开关**不再走这一格**。
+        //   第一版把它挂在 `input`/`change` 委托上（`data-settings-bool`），而**按钮点击不派发
+        //   `input`/`change`** ⇒ 处理器一次都跑不到（玩家看到"点了没反应，状态栏一个字都没有"）。
+        //   现在走本仓**所有按钮同一条路**：`data-action="inject-toggle"` → `bindActions` 的 click 委托
+        //   → 动作总线 → `sw2ToggleInject()`（导出的、能在 Node 里真跑的判据函数）。
     };
     win.addEventListener('input', onField);
     win.addEventListener('change', onField);
@@ -1536,178 +1381,25 @@ function bindSettingsForm() {
     }, { passive: false });
 }
 
-// 取书结果按会话缓存。三态语义（**"读不到"与"书里没有"必须分形**——硬规矩二）：
-//   `{ ok: true, entries: [...] }` = 书读到了（条目可能为空 = 书里真没有）
-//   `{ ok: false }`           = **书没读到**（取书炸了/一本都没取到）→ 调用方**不写任何痕迹**，下轮再试
-//   旧法失败时 `return []`，与"书里没有"同形 ⇒ 引擎把读不到书记成「书未明述」并**永久锁死**该栏
-//   （违反硬规矩「绝不用空值反推『书里没有』」）。另：取书结果按会话缓存（原实现每个实体重取一遍全量书）。
-let sw2BookCache = null;   // { names, entries, readable }——只活在内存，loadWorld 时清
-export function resetBookCache() { sw2BookCache = null; }
+// ★★★leg80：取书缓存 + 三个消费者口（原始条目 / 书正文 / 按名号三档文本）也**只住新家**了。
+//   ★本族真正的承重墙（留档，别改回去）：**三态语义**——`{ ok: true, entries: [] }` = 书读到了但
+//     书里真没有（另一态）；`{ ok: false }` = **书没读到**（取书炸了/一本都没取到）⇒ 调用方**不写任何痕迹**。
+//     旧法失败时 `return []`，与"书里没有"同形 ⇒ 引擎把"读不到书"记成「书未明述」并把该栏**永久锁死**
+//     （实测代价：用户真账 563 实体、`location` 占位值「未明」563——面板整列「未载」）。
+//   ★留档（leg25 f 那三条断头，全在原地接线层，正是这一族搬家的理由）：
+//     ① `lookupOneEntity` 调 `bookEntriesCached()`——**该函数全仓从未定义**（真名 `worldBookCached`）⇒
+//        点面板行的「查/重查」当场 `ReferenceError`；
+//     ② `advanceTick` 的 preStep 与批量补全**压根没传 `bookEntries`** ⇒ `runBatchLookup` 里
+//        `bookEntries == null` ⇒ 位置继承原样返回世界 ⇒ 推断跑 0 次；
+//     ③ 全量测试没有任何一条把 `bookEntries` 喂给这两个收口 ⇒ "接线断了而测试全绿"。
+//   ★零参那一口的契约**一个字没改**：`bookEntriesForInherit()` 仍然零参，内部走**注入进来的** `getCtx()`；
+//     其余的口一律收 ctx 形参（谁调谁给）——两种形状并存是故意的，判据咬这一条。
 
-async function worldBookCached() {
-    if (sw2BookCache) return sw2BookCache;
-    const ctx = getCtx();
-    const character = pickCharacter(ctx);
-    const { entries, readable } = await collectWorldInfoEntries(ctx, character);
-    sw2BookCache = { entries: entries || [], readable };
-    return sw2BookCache;
-}
-
-// leg25 f 修（**接线类缺陷，本棒最重的一条**）：位置继承（零 token 结构推断，`deriveLocationFromBook`）
-//   要的是**原始 ST 条目**（`comment`=条目名 / `content`=正文 / `key`=键数组）——它自己按条目名与
-//   正文成员行匹配实体，**不经过查书那套"按名号取三档文本"**，所以不能复用 `bookTextForEntity`。
-// 旧法为什么一次都没生效（三处断头，全在接线层）：
-//   ① `lookupOneEntity` 调 `bookEntriesCached()`——**该函数全仓从未定义**（只有 `worldBookCached`），
-//      点面板行的「查/重查」当场抛 `ReferenceError`；
-//   ② `runBatchChunk`（批量补全）与 `advanceTick` 的 preStep（每轮前置步）**压根没传 `bookEntries`**
-//      ⇒ `runBatchLookup` 里 `bookEntries == null` ⇒ `withInherit` 原样返回世界 ⇒ 推断跑 0 次；
-//   ③ 全量测试没有任何一条把 `bookEntries` 喂给这两个收口 ⇒ "接线断了而测试全绿"（本仓常客）。
-// 实测代价（用户真账 563 实体）：`location` 真值 0 / 占位值「未明」563——面板整列「未载」。
-// 该函数提成**导出**是为了能被真测（与 `autoComposeSource` 同一治法）：注入 fake ST ctx 真跑。
-// 失败语义（与查书路同纪律）：**取不到书就返回空数组 = 本轮不推断**，绝不猜位置、绝不阻塞调用方。
-export async function bookEntriesForInherit() {
-    try {
-        const book = await worldBookCached();
-        if (!book?.readable) return [];          // 书没挂载/读不到 ⇒ 结构推断没得依据（≠ 书里没有）
-        return Array.isArray(book.entries) ? book.entries : [];
-    } catch (err) {
-        console.warn('[story-world-v2] 位置继承：取书失败（本轮不推断，世界照常推进）', String(err?.message || err));
-        return [];
-    }
-}
-
-// ★leg40：**世界书正文**（供"从世界源起根"用）——与 `bookEntriesForInherit` 同一份缓存，只多拼一段文本。
-//   为什么另起一个函数而不是在起根处现拼：取书要 await + 失败兜底，散在调用点会长出第二份"取书口径"。
-//   格式与 `autoComposeSource` 的世界信息一致（## 条目名 + 正文），起根提示词与设定抽取读到的就是同一种书文。
-//   失败语义同 `bookEntriesForInherit`：**取不到书就返回空文本**（起根会如实报"世界源正文为空"，绝不猜）。
-export async function bookTextForRoots() {
-    try {
-        const book = await worldBookCached();
-        if (!book?.readable) return { text: '', entries: 0 };
-        const entries = Array.isArray(book.entries) ? book.entries : [];
-        const text = entries
-            .map((e) => `## ${String(e?.comment || e?.key?.[0] || '').trim()}\n${String(e?.content ?? '')}`)
-            .join('\n\n');
-        return { text, entries: entries.length };
-    } catch (err) {
-        console.warn('[story-world-v2] 起根：取书失败（本轮不起根，世界照常载入）', String(err?.message || err));
-        return { text: '', entries: 0 };
-    }
-}
-
-// B6（leg25 d，细案 spec-lookup-batch-refresh §B6）：在条目正文里**定位到该名号自己那一行**。
-//   为什么值得做：v2 只会"命中条目→整条给"，而用户的书格式高度规整——
-export function locateNameLine(content, name) {    const text = String(content ?? '');
-    const nm = String(name ?? '').trim();
-    if (!text || !nm) return null;
-    // 行首（可带列表符号）出现名号，**紧跟着**冒号或圆括号属性 = 该名号自己那一行；
-    //   名号后面先跟别的字（`吞天妖王 与 金刚狮王 (…) 交战。`）⇒ 明确**不认**（防跨名号抓错人）。
-    const re = new RegExp(`^[-*·•\\s]*${escapeRegExp(nm)}\\s*(?:[：:]|\\()([^\\n]*)`, 'm');
-    const m = re.exec(text);
-    return m ? m[0].trim() : null;
-}
-
-function escapeRegExp(s) {
-    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function locateNameSnippet(content, name) {
-    const EXPAND = 160;   // 名号前后各取多少字符（够一句上下文，又不至于把整条灌进 prompt）
-    // ★边界优先级（leg25 d 的判据抓过一次）：**先找句读/换行（硬边界），找不到才退到逗号（软边界）**。
-    //   旧法见逗号就停 ⇒「…吞天妖王于北荒现身，」——把紧跟其后的「气息T8大乘中期」切掉了，
-    //   模型看不到档位原话 ⇒ 记 absent ⇒ **假的「书未明述」**（与本仓一直在治的那种病同款）。
-    const hardStop = /[\n。！？；]/;
-    const softBreak = /[，、]/;
-    const text = String(content ?? '');
-    const nm = String(name ?? '').trim();
-    if (!text || !nm) return null;
-    const m = new RegExp(escapeRegExp(nm)).exec(text);
-    if (!m) return null;
-    const scan = (dir) => {
-        let hard = null;
-        let soft = null;
-        if (dir < 0) {
-            for (let i = m.index - 1; i >= 0 && m.index - i <= EXPAND; i -= 1) {
-                if (hardStop.test(text[i])) { hard = i + 1; break; }
-                if (soft === null && softBreak.test(text[i])) soft = i + 1;
-            }
-        } else {
-            const end = m.index + nm.length;
-            for (let i = end; i < text.length && i - end <= EXPAND; i += 1) {
-                if (hardStop.test(text[i])) { hard = i; break; }
-                if (soft === null && softBreak.test(text[i])) soft = i;
-            }
-        }
-        return { hard, soft };
-    };
-    const fromSide = scan(-1);
-    const toSide = scan(1);
-    const from = fromSide.hard !== null ? fromSide.hard : (fromSide.soft !== null ? fromSide.soft : Math.max(0, m.index - EXPAND));
-    const to = toSide.hard !== null ? toSide.hard : (toSide.soft !== null ? toSide.soft : Math.min(text.length, m.index + nm.length + EXPAND));
-    const seg = text.slice(from, to).trim();
-    return seg || null;
-}
-
-export function bookEntryText(content, name, cap = 1200) {
-    const raw = String(content ?? '');
-    const line = locateNameLine(raw, name);
-    if (line) return { text: line, located: 'line' };
-    const snippet = locateNameSnippet(raw, name);
-    if (snippet) return { text: snippet, located: 'snippet' };
-    return { text: raw.slice(0, cap), located: 'none' };   // 定位不到才整条截断（cap 内），并如实标 located
-}
-
-async function bookTextForEntity(entity) {
-    const name = String(entity?.name || '').trim();
-    if (!name) return { ok: true, entries: [] };
-    let book;
-    try {
-        book = await worldBookCached();
-    } catch (err) {
-        console.warn('[story-world-v2] 查书：取书失败（**不是"书里没有"**，不写任何痕迹，下轮再试）', String(err?.message || err));
-        return { ok: false };
-    }
-    if (!book.readable) {
-        console.warn('[story-world-v2] 查书：一本书都没读到（世界书没挂载/未加载）——本轮不写痕迹');
-        return { ok: false };
-    }
-    const hit = (book.entries || []).filter((e) => {
-        const comment = String(e?.comment || '').trim();
-        const keys = Array.isArray(e?.key) ? e.key : [e?.key];
-        return comment === name || comment.includes(name) || keys.map((k) => String(k ?? '').trim()).includes(name);
-    });
-    return {
-        ok: true,
-        entries: hit.slice(0, 4).map((e) => {
-            const picked = bookEntryText(e?.content, name);
-            return {
-                name: String(e?.comment || name).trim(),
-                text: picked.text,
-                located: picked.located,
-            };
-        }).filter((x) => x.text),
-    };
-}
-
-// ---------- leg25 d：批量补全（借轮次跑；每轮 ≤BATCH_PER_TICK 批） ----------
-const BATCH_PER_TICK = 1;          // 每轮最多跑几批（细案 §10 B2：1 批，不拖慢推进）
-let sw2BatchTask = null;           // { ids, cursor, done:[], failed:[], success, pending, absent, forceFields, chars }
-
-export function batchTaskStatus() {
-    if (!sw2BatchTask) return null;
-    const t = sw2BatchTask;
-    return {
-        total: t.ids.length, cursor: t.cursor, remaining: t.ids.length - t.cursor,
-        success: t.success, pending: t.pending, absent: t.absent, failed: t.failed.length,
-        forceFields: t.forceFields,
-    };
-}
-
-export function stopBatchTask() {
-    if (!sw2BatchTask) return false;
-    sw2BatchTask = null;
-    return true;
-}
+// ★★★leg76 收尾（本次补齐）：**全册批量补全整族已撤**——撤掉的是这三格（每轮搭车的任务态）
+//   加后面那四格（`batchStatusText`/`startBatchTask`/`runBatchChunk`/`planBatchesLazy`），
+//   以及两处总线动作与 `renderCfg` 里的 `lookupTask`。撤的依据（leg76 §1）：方向本身是错的——
+//   它真会问的那批实体里**十个有九个是「势力」**，而提示词**明令势力不抽实力** ⇒ 那一栏对它们永远补不上。
+//   ★边界：**行内那枚「查」是好的，保留**（`lookup-entity`/`lookupOneEntity` 一个字未动）。
 
 // 渲染 config（渲染层不持状态：任务/快照/记忆自证一律由本层注入）
 function renderCfg(extra = {}) {
@@ -1717,23 +1409,52 @@ function renderCfg(extra = {}) {
     //     leg41 的"四个下拉全空白"就是因为同步逻辑另写了一套"没有就是空"（同一语义两处实现 ⇒ 迟早分叉）。
     //   `paramUndo` ⇒ 撤销按钮的自证面（可退几步）。
     //   ★世界对象用**面板正在渲染的那一份**（`sw2LastWorld`）现取：桶键必须与它同源。
-    const w = sw2LastWorld || readHotMeta()?.world || null;
+    //   ★★★leg82：但**桶键优先取"hub 真正读写过的那个桶"**（受控口 `currentWorldName()`）——
+    //     这就是 leg48 那条"**读的桶 = 写的桶**"（被违反过九轮，正是"改了档位、刷新回默认"的机理）：
+    //     `loadWorld` 走空态/轮转失败时交给面板的是**空态世界**（世界名 = 未名世界），
+    //     按它去读会读到**另一个空桶** ⇒ 面板按出厂默认画一遍，把玩家选的值从画面上盖掉。
+    //     ⇒ 与"控件按真源对齐"那一处同一口径（那边本来就是 `currentWorldName()` 优先）。
+    const w = paramApi.currentWorldName() || sw2LastWorld || readHotMeta()?.world || null;
     return {
         ...(modelSettings() || {}),
-        lookupTask: batchTaskStatus(),
-        snapshots: sw2SnapshotCache,
-        memoryPush: sw2MemoryPush,
-        paramEnv: paramHub.displayEnv(w),
+        snapshots: snapHub.readSnapshotCache(),
+        memoryPush: readMemoryPush(),   // ★leg72：走受控通道读那份自证面（状态只住 web/memory-store.js）
+        paramEnv: paramApi.displayEnv(w),
         paramUndo: sw2ParamUndoState(),
         // ★★leg46 续：自检卡要的读数（世界名/桶键 · 真源 · 引擎镜像 · 主路能不能写）——
         //   渲染层不持状态，一律由本层注入（照本仓既有纪律）。
-        paramDiag: gatherParamEvidence(),
+        paramDiag: paramApi.gatherParamEvidence(),
         // ★★★leg55（leg54 §6.4）：**面板上印出来的数字必须现算**——旧卷卡那行「自动入卷阈值」原本
         //   靠 `?? '500'` / `?? '5'` 兜底，`renderCfg()` 从不注入这两键 ⇒ "读 config"是死路，
         //   印出来的其实是渲染层抄的一份字面量（正是 leg54 那个 4096 的同一种病）。
         //   ⇒ 从真源现读：这两值就是 `planChronicleRotation` 本笔在上面走的那条缺省（同一份常量）。
         limitsTicks: PROPOSED_LIMITS.ticks,
         limitsBytesMB: PROPOSED_LIMITS.bytes / 1024 / 1024,
+        // ★★★leg87（用户令「改也改不了是死的不会根据模型变化」）：单轮超时/输出上限**现读设置**。
+        //   没填过 ⇒ 出厂值（`PROPOSED_CALL_LIMITS`，与引擎真正吃的那个数同源）；
+        //   填过 ⇒ 印你填的（这两个框从此是**控件**，不再是"印一行常量"的展示品）。
+        callTimeoutSec: (modelSettings() || {}).callTimeoutSec ?? Math.round(PROPOSED_CALL_LIMITS.timeoutMs / 1000),
+        callMaxTokens: (modelSettings() || {}).callMaxTokens ?? PROPOSED_CALL_LIMITS.maxTokens,
+        // ★★★leg89：「与聊天模型的接线」卡要的三个读数——**全部现读真源**（面板不持状态、不抄字面量）：
+        //   · `injectSwitches` 三个开关的**当前态**（真源 = `extension_settings.story_world_v2`）；
+        //   · `tagMaxActions` 那个数字框的值（没填过 ⇒ 出厂 12，与引擎缺省同一个数）；
+        //   · `injectLine` 上一次注入的**如实读数**（字数现算；没注入过 ⇒ undefined ⇒ 渲染层印说明句）。
+        injectSwitches: {
+            injectTagSpec: injectSwitchOn('injectTagSpec'),
+            injectRoster: injectSwitchOn('injectRoster'),
+            injectWorldTide: injectSwitchOn('injectWorldTide'),
+        },
+        tagMaxActions: (modelSettings() || {}).tagMaxActions ?? 12,
+        // ★标签读数**现算**（`src/tag-extract.js` 的 `tagReadoutLine` 是唯一口径，渲染层不另写一份印法）；
+        //   没抽到 ⇒ 那一行印成"本轮没读到标签"——**不许留空**，留空会让人以为功能坏了。
+        injectLine: sw2LastTagFacts
+            ? `${tagReadoutLine(sw2LastTagFacts)}${sw2LastInjectLine ? ` · ${sw2LastInjectLine}` : ''}`
+            : (sw2LastInjectLine || '本轮正文里没有读到标签（要么开关关着，要么聊天模型还没按标签写）。'),
+        // ★leg92：**"注入跑过没有"单列一格**——它是排查第一问（用户报的"开关是 1、字典里却没有"，
+        //   只有这一格能把"从没跑过"与"跑了但注入 0 字"分开）。没跑过 ⇒ 直说没跑，不留空。
+        injectRuns: sw2LastInjectRuns
+            ? `注入跑过 ${sw2LastInjectRuns.count} 次 · 最后一次 ${sw2LastInjectRuns.lastOff ? '开关全关' : (sw2LastInjectRuns.lastChars ? `注入 ${sw2LastInjectRuns.lastChars} 字` : '⚠ 一个字都没注入')}`
+            : '注入器还没跑过（世界载入后会自动设一次；若一直这样，把这条发我）',
         ...extra,
     };
 }
@@ -1743,214 +1464,30 @@ function renderCfg(extra = {}) {
 // ★★leg40c 续（用户实机「只是展开下拉就弹一句，点了还是改不了值」）：
 //   押后逻辑的**定义**已提到 `refreshWorld` 之前（见那一段注释：放这里就是 TDZ 当场炸）。
 
-/**
- * ★★leg46 续·八：**把页面上现存参数控件里的值收起来**（渲染整页之前的"事实采集"）。
- * 为什么需要它（用户第四次实机那张"下拉是 9/12/30/40、四格却写 3默认/6默认/15默认/20默认"的截图）：
- *   那一刻 `paramEnv` 里没有这四个键，渲染层就按"出厂默认"画了格，而**控件上还留着玩家选的值**。
- *   两者不一致时**控件才是事实**（那是玩家的手、也是他刚做成的事）⇒ 用它当**最高优先级覆盖**。
- * @returns {{env: object|null, selects: object}} `env` 只在"有控件值"时非空（否则让渲染层照旧读真源）
- */
-export function sw2CollectLiveParamValues() {
-    try {
-        if (typeof document === 'undefined') return { env: null, selects: {} };
-        const win = document.getElementById(WINDOW_ID);
-        if (!win) return { env: null, selects: {} };
-        const selects = {};
-        for (const el of win.querySelectorAll('[data-action="set-param"][data-param]')) {
-            const tag = String(el.tagName || '').toUpperCase();
-            const key = el.getAttribute('data-param');
-            if (!key) continue;
-            if (tag === 'SELECT') {
-                const v = String(el.value ?? '').trim();
-                if (v) selects[key] = v;             // ★空串＝玩家清成未定 ⇒ 不覆盖（让真源/默认照旧说话）
-            } else if (tag === 'INPUT') {
-                // ★★★leg54：**数字输入框也要采**（世界尺度那四个框从 `<select>` 换成了 `<input>`）。
-                //   为什么漏不得（不然就是一个"能填、但填了白填"的控件）：
-                //   本函数的结果是 `paramEnv`（面板整块按它画）——漏采 ⇒ 玩家刚敲进去的数**进不了 `paramEnv`**
-                //   ⇒ 面板照真源/默认重画一遍 ⇒ **看起来就是"我填了它自己跳回去"**（leg48 治过的那条症状）。
-                //   ★空串照旧不覆盖（与 SELECT 同口径）：空 = 玩家清成未定，让真源/默认说话。
-                const v = String(el.value ?? '').trim();
-                if (v) selects[key] = v;
-            } else if (tag === 'BUTTON') {
-                // 开关：亮着的那一枚按钮写着 data-value="1"
-                const on = el.classList?.contains?.('sw2-primary');
-                if (on) selects[key] = String(el.getAttribute('data-value') ?? '1');
-            }
-        }
-        if (!Object.keys(selects).length) return { env: null, selects: {} };
-        // ★★leg48：基准值取"hub 真正读写过的那个桶"（见 `sw2SetParamControl` 里那段现场记录）
-        const base = { ...paramHub.displayEnv(paramHub.currentWorldName() || sw2LastWorld || readHotMeta()?.world || null) };
-        // ★★★leg48（**真浏览器现场抓到的最后一环**）：**控件值不许盖住真源**。
-        //   现场：玩家选 9 → 真源里已经是 9 → 浏览器把重建出来的 `<select>` 显示成旧值 3
-        //   → 这句"控件值覆盖在真源之上"把 **3** 抬成最高优先级 → 面板与格**照着 3 重画一遍**
-        //   ⇒ 玩家看到"它自己跳回去了"（而真源里明明是 9）。
-        //   ⇒ 定稿（三条顺位，与 `hub.displayEnv` 同一口径）：
-        //     ① 真源（`displayEnv`，**绝不许被控件盖住**）
-        //     ② 控件现值（只做"真源没写过的那些键"的补充 —— 开关按钮与"书里抽出来的镜像值"靠它，
-        //        照 user 第四次实机的原意：**这一类**分歧时控件才是事实）
-        //     ③ 灰账（由 hub 在 displayEnv 里兜底）
-        //   ★为什么允许控件盖住"账上镜像"（②>③）却不让它盖住真源（①>②）：真源是**玩家的手写下的**，
-        //     而镜像只是抄来的旧账；控件"比旧账新"是可能的，控件"比玩家的手新"不可能。
-        const OWN = Object.prototype.hasOwnProperty;
-        const srcOwn = {};   // 只有"真源/本页权威值里确实有"的键才进这里
-        try {
-            const tx = paramHub.diag(sw2LastWorld || readHotMeta()?.world || null);
-            for (const k of Object.keys(tx?.真源 || {})) srcOwn[k] = true;
-            for (const k of Object.keys(tx?.挂起的镜像 || {})) srcOwn[k] = true;
-        } catch (_) {}
-        const out = { ...base };
-        for (const [k, v] of Object.entries(selects)) {
-            if (OWN.call(base, k) && srcOwn[k]) continue;   // ★真源说了算 ⇒ 控件不许盖
-            out[k] = v;
-        }
-        return { env: out, selects };   // 采集到的控件值仍原样带出去（给调用方留痕用）
-    } catch (err) {
-        console.warn('[story-world-v2] 采集控件现值失败（不影响参数本体）', String(err?.message || err));
-        return { env: null, selects: {} };
-    }
-}
+// ★★★leg82：**采集控件现值**那一块已随参数族搬进 `web/param-panel.js`
+//   （留档：`export function sw2CollectLiveParamValues()`；上面 `refreshWorld` 里那处调用点
+//    改走 `paramApi.sw2CollectLiveParamValues()`，返回形状 `{ env, selects }` 一字未变）。
+//   ★它为什么必须存在（原样留档，别丢）：渲染整页之前先把页面上现存控件的值收起来当**最高优先级
+//    覆盖**——否则"真源里还没落成"的那一刻，渲染层会按出厂默认画格，而控件上还留着玩家选的值
+//    （用户第四次实机那张"下拉是 9/12/30/40、四格却写 3默认/6默认/15默认/20默认"）。
+//    ★两条边界同样搬走了：空串**不覆盖**（＝玩家清成未定，让真源/默认说话）；控件值**不许盖住真源**。
 
-// ★★★leg46 续·五/六：**"当前值"那一格的字，只由 `sw2SetParamCell` 一处写**（`data-param-cell="<键>"` 的 `<b>`）。
-/** ★leg46 续·九：写格留痕（取证用；不进任何判定）。 */
+// ★★★leg82：**面板 DOM 镜像**那一整段（写格留痕 · 写格 · 找控件 · 取值 · 对齐控件 · 同步格）
+//   已随参数族搬进 `web/param-panel.js`（本文件里**不再有它们的定义**）。
+/* ★★★leg82 留档：这几格的**原来**形状（照本仓"注释里可以留档"那条纪律原样存一份）：
 const sw2CellWriteLog = [];
-//   为什么非它不可（用户第三次实机的真形状）：旧法整块重画参数页 ⇒ 控件在玩家手底下被销毁重建
-//   ⇒ 浏览器再吐一笔**带旧值**的事件 ⇒ "点一次空白写两次，第二笔把 9 覆盖回 3"。
-//   ★第六轮补的那一刀（用户第四次实机：四个下拉都选对了、四格却写「未定」）：格与控件必须**同源** ——
-//     格的值必须由调用方把"这一次渲染/这一次改动用的那份真源"传进来，**不许自己再读一遍**。
-/**
- * ★★★**唯一的"格该显示什么"的写手**（`data-param-cell="<键>"` 的 `<b>`）——**只读控件，不读别处**。
- *
- * ＝＝ 为什么最终是这个形状（用户五轮实机把我逼到这一步）＝＝
- * 前面四版都错在同一件事上：**"格"和"控件"各自去问一个数据源**（真源 / 注入的 env / 我自己算的判定），
- * 于是只要有一刻两边读到的不是同一份，画面就自相矛盾：
- *   · 下拉是 9、格写「未定」；· 下拉是 12、格写「6默认」；· 改完当场变「未定」……
- *   **每一次都是"两个来源、一个瞬间的错位"，不是"某一笔没落下去"。**
- * ⇒ 定稿（把这类错位**从结构上删掉**）：**格子里写什么，只看同一行那个控件自己的值**。
- *   控件是 12，格就是 12 —— 两者**在同一个节点树里、同一时刻读**，物理上不可能不一致。
- *   真源/引擎/审计那一侧对不对，交给**自检卡**去说（那是它的活），**不拿它来决定这一格显示什么**。
- *
- * ＝＝ 规矩（都能机械核；判据 ⑯ 锁着）＝＝
- *   ① **只读控件**（同一卡片里的 `[data-action="set-param"]`），**绝不改控件**（控件是玩家的手）；
- *   ② **只写这一格的字**（`textContent`），不碰结构、不碰事件、不新建/销毁节点；
- *   ③ `<select value="">` 或开关"关" ⇒ 写「未定」；有值 ⇒ 写那个值（**不带任何小标**）；
- *   ④ 找不到对应控件 ⇒ **什么都不做**（退回让渲染层画，绝不自己猜一个值出来）。
+export function sw2SetParamCell(key) { ... }
+function sw2ParamControlOf(win, key) { ... }
+function sw2ControlText(ctl) { ... }
+export function sw2SetParamControl(key) { ... }
+export function sw2SyncParamCells() { ... }
  */
-export function sw2SetParamCell(key) {
-    try {
-        if (typeof document === 'undefined') return false;
-        const win = document.getElementById(WINDOW_ID);
-        if (!win) return false;
-        const ctl = sw2ParamControlOf(win, key);
-        if (!ctl) return false;                       // ★找不到控件就退让（绝不自己编一个值）
-        const text = sw2ControlText(ctl);
-        // ★写格留痕（取证用；不进任何判定）
-        try {
-            sw2CellWriteLog.push(`${new Date().toISOString()} ${key} ← ${JSON.stringify(text)}（读自控件）`);
-            if (sw2CellWriteLog.length > 30) sw2CellWriteLog.shift();
-        } catch (_) {}
-        for (const el of win.querySelectorAll('[data-param-cell]')) {
-            if (el.getAttribute('data-param-cell') !== key) continue;
-            if (el.textContent !== text) el.textContent = text;
-        }
-        return true;
-    } catch (err) {
-        console.warn('[story-world-v2] 就地刷新参数格失败（不影响参数本体）', String(err?.message || err));
-        return false;
-    }
-}
-
-/** 找出这一格对应的**控件**（同一张卡片里的 `[data-action="set-param"]`）。找不到返回 null。 */
-function sw2ParamControlOf(win, key) {
-    try {
-        const sel = win.querySelector(`[data-action="set-param"][data-param="${key}"]`);
-        if (sel) {
-            const tag = String(sel.tagName || '').toUpperCase();
-            if (tag === 'SELECT' || tag === 'INPUT') return sel;
-            return null;                               // 一排开关按钮的情况下面单独处理
-        }
-        // 开关：一排按钮里"亮着的那一枚"代表开（`.sw2-primary`），都没亮 ⇒ 关
-        const btns = [...win.querySelectorAll(`[data-action="set-param"][data-param="${key}"]`)];
-        if (!btns.length) return null;
-        const on = btns.find((b) => b.classList?.contains?.('sw2-primary')) || null;
-        return on || btns[btns.length - 1];            // 关的时候用最后一枚（"关"那枚）代表状态
-    } catch (_) { return null; }
-}
-
-/** 控件现值 → 这一格该显示的字（**唯一的取值处**）。 */
-function sw2ControlText(ctl) {
-    try {
-        const tag = String(ctl.tagName || '').toUpperCase();
-        if (tag === 'SELECT' || tag === 'INPUT') {
-            const v = String(ctl.value ?? '').trim();
-            return v || '未定';
-        }
-        if (tag === 'BUTTON') {
-            return ctl.classList?.contains?.('sw2-primary') ? '开' : '未定';
-        }
-    } catch (_) {}
-    return '未定';
-}
-
-/**
- * ★★★leg48：**把控件按真源对齐**（一笔参数操作结束之后调一次；下拉专用）。
- *
- * ＝＝ 为什么必须有它（用户实机状态条「每轮递几条线 → 未定（已存进本地存储 · 已同步给引擎）」）＝＝
- * 那一屏的形状：**控件空着**（浏览器/滚轮/重画吐了一笔空值），面板于是把"空"当成一次改动，
- * 而"格"又只读控件 ⇒ 格写「未定」 ⇒ 玩家看到的是"我的档位没了"。刷新之后真源里那一格回来，
- * 就成了他报了十几轮的那句话：**"改了档位，刷新之后回默认"**。
- * ⇒ 定稿（一条可机械核的纪律）：**控件的值 = 真源的裁决值**，每一笔操作结束时按真源对齐一次。
- *   · 写成功 ⇒ 真源就是玩家选的那一档（控件原地不动，两边天然一致）；
- *   · 空值/非法/失败 ⇒ 控件**退回真源那一档**（"手滑到空"不再留在屏幕上冒充一次改动）。
- *   ★它只写 `<select>` 的 `value`，**不新建/不销毁任何节点**（旧法整块 `innerHTML` 重画会把玩家
- *     手底下的控件销毁重建 ⇒ 浏览器对**新节点**再吐一笔带旧值的事件 ⇒"点一次写两次"）。
- *   ★找不到这个键的控件 / 不是下拉（开关按钮有它自己的画法）⇒ **什么都不做**（退让）。
- */
-export function sw2SetParamControl(key) {
-    try {
-        if (typeof document === 'undefined') return false;
-        const win = document.getElementById(WINDOW_ID);
-        if (!win) return false;
-        const el = win.querySelector(`[data-action="set-param"][data-param="${key}"]`);
-        // ★★★leg54：**`<input>` 也必须被对齐**（世界尺度那四个框从下拉换成了数字输入框）。
-        //   旧版这一行只认 `SELECT` ⇒ 换控件之后它会**静默退让**，而这一退让的后果正是它当初要治的病：
-        //   玩家"手滑把框清空"之后，控件上空着、真源里还是老值 ⇒ 屏幕上留着一次**假的改动**
-        //   （leg48 那就是"改了档位、刷新回默认"的观感来源）。⇒ 两种控件都认。
-        //   ★`sw2ControlText`/下面写回的那两处**本来就同时认 SELECT 与 INPUT**（当初就写对了）——
-        //     只有这一道类型闸漏了，是个"改了一处、没改配套那一处"的实例。
-        const tag = String(el?.tagName || '').toUpperCase();
-        if (!el || (tag !== 'SELECT' && tag !== 'INPUT')) return false;
-        // ★裁决只问一处：`paramHub.displayEnv`（真源 > 本页刚写的权威值 > 账上镜像 > 出厂默认）
-        // ★★★leg48：**桶名取"hub 真正读写过的那个桶"**（`currentWorldName()`），不取"当下那个世界对象"——
-        //   病因（真浏览器现场）：`loadWorld` 走空态/轮转失败时把**空态世界**交给面板，
-        //   面板于是去读"未名世界"那个空桶 ⇒ 按出厂默认把控件写成 3，而玩家的档位其实在"大荒z"桶里。
-        //   读的桶必须与写的桶是同一个 —— 这一条被违反过九轮，是"改了回默认"的机理。
-        const env = paramHub.displayEnv(paramHub.currentWorldName() || sw2HubLastWorld || sw2LastWorld || readHotMeta()?.world || null);
-        const want = Object.prototype.hasOwnProperty.call(env, key) ? String(env[key]) : '';
-        if (String(el.value ?? '') === want) return false;      // 已经一致 ⇒ 一个字节都不动
-        el.value = want;
-        console.info(`[story-world-v2] 参数控件按真源对齐：${key} → ${JSON.stringify(want || '未定')}`);
-        return true;
-    } catch (err) {
-        console.warn('[story-world-v2] 控件对齐失败（不影响参数本体）', String(err?.message || err));
-        return false;
-    }
-}
-
-/**
- * ★★**把参数页上所有显示格，按各自的控件对齐**（用户改了值/页面重画之后各调一次）。
- * 这是"格与控件永不分叉"的**唯一入口**——判据 ⑯ 锁的就是"页面上不存在'控件是 12 而格不是 12'"。
- */
-export function sw2SyncParamCells() {
-    try {
-        if (typeof document === 'undefined') return 0;
-        const win = document.getElementById(WINDOW_ID);
-        if (!win) return 0;
-        const keys = new Set([...win.querySelectorAll('[data-param-cell]')].map((el) => el.getAttribute('data-param-cell')));
-        let n = 0;
-        for (const k of keys) if (k && sw2SetParamCell(k)) n += 1;
-        return n;
-    } catch (_) { return 0; }
-}
+//   ★★本文件里**仍然会出现这些名字**——但它们只出现在受控口的**调用点**里
+//     （`paramApi.sw2SetParamCell(k)` / `paramApi.sw2SyncParamCells()` 这种形状），**不是定义**。
+//     判据咬的正是这条区别：状态与实现只能有一个家，调用点可以有很多处。
+//   ★"格与控件永不分叉"那条承重墙随族搬走（判据 ⑯ 仍咬它，只是现在咬的是新家）：
+//     格子的字**只看同一行那个控件自己的值**；控件按真源对齐；两者由**新家那一个入口**收口
+//     （它遍历页面上所有 `[data-param-cell]`，逐个按本行控件对齐）。
 
 function refreshSections(names) {
     if (typeof document === 'undefined') return;
@@ -1958,18 +1495,18 @@ function refreshSections(names) {
     try {
         const win = document.getElementById(WINDOW_ID);
         if (!win || !sw2LastWorld) return;
-        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: { chronicleView: sw2ChronicleView, entsView: sw2EntsView } });
+        const out = renderAll(sw2LastWorld, { config: renderCfg(), oldVolumes: LISTED_VOLUMES, view: viewState.views() });
         for (const name of names || []) {
             const el = win.querySelector(`#sw2_view_${name}`);
             if (!el) continue;
             // ★玩家正在这一页上下拉/点按钮 ⇒ 这一页押后（否则等于把他的手从控件上打掉）
-            if (playerIsTouchingParams() && el.contains(document.activeElement)) {
+            if (paramApi.playerIsTouchingParams() && el.contains(document.activeElement)) {
                 pendingSectionRefresh.add(name);
                 console.info(`[story-world-v2] ${name} 页上有控件正被操作 —— 本次重绘押后（避免销毁正在展开的下拉）`);
                 continue;
             }
-            if (name === 'board') {
-                el.innerHTML = typeof out.board === 'string' ? out.board : BOARD_BLOCK_ORDER.map((k) => (out.board && out.board[k]) || '').join('');
+            if (name === 'panorama') {
+                el.innerHTML = mergedMainHtml(out);   // ★leg97 并页：四层 ＋ 观棋那几块（唯一一处组合）
             } else if (typeof out[name] === 'string') {
                 el.innerHTML = out[name];
             }
@@ -1981,12 +1518,6 @@ function refreshSections(names) {
         //   ⇒ 不在这里清掉标志，"补上押后的重绘"就会自己咬自己（实测会多跑一轮空刷新）。
         sw2SectionRefreshRunning = false;
     }
-}
-
-function batchStatusText() {
-    const s = batchTaskStatus();
-    if (!s) return null;
-    return `批量补全：第 ${s.cursor}/${s.total}（成功 ${s.success} · 待补 ${s.pending} · 书未载 ${s.absent} · 失败 ${s.failed}）`;
 }
 
 // ---------- leg27：抽取进度（用户「十多分钟了还是没抽好，我也看不到日志」那一刀） ----------
@@ -2064,7 +1595,13 @@ export function extractionProgressHandler(events, { setText = setStatus, interva
     };
 }
 
-// ---------- leg25 d：查书补全的两个入口（面板行内「查/重查」+ 批量补全） ----------
+// ---------- leg25 d：查书补全（面板行内「查/重查」；全册批量补全那一枚 leg76 已撤） ----------
+// ★leg80：新家的 `bookTextForEntity(entity, ctx)` **收 ctx 形参**（本族不吃 window），而下游
+//   `src/entity-lookup.js` 的注入面是**单参**的 `bookText(entity)`（`resolveBookSource` 只把实体传进去）
+//   ⇒ 这一层把 ctx **现取**补上。等价于搬走之前那一版"函数内部自己调 `getCtx()`"：
+//   每调一次现取一次、不抓死（抓死 = 换了聊天/卡之后还在读上一本书，静默、不报错）。
+const sw2BookTextForEntity = (entity) => bookTextForEntity(entity, getCtx());
+
 export async function lookupOneEntity(id, { forceFields = null } = {}) {
     const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
     if (!world) return { ok: false, error: '还没有世界' };
@@ -2073,9 +1610,12 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
     if (!resolved) return { ok: false, error: '模型通道未配置' };
     const { entity, missing } = pickOneForLookup(world, id, { forceFields });
     if (!entity) return { ok: false, error: '账上没有这个实体' };
-    if (!missing.length) return { ok: false, error: '这一栏已经有原话了（要连「书未明述」一起推倒重查，用页顶的「补全全册实力」）' };
+    // ★★★leg76 收尾（本次补齐）：这句话原先写着"用页顶的「补全全册实力」"——**那枚钮已撤**
+    //   ⇒ 它就成了一条**玩家读了会去找、却找不到**的指路（leg40b 治过的"永久承诺"同款病）。
+    //   改如实：全册那条腿已不在，能做的就是**在这一行上连「书未明述」一起推倒重查**。
+    if (!missing.length) return { ok: false, error: '这一栏已经有原话了（要连「书未明述」一起推倒重查，用这一行的「重查」；全册批量补全的旧入口已撤）' };
     const res = await runBatchLookup({
-        ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
+        ssot: world, transport: diagExtract(resolved), bookText: sw2BookTextForEntity,
         ids: [id], forceFields, tick: world?.meta?.tick ?? 0,
         bookEntries: await bookEntriesForInherit(),   // ★leg25 f：这条路也必须吃位置继承（零 token 兜底）
     });
@@ -2087,74 +1627,42 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
     return { ok: true, stats: res.stats, warning: res.warning, entity: res.ssot.entities.find((x) => x.id === id) };
 }
 
-export function startBatchTask({ forceFields = 'absent', ids = null } = {}) {
-    const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
-    if (!world) return { ok: false, error: '还没有世界' };
-    const all = (ids && ids.length) ? ids : (world.entities || []).filter((e) => e.status !== 'dead' && e.status !== 'retired').map((e) => e.id);
-    sw2BatchTask = {
-        ids: all, cursor: 0, failed: [], success: 0, pending: 0, absent: 0, forceFields,
-    };
-    return { ok: true, total: all.length };
-}
-
-async function runBatchChunk(resolved) {
-    const t = sw2BatchTask;
-    if (!t) return null;
-    const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
-    if (!world) { sw2BatchTask = null; return { warning: '世界不在了，批量补全中止' }; }
-    const { batches } = await planBatchesLazy(world, t);
-    if (!batches.length) {
-        const summary = `批量补全完成：成功 ${t.success} · 待补 ${t.pending} · 书未载 ${t.absent} · 失败 ${t.failed.length}`;
-        sw2BatchTask = null;
-        return { warning: null, done: true, summary };
-    }
-    const batch = batches[0];
-    const res = await runBatchLookup({
-        ssot: world, transport: diagExtract(resolved), bookText: bookTextForEntity,
-        ids: batch.ids, forceFields: t.forceFields, tick: world?.meta?.tick ?? 0,
-        bookEntries: await bookEntriesForInherit(),   // leg25 f：批量补全同样吃位置继承
-    });
-    t.cursor += batch.ids.length;
-    if (res.stats) {
-        t.success += res.stats.ok || 0;
-        t.pending += res.stats.pending || 0;
-        t.absent += res.stats.absent || 0;
-    } else {
-        t.failed.push(...batch.ids);
-    }
-    if (res.ssot) {
-        writeHotMeta(hotAccountShape(res.ssot));
-        await flushHotMeta();
-        sw2LastWorld = res.ssot;
-    }
-    return { warning: res.warning, done: false };
-}
-
-async function planBatchesLazy(world, task) {
-    const rest = task.ids.slice(task.cursor);
-    if (!rest.length) return { batches: [] };
-    return planBatches({ world, ids: rest, forceFields: task.forceFields, bookText: bookTextForEntity });
-}
-
 // ---------- K36：每轮演化（前置步 + 主调用 + 落盘点） ----------
 async function advanceTick({ world, dialogue }) {
     const settings = modelSettings();
     sw2LastSettings = settings;
-    const resolved = resolveBrowserTransport(settings);
+    // ★★★leg87（用户令「改也改不了是死的不会根据模型变化」）：主调用那两个数**从设置现读**。
+    //   缺省仍由 `createHttpTransport` 从 `PROPOSED_CALL_LIMITS` 取（一个真源，未填时行为逐字节不变）；
+    //   玩家填过就吃玩家的（`sw2NormalizeNumericSetting` 已在写盘那一步挡掉非法值）。
+    const limits = {
+        ...(Number.isFinite(settings?.callTimeoutSec) ? { timeoutMs: settings.callTimeoutSec * 1000 } : {}),
+        ...(Number.isFinite(settings?.callMaxTokens) ? { maxTokens: settings.callMaxTokens } : {}),
+    };
+    const resolved = resolveBrowserTransport(settings, { limits });
     if (!resolved) {
         return { ok: false, error: '模型通道未配置（设置页填写服务地址/密钥/模型）' };
     }
     const res = await runTick({
+        // ★★★leg88 撤回留档（原 leg87 那笔"名单从世界账现取"已撤）：这里曾是
+        //   `extractCtx: buildExtractCtx(world)`——服务的是"从你发的话里提取落子"。
+        //   用户裁示那不是他要的提取 ⇒ 连同 `web/dialogue.js` 整族撤回，恢复零参调用。
+        //   ★★★leg89 接线（**两个断点只接了一个，这是刻意的**）：
+        //     · `extractCtx: {}` **仍然写死不动**——它喂的是老口径（读玩家那一句），那是被否掉的方向；
+        //     · 新口径（标签）**不走 extractCtx**，它直接吃 `dialogue` 这个已经在的形参
+        //       （`runTick` 内部 `extractTags(dialogue, …)`）⇒ 两处断点里**只有传对话那一处要接**。
         transport: resolved.transport, ssot: world, dialogue, extractCtx: {},
+        // ★★★leg89：单轮注入行动条数上限（设置页那个可填数字框；没填 ⇒ 引擎缺省）。
+        tagMaxActions: Number.isFinite(settings?.tagMaxActions) ? settings.tagMaxActions : undefined,
         // 前置步：① 选本轮上场实体（LLM，≤15）→ ② 只对缺字段者查书（模型）→ ③ 引擎回写查书标记。
         // 失败零阻塞：任一步失败都退回引擎镜头，世界照常推进（细案 §4）。
-        // leg25 d 追加：批量补全**借轮次**跑在这里（每轮 ≤BATCH_PER_TICK 批）——世界照常推进，
-        //   补全是搭车的；两条路都走同一个 runBatchLookup 收口。
+        // ★★★leg76 收尾（本次补齐）：原先这里还有一段"**批量补全借轮次搭车**"（每轮 ≤BATCH_PER_TICK 批、
+        //   跑完把 ssot 换成批量后的那份）——它随全册批量补全整族撤除。撤掉之后这一格**只剩前置步本身**：
+        //   前置步是真在干活的那条路（不是被撤的对象），所以它一个字未动，只是不再有搭车的那一段。
         preStep: async ({ ssot: cur, move }) => {
             const pre = await runEntityLookupStep({
                 ssot: cur,
                 transport: diagExtract(resolved),
-                bookText: bookTextForEntity,
+                bookText: sw2BookTextForEntity,
                 tick: cur?.meta?.tick ?? 0,
                 moveFact: move,
                 prevPicks: sw2LastPicks,
@@ -2164,18 +1672,7 @@ async function advanceTick({ world, dialogue }) {
             // ★leg34：世界书检索注入**不在这里**——它放在 `runTick` 里（`injectWorldBookRecall`），
             //   因为那一步要读**本轮选中的 picks**（`pre.picks`），而 `runTick` 正好在 preStep 之后、
             //   出包之前拿到它 ⇒ **一处执行、顺序天生正确**，也不会重复检索。
-            if (!sw2BatchTask) return pre;
-            let world2 = pre?.ssot || cur;
-            for (let i = 0; i < BATCH_PER_TICK; i += 1) {
-                if (!sw2BatchTask) break;
-                const r = await runBatchChunk(resolved);
-                if (r?.done) { setStatus(r.summary); break; }
-                if (r?.warning) console.warn('[story-world-v2] 批量补全:', r.warning);
-            }
-            // 批量改了账 ⇒ 把前置步的 ssot 换成批量后的（落盘点据此写盘）
-            if (sw2LastWorld) world2 = sw2LastWorld;
-            setStatus(batchStatusText());
-            return { ...pre, ssot: world2 };
+            return pre;
         },
         // 落盘点：前置步的新字段**必须落盘**，否则 Ctrl+F5 一次就重查一遍（细案 §7）。
         onPreStep: async (pre) => {
@@ -2200,6 +1697,9 @@ async function advanceTick({ world, dialogue }) {
             warnings: res.healed.warnings,
         });
     }
+    // ★★★leg89：标签读数**每轮从头写**（没标签的轮次就把上一轮那行清掉——绝不让它冒充本轮）。
+    sw2LastTagFacts = res?.tagFacts || null;
+    if (res?.tagReadout) console.info(`[story-world-v2] ${res.tagReadout}`);
     return res;
 }
 
@@ -2224,20 +1724,52 @@ export function setupAsyncTicks(ctx) {
                 //   实机出现"控制台说投成了、插件里却看不到"的矛盾，而盘上那份是被 `saveChat()` 落盘的
                 //   **运行时对象**——只有投完那一刻的内存真相能回答"到底写没写进去"。一行，好抄也好贴。
                 if (r?.ok) console.info(memoryStoreCheckLine());
-            } else if (sw2MemoryPush) {
-                sw2MemoryPush = null;   // 开关关了 ⇒ 自证面归零（不许留着上一次的"已投"冒充本次）
+            } else if (readMemoryPush()) {
+                clearMemoryPush();   // 开关关了 ⇒ 自证面归零（不许留着上一次的"已投"冒充本次）
             }
             return rot.hot;
         },
-        refresh: (hot) => { refreshWorld(hot, { oldVolumes: LISTED_VOLUMES }); },
+        refresh: (hot) => {
+            refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });
+            // ★★★leg89：世界推完 ⇒ **重设注入**（名册可能刚长了新人）。
+            //   为什么在这里而不是 `MESSAGE_RECEIVED` 里：这条回调是"真落了账之后"才走到的那一格，
+            //   名册此时才是最新的（在 `MESSAGE_RECEIVED` 里设会迟到一轮，等于每轮都注入上一轮的名册）。
+            try {
+                const r = sw2Injector?.apply();
+                if (r?.line) sw2LastInjectLine = r.line;
+            } catch (err) {
+                // ★失败零阻塞：注入不成绝不能拦住世界推进（本仓既有口径）
+                console.warn('[story-world-v2] 注入标签失败（世界照常推进）:', err?.message || err);
+            }
+        },
         onStatus: setStatus,
     });
+    // ★★★leg89：**注入器装配**。三件事按顺序说清：
+    //   ① 注入什么：标签格式指令 + 名号对照（两段，可分别关；世界动向默认关——见 `web/inject.js` 头注）；
+    //   ② 什么时候设：世界每推完一轮**重设一次**（`MESSAGE_RECEIVED` 之后就会走到），
+    //      外加切聊天/载入世界时设一次 ⇒ 下一轮发消息时它已是最新的（`setExtensionPrompt` 会一直挂着）；
+    //   ③ 拿谁设：`getWorld` **现取**（`sw2LastWorld` → 热账），与 `renderCfg` 同一口径——
+    //      **不许抓死**（抓死 = 换了聊天还在给新对话注入上一个世界的名册）。
+    sw2Injector = createInjector({
+        getCtx: freshCtx,
+        getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
+        isOn: injectSwitchOn,
+        setStatus,
+    });
+    sw2Injector.apply();   // 首次装配即生效（否则"开了开关却要等一轮才注入"）
     es?.on?.(et.MESSAGE_RECEIVED, () => {
         // ★leg33d 总闸：关掉时**不自动推进**（但说一句，别让用户以为插件坏了或以为推过了）。
         //   闸的判据提成导出的纯函数 `sw2OnMessageReceived` —— 为的是**能真测**（本仓铁律：
         //   "要真 ctx 的接线，要么提成可导出函数真跑，要么写注入 fake ctx 的测试"）。
         sw2OnMessageReceived(loadHotAccount(readHotMeta()), {
-            advance: () => sw2TickQueue.advance().catch(() => {}),
+            // ★★★leg89：**传正文**——`advanceTick` 的 `dialogue` 形参本来就是"这一轮的对话"，
+            //   新口径的标签就长在里面（`runTick` 内 `extractTags(dialogue)`）。
+            //   ★为什么不在里面自己读 `ctx.chat`：形参已经在、已经有测试面（`async-tick` 的 fake 注入），
+            //     再开第二条读法就成了"同一个东西两把尺子"（本仓 leg46 那类病的根）。
+            //   ★读不到（拿空串）就是"这一轮没有正文"——**不退回更早的消息**（那会让上一轮冒充本轮）。
+            //   ★★★走 `sw2AdvanceOnce`（而不是直接 `advance(...)`）：手动路与自动路要共用
+            //     "同一段正文只推一次"这把尺子，否则总闸开着时按「推进一轮」会拿同一段正文提两遍。
+            advance: () => sw2AdvanceOnce(),
             setStatus,
         });
     });
@@ -2430,13 +1962,13 @@ export async function loadWorld() {
     // ★★★leg46：**载入期一次做完**（接纳账上已有的参数 + 合并进真源 + 镜像回世界账）——
     //   三件事都在 `paramHub.commit(world)` 里，一次事务、一个桶键、一份核对结果。
     //   旧版把它们摊在本文件里（各算一次世界名、各写一次存储）⇒ 这正是"读一个桶、写另一个桶"的温床。
-    const adopted = paramHub.commit(world);
-    sw2HubLastWorld = world;
+    const adopted = paramApi.commit(world);
+    paramApi.setLastWorld(world);
     // ★★★leg48：**把"世界没到那一刻"写下的档位一次补进世界账**（幂等）。
     //   为什么必须有这一步（本棒治"改了回默认"的另一半）：写入口已经和世界解耦了 ——
     //   世界对象没到 ⇒ 真源照写、引擎那一格挂起 ⇒ **必须在这里补上**，否则"面板改了、引擎按旧档跑"。
     //   顺序放在 `commit` 之后：先接纳账上已有的，再把本会话写过的补齐（两次都是幂等纯函数）。
-    const flushed = paramHub.flushPending(world);
+    const flushed = paramApi.flushPending(world);
     const flushedWorld = flushed.world || null;
     const paramsAdopted = adopted.adopted;
     const paramsMirrored = adopted.mirrorChanged || flushed.changed;
@@ -2464,7 +1996,7 @@ export async function loadWorld() {
         // 轮转失败 = 世界不动（内存与盘上一致），如实报错不装成功（E2 语义）
         // ★★★leg48：**这条路上也要补镜像**——它正是真浏览器现场抓到的那个形状（世界半成品 ⇒ 面板空态）。
         //   旧版这里直接 `refreshWorld` 就完了，玩家在这一刻改的档位只能等下一次载入才进世界账。
-        try { paramHub.flushPending(rot.hot); } catch (_) {}
+        try { paramApi.flushPending(rot.hot); } catch (_) {}
         refreshWorld(rot.hot, { oldVolumes: LISTED_VOLUMES });
         setStatus(`⚠ ${rot.error}——世界原样不动（热账没写），可重试`);
         return;
@@ -2475,7 +2007,17 @@ export async function loadWorld() {
     //   在载入时收成标量摘要（幂等、不可变；无可摘则原对象返回）。与上面同一治法，同一位置。
     const migrated = slimLegacyCompile(migrated0);
     if (migrated !== migrated0) console.info('[story-world-v2] 编译读数旧账已收成标量摘要（诊断明细不再进账本）');
-    const hotWorld = migrated;   // 旧账清理后的世界（下面所有落账都基于它）
+    // ★★★leg74（补接线）：**第三处旧账清理**——把"不算世界"的那几类（文风禁令/变量指令/其他）
+    //   从法则账里摘掉（`src/settle.js` 的 `migrateStyleRulesFromCanon`，幂等 + 不可变 + 留痕）。
+    //   为什么必须在**载入期**清（而不只是"下次抽取别再收"）：那些条目**早就在老账里了**，
+    //   只改抽取侧 ⇒ 老账里那几类会一直躺在面板上（用户看到的正是它）。
+    //   ★留档（**本笔没做，是既有待办**）：`restoreSnapshot` 目前**不跑**这处迁移 ⇒ 恢复一份
+    //     leg74 之前的快照会把那三类带回来（直到下一次 `loadWorld` 才被清掉）。形态早就写明了
+    //     （leg74 §3-A：让 `restoreSnapshot` 写回前调**同一个** `migrateStyleRulesFromCanon`，
+    //     不是在渲染层截）——它**不属于本次三条红灯**，故此处只登记、不夹带。
+    const migrated1 = migrateStyleRulesFromCanon(migrated);
+    if (migrated1 !== migrated) console.info('[story-world-v2] 法则账旧账已清（文风禁令/变量指令/其他 不进世界账）');
+    const hotWorld = migrated1;   // 旧账清理后的世界（下面所有落账都基于它，别把清理结果丢了）
     // 名册落账（可重入）+ 位置继承：共用同一份条目，一次落盘
     const bookEntriesForSeed = await bookEntriesForInherit();
     const { seed, seededDelta, backfilled, changed } = seedAndBackfill(hotWorld, { entries: bookEntriesForSeed });
@@ -2500,7 +2042,13 @@ export async function loadWorld() {
     // ★leg33d：插件总闸的一次性迁移（幂等；只对"该键从未写过"的世界动手，见 ensureAutoAdvanceKey 注释）。
     //   有推进史的存量世界 ⇒ 迁成 '1'（升级前后行为一字不变）；全新世界 ⇒ '0'（要你按一下「开始」）。
     const autoKeyAdded = ensureAutoAdvanceKey(world2);
-    if (changed || loc.inherited > 0 || migrated !== hot || pieceSync.renamed || autoKeyAdded || replayedPendingEnv) {   // migrated!==hot = 迁移真改了账（ref 判等，幂等不空写）
+    // ★★leg74（补接线）：这一行是本棒自查发现的那个洞的定稿——**两次清理各算各的**，
+    //   不许合并成一次比较（合并会让"只改了其中一件事"漏写盘）：
+    //     `migrated !== hot`  = `slimLegacyCompile`（leg60）那一次；
+    //     `migrated1 !== migrated` = 法则账清旧账（leg74）这一次。
+    //   少了后一项 ⇒ 只发生文风禁令清理时**不写盘**：面板是对的（内存干净），
+    //   而盘上那份老账照旧带着写法规矩（导出/换机/看账都还能看到）。
+    if (changed || loc.inherited > 0 || migrated !== hot || migrated1 !== migrated || pieceSync.renamed || autoKeyAdded || replayedPendingEnv) {   // 两次清理各算各的（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(world2));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
         if (!flushed.ok) console.warn('[story-world-v2] 账本写回未落盘', { reason: flushed.reason, seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited, 棋子校准: pieceSync, 补回本地档位: replayedPendingEnv });
@@ -2519,7 +2067,7 @@ export async function loadWorld() {
     //     才成型"的，那一次补的是**半成品**。玩家在"世界对象还没成型"的窗口里改的档位，
     //     就会一路挂到**下一次载入**才进世界账 ⇒ 这一次会话里"面板改了、引擎按旧档跑"。
     //   ⇒ 口径：**"世界一到就补"**——载入链**每一处拿到可用世界的地方**都补一次（幂等、无变化零写）。
-    const lateFlush = paramHub.flushPending(world2);
+    const lateFlush = paramApi.flushPending(world2);
     if (lateFlush.changed) {
         writeHotMeta(hotAccountShape(lateFlush.world || world2));
         // ★日志口径与载入期开头那次**同一条**（同一件事只有一个说法，别造第二套）
@@ -2529,7 +2077,7 @@ export async function loadWorld() {
     }
     LISTED_VOLUMES = await listOldVolumes();
     refreshWorld(world2, { oldVolumes: LISTED_VOLUMES });
-    refreshSnapshots();   // leg27 后：快照清单随世界加载刷新（异步，回来再重绘一次）
+    snapHub.refreshSnapshots();   // leg27 后：快照清单随世界加载刷新（异步，回来再重绘一次）
     // ★leg33d：关着的时候**明说**（否则"世界怎么不动了"会被当成 bug；面板照常可用）
     if (!autoAdvanceOn(world2)) {
         setStatus('⏸ 插件已关 · 自动推进不生效（发消息/切聊天都不动世界）· 参数页「插件总闸」可开 · 也可按参数页的「推进一轮」手动推');
@@ -2537,288 +2085,31 @@ export async function loadWorld() {
 }
 
 // ---------- leg26 b：记忆投递（引擎事实 → 记忆插件）----------
-/**
- * 记忆插件适配器（YM 依赖注入，缺省 = 浏览器里的 `window.YuzukiMemory`）。
- * ★leg27 g：`YM` 改成**依赖注入形参**——为的是**能真测**（本仓铁律「要真 ctx 的接线，
- *   要么提成可导出函数真跑，要么写注入 fake ctx 的测试」）。下面那个 `loadState` 事故
- *   （把用户档案清空）**单测抓不到就是因为原来没法注入**。
- */
-// leg29：本插件写进记忆插件的记录 id **一律以 `sw2_` 开头**（见 src/memory-bridge.js 的前缀：
-//   `sw2_state` / `sw2_ev_` / `sw2_ev_open_` / `sw2_ev_span_`）。这个前缀是"我方命名空间"的边界：
-//   写入时**只清我方、只看这个前缀**，非此前缀的记录一律不动（防 leg27 g 那种覆盖用户数据的复发）。
-export const SW2_RECORD_PREFIX = 'sw2_';
-// leg29：逻辑表名 → 插件内置表 id（两张逻辑表对应两个插件槽位；见 src/memory-bridge.js 顶部留档）
-// ★leg30：**从三项收到两项**——"史卷纪要"已并入「世界大事」，不再是逻辑表（它是同一个列表里成段的行）。
-export const TABLE_ID_ALIAS = {
-    [MEMORY_TABLE_STATE]: PLUGIN_TABLE_STATE,
-    [MEMORY_TABLE_EVENTS]: PLUGIN_TABLE_EVENTS,
-};
-export function memoryStore(YM = (typeof window !== 'undefined' ? window.YuzukiMemory : null)) {
-    const Storage = YM?.Storage;
-    if (!Storage || typeof Storage.saveState !== 'function') return null;
-    const blank = () => {
-        const made = YM?.VariableInjector?.createDefaultState?.();
-        return made && typeof made === 'object' ? made : { tables: [], records: {}, activeRecordIds: {} };
-    };
-    return {
-        // 读现状：插件自己的 loadState 会做规范化；读不到就用它自己的默认态（**不自己造形状**）
-        //
-        // ★leg27 g（用户实机「**记忆插件也没有记录事件，还把插件原来的角色档案清空了**」）：
-        //   病 = 这一行原写 **`Storage.loadState?.(null, null)`**——第二参**显式传 `null`**。
-        //   插件签名是 `loadState(fallbackState, sessionId = getCurrentSessionId())`，**ES 形参默认值只在
-        //   `undefined` 时才生效** ⇒ 传 `null` 等于把 sessionId 定成 null ⇒ `getStorageKeys(null)` 返回空 ⇒
-        //   插件开头那句 `if (!keys.length) return normalizeState(null, fallbackState);` 直接拿 null 兜底返回
-        //   **非对象** ⇒ 本函数 `if (s && typeof s === 'object')` 不成立 ⇒ **退回 `blank()`**（自带表全空）⇒
-        //   `writeRecords` 再走 `saveState(..., { force: true })`（**force 会跳过插件全部保护闸**）把这份空态
-        //   写回 ⇒ **用户自己填的「角色档案」被逐条抹掉**（物品追踪/世界设定没填过，所以看着"还在"）。
-        //   ⇒ 治法：**把那行参数传成插件自己的默认态**（即"读不到时该用的兜底"，也正是形参的本意）——
-        //   `readState(null, null)` 这种"用 null 占位"的写法在本仓一律不许再用（null 不触发默认值）。
-        //   铁证（本机 vm 里跑插件**真存储代码**的对照，同一夹具）：
-        //     现行写法 ⇒ 投递前 character_profile 3 条 → 投递后 **0 条**（localStorage 与 chatMetadata 同时被清）
-        //     修法写法 ⇒ 投递前 3 条 → 投递后 **3 条**（item_tracking/world_setting 同样原样保留）
-        readState() {
-            const fallback = blank();
-            try {
-                // 传 fallback 而**不是 `null`**：插件签名 `loadState(fallbackState, sessionId = 当前会话)`——
-                // 传 null 会把 sessionId 定成 null（默认值不生效）⇒ 见上面那段事故留档。
-                const s = Storage.loadState?.(fallback);
-                if (s && typeof s === 'object') return s;
-            } catch (err) { console.warn('[story-world-v2] 读记忆状态失败：', err?.message || err); }
-            return fallback;
-        },
-        // 写记录：并进它的 state（表定义随首次写入一起给），再走它自己的 saveState 落盘
-        writeRecords(records, { tables = [], now = Date.now() } = {}) {
-            const state = this.readState() || blank();
-            // ★leg29：**旧表定义也要清掉**。三张逻辑表改用插件内置 id 之后（见 src/memory-bridge.js 顶部），
-            //   原来那三张自定义表（`世界状态/世界大事/史卷纪要`）若不删，插件会永远保留它们
-            //   （`normalizeState` 只保留"表定义还在"的那些记录键）⇒ 侧栏里挂着三张**永远不会再更新**的空表，
-            //   正是用户问的"为什么多出三个来"。只删这三个**我们自己创建的** id，别的一律不动。
-            const next = {
-                ...state,
-                tables: (Array.isArray(state.tables) ? state.tables : []).filter((t) => !LEGACY_TABLE_IDS.includes(t?.id)),
-                records: { ...(state.records || {}) },
-                activeRecordIds: { ...(state.activeRecordIds || {}) },
-            };
-            for (const id of LEGACY_TABLE_IDS) delete next.records[id];   // 旧表的记录一并送走（插件对无表定义的记录键不收）
-            // ★leg29：同 id 必须**覆盖**，不能"已存在就跳过"——插件里原本就有 `world_setting`/`item_tracking`
-            //   两张内置表（带它自己的列定义）⇒ 跳过的话，**我们给的列与显示名一个字都进不去**
-            //   （实测抓到的：盘上那两张表还是插件原列、侧栏还是"世界设定/物品追踪"，我们改了个寂寞）。
-            //   口径：这两张表**归我们管**（记录 id 一律 `sw2_` 前缀），所以定义以我方为准；别人的表不碰。
-            for (const t of tables) {
-                const at = next.tables.findIndex((x) => x?.id === t.id);
-                if (at >= 0) next.tables[at] = { ...t }; else next.tables.push({ ...t });
-            }
-            // ★leg29：**逻辑表**收进**插件内置表 id**（用户拍板「对齐插件内置表形状」；理由见
-            //   src/memory-bridge.js 顶部那一段：插件 `createTableWorkspaceView` 按 `table.id` 硬编码，
-            //   自定义 id 的详情视图是空 div）。映射：世界状态→world_setting、世界大事→item_tracking。
-            //   ★leg30：**从三张收到两张**——"史卷纪要"并进「世界大事」（里程碑 span 折成一行，见那个文件 ②.2）。
-            //   记录按 `table.id` 分组存储，同 id 的自然并成一列数组。
-            const byTable = new Map();
-            for (const [logical, list] of Object.entries(records)) {
-                const target = TABLE_ID_ALIAS[logical] || logical;
-                byTable.set(target, [...(byTable.get(target) || []), ...(Array.isArray(list) ? list : [])]);
-            }
-            for (const [tableId, list] of byTable.entries()) {
-                const incoming = Array.isArray(list) ? list : [];
-                const prev = Array.isArray(next.records[tableId]) ? next.records[tableId] : [];
-                // ★leg29 修（用户实机「投递是投递了但是看不到内容 / 为什么多出三个来」查证时发现）：
-                //   原来只做**按 id 合并**（push），于是：
-                //   ①状态表原来每轮一个新 id（`sw2_state_<tick>`）⇒ 旧轮次**越堆越多**（真账实测三条并存）；
-                //   ②大事表/史卷纪要的旧记录到轮换/退役后**永远留在插件里**。
-                //   改法：**先删掉本插件自己命名空间（`sw2_`）里"这次没投"的记录，再并入本次的**——
-                //   口径是"我方三张表以**本次投出的集合**为准"，同时**绝不碰任何非 `sw2_` 前缀的记录**
-                //   （用户自己加的、插件自己生成的，一律原样留着——leg27 g 那次数据丢失的教训）。
-                const incomingIds = new Set(incoming.map((r) => r?.id));
-                const merged = prev.filter((r) => !(typeof r?.id === 'string' && r.id.startsWith(SW2_RECORD_PREFIX) && !incomingIds.has(r.id)));
-                for (const rec of incoming) {
-                    const at = merged.findIndex((x) => x?.id === rec.id);
-                    if (at >= 0) merged[at] = rec; else merged.push(rec);
-                }
-                next.records[tableId] = merged;
-            }
-            Storage.saveState(next, next, undefined, { force: true, saveOrigin: 'story-world-v2', allowDuringSwitch: true, now });
-            // ★leg29：**通知插件"状态变了"**。为什么必须做：插件窗口是从它**自己的内存缓存**
-            //   （`memory-window.js` 的 `memoryState`）渲染的；我们绕过它的 UI 直接写存储，它不知道 ⇒
-            //   用户看到的是**旧快照**（现象：控制台自检说记录都在、插件里却还是旧表旧列，甚至看不到内容）。
-            //   插件官方留了这条通道：`window.addEventListener('yzm-memory-state-updated', reloadStateFromStorage)`
-            //   ——它收到就重读存储并重绘当前页。**不是我们发明的接口，是用它自己的同步机制**。
-            try {
-                if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-                    const ping = () => window.dispatchEvent(new CustomEvent('yzm-memory-state-updated', { detail: { source: 'story-world-v2', table: 'all' } }));
-                    ping();
-                    // ★leg29：**再补一次延迟重发**。为什么：插件的监听是在它自己的 UI 初始化时绑的
-                    //   （`if (!window.yzmMemoryStateUpdateBound) window.addEventListener(...)`），
-                    //   而用户**没打开过记忆窗口时它可能还没绑上** ⇒ 第一次派发没人接 ⇒ 它继续用内存里的
-                    //   旧状态（盘上 `saveOrigin=auto` 就是它随后回写的证据）。两次派发覆盖"开着窗口"与"刚打开"两种时机。
-                    if (typeof window.setTimeout === 'function') window.setTimeout(ping, 600);
-                    // ★leg29：**表名校正（一次，不循环）**。为什么：插件是从它**自己的内存状态**渲染侧栏的，
-                    //   而它随后会把自己那份写回存储 ⇒ 我们写的表名会被盖回去（记录值不受影响）。
-                    //   用户问的是"难道每次开新聊天都要自己改吗"——**不该**。所以这里在 700ms 后
-                    //   **只重写表定义里的 name**（不动任何记录），让我们的名字成为最后写入的那一个。
-                    //   一次为限：不做循环对抗（那是往第三方私有状态里塞脆写法），失败也只是名字回去，不影响内容。
-                    const wantNames = Object.fromEntries(tables.map((t) => [t.id, t.name]));
-                    if (typeof window.setTimeout === 'function') {
-                        window.setTimeout(() => {
-                            try {
-                                const after = window.SillyTavern?.getContext?.()?.chatMetadata?.yuzukiMemory;
-                                if (!after || !Array.isArray(after.tables)) return;
-                                let fixed = 0;
-                                for (const t of after.tables) if (wantNames[t.id] && t.name !== wantNames[t.id]) { t.name = wantNames[t.id]; fixed++; }
-                                if (!fixed) return;
-                                const pluginStorage = window.YuzukiMemory?.Storage;
-                                if (typeof pluginStorage?.saveState === 'function') pluginStorage.saveState(after, after, undefined, { force: true, saveOrigin: 'story-world-v2', allowDuringSwitch: true });
-                                console.info(`[story-world-v2] 记忆自检：表名被插件覆盖过，已校正 ${fixed} 张（${Object.values(wantNames).join(' / ')}）`);
-                            } catch (_) { /* 校正失败只是名字，不影响内容 */ }
-                        }, 700);
-                    }
-                }
-            } catch (_) { /* 插件不在/浏览器不支持 ⇒ 静默：世界推进永远优先 */ }
-            // ★leg29：**派发完再看一眼**，把"插件有没有把它自己那份缓存盖回来"记下来（只读，不改任何东西）。
-            //   真存储代码复演证明我们写出去的那份是对的 ⇒ 若此刻盘上表名不是我们的，就是**插件随后覆盖**，
-            //   而不是我们写错。留痕是为了下一次不用再猜。
-            try {
-                if (typeof window !== 'undefined') {
-                    const after = window.SillyTavern?.getContext?.()?.chatMetadata?.yuzukiMemory;
-                    const nameOf = (id) => (after?.tables || []).find((t) => t.id === id)?.name;
-                    if (nameOf(PLUGIN_TABLE_STATE) !== undefined && nameOf(PLUGIN_TABLE_STATE) !== DISPLAY_NAME_STATE) {
-                        console.info(`[story-world-v2] 记忆自检：表名被插件覆盖回去了（现为「${nameOf(PLUGIN_TABLE_STATE)}」，期望「${DISPLAY_NAME_STATE}」）——记录值不受影响`);
-                    }
-                }
-            } catch (_) { /* 纯留痕，失败无所谓 */ }
-        },
-    };
-}
+// ★★★leg72（丙-web · 第一格）：**这一族已整族搬进 `web/memory-store.js`**——
+//   插件适配器（连同 leg27 g 那条血泪留档：读现状那行参数**不许**传 null，否则会把用户
+//   自己填的角色档案逐条抹掉）、两枚逻辑表别名、投递入口、只读自检、投递自证面与它的显示行。
+//   ★本文件从此一个字都不再经手它们的实现：上面那条 import 就是唯一的取回面。
+//   ★留档：记忆那一族的状态（投递自证面）与它的读法**同处一地**，本文件只走受控通道。
 
-// ★leg27 i：导出是为了**能真测**（leg27 i 的事故恰恰是"投递其实跑完了、只在成功日志那行抛
-//   `MEMORY_TABLE_MILESTONES is not defined`，被调用点的 `.catch(() => {})` 吞掉 ⇒ 插件里什么都没有"）。
-//   判据必须走**真函数**——只调 `markMemoryPush`（喂现成结果）永远抓不到那条路。
-//   ★leg30：那条事故的常量已删（前史不再是表）⇒ 成功日志改为只报**实际投出的两张表**的条数；
-//   本函数仍必须走真路径，判据也就仍能抓到"日志行抛异常"这一类事故。
-export async function pushMemoryNow(world) {
-    try {
-        if (!world) return { ok: false, reason: 'no-world' };
-        const store = memoryStore();
-        if (!store) return { ok: false, reason: '插件未加载（柚月の记忆）' };
-        const r = pushToMemory(buildMemoryPayload(world), { store });
-        if (!r.ok) console.warn('[story-world-v2] 记忆投递未成：', r.reason);
-        else console.info('[story-world-v2] 记忆已投：', { [MEMORY_TABLE_STATE]: r.tick, 世界大事: (r.counts || {})[MEMORY_TABLE_EVENTS] ?? 0 });
-        return r;
-    } catch (err) {
-        console.warn('[story-world-v2] 记忆投递异常（已忽略，世界照常）：', err?.message || err);
-        return { ok: false, reason: String(err?.message || err) };
-    }
-}
-
-// ★leg29：**只读自检**（给排查用，不改任何状态）。
-//   为什么需要它：实机出现"控制台说记忆已投，但插件里看不到、盘上也没变"的矛盾——
-//   而盘上那份是被 `saveChat()` 落盘的**运行时对象**，只有浏览器内存里那一刻的真相能回答"到底写没写进去"。
-export function memoryStoreReport(YM = (typeof window !== 'undefined' ? window.YuzukiMemory : null)) {
-    try {
-        // ★leg30 修：这里原来**直接写 `window.SillyTavern`**——本模块其余地方一律用
-        //   `typeof window !== 'undefined'` 守卫（见 `memoryStore`），只有这一处漏了 ⇒ 在任何非浏览器环境
-        //   （Node 测试、vm 复演）里第一步就抛 `ReferenceError: window is not defined`，
-        //   被本函数的 catch 吞成一个 `{报错: ...}` ⇒ **这条自检从此永远不可测、也永远报不出东西**。
-        //   这正是它该被抓到的地方：判据要能真跑，不能只在浏览器里"应该没问题"。
-        const ctx = (typeof window !== 'undefined' ? window.SillyTavern?.getContext?.() : null);
-        const state = ctx?.chatMetadata?.yuzukiMemory ?? YM?.Storage?.loadState?.(YM?.VariableInjector?.createDefaultState?.()) ?? null;
-        const records = state?.records || {};
-        const count = (id) => (Array.isArray(records[id]) ? records[id].length : 0);
-        const mine = (id) => (Array.isArray(records[id]) ? records[id].filter((r) => String(r?.id || '').startsWith('sw2_')).length : 0);
-        // ★leg30：**语义自检**——"位置列里装的是人名吗？"（用户实机截图一眼看出的那件事）。
-        //   为什么放进自检而不是只做单测：这个病**在单测里结构上不可能红**（旧判据只锁列名形状与条数，
-        //   列名对、条数对 ⇒ 538/538 全绿照样乱）。把判据接进投递路径，下一棒不用再靠肉眼发现。
-        //   口径：①表是插件内置表、可能同时装着别人的记录 ⇒ **只看我方 `sw2_` 的记录**；
-        //   ②位置可能是一**串**（旧代码把波及名单整串写进去）⇒ 逐个片段对，不做整串相等比较
-        //   （整串比较会漏掉 `薛铁衣、大虞` 这种真病——本条判据的第一版就是这么假绿的）。
-        const splitNames = (v) => String(v || '').split(/[、,，]/).map((s) => s.trim()).filter(Boolean);
-        const semanticIssues = (() => {
-            const out = [];
-            const evRows = (Array.isArray(records[PLUGIN_TABLE_EVENTS]) ? records[PLUGIN_TABLE_EVENTS] : [])
-                .filter((r) => String(r?.id || '').startsWith(SW2_RECORD_PREFIX));
-            // 插件自己的角色档案里那一列叫「姓名」（见 ui/memory-window.js 的角色表列定义）；
-            //   另外两个名字是我们自己可能用过的写法，一并认（认不出就退化成空集 ⇒ 自检不出声，不假报）。
-            const names = new Set((state?.records?.character_profile || []).flatMap((r) => {
-                const v = r?.values?.['姓名'] ?? r?.values?.['角色名'] ?? r?.values?.['名字'];
-                return splitNames(typeof v === 'string' ? v : '');
-            }));
-            for (const r of evRows) {
-                const where = String(r?.values?.['物品位置'] || '').trim();
-                if (!where) continue;
-                const hit = splitNames(where).find((part) => names.has(part));
-                if (hit) out.push(`「${r?.values?.['物品名称'] || '?'}」的位置列写着人名「${hit}」`);
-            }
-            const ids = evRows.map((r) => r?.id);
-            if (new Set(ids).size !== ids.length) out.push('发生表有重复 id（插件按 id 合并，重复即覆盖）');
-            return out;
-        })();
-        return {
-            我方两张表的记录在不在: {
-                [`${PLUGIN_TABLE_STATE}(世界状态)`]: `${mine(PLUGIN_TABLE_STATE)} 条（共 ${count(PLUGIN_TABLE_STATE)}）`,
-                [`${PLUGIN_TABLE_EVENTS}(世界大事)`]: `${mine(PLUGIN_TABLE_EVENTS)} 条（共 ${count(PLUGIN_TABLE_EVENTS)}）`,
-            },
-            语义自检: semanticIssues.length ? semanticIssues : '无异常（位置列没混进人名、记录 id 不重复）',
-            旧的自定义表: LEGACY_TABLE_IDS.map((id) => `${id}: 表定义=${(state?.tables || []).some((t) => t.id === id) ? '在' : '已删'}，记录 ${count(id)} 条`),
-            表清单: (state?.tables || []).map((t) => `${t.id}(${t.name})`),
-            状态记录的值: (records[PLUGIN_TABLE_STATE] || []).find((r) => r?.id === 'sw2_state')?.values ?? '(没有 sw2_state 这条)',
-            事件记录首条: (records[PLUGIN_TABLE_EVENTS] || []).find((r) => String(r?.id || '').startsWith('sw2_ev_'))?.values ?? '(没有 sw2_ev_ 记录)',
-            saveOrigin: state?.saveOrigin,
-            updatedAt: state?.updatedAt,
-        };
-    } catch (err) {
-        return { 报错: String(err?.message || err) };
-    }
-}
-
-// ★leg29：**投完当场自检的一行**（接在推送路径上，随每次投递打出）。
-//   为什么做成一行：实机排查时"手抄控制台多行对象"反复丢失输出——一行纯文本，好抄也好贴。
-//   只报事实：我方命名空间的记录在不在、旧表删没删；**不做任何写入**。
-// ★leg30：**可注入**（`YM` 形参）——理由与 `memoryStore` 当初改注入形参一样：判据要能**真跑**。
-//   这条自检的语义判据（"位置列里有人名吗"）若不能真跑，就等于又把它交回给肉眼。
-export function memoryStoreCheckLine(YM = (typeof window !== 'undefined' ? window.YuzukiMemory : null)) {
-    const r = memoryStoreReport(YM);
-    if (r?.报错) return `[story-world-v2] 记忆自检失败：${r.报错}`;
-    const mine = r.我方两张表的记录在不在 || {};
-    const legacyOn = (r.旧的自定义表 || []).filter((x) => x.includes('表定义=在'));
-    // ★leg29：**表名也要报**。为什么：插件是从**它自己的内存缓存**渲染侧栏的，而它自己的定时/落盘会把
-    //   那份缓存写回存储 ⇒ 我们写的表名可能被覆盖回去（真存储代码复演证明"我们写的那份是对的"，
-    //   所以一旦盘上名字不对，就是被它盖回去了）。把名字打进自检，一眼可见。
-    const names = (r.表清单 || []).filter((x) => x.startsWith('world_setting') || x.startsWith('item_tracking')).join(' ');
-    // ★leg30：**语义异常也进这一行**（位置列混进人名之类）——它此前只能靠用户肉眼发现。
-    const sem = r.语义自检;
-    const semBit = Array.isArray(sem) && sem.length ? ` ｜ ⚠ 语义：${sem.join('；')}` : '';
-    return `[story-world-v2] 记忆自检：world_setting=${mine['world_setting(世界状态)'] ?? '?'} ｜ item_tracking=${mine['item_tracking(世界大事)'] ?? '?'} ｜ 表名 ${names} ｜ 旧表残留 ${legacyOn.length} 张 ｜ saveOrigin=${r.saveOrigin ?? '?'}${semBit}`;
-}
-
-// ★leg27 h：记忆投递**自证面**（用户两次靠肉眼发现它没生效 ⇒ 这功能此前没有可查的痕迹）。
-//   口径：只报**事实**（投了第几轮 / 几条 / 或失败原因），不确定的一律不显示。
-//   `null` = 本轮没投（开关关着，或还没推过）——**不显示"已投"**，免得变成假绿。
-let sw2MemoryPush = null;
-// ★leg40b（第二刀 · 死代码）：`memoryPushStatus()` 已删——它零调用（现役的是下面这个 `memoryPushLine()`，
-//   状态栏与参数页都走它）。同一个事实只留一条读法，免得以后两条路各写各的口径。
-export function markMemoryPush(result, tick) {
-    sw2MemoryPush = result?.ok
-        ? { ok: true, tick: result.tick || (Number.isFinite(tick) ? `第 ${tick} 轮` : ''), counts: result.counts || {}, at: Date.now() }
-        : { ok: false, reason: result?.reason || '未知原因', at: Date.now() };
-    return sw2MemoryPush;
-}
-/** 一行事实（给状态栏/面板用）；没投过就不出声 */
-export function memoryPushLine() {
-    const m = sw2MemoryPush;
-    if (!m) return '';
-    return m.ok ? `记忆已投 · ${m.tick} · 大事 ${m.counts[EVENTS_TABLE_NAME] ?? 0} 条` : `⚠ 记忆投递未成：${m.reason}`;
-}
-
-// ★★★leg48：**"参数操作进行中"的忙闩**（按参数键记）——见 `bus['set-param']` 里那段现场读数。
-//   为什么必须有它：重画会把 `<select>` 销毁重建，浏览器对**新节点**补吐一笔**带旧值**的事件
-//   （`input`+`change` 各一次）⇒ **同一格一次点击进两笔，第二笔把玩家选的值覆盖回去**。
-//   它只挡"同一刻的补吐事件"：玩家下一次真实点击时上一笔早已结束，所以手感上完全无感。
+// ★★★leg82：**"参数操作进行中"的忙闩**已随参数族搬进 `web/param-panel.js`。
+/* ★★★leg82 留档：这一格**原来**的定义（照本仓"注释里可以留档"那条纪律原样存一份）：
 const sw2ParamBusy = new Map();   // 参数键 → true（正在处理这一格的一笔操作）
+ */
+//   为什么必须有它（原样留档）：重画会把 `<select>` 销毁重建，浏览器对**新节点**补吐一笔**带旧值**
+//   的事件（`input`+`change` 各一次）⇒ **同一格一次点击进两笔，第二笔把玩家选的值覆盖回去**。
+//   它只挡"同一刻的补吐事件"：玩家下一次真实点击时上一笔早已结束，所以手感上完全无感。
+//   ★★本文件读写它一律走 `paramApi.paramBusy()`——交出来的是那颗 `Map` 的**本体**（不是副本）：
+//     交副本 = 把状态劈两半 ⇒ 忙闩当场形同虚设（本仓最贵的病）。
 
 // ---------- K35：真实动作总线（阅卷/导出/导入；其余按钮随 K36 接调度） ----------
 // ★leg40b（A2 · 体检修）：动作总线在这里装配，而面板模板与事件委托早于它 —— 见 `dispatchAction` 的兜底。
 if (typeof window !== 'undefined') {
     window.__sw2Actions = window.__sw2Actions || {};
     const bus = window.__sw2Actions;
+
+    // ★★★leg89：注入开关**改由 `bindActions` 的 click 委托直接收**（见那一处的注释与沿革）。
+    //   这里原来注册的 `inject-toggle` 总线动作**已撤**——不是每个按钮都必须走总线，
+    //   而这条路连续两版都在"事件能不能到"上出问题 ⇒ 收进唯一点击入口最稳。
 
     // ---------- ★★leg62：**独立抽取设定**的入口（用户令「方便我直抽设定快速看效果」）----------
     // 口径（三条，别越界）：
@@ -2879,6 +2170,74 @@ if (typeof window !== 'undefined') {
         delete world.context.__scaleDraft;
         refreshSections(['setting']);
         setStatus('已清掉直抽刻度那一栏（账本本来就没动过）');
+    };
+
+    // ---------- ★★leg70（A6）：**采用这份草稿（只换刻度）** —— 抽完能存 ----------
+    // 病（`docs/leg68-recon-pending.md` §A6 实测 + 用户 leg63 原话「我刚刚抽了有很多表，但是原本的内容还在」）：
+    //   上面那条直抽通道只把结果挂到 `world.context.__scaleDraft`（**会话态**），
+    //   `applySettingToSsot` / `writeHotMeta` / `flushHotMeta` **一个都没调**
+    //   ⇒ ① 刷新即丢；② `frozen.canon.刻度` 一个字不动 ⇒ 面板上"原本的内容还在"；
+    //     ③ 那一栏**永远只是看的**（想真用只能走「初始化」= 重开世界，或「只重抽设定」= 换掉整份设定）。
+    //   ★而"直抽那条路不当第二条写入口"是**有意留的口**（见上一条通道的口径注释），不是漏接的线
+    //     ⇒ 所以**另起一个动作**：抽 = 一次调用瞄一眼、采用 = 写账落盘，两件事不许同处一地。
+    //
+    // 口径（四条，别越界）：
+    //   ① **只换刻度那三格**（`刻度` + 由它派生的 `powerScale`/`dims`）——用户要的是"换尺子"，
+    //      不是"换设定"：法则/名册/史略/世情/张力**一个字不动**（判据里有反向白名单）。
+    //   ② **料 = 手上那份草稿**（`world.context.__scaleDraft.scales`），**不是重抽一遍**
+    //      ⇒ 本动作**不许**出现 `extractWorldSetting`（本仓最贵的病：把"抽"与"存"接成一条）。
+    //   ③ **名册保命靠形状**：canon 从**账上那份**展开起手（`{ ...before, … }`）⇒ `bookEntities`
+    //      等键天然带过。对照同族的「只重抽设定」——它换的是**整份** canon，所以它必须**显式**保名册。
+    //   ④ **落盘三步一个不少**：`applySettingToSsot`（唯一那条换设定路）→ `writeHotMeta` →
+    //      **`await flushHotMeta()`** ⇒ 刷新不丢（这一步正是本动作与"只瞄一眼"的根本区别，leg20 语义）。
+    bus['adopt-scale-draft'] = async () => {
+        const meta = readHotMeta();
+        const world = meta ? loadHotAccount(meta) : null;
+        if (!world) { setStatus('⚠ 世界还没载入——先载入一个世界再采用草稿'); return; }
+        const draft = world.context?.__scaleDraft;
+        if (!draft || typeof draft !== 'object') { setStatus('⚠ 草稿栏是空的——先按「只抽刻度」抽一次再采用'); return; }
+        // 空草稿不许入账：那会把账上的尺子**抹成零张表**（"抽到 0 张"不该等于"清空刻度"）
+        const scales = Array.isArray(draft.scales) ? draft.scales : [];
+        if (!scales.length) { setStatus('⚠ 这份草稿一张表都没有——不采用（账上的刻度一个字没动）'); return; }
+        const frozen = world.context?.setting?.frozen;
+        const before = frozen?.canon || {};
+        // ★拍板 9：覆盖**不可回** ⇒ 旧的那一份先打到控制台再覆盖（照「只重抽设定」那条"改一次留一次痕"）。
+        //   读数直接取自**手上这份 canon**（`刻度` 是源，旧两列是派生视图 ⇒ 数它一张表几档就是账上真数）。
+        const oldScales = Array.isArray(before.刻度) ? before.刻度 : [];
+        const nTiers = (list) => list.reduce((n, t) => n + (t.档位 || []).length + (t.子表 || []).reduce((m, s) => m + (s.档位 || []).length, 0), 0);
+        console.info('[story-world-v2] 采用这份草稿：即将只换刻度那三格（旧读数备份，旧账不再可回）', {
+            世界: world.context?.world, 指纹: frozen?.fingerprint, 草稿源: draft.source || '',
+            旧: {
+                刻度表: oldScales.length, 档位: nTiers(oldScales),
+                旧两列: { 档位: (before.powerScale || []).length, 维度: (before.dims || []).length },
+            },
+            新: { 刻度表: scales.length, 档位: nTiers(scales), 遗留错误: (draft.errors || []).length },
+        });
+        // ★拍板 4：旧两列走**唯一**那条派生路（`abstract.js:1064`）——不许在这里手写一份 `powerScale`/`dims`
+        const flat = scalesToFlat(scales);
+        // ★拍板 3：名册保命那一步 —— **从旧 canon 展开**（`bookEntities` 等键原样带过，结构上保命）
+        const canon = { ...before, 刻度: scales, powerScale: flat.powerScale, dims: flat.dims };
+        // ★拍板 5/6：`fingerprint` **不动**（本次没重读源 ⇒ 动它就是谎报"书变了"，会让"书没变不重抽"失去依据）；
+        //   `extractedAt` **要新**（它印在设定页副标题「抽取于 …」上，而刻度确实是这一刻换的；
+        //   ★代价如实说：它不再表示"整份设定来自同一次抽取"——更准的做法是另加一个键，那要动契约，已登记待报批）
+        const setting = { ...world.context.setting,
+            frozen: { ...world.context.setting.frozen, canon, extractedAt: new Date().toISOString() },
+        };
+        // ★拍板 1/2：走唯一那条换设定的路径（其余字段原样带过；不许自己拼一份 `context`）
+        const next = applySettingToSsot(world, setting);
+        // ★拍板 7：入账 ⇒ 草稿**退场**（留着 ⇒ 面板同时画"草稿"与"账本"两份刻度，看着像没生效）
+        delete next.context.__scaleDraft;
+        writeHotMeta(hotAccountShape(next));
+        const flushed = await flushHotMeta();   // 采用入账：走与「只重抽设定」同一条显式落盘路径
+        refreshWorld(next, { oldVolumes: LISTED_VOLUMES });
+        refreshSections(['setting']);
+        const fmt = (list) => `${list.length} 张 / ${nTiers(list)} 档`;
+        // ★拍板 8：如实报三样 —— 换了什么 / 没动什么 / **单次调用的局限**（`leg63.md` §5.3 登记的必须告知项）
+        setStatus(`已采用这份草稿：刻度换成 ${fmt(scales)}（原来 ${fmt(oldScales)}）`
+            + `——只换刻度那三格（刻度 + 派生出来的力量谱系/维度）· 法则/名册/史略/张力一个字没动`
+            + `（无回退键，旧的那份已打到控制台）`
+            + ` · ⚠ 草稿是一次调用抽的、「只重抽设定」走多块 + 块间合并 ⇒ 两边不会逐字相同；想走生产那条管线就用「只重抽设定」`
+            + (flushed.ok ? '' : '（⚠ 落盘没确认，见控制台——刷新可能丢）'));
     };
 
     // ---------- ★★leg62b：**只重抽设定**（用户令「我只想重抽设定」）----------
@@ -2992,17 +2351,17 @@ if (typeof window !== 'undefined') {
         //   ⇒ 定稿（一笔操作 = 一笔事务）：**本通道忙的时候，同一格再来的事件一律不受理**，
         //     并如实留痕（不是静默丢弃）。它只挡"同一刻的补吐事件"，挡不住玩家下一次真实的点击
         //     （那时上一笔早已结束）。
-        const busy = sw2ParamBusy.get(key);
+        const busy = paramApi.paramBusy().get(key);
         if (busy) {
             console.info(`[story-world-v2] set-param：上一次操作还在进行中 ⇒ 不受理这一笔重复事件`
                 + `（值 ${JSON.stringify(value)}）——这是重画/浏览器补吐的那一笔，不是玩家的手：${key}`);
             return;
         }
-        sw2ParamBusy.set(key, true);
+        paramApi.paramBusy().set(key, true);
         try {
             return await sw2ApplyParam(key, value, payload);
         } finally {
-            sw2ParamBusy.delete(key);
+            paramApi.paramBusy().delete(key);
         }
     };
 
@@ -3038,8 +2397,8 @@ if (typeof window !== 'undefined') {
             try { return String(payload?.worldName || meta?.world?.context?.world || '').trim(); } catch (_) { return ''; }
         })();
         const key2 = world || worldNameHint || null;
-        const r = fromUnsetOption ? paramHub.clear(key2, key) : paramHub.set(key2, key, value);
-        sw2HubLastWorld = r.mirror?.world || world || sw2HubLastWorld || null;
+        const r = fromUnsetOption ? paramApi.clear(key2, key) : paramApi.set(key2, key, value);
+        paramApi.setLastWorld(r.mirror?.world || world || paramApi.lastWorld() || null);
         // ★★★leg48：**世界没到就出声**（旧版这条路上一个字都不说，于是"世界对象没拿到"这件事
         //   在玩家与维护者两边都不可见——十二轮里缺的就是这一行）。
         if (!world) {
@@ -3066,7 +2425,7 @@ if (typeof window !== 'undefined') {
         // 受理了（真值变了）⇒ 把镜像那份落进聊天账。★从这里往后全是"下游"，参数已经安全落定。
         if (r.changed && r.mirror?.world) {
             writeHotMeta(hotAccountShape(r.mirror.world));
-            sw2HubLastWorld = r.mirror.world;
+            paramApi.setLastWorld(r.mirror.world);
         }
 
         // 开关刚打开 ⇒ 立刻投一次（不等下一轮）。leg27 h：同样如实上报（自证面）
@@ -3074,10 +2433,10 @@ if (typeof window !== 'undefined') {
         if (r.changed && key === 'memoryEnabled') {
             const on = r.after === '1';
             const memResult = on
-                ? await pushMemoryNow(sw2HubLastWorld || world).catch(() => ({ ok: false, reason: '抛错（见控制台）' }))
+                ? await pushMemoryNow(paramApi.lastWorld() || world).catch(() => ({ ok: false, reason: '抛错（见控制台）' }))
                 : { ok: false, reason: '开关刚被关掉' };
             markMemoryPush(memResult, world?.meta?.tick);
-            if (!on) sw2MemoryPush = null;   // 关掉 ⇒ 自证面归零（不留上一次的"已投"）
+            if (!on) clearMemoryPush();   // 关掉 ⇒ 自证面归零（不留上一次的"已投"）
             memLine = memoryPushLine();
         }
 
@@ -3098,8 +2457,8 @@ if (typeof window !== 'undefined') {
             //   写成功 ⇒ 控件停在玩家选的那一档（真源＝它）；空值/非法/失败 ⇒ 控件**退回真源那一档**，
             //   于是"手滑到空"不会再留在屏幕上冒充一次改动（旧版留着的就是那一屏：
             //   控件空着、"格"跟着写「未定」，刷新一看档位回默认）。
-            sw2SetParamControl(key);
-            sw2SyncParamCells();
+            paramApi.sw2SetParamControl(key);
+            paramApi.sw2SyncParamCells();
             // 撤销按钮的可用性跟着刷（它是按钮，改 `disabled` 不算"回写控件的值"）
             try {
                 const btn = document.getElementById(WINDOW_ID)?.querySelector?.('[data-action="param-undo"]');
@@ -3125,12 +2484,12 @@ if (typeof window !== 'undefined') {
     }
     // ---------- leg41：撤销（参数页那一枚；照 v1 的撤销栈）----------
     bus['param-undo'] = async () => {
-        const r = sw2UndoParam();
+        const r = paramApi.sw2UndoParam();
         if (!r.ok) { setStatus(`↶ ${r.reason}`); return; }
         setStatus(`↶ 已撤销：${r.label} —— 档位回到那一步之前（世界已经发生的事不回退）`);
     };
 
-    // ---------- leg25 d：查书补全的两个入口（面板行内「查/重查」+ 批量补全）----------
+    // ---------- leg25 d：查书补全（只剩面板行内「查/重查」这一条路）----------
     // 单实体：即时查一次（不必等下一轮世界推进），查完立即落盘 + 重绘
     bus['lookup-entity'] = async (payload) => {
         const id = payload?.entity;
@@ -3149,21 +2508,11 @@ if (typeof window !== 'undefined') {
         }
     };
 
-    bus['lookup-batch'] = async (payload) => {
-        if (sw2BatchTask) {
-            const s = batchTaskStatus();
-            stopBatchTask();
-            setStatus(`已停止批量补全：第 ${s.cursor}/${s.total} 批（成功 ${s.success}）——世界照常推进`);
-            return;
-        }
-        const forceFields = payload?.force === 'all' ? 'all' : 'absent';
-        const started = startBatchTask({ forceFields });
-        if (!started.ok) { setStatus(`⚠ ${started.error}`); return; }
-        setStatus(batchStatusText() || `批量补全已排队（共 ${started.total} 个）——每轮搭车跑一批，想停再点一次`);
-    };
-    // 面板上的名字叫 `lookup-batch-all`（render.js 的按钮就这么写的）——同一个动作，两个别名都接上，
-    //   防"按钮画了没人接"（本仓判据：**面板产物里每个 data-action 都必须有真实处理器**）。
-    bus['lookup-batch-all'] = (payload, event) => bus['lookup-batch'](payload, event);
+    // ★★★leg76 收尾（本次补齐）：`bus['lookup-batch']` 与它的别名 `bus['lookup-batch-all']` **整段删除**。
+    //   撤钮之后两头都必须干净：产物里没有那枚钮（`src/render.js` 已撤）、总线里也不许再有那两个动作
+    //   （`test/lookup-batch.test.js:441` 正是"两头都不许回潮"那条锁）。
+    //   ★判据纪律留档：只锁一头的话，"按钮撤了但处理器留着"或反之都能溜过——正是 leg40b 治的那类半拉子。
+    //   ★边界：上面那枚行内「查」（`lookup-entity`）**是好的，保留**——本笔只撤全册那一枚。
 
     // ---------- leg27 后：快照容错（第八页签的两个动作）----------
     bus['snapshot-restore'] = async (payload) => {
@@ -3177,10 +2526,14 @@ if (typeof window !== 'undefined') {
             : true;
         if (!ok) { setStatus('已取消（世界原样）'); return; }
         setStatus(`正在回到快照 ${id}…`);
-        const r = await restoreSnapshot(id);
+        const r = await snapHub.restoreSnapshot(id);
         if (!r.ok) { setStatus(`⚠ 回不去（链不完整）——${r.error}`); return; }
-        await refreshSnapshots();
-        setStatus(`已回到 ${id}（第 ${r.tick ?? '?'} 轮 · ${r.plan === 'full' ? '整份' : '锚点+增量'}）${r.flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}——对话记录未动`);
+        await snapHub.refreshSnapshots();
+        // ★★leg72b：`flushed` 是 `flushHotMeta()` 返回的**三态对象**（`{ ok, reason }`）——
+        //   写成 `r.flushed ?` 是判**对象真值**（恒真）⇒ 真失败也印"已落盘"，
+        //   与上面 `snapshot-store.js` 里那条"存根恒真"是**同一种病**（leg67–71 的形态）。
+        //   ⇒ 必须按 `.ok` 分叉；这就是本仓那条「面板上印出来的必须现算」的落法。
+        setStatus(`已回到 ${id}（第 ${r.tick ?? '?'} 轮 · ${r.plan === 'full' ? '整份' : '锚点+增量'}）${r.flushed?.ok ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}——对话记录未动`);
     };
 
     bus['snapshot-clear'] = async () => {
@@ -3188,9 +2541,9 @@ if (typeof window !== 'undefined') {
             ? window.confirm('重置快照？\n\n· 会清空**当前聊天**的全部快照（别的聊天不受影响）\n· 然后立刻给**现在这份世界**拍一份新链头（第 1 份）\n· 世界账本身**不动**，只动快照库\n\n适用场景：盘上混着旧代码/丢账时拍下的脏数据。')
             : true;
         if (!ok) { setStatus('已取消（世界原样）'); return; }
-        const r = await resetSnapshots();
+        const r = await snapHub.resetSnapshots();
         if (!r.ok) { setStatus(`⚠ 重置失败：${r.error}`); return; }
-        await refreshSnapshots();
+        await snapHub.refreshSnapshots();
         setStatus(`快照已重置（清掉 ${r.removed} 份 · 已拍新链头 s1）——世界账未动，窗口保留 15 步`);
     };
 
@@ -3219,38 +2572,25 @@ if (typeof window !== 'undefined') {
     //     · 换"只看/了结/轮次" ⇒ **回第一页**（命中集合变了，停在第 3 页会落在另一批行上）；
     //     · 换"计数口径" ⇒ **不回第一页**（一个行都不动，只是几枚钮换了把尺子；回首页 = 无理由的位移）。
     bus['ch-layer'] = (payload) => {
-        const v = String(payload?.value || 'all');
-        if (['all', 'event', 'book'].includes(v)) sw2ChronicleView.layer = v;
-        sw2ChronicleView.page = 1;
-        sw2ChronicleView.pageBook = 1;
+        viewState.setLayer(String(payload?.value || 'all'));   // ★leg79/81：状态与"回第一页"两条规矩都住新家
         refreshSections(['chronicle']);
     };
     bus['ch-closed'] = (payload) => {
-        const v = String(payload?.value || 'any');
-        if (['any', 'done', 'open'].includes(v)) sw2ChronicleView.closed = v;
-        sw2ChronicleView.page = 1;
-        sw2ChronicleView.pageBook = 1;
+        viewState.setClosed(String(payload?.value || 'any'));
         refreshSections(['chronicle']);
     };
     bus['ch-range'] = (payload) => {
-        const v = String(payload?.value || '10');
-        if (['5', '10', 'all'].includes(v)) sw2ChronicleView.range = v;
-        sw2ChronicleView.page = 1;
-        sw2ChronicleView.pageBook = 1;
+        viewState.setRange(String(payload?.value || '10'));
         refreshSections(['chronicle']);
     };
     bus['ch-scope'] = (payload) => {
-        const v = String(payload?.value || 'all');
-        if (v === 'all' || v === 'hit') sw2ChronicleView.scope = v;
-        refreshSections(['chronicle']);      // ★不动 page（与 `ents-scope` 同一条理由）
+        viewState.setChronicleScope(String(payload?.value || 'all'));   // ★不动 page（与 `ents-scope` 同一条理由）
+        refreshSections(['chronicle']);
     };
     bus['ch-page'] = (payload) => {
         // ★页码由渲染层夹紧（`selectChroniclePage` 的越界夹紧），这里只管加减——零第二份夹紧逻辑。
         //   ★两层的页是两枚分页器、两个游标（细案 §3.4：一枚共享分页器会在"收起的名单"上翻页 ⇒ 死控件）。
-        const layer = String(payload?.layer || 'event');
-        const delta = String(payload?.value) === 'prev' ? -1 : 1;
-        if (layer === 'book') sw2ChronicleView.pageBook += delta;
-        else sw2ChronicleView.page += delta;
+        viewState.turnChroniclePage(String(payload?.layer || 'event'), String(payload?.value) === 'prev' ? -1 : 1);
         refreshSections(['chronicle']);
     };
 
@@ -3258,20 +2598,15 @@ if (typeof window !== 'undefined') {
     // 口径：改状态一行 + 只重绘本页。**选数据一行都不写在这里**（全在 `src/render.js` 的纯函数里）。
     // ★重绘走 `refreshSections(['entities'])` 而不是自己拼 innerHTML：它是本仓唯一的局部重绘通道，
     //   且跑在 `sw2SectionRefreshRunning` 防重入标志里（自拼 innerHTML 会绕过它 ⇒ 重绘自己咬自己）。
+    // ★★leg79/81：两张筛选词表（`SW2_ENTS_KINDS` / `SW2_ENTS_FILTERS`）**随族搬走了** ⇒
+    //   接线层不再自己判词表：`applyEntsFilter` 返回 `false` = "这个词不在两张表里"，
+    //   与原先的 `else-if` **同义**（接线层据此一个字都不动）。
     bus['ents-filter'] = (payload) => {
-        const v = String(payload?.value || '');
-        if (SW2_ENTS_KINDS.has(v)) sw2EntsView.kind = v;
-        else if (SW2_ENTS_FILTERS.has(v)) {
-            const i = sw2EntsView.filters.indexOf(v);
-            if (i >= 0) sw2EntsView.filters.splice(i, 1); else sw2EntsView.filters.push(v);
-        }
-        sw2EntsView.page = 1;          // ★换筛选必回第一页（否则"页码夹紧"会让人以为点了没反应）
+        viewState.applyEntsFilter(String(payload?.value || ''));
         refreshSections(['entities']);
     };
     bus['ents-sort'] = (payload) => {
-        const v = String(payload?.value || 'active');
-        if (['active', 'recent', 'name'].includes(v)) sw2EntsView.sort = v;
-        sw2EntsView.page = 1;
+        viewState.setEntsSort(String(payload?.value || 'active'));
         refreshSections(['entities']);
     };
     // ★分组那一档（`grp`）：控件与分组渲染在 Task 5 同批落地（用户拍板"中途不许有死控件"）。
@@ -3279,14 +2614,12 @@ if (typeof window !== 'undefined') {
     //     换了分组口径 ⇒ 命中集合的**切法与顺序都变**，停在第 3 页会落在另一批组上
     //     （与"换筛选/换搜索词必回第一页"同一条道理，否则玩家以为点了没反应）。
     bus['ents-group'] = (payload) => {
-        const v = String(payload?.value || 'none');
-        if (['none', 'parent', 'loc', 'kind'].includes(v)) sw2EntsView.grp = v;
-        sw2EntsView.page = 1;
+        viewState.setEntsGroup(String(payload?.value || 'none'));
         refreshSections(['entities']);
     };
     bus['ents-page'] = (payload) => {
         // ★页码由渲染层夹紧（`selectEntityPage` 的越界夹紧），这里只管加减——零第二份夹紧逻辑
-        sw2EntsView.page += (String(payload?.value) === 'prev' ? -1 : 1);
+        viewState.turnEntsPage(String(payload?.value) === 'prev' ? -1 : 1);
         refreshSections(['entities']);
     };
     // ★终审 I1：chip 计数的**口径开关**（全册 ⇄ 当前结果）。走的还是既有那条 `refreshSections(['entities'])`
@@ -3296,11 +2629,17 @@ if (typeof window !== 'undefined') {
     //     `rows`/`hit`/`pages` 全不变，只是那几枚钮上的数换了把尺子。此时回第一页反而是**无理由的位移**
     //     （玩家正翻到第 7 页看着，点一下口径就被踢回第 1 页 = 本仓最忌的"面板抢玩家的手"）。
     bus['ents-scope'] = (payload) => {
-        const v = String(payload?.value || 'all');
-        if (v === 'all' || v === 'hit') sw2EntsView.scope = v;
+        viewState.setEntsScope(String(payload?.value || 'all'));
         refreshSections(['entities']);
     };
 
+    // ★★★leg93c（用户令「**事件链条点击后不要放在编年页了，直接弹出一个小窗口**，
+    //   要不然我在大事纪页签点击还得回到编年页」）：链视图改走**浮层**。
+    //   病（源码可证）：旧实现把渲染好的链视图 `insertAdjacentHTML('afterbegin')` 到
+    //   **写死的 `#sw2_view_chronicle`** ⇒ 链按钮在两处（编年页 + 大事纪·旧卷页，C-1 两个入口），
+    //   从大事纪点，内容却进了**另一个页签** ⇒ 玩家看到"点了没反应"，得自己切回编年页。
+    //   ⇒ 修法：链视图进一个**挂在 `document.body` 上的浮层**（三条理由见 `web/style.css` 的 `.sw2-cv-mask`）。
+    //   ★浮层与面板窗口**互不影响**：面板关着也能看（链是只读事实）；面板的 ESC 只管面板，浮层的 ESC 只管浮层。
     bus['open-chain'] = (payload) => {
         try {
             const id = payload?.chain;
@@ -3308,18 +2647,70 @@ if (typeof window !== 'undefined') {
             if (!world || !id) { setStatus('⚠ 没有可展开的链'); return; }
             const chain = expandChain(world, id);
             const html = renderChainViewHtml(chain, { world, volumes: LISTED_VOLUMES });
-            const chronicle = document.getElementById('sw2_view_chronicle');
-            if (!chronicle) return;
-            chronicle.insertAdjacentHTML('afterbegin', html);
+            // 先撤上一层（点第二条链 ⇒ 换内容，不留两份）
+            document.getElementById(CHAIN_MASK_ID)?.remove();
+            const mask = document.createElement('div');
+            mask.className = 'sw2-cv-mask';
+            mask.id = CHAIN_MASK_ID;
+            const box = document.createElement('div');
+            box.className = 'sw2-cv-box';
+            box.innerHTML = `${html}<div class="sw2-cv-hint">点空白处或按 Esc 关闭 · 链视图只读</div>`;
+            mask.appendChild(box);
+            // ⓵ 点**背景**关掉（点弹窗内部不关——不然想看细处一点就没了）
+            mask.addEventListener('click', (e) => { if (e.target === mask) closeChainPopup(); });
+            // ⓷ ★★**浮层自己的按钮委托**（这条是必须的，别删）：面板的动作总线 `bindActions` 是挂在
+            //   **`#story_world2_window`** 上的（`addEventListener('click', …)`），而本浮层挂在 `document.body`
+            //   ⇒ 浮层里的 `data-action` **永远走不到那条总线**：链视图自带的「收起」（`chain-close`）与
+            //   各处的「阅卷」（`.sw2-goto` → 切到旧卷页）会**点了没反应**。
+            //   ⇒ 在浮层上挂一条同形状的委托，**它只处理浮层自己那棵树里的东西**（`e.target.closest` 天然限定），
+            //     不碰面板的任何行为（面板里那两个按钮照旧走总线，两边不重不漏）。
+            mask.addEventListener('click', (e) => {
+                const t = e.target;
+                const goto = t?.closest?.('.sw2-goto');
+                if (goto) {
+                    // 「阅卷」= 要看旧卷页 ⇒ **先把浮层收掉**，否则挡住了玩家要看的东西（用户那句抱怨的另一面）
+                    const view = goto.getAttribute('data-view') || 'archive';
+                    closeChainPopup();
+                    document.getElementById(WINDOW_ID)?.querySelector(`.sw2-tab[data-view="${view}"]`)?.click();
+                    return;
+                }
+                const act = t?.closest?.('[data-action]');
+                if (!act) return;
+                const action = act.getAttribute('data-action');
+                if (action === 'chain-close') { closeChainPopup(); return; }
+                if (action === 'open-chain') {
+                    // 链里再点链 ⇒ 换内容（`open-chain` 自己会先撤上一层）
+                    bus['open-chain']({ chain: act.getAttribute('data-chain') });
+                    return;
+                }
+                // 浮层里若将来长出别的动作：交给面板那条总线（宁可走一次，也别画了不接）
+                dispatchAction(action, { source: act.getAttribute('data-source'), vol: act.getAttribute('data-vol'), chain: act.getAttribute('data-chain'), entity: act.getAttribute('data-entity'), name: act.getAttribute('data-name'), snap: act.getAttribute('data-snap'), tick: act.getAttribute('data-tick') }, e);
+            });
+            // ⓶ ESC 关掉：**捕获阶段**且 `stopPropagation` ⇒ 面板那条"ESC 关整个窗口"不会跟着一起触发
+            //   （本监听只在浮层存在期间挂着，随浮层一起摘掉——见 `closeChainPopup`）
+            document.body.appendChild(mask);
+            const onEsc = (e) => {
+                if (e.key !== 'Escape') return;
+                e.stopPropagation();
+                e.preventDefault();
+                closeChainPopup();
+            };
+            mask._sw2Esc = onEsc;
+            document.addEventListener('keydown', onEsc, true);
             setStatus(chain.ok ? `链已展开（上承 ${chain.up?.length ?? 0} · 下沿 ${chain.down?.length ?? 0} · 只读）` : '⚠ 链视图不可用');
         } catch (err) {
             setStatus(`⚠ 链视图失败：${err?.message || err}`);
         }
     };
 
-    bus['chain-close'] = () => {
-        document.getElementById('sw2_chain_view')?.remove();
-    };
+    /** ★leg93c：收链浮层（**一处收口**：`chain-close` 按钮 / 点背景 / ESC 三条路都走它）。 */
+    function closeChainPopup() {
+        const el = document.getElementById(CHAIN_MASK_ID);
+        if (el?._sw2Esc) document.removeEventListener('keydown', el._sw2Esc, true);
+        el?.remove();
+    }
+
+    bus['chain-close'] = () => closeChainPopup();
 
     bus['export-world'] = async () => {
         const meta = readHotMeta();
@@ -3447,10 +2838,9 @@ if (typeof window !== 'undefined') {
             //   名字读 ST 的 `name1`（用户人设名）。★拿不到就退回旧口径（空串 ⇒ 「你」），**不猜**。
             const personaName = (() => { try { return String(getCtx()?.name1 || '').trim(); } catch (_) { return ''; } })();
             const piece = attachPlayerPiece(seed, personaName);
-            const playerDesc = String(settings.playerDesc || '').trim();
-            if (playerDesc) {
-                seed.meta = { ...(seed.meta || {}), playerDesc };
-            }
+            // ★★★leg87：这里原本还有一段「把设置页的开档描述写进 `seed.meta.playerDesc`」——
+            //   随那张卡一起撤（依据：写进去之后**全仓零处读**，四维解析那一族 leg25 c 已整条删除）。
+            //   撤掉它 = 新账不再多一个无人读的字段；旧账里已有的一律不动（引擎不读，迁不迁行为相同）。
             const playerFinal = seed.entities.find((e) => e.id === seed.context?.playerId);
             // ★★leg40：**从世界源起根**——新世界开局就种几条"书里正在发生的事"当线头。
             //   为什么必须在**开局**这一步（用户拍板：起根只留在"初始化"与"显式移植"两处，**载入期绝不自动跑**）：
@@ -3504,7 +2894,7 @@ if (typeof window !== 'undefined') {
             //     并让状态条如实报"补回来几个"。★补的只有**玩家输入**（`playerInputs`）——
             //     因变量（民生度/动乱度）是**世界的结果**，这一枚按钮清的正是引擎算出来的那一层，
             //     把它们搬回来就会"清了又被填回去"（判据 ⑫b 当场抓红过这一版）。
-            const carried = paramHub.playerInputs(world);     // 清之前在手上（只读，不改世界）
+            const carried = paramApi.playerInputs(world);     // 清之前在手上（只读，不改世界）
             world.context.setting = resetDynamicLayer(world.context.setting);
             const dyn = world.context.setting.dynamic;
             world.context.setting = { ...world.context.setting, dynamic: { ...dyn, env: { ...carried } } };
@@ -3528,8 +2918,8 @@ if (typeof window !== 'undefined') {
     // 这枚按钮一次给出五个决定性读数（主路键名/原文/能不能写 · 世界名与桶键 · 真源 · 引擎镜像 ·
     // 真源与镜像不一致的键），并尽量拷进剪贴板 ⇒ 玩家不用开控制台。
     bus['param-doctor'] = async () => {
-        const ev = gatherParamEvidence();
-        const text = paramEvidenceText(ev);
+        const ev = paramApi.gatherParamEvidence();
+        const text = paramApi.paramEvidenceText(ev);
         console.info(text);
         let copied = false;
         try {
@@ -3549,6 +2939,23 @@ function bindActions() {
     const win = document.getElementById(WINDOW_ID);
     if (!win) return;
     win.addEventListener('click', (e) => {
+        // ★★★leg89（用户实机「点了之后还要再点旁边的空白才会切换」的定案）：
+        //   注入开关**就在这里直接收**——不进动作总线、不靠 `data-action` 的注册时序。
+        //   为什么改成这样（两次实机都栽在这条链子上）：
+        //     第一版挂 `input`/`change` ⇒ **按钮根本不派发那两个事件**（点了完全没反应）；
+        //     第二版改走 `data-action` + 总线 ⇒ 切换**延迟到下一次刷新**才画出来
+        //     （说明这条路上还有一环不是"当场"的——而 `bindActions` 这个 click 委托本身就挂在
+        //      `#story_world2_window` 上、与标签页/其它按钮**同一条**、每次点击必然走到）。
+        //   ⇒ 定稿：**唯一点击入口 + 纯 DOM 属性**，判据仍全在导出的 `sw2ToggleInject()` 里
+        //     （那一条判据能在 Node 里真跑，见 `test/tag-extract.test.js` 的 ⑲）。
+        const sw = e.target?.closest?.('[data-inject-switch]') || null;
+        if (sw) {
+            const key = sw.getAttribute('data-inject-switch');
+            const on = String(sw.getAttribute('data-value') ?? '') === '1';
+            console.info(`[story-world-v2] 注入开关被按下：${key} → ${on ? '开' : '关'}`);
+            sw2ToggleInject(key, on);
+            return;
+        }
         const el = e.target?.closest?.('[data-action]') || e.target?.closest?.('.sw2-goto');
         if (!el) return;
         if (el.classList.contains('sw2-goto')) {
@@ -3557,7 +2964,7 @@ function bindActions() {
             return;
         }
         const action = el.getAttribute('data-action');
-        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity'), name: el.getAttribute('data-name'), force: el.getAttribute('data-force'), snap: el.getAttribute('data-snap'), tick: el.getAttribute('data-tick'), param: el.getAttribute('data-param'), value: el.getAttribute('data-value') };
+        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity'), name: el.getAttribute('data-name'), force: el.getAttribute('data-force'), snap: el.getAttribute('data-snap'), tick: el.getAttribute('data-tick'), param: el.getAttribute('data-param'), value: el.getAttribute('data-value'), key: el.getAttribute('data-key') };
         dispatchAction(action, payload, e);
     });
     // ★细案实体页：搜索框（`#sw2_ents_q`）走 input 通道——`refreshSections` 换掉 innerHTML 会**夺焦点**，
@@ -3573,8 +2980,8 @@ function bindActions() {
     //   ★判据走源码锁（`test/render.test.js` 的"终审 C1"那条，自带反向自证）——IME 组合序列在 Node 里
     //     造不出真序列，而这段护栏的可观察效果"不发生一次重绘"要真 DOM + 真世界对象才看得见。
     win.addEventListener('compositionstart', (e) => {
-        if (e.target?.closest?.('#sw2_ents_q')) sw2EntsComposing = true;
-        if (e.target?.closest?.('#sw2_ch_q')) sw2ChronicleComposing = true;
+        if (e.target?.closest?.('#sw2_ents_q')) viewState.setEntsComposing(true);
+        if (e.target?.closest?.('#sw2_ch_q')) viewState.setChronicleComposing(true);
     });
     win.addEventListener('compositionend', (e) => {
         const q = e.target?.closest?.('#sw2_ents_q');
@@ -3582,36 +2989,38 @@ function bindActions() {
         if (cq) {
             // ★leg50 编年页搜索框：与实体页那一支**逐字同款**（同一个病、同一副药——
             //   "重绘把搜索框节点换掉 ⇒ 中文输入法组合被当场打断"）。
-            sw2ChronicleComposing = false;
+            viewState.setChronicleComposing(false);
             const caret = cq.selectionStart;
-            sw2ChronicleView.q = String(cq.value || '');
-            sw2ChronicleView.page = 1;        // 换搜索词必回第一页（同筛选）
-            sw2ChronicleView.pageBook = 1;
+            // ★leg79/81：视图对象**就地写**（`viewState.chronicle().field = …`）——**不许绑进变量**：
+            //   绑了它，`reset()` 一换绑定，这些就地写就落到**被丢弃的旧对象**上（面板"点了没反应"，且不抛错）。
+            viewState.chronicle().q = String(cq.value || '');
+            viewState.chronicle().page = 1;        // 换搜索词必回第一页（同筛选）
+            viewState.chronicle().pageBook = 1;
             refreshSections(['chronicle']);
             const again = win.querySelector('#sw2_ch_q');
             if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
             return;
         }
         if (!q) return;
-        sw2EntsComposing = false;
+        viewState.setEntsComposing(false);
         // 组合结束 = 补一次**正常的提交**（组合期一次都没提交过）；四步与下面 input 那支同形。
         const caret = q.selectionStart;
-        sw2EntsView.q = String(q.value || '');
-        sw2EntsView.page = 1;                 // 换搜索词必回第一页（同筛选）
+        viewState.entities().q = String(q.value || '');
+        viewState.entities().page = 1;             // 换搜索词必回第一页（同筛选）
         refreshSections(['entities']);
         const again = win.querySelector('#sw2_ents_q');
         if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
     });
     win.addEventListener('input', (e) => {
         // ★C1 护栏：组合期**在改状态与重绘之前**早退（这两样都会把组合打断）
-        if (e.isComposing || sw2EntsComposing || sw2ChronicleComposing) return;
+        if (e.isComposing || viewState.anyComposing()) return;
         // ★leg50 编年页搜索框（同款四步）
         const cq = e.target?.closest?.('#sw2_ch_q');
         if (cq) {
             const caret = cq.selectionStart;
-            sw2ChronicleView.q = String(cq.value || '');
-            sw2ChronicleView.page = 1;
-            sw2ChronicleView.pageBook = 1;
+            viewState.chronicle().q = String(cq.value || '');
+            viewState.chronicle().page = 1;
+            viewState.chronicle().pageBook = 1;
             refreshSections(['chronicle']);
             const again = win.querySelector('#sw2_ch_q');
             if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }
@@ -3620,8 +3029,8 @@ function bindActions() {
         const q = e.target?.closest?.('#sw2_ents_q');
         if (!q) return;
         const caret = q.selectionStart;
-        sw2EntsView.q = String(q.value || '');
-        sw2EntsView.page = 1;                 // 换搜索词必回第一页（同筛选）
+        viewState.entities().q = String(q.value || '');
+        viewState.entities().page = 1;             // 换搜索词必回第一页（同筛选）
         refreshSections(['entities']);
         const again = win.querySelector('#sw2_ents_q');
         if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (_) {} }

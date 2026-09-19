@@ -416,10 +416,10 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         const handlers = new Set(Object.keys(globalThis.window.__sw2Actions || {}));
         assert.ok(handlers.size > 0, '动作总线已注册');
         const w = world();
-        w.entities[1]['实力'] = 'T9';           // 触发"重查"按钮出现
+        w.entities[1]['实力'] = 'T9';           // 触发行内「查」那一档（★leg76：`lookupTask` 已随批量补全删除）
         const html = JSON.stringify([
-            renderAll(w, { config: { lookupTask: null } }),
-            renderEntitiesHtml(w, { config: { lookupTask: { cursor: 3, total: 10, success: 2, pending: 1, absent: 0, failed: 0 } } }),
+            renderAll(w),
+            renderEntitiesHtml(w),
         ]);
         const actions = [...new Set([...html.matchAll(/data-action=\\?"([a-z0-9-]+)\\?"/g)].map((m) => m[1]))];
         assert.ok(actions.length > 0, '产物里确有 data-action');
@@ -433,8 +433,13 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         const dangling = actions.filter((a) => !handlers.has(a) && !NON_BUS.has(a));
         assert.deepEqual(dangling, [], `★这些动作画了按钮但没有处理器：${dangling.join('、')}`);
         assert.ok(actions.includes('lookup-entity'), '行内「查」在产物里');
-        assert.ok(actions.includes('lookup-batch-all'), '批量入口在产物里');
-        assert.ok(handlers.has('lookup-entity') && handlers.has('lookup-batch-all'), '★本棒新加的两个入口真的有处理器');
+        assert.ok(handlers.has('lookup-entity'), '★行内「查」真的有处理器');
+        // ★★★leg76（用户令「这个按钮根本用不了，要么改成重抽名册，要么就删了」）：全册批量补全**已整族撤除**。
+        //   本条锁**两头都不许回潮**：产物里不许再有那枚钮、总线里也不许再有那个动作
+        //   （只锁一头的话，"按钮撤了但处理器留着"或反之都能溜过 —— 正是 leg40b 治的那类半拉子）。
+        assert.ok(!actions.includes('lookup-batch-all'), '★「⬇ 补全全册实力」那枚钮不许回潮（leg76 已撤）');
+        assert.ok(!handlers.has('lookup-batch-all') && !handlers.has('lookup-batch'), '★批量补全的总线动作也不许回潮');
+        assert.ok(!html.includes('补全全册实力'), '★文案也不许回潮（面板不许承诺一个不存在的钮）');
         // ★细案实体页（leg49 Task 4）：工具条与分页器的三个动作必须真的有处理器。
         //   上面 :433 那条是全产物差异检查（治"有没有漏"），这一段补的是**正向点名**
         //   （治"点名的这三个必须在"）——两组判据分工不同，缺任一组都会漏掉一类断线。
@@ -467,12 +472,23 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
     }
 });
 
-test('leg25 d：批量进度与按钮随 config 进面板（渲染层不持任务状态）', () => {
+test('★★★leg76：全册批量补全已撤——产物里不再有那枚钮、也不再有进度行（两头都锁）', () => {
+    // ★用户令：「这个按钮根本用不了，要么就改成重抽名册，要么就删了」。撤的依据（真账实测）：
+    //   ① 它只查 `forcedFields('absent')` 那一小撮（大荒z1 689 实体只问 11 个 / 实教 134 只问 1 个）；
+    //   ② 点了不当场跑、跑完还把总结句印成字面量 `null`；
+    //   ③ ★根因：它真会问的那 11 个里 **10 个是「势力」**，而提示词**明令势力不抽实力** ⇒ 永远补不上。
     const w = world();
-    const idle = renderEntitiesHtml(w, { config: { lookupTask: null } });
-    assert.ok(idle.includes('⬇ 补全全册实力'), '未在跑 → 显示启动按钮');
-    assert.ok(idle.includes('data-action="lookup-batch-all"'));
-    const running = renderEntitiesHtml(w, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } });
-    assert.ok(running.includes('■ 停止补全 4/623'), '在跑 → 显示停止 + 进度');
-    assert.ok(running.includes('补全中 4/623'), '进度行在位');
+    // 即使有人把旧的 `config.lookupTask` 塞进来，面板也**不许**再画出任何批量痕迹（防"改一处漏一处"）
+    for (const cfg of [undefined, { config: {} }, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } }]) {
+        const html = cfg === undefined ? renderEntitiesHtml(w) : renderEntitiesHtml(w, cfg);
+        assert.ok(!html.includes('data-action="lookup-batch-all"'), '★启动/停止那枚钮不许回潮');
+        assert.ok(!html.includes('补全全册实力'), '★「⬇ 补全全册实力」文案不许回潮');
+        assert.ok(!html.includes('■ 停止补全'), '★「■ 停止补全」文案不许回潮');
+        assert.ok(!html.includes('补全中'), '★在跑时的进度行也不许回潮');
+    }
+    // ★行内那枚「查」是好的 ⇒ 必须在（别把好的那枚一起删了）
+    assert.ok(renderEntitiesHtml(w).includes('data-action="lookup-entity"'), '★行内「查」必须还在');
+    // ★反向自证：面板那条说明**如实**说清"没有全册重查入口了"，不许指路到一个不存在的钮
+    const html = renderEntitiesHtml(w);
+    assert.ok(!html.includes('入口是工具栏里那枚'), '★不许再指路到那枚已撤的钮（面板不许承诺不存在的东西）');
 });

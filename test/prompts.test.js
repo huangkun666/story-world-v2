@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAIN_PROMPT, MAIN_PROMPT_V, OUTPUT_TEMPLATE, assembleMainPrompt } from '../src/prompts.js';
 // leg31：行式表格的往返判据（判据 D）与分隔符自检（判据 C）直接打真源函数，不自建副本
-import { packTextOf, parseEntityTableBlock, entityTableAnomalies, ENTITY_TABLE_HEADER, buildEvolutionPack } from '../src/pack.js';
+import { packTextOf, parseEntityTableBlock, entityTableAnomalies, ENTITY_TABLE_HEADER, buildEvolutionPack, trimPack, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
 // leg29：告知面上限不写字面量——直接读真源常量，改上限则本用例随之成立（与 worldstep 那条同法）
 import { RIPPLE_TARGET_CAP } from '../src/weight.js';
 // leg32d：七组必填的**真源**（与其在提示词里抄一遍，不如直接读 schema——数字/清单只允许一个真源）
@@ -31,8 +31,24 @@ function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick 
 }
 const ent = (id, name, kind, extra = {}) => ({ id, kind, name, location: '中央', ...extra });
 
-test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-20：leg40 第 14 条「线捆 + 拾遗」+ leg39 视角改写「你就是这个世界」+ 多主线并立 + 事件三源分工 + 新线三由来 + leg34 字段写回/带因复活/主动查 + leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-20');
+test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-23：★leg100 第 15 条补「归档不许当候选」+ v2-agenda-t1-22：leg95 第 15 条「收场提议 eventClosures」+ v2-agenda-t1-21：leg90 第 8b 条「事件标题自带对象」+ leg40 第 14 条「线捆 + 拾遗」+ leg39 视角改写「你就是这个世界」+ 多主线并立 + 事件三源分工 + 新线三由来 + leg34 字段写回/带因复活/主动查 + leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-23');
+    // ★★★leg95（用户令「让 llm 来决定何时结束」+「引入机械就一定要避免让代码去理解语义」）：第 15 条。
+    //   为什么立它：`seed`/`state` 两种源**没有任何关闭路径**，涟漪的门①追到种子永远 false
+    //   ⇒ 真账 A 局 16 条 / B 局 44 条**结构上永远闭不了**（推 40 轮只增不减）。机械判不了"这段讲完了没有"。
+    //   ★问法经真账回测定稿（装置 `demo/measure-leg95-close-live.js`）：问「讲完了没有」⇒ A 局点 18/42、
+    //     B 局点 9/68，**号零错**；问「还用不用接着提」⇒ 同一份账点 43/68（含 14 件刚落账的）——太狠。
+    assert.ok(MAIN_PROMPT.includes('eventClosures'), '第 15 条必须点名 eventClosures 这一组（不给入口＝兑现不了的承诺）');
+    assert.ok(MAIN_PROMPT.includes('每一件都已经发生过了'), '★先把"还没结束"的语义说清（它不是"正在发生"，是"账上还没放下来"）——这是这一条的地基');
+    assert.ok(MAIN_PROMPT.includes('这一段过去了'), '★"结束"的定稿口径＝这一段过去了（不是"有个圆满结局"）');
+    assert.ok(MAIN_PROMPT.includes('半途而废、被更大的事盖过去、不了了之'), '★"结束 ≠ 圆满"必须明写（否则模型不敢收）');
+    assert.ok(MAIN_PROMPT.includes('下一轮还会问一次'), '★"拿不准就不要列"要给退路（漏一件的代价远小于收错一件）');
+    assert.ok(MAIN_PROMPT.includes('等于你自己把手头的线掐了'), '★点明"硬收"的后果（把还在演的事按下去）');
+    assert.ok(MAIN_PROMPT.includes('收场不是在世界上再发生一件事'), '★防"给收场再写一件 state 的事"那种形态错乱');
+    assert.ok(/一轮\*\*最多 8 件\*\*/.test(MAIN_PROMPT), '配额要写给模型看（超出的引擎顺延，不白跑）');
+    assert.ok(MAIN_PROMPT.includes('已经收过场的事再收一次'), '★两种会被当场拒的写法要写明（省得白写一轮）');
+    // ★旧"在办/搁置"问法**不许进生产提示词**：真账实测它一次清掉 63%（含刚落账的事）——那是把世界正演的事一起收了。
+    assert.ok(!MAIN_PROMPT.includes('还用不用接着提'), '★回测里那个"太狠"的问法不得回潮（它会清掉正在演的事）');
     // ★leg40 第 14 条（线捆）：治"起了根没人浇"——真账 59 轮起过 9 条无来路的线、下一轮一条都没被接续。
     assert.ok(MAIN_PROMPT.includes('"线捆"（threads）'), '第 14 条必须点名 threads 这一栏（模型得知道看哪儿）');
     assert.ok(MAIN_PROMPT.includes('上面每一条，本回合各给它一步'), '★"每条各写一步"是这一条的核心要求（不是"挑一条"）');
@@ -220,6 +236,25 @@ test('leg32d·契约锁：schema 顶层 required 的七组，提示词必须逐�
     assert.ok(/可省[^。]*不适用于[^。]*七组/.test(MAIN_PROMPT), '要明说"可省"不适用于七组本身');
 });
 
+test('★★leg90·第 8b 条：事件标题**自带对象**（用户令：有就写、没就不写）', () => {
+    // 病（用户实机看注入输出时一句话问出来的）：「**万魔之祖完成初步接引，聊天llm怎么知道是接引谁**」。
+    //   查实：事件契约只有 id/title/source/position/ripples 五格，**没有"对象"这一格**
+    //   ⇒ "接引谁"只可能活在**标题字符串**里，注入面怎么改都答不出来。故治在写入那一刻的措辞。
+    assert.ok(MAIN_PROMPT.includes('事件标题（newEvents[].title）必须自带对象'), '★8b 条在位');
+    assert.ok(MAIN_PROMPT.includes('知道对象就写进标题里'), '★正向：知道就写进去');
+    assert.ok(MAIN_PROMPT.includes('不知道对象就不要编'), '★反向：不知道不要编（编出来的会被当成账上事实往下传）');
+    // 要给出**可照抄的对照**（正反各一例），否则模型不知道"自带对象"长什么样
+    assert.ok(MAIN_PROMPT.includes('完成初步接引血屠魔君'), '★正向例子在位（用户原话那一条）');
+    assert.ok(MAIN_PROMPT.includes('不写「万魔之祖完成初步接引」'), '★反向例子在位（正是用户骂的那一句）');
+    // 判据要可自检（把标题单独拎出来读）
+    assert.ok(MAIN_PROMPT.includes('把标题单独拎出来'), '★给出可自检的判据（模型能自己核对）');
+    // 字段说明里也要点名 title（模型啃长段落时也能看到）
+    assert.ok(MAIN_PROMPT.includes('newEvents[].title=事件标题'), '★字段说明里点名 title 的写法');
+    // 输出模板的示例要跟着改（示例是模型照抄的样板——留着"偏将整军出城"这种虚标题等于教它写虚的）
+    assert.ok(OUTPUT_TEMPLATE.includes('偏将整军出城，把北门的守将换成了自己人'), '★模板示例自带对象');
+    assert.ok(!OUTPUT_TEMPLATE.includes('"title": "偏将整军出城"'), '★旧虚标题示例不得回潮');
+});
+
 test('leg32c·铁律 9：长跑接得上（因果要有来路 / 同一件事不重开 / 世界是好几条线并排走）', () => {
     // ① 三条口径都在（判据写成"要点在不在"，不钉整句 —— 措辞可以改，要点不许丢）
     assert.ok(MAIN_PROMPT.includes('长跑：往下传的时候，因果要接得上'), '铁律 9 在位');
@@ -322,10 +357,78 @@ test('leg32c·包面：在飞盘算带出生理由 + 已了结线台账 + 已关
     assert.deepEqual(p.pack.closedAgendas[0], { id: 'a_old', owner: 'e_b', goal: '办完的事', source: { type: 'state' } }, '谁/办什么/因何而起三样');
     // ③ 已关闭事件带 source（旧版只带 id+title，且只带 2 条）
     assert.ok(p.pack.recentClosedEvents.some((e) => e.id === 'ev_1' && e.source?.type === 'state'), '★已关闭事件要带源');
+    // ★★★leg100（甲案）：**归档那一栏必须自己带记号**（未裁剪那一态也要锁）。
+    //   ★本笔的**反向自证当场咬出来的一处空绿**：这条断言我第一版写成 `[0].closed === true`，
+    //     而这份夹具里**第一条事件是开着的**（`recentClosedEvents[0]` 其实是那条已了结的 `ev_1`——
+    //     但断言写宽了：只要那一栏非空就过）⇒ 把产品的记号整个删掉，判据**照旧全绿**。
+    //     ⇒ 定稿按"**每一条**都得带"来咬（`every` + 非空前置），空绿被堵死。
+    assert.ok(p.pack.recentClosedEvents.length > 0, '前置：这份夹具里归档那一栏要有内容（否则下面是空绿）');
+    assert.ok(p.pack.recentClosedEvents.every((e) => e.closed === true),
+        '★归档那一栏**每一条**都要盖 `closed: true`（未裁剪那一态）');
+    // ★同时咬反面：候选那一栏**不许**被盖上同一个记号（盖上＝把可动的事说成墓碑）
+    assert.ok(p.pack.pendingEvents.every((e) => e.closed === undefined),
+        '★候选那一栏不许带 `closed` 记号（两栏要真的分得开——这才是甲案的目的）');
     // ④ 包文本里真的看得见（不是只挂在对象上、序列化时又丢了）
     const text = packTextOf(p.pack);
     assert.ok(text.includes('closedAgendas') && text.includes('办完的事'), '台账必须真的序列化进包文本');
     assert.ok(text.includes('"source"'), '出生理由必须真的序列化进包文本');
+    assert.ok(text.includes('"closed":true'), '★记号必须真的序列化进包文本（挂在对象上而在序列化时丢了 = 没做）');
+});
+
+// ═══════════════ ★★★leg100（甲案）：归档与候选必须在**给模型的资料**里分得开 ═══════════════
+// 用户令「**可以按甲吧**」（甲 = 让两栏长得不一样，而不是只在报错里骂它一句）。
+// 真机病（`docs/session-handoff-2026-09-21-leg100.md` §0 有完整取证）：模型**从 `recentClosedEvents`
+//   那一栏挑了两个已了结的号**去收场（`ev_6_4`/`ev_7_2`，恰好是那份尾巴的头两条）——两栏此前
+//   **形状完全一样**（都是 id+title+source），模型手上没有分辨"候选/墓碑"的尺子。
+// ★★为什么判据必须咬"**裁剪后记号还在**"：`trimPack` 的 ③ 级原来只留 `{id}`（把 title/source 全丢掉），
+//   而"**只剩一串光秃秃的号**"恰恰是最像候选池的形态（真账 `trimmed=null`，但真超预算时就会走到那一级）。
+//   ⇒ 记号做成**独立一格**、并且裁剪时要**跟着留**；只咬未裁剪那一态 = 漏掉最危险的那一态。
+test('★leg100：预算裁剪把归档裁到只剩 id 时，**"已了结"的记号也必须活着**（最危险的那一态）', () => {
+    // ★为什么不靠"堆实体去逼预算"（我前两版都这么写，两次都被自己的**前置断言**拦下：
+    //   `cut=["entities.slim"]` / `["entities.slim","entities.idOnly"]` —— 说明那份夹具**根本没走到 ③**）：
+    //   那条路要**猜**多大的夹具才越界，够不够全看别处的常量，而且夹具越堆越慢（实测 48ms）。
+    //   ⇒ 本用例要咬的那件事**与预算无关**，只与"③ 那一级做什么"有关 ⇒ 直接从**不变量**出发构造：
+    //     把包摆成"已经降级到底"的那一态（实体只剩 id+name，而这一态**本身就超预算**），
+    //     于是 ③ 成为**第一个真正要动的**那一级 —— 不用猜、也不会被前两级吃掉。
+    //   ★尺寸怎么定的（**不猜**）：预算 `EVOLUTION_BUDGET_TOKENS = 30000`、`TOKEN_RATIO = 3`（中文）
+    //     ⇒ 包文本要**超过 90000 字符**才越界。8000 个 `{id,name}` ≈ 120000 字符 ⇒ 稳过线，
+    //     且下面那条前置断言会**当场**把"没越界"顶红（第一版 3000 个实测 `cut=[]`，正是被它拦下的）。
+    const entities = Array.from({ length: 8000 }, (_, i) => ({ id: 'e_' + i, name: '角色' + i }));   // idOnly 形态
+    const mk = () => ({
+        world: '测试', tension: 0.5, positions: ['中央'],
+        entities,
+        agendas: [],
+        pendingEvents: [{ id: 'ev_2_1', title: '还开着的一件事', source: { type: 'state' }, position: '中央' }],
+        recentClosedEvents: Array.from({ length: 20 }, (_, i) => ({
+            id: 'ev_1_' + i, title: '已经了结的事' + i, source: { type: 'ripple' }, closed: true,
+        })),
+        playerMove: null, dialogueBook: [],
+        // 实体已是最瘦形态 ⇒ 前两级（slim / idOnly）压不动它 ⇒ ③ 才是第一个真正生效的级别
+        __relight: () => entities,
+    });
+    assert.ok(Math.ceil(JSON.stringify(mk()).length / 3) > EVOLUTION_BUDGET_TOKENS,
+        '前置：夹具必须真的超预算（否则本用例是空绿）');
+    const p = mk();
+    const cut = trimPack(p);
+    assert.ok(cut.includes('recentClosedEvents'),
+        `前置：必须真的裁到 recentClosedEvents（实际 cut=${JSON.stringify(cut)}）`);
+    const row = p.recentClosedEvents[0];
+    assert.ok(row, '前置：归档那一栏要有内容（否则下面全是空绿）');
+    assert.deepEqual(Object.keys(row), ['id', 'closed'], `★记号必须跟着留：实际 ${JSON.stringify(row)}`);
+    assert.equal(row.title, undefined, '前提：③ 确实把 title 丢掉了（正是"只剩号"那一态）');
+    assert.ok(packTextOf(p).includes('"closed":true'), '★记号必须真的在**包文本**里（序列化后仍看得见）');
+    assert.ok(p.pendingEvents.every((e) => e.closed === undefined),
+        '★候选那一栏不许盖上"已了结"的记号（盖上就等于把可动的事说成墓碑）');
+});
+
+// ★★leg100：提示词必须把"记号是什么意思"**写给模型看**（记号本身不会自己说话——leg39 的教训：
+//   "给名单不给资格＝名单空转"）。三条一起咬：点出栏名 · 点出记号 · 说出"别从那一栏拿号"这个禁令。
+test('★leg100：提示词第 15 条必须把"归档不许当候选"写给模型（栏名 + 记号 + 禁令三样齐）', () => {
+    assert.ok(MAIN_PROMPT.includes('recentClosedEvents'), '★必须点名那一栏（模型得知道是哪一栏）');
+    assert.ok(MAIN_PROMPT.includes('closed'), '★必须把记号的字面写给模型（它看到的是 `"closed": true`）');
+    assert.ok(MAIN_PROMPT.includes('别从那一栏拿号'), '★必须给出禁令（只说"那是归档"不够——leg39 那条教训）');
+    assert.ok(MAIN_PROMPT.includes('pendingEvents'), '★必须同时点出**该从哪一栏挑**（两栏都要点到才对得上）');
+    assert.ok(!MAIN_PROMPT.includes('还用不用接着提'), '★"太狠"的旧问法照旧不许回潮（leg95 那条锁不动）');
 });
 
 test('leg32c·不新造字段：已了结线台账**不报结局**（账上没有结局字段，宁可少报）', () => {

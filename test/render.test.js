@@ -10,12 +10,23 @@ import path from 'node:path';
 import {
     renderAll, renderBoardHtml, renderChronicleHtml, renderArchiveHtml,
     renderEntitiesHtml, renderSettingHtml, renderSettingsHtml, renderVolumeReadHtml,
-    renderChainViewHtml, renderInfoBandHtml, renderParamsHtml, escapeHtml, BLACKLIST,
+    renderChainViewHtml, renderInfoBandHtml, renderParamsHtml,
+    // ★★leg94：编年视图默认态的**唯一真源** + 账目行里机器号换人话的两个口（判据直接喂它们验边界）
+    CHRONICLE_DEFAULT_VIEW, chronicleEventNames, chronicleDisplayText,
     // ★leg56：分段档位条（纯展示函数——判据直接喂数字验边界，不必造世界）
     gearBarHtml,
     ENTS_PAGE_SIZE, ENTS_DEFAULT_VIEW, makeEntsView, entsSearchTextOf, selectEntityPage, entsHitCounts,
-    PANEL_BUILD,
 } from '../src/render.js';
+// ★★★leg87：单轮超时/输出上限那条锁要**逐字比对出厂真源**（不许渲染层自己抄一份数）。
+import { PROPOSED_CALL_LIMITS } from '../src/transport-http.js';
+// ★★leg88 撤回留档：本文件里 leg87 那几条**关于"提取"**的断言已随 `web/dialogue.js` 整族撤回
+//   （用户裁示："从你发的话里提取落子"不是他要的提取）。关于**A 删 / C 删 / 单轮上限改控件**那几条
+//   一个字未动——那三件是用户明确批准的。
+// ★★★leg85（丙案 · render.js 第一个切口）：**共用底**（`escapeHtml` / `BLACKLIST` / `PANEL_BUILD` …）
+//   整族搬进 `src/render-base.js` ⇒ 本文件按"符号的实际新家"改指向（**不搞 re-export**，本仓明令）。
+//   ★判据内容一个字没改：本文件对这一族咬的仍然是**内容与形状**（黑名单里真有那些词、构建号合
+//     `/^leg\d+-/` 且不含禁词），与"它住在哪个文件"无关 ⇒ 换家不改判据，只换取样地址。
+import { escapeHtml, BLACKLIST, PANEL_BUILD } from '../src/render-base.js';
 import { AGENDA_CAPS } from '../src/settle.js';
 import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS } from '../src/limits.js';
 // ★leg52：面板的档位白名单＝参数表那两张表本身（从**真源**取，不抄字面量——否则面板造得出引擎不认的值）
@@ -45,14 +56,29 @@ test('leg26 c：参数页——值不重复、因变量不给旋钮、自变量�
     //    判据必须按**结构**写：字面连着（`未定未定`）不算——重复出现在两个标签之间。
     //    口径 = 把 `<select>` 整块剥掉后（下拉里的选项文本是控件本身，不算"呈现"），
     //    该值的出现次数必须恰好 = 1（那一行只该显示一次）。
-    const withoutSelects = (s) => String(s).replace(/<select[\s\S]*?<\/select>/g, '');
+    //    ★★leg99：这个助手已提到**模块级**（`leg52·E` 那条判据也要用它）——只留一份实现。
     const count = (hay, needle) => hay.split(needle).length - 1;
     const bare = structuredClone(w);
     bare.context.setting.dynamic.env = {};            // 全未定 —— 正是用户截图那个状态
     const bareHtml = withoutSelects(renderParamsHtml(bare));
-    // ★★leg53（口径升级·用户令「民生那一格拿掉」）：面板上的格从 4 个变 **3** 个
-    //   （乱象 + 天时 + 时局）⇒ 这里从 4 改 3。**判据的实质一字未变**：每个格只许画一次「未定」。
-    assert.equal(count(bareHtml, '未定'), 3, `★参数页未定值重复渲染（3 个格各一次，实际 ${count(bareHtml, '未定')} 次）`);
+    // ★★★leg99（用户令「当前是什么值就是下拉栏的值」）：口径**升级**——原来数的是"3 个格各画一次"，
+    //   而撤掉自变量那两格之后，**「未定」只剩因变量那一格**（乱象；它没有控件、那格是它唯一的读数面）。
+    //   ⇒ 断言改成：①`未定` **恰好 1 次**（= 乱象那格）②**两个自变量一个字都不许印**（它们的值只在下拉里）。
+    //   ★这一改**不是放松**：把 `<select>` 剥掉之后再数，数出来的就是"**呈现层**印了几个未定"，
+    //     而下面 ①b 那条按**每个键**咬住了"控件确实带着未定" ⇒ 两个方向都在。
+    assert.equal(count(bareHtml, '未定'), 1,
+        `★★leg99：撤掉自变量那两格后，「未定」只该剩因变量那一格（实际 ${count(bareHtml, '未定')} 次）`);
+    // ①b ★反向（防"上面那条只是因为整页没渲染出来"）：两个自变量的**下拉自己**必须带着「未定」。
+    //   ★两个坑都在这里踩过（都留档）：
+    //     ①形状：空值那一项是 `<option value="">未定</option>`——**不带 `selected`**（本笔多写了四个字符、当场红）；
+    //     ②**必须在剥过 `<select>` 之前的那份原文上验**——`bareHtml` 是 `withoutSelects(...)` 的产物，
+    //       拿它去找 `option` 永远找不到（本笔第二版就是这么红的）。⇒ 用 `bareRaw`。
+    const bareRaw = renderParamsHtml(bare);           // ★未剥 select 的原文（控件在这里）
+    for (const key of ['天时', '张力推手']) {
+        const seg = bareRaw.slice(bareRaw.indexOf(`data-param="${key}"`));
+        assert.ok(seg.slice(0, 400).includes('<option value="">未定</option>'),
+            `★前置：自变量「${key}」的下拉必须把「未定」列为可选项（否则上面那条是空绿）`);
+    }
 
     // ② 因变量（乱象）只读：所在行不得有 <select>
     //    ★★leg53：`民生度` 已从面板撤下（用户令「拿掉」——它没有生产者，永远「未定」）
@@ -199,10 +225,18 @@ test('★leg27 后：改参数**不许整页重绘**（用户实拍「下拉表�
     assert.match(seg, /refreshSections\(\['board'\]\)/, '★只许重画观棋页（参数页重画 = 控件被销毁重建 = 第二笔事件的来源）');
     assert.ok(!/refreshSections\(\[[^\]]*'params'/.test(seg), '★★参数页**不许**被整块重画（这一条是"点一次写两次"的根治）');
     assert.match(seg, /sw2SetParamControl\(key\)/, '★控件按真源就地回写（不重建节点）');
-    assert.match(seg, /sw2ParamBusy/, '★★同一格"一笔操作"未结束时不许受理重复事件（重画补吐的那一笔）');
+    // ★★★leg82：忙闩已随参数族搬进 `web/param-panel.js`，接线层的形状从裸名 `sw2ParamBusy`
+    //   改成**受控口** `paramApi.paramBusy()`（交出的是那颗 Map 本体）⇒ 判据跟着符号走。
+    //   ★口径**不放宽**：仍锁"`set-param` 这条路上必须有忙闩"（缺它 = 重画补吐的那一笔会被受理）。
+    assert.match(seg, /paramBusy\(\)/, '★★同一格"一笔操作"未结束时不许受理重复事件（重画补吐的那一笔）');
     // refreshSections 自身纪律：缺 DOM / 缺世界时静默返回（浏览器可载性与 Node 动态导入都不许炸）
     // ★leg40c 续：这里原来也是**固定字节切片**（+900，注释一长就假红）⇒ 改成结构切片。
-    const fnStart = web.indexOf('function refreshSections(');
+    // ★★★leg82：锚点从 `'function refreshSections('` 改成**带行首的** `'\nfunction refreshSections('`
+    //   —— 因为 leg82 之后文件里**先**出现了对它的**引用**（`createParamApi({ ..., refreshSections, })`
+    //   那一行），裸 `indexOf` 于是命中**引用**而不是**定义** ⇒ 切出来的是别人家的函数体
+    //   （实测：切片里连 DOM 守卫都没有 ⇒ 当场红）。行首锚只认定义那一行。
+    const fnStart = web.indexOf('\nfunction refreshSections(');
+    assert.ok(fnStart > 0, '★锚点必须找得到 `function refreshSections(` 的**定义**（找不到 ⇒ 下面两条测的是空切片）');
     const fnEnd = web.indexOf('\nfunction ', fnStart + 10);
     const fn = web.slice(fnStart, fnEnd > fnStart ? fnEnd : fnStart + 4000);
     assert.match(fn, /typeof document === 'undefined'/, 'refreshSections 必须有 DOM 守卫');
@@ -282,10 +316,13 @@ test('★★leg46（口径升级）：set-param 只做接线——三态规则�
     // ① 判定与写入都交给 hub（唯一写入口）
     //   ★★★leg48 升级：接线层交给 hub 的**不再是"世界对象"**，而是"世界（或世界名）+ 键 + 值"——
     //     因为"世界对象拿不到"曾经等于"一个字都不写"（用户报了十二轮的那条症状）。
-    assert.match(seg, /paramHub\.(set|clear)\(key2, key(, value)?\)/, '★set-param 必须把"世界（或世界名）+ 键 + 值"整体交给 hub');
+    //   ★★★leg82：写入口现在藏在**受控口**后面（`paramApi.set/clear`，真定义在 `web/param-panel.js`
+    //     的 hub 装配那一格）⇒ 锚点跟着符号走。口径**不放宽**：仍锁"**世界（或世界名）+ 键 + 值**
+    //     一起交给 hub"这个**形状**（不是"文件里出现过 paramApi.set"那种松口径）。
+    assert.match(seg, /paramApi\.(set|clear)\(key2, key(, value)?\)/, '★set-param 必须把"世界（或世界名）+ 键 + 值"整体交给 hub');
     // ★★★leg48：**"手滑到空"与"明确清空"在接线层分开**（下拉里的空串 = 玩家明确选了「未定」）
     assert.match(seg, /fromUnsetOption/, '★必须判"这一笔是不是明确选了未定"（不分 ⇒ 空值会被当成清空命令，删掉玩家的档位）');
-    assert.match(seg, /paramHub\.clear\(/, '★明确清空走 hub 的显式通道');
+    assert.match(seg, /paramApi\.clear\(/, '★明确清空走 hub 的显式通道');
     // ★★★leg48：**世界对象拿不到时要出声**（旧版这条路上一个字都不说 ⇒ 十二轮不可见）
     assert.match(seg, /拿不到世界对象/, '★拿不到世界对象必须留痕（不许沉默）');
     // ★★★leg48：一笔结束之后**控件按真源对齐**（"手滑到空"不许留在屏幕上冒充一次改动）
@@ -307,7 +344,15 @@ test('★★leg46（口径升级）：set-param 只做接线——三态规则�
 
 test('★leg27 c：滚轮不许改档位（`<select>` 滚过就改值是老坑，正是"打开就弹"的来路之一）', () => {
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
-    const seg = web.slice(web.indexOf('function bindSettingsForm('), web.indexOf('function bindSettingsForm(') + 3000);
+    // ★★leg87 勘正：这里原先是 `先读 3000 字符`的**写死窗口**，而 leg87 在 `onField` 里加了
+    //   数字设置那一格（超时/输出上限的校验与如实出声）⇒ 函数体变长、`addEventListener('wheel'`
+    //   被挤出窗口 ⇒ **假红**（拦轮那三行一个字都没动，见下面那条反向自证）。
+    //   ⇒ 口径改成"切到函数体真正结束"（与 `retired-controls.test.js` 那条 `lookupOneEntity`
+    //     的切法同一形状：**锚在内容上，不锚字符数**——写死长度就是一种"锚在行号上"）。
+    const from = web.indexOf('function bindSettingsForm(');
+    const nextFn = web.indexOf('\nfunction ', from + 10);
+    const seg = web.slice(from, nextFn > 0 ? nextFn : undefined);
+    assert.ok(seg.length > 500, '★前置：切到了真的函数体（切空了下面几条就是空绿）');
     assert.match(seg, /addEventListener\('wheel'/, '★必须挂 wheel 拦截');
     assert.match(seg, /preventDefault\(\)/, '★必须真的 preventDefault（否则等于没拦）');
     assert.match(seg, /passive:\s*false/, '★必须 passive:false（被动监听里 preventDefault 无效）');
@@ -373,8 +418,12 @@ function world() {
 //   扫的正是这份夹具 ⇒ **玩家真写一段描述时会被带出来的词，夹具里一个都没有**。
 //   实测抓到的病灶：设置页那句「世界从中摘你的底子（**兵力/权位/人脉/耳目**）」——
 //   那四个概念在 leg25 c 已按用户令整条删除，却因为夹具描述不含这四个词而**年年绿灯**。
-//   ⇒ 夹具改成含四维词的描述，让下面几条禁词扫描真的能咬住这一格。
-const CONFIG = { baseUrl: 'https://gcli.ggchan.dev/v1', apiKey: 'k', model: 'gemini-3.1-pro-preview', playerDesc: '我名黄坤，炼气九层。四维皆无：兵力、权位、人脉、耳目一概谈不上。' };
+// ★★leg87（用户令「A 删了」）：`playerDesc` **已随那张「你的开档描述」卡一起撤**（写进 `meta.playerDesc`
+//   全仓零处读；四维解析那一族 leg25 c 已整条删除）⇒ 夹具里那个键**删掉**，并改由
+//   `test/retired-controls.test.js` 的登记表做**双面锁**（产物面 + 源码串面），比散在这几条里更结实。
+//   ★下面那条 leg40b 的四维锁**一个字节都没放松**：它扫的是"设置页自己的文案"，夹具描述撤了之后
+//     判据从"界面文案 vs 夹具描述"改成"界面文案零四维"，见该条的新注（原锁的意图：界面不许承诺四维）。
+const CONFIG = { baseUrl: 'https://gcli.ggchan.dev/v1', apiKey: 'k', model: 'gemini-3.1-pro-preview' };
 const VOLUMES = [{ id: '卷一', info: '第 1–500 轮 · 512KB · 收在插件本地' }];
 
 test('K33/A-2：同输入两次 renderAll 逐字节一致（纯函数锁）；参数面（config/oldVolumes）也在锁内', () => {
@@ -384,6 +433,10 @@ test('K33/A-2：同输入两次 renderAll 逐字节一致（纯函数锁）；�
 });
 
 const textOnly = (html) => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+// ★★leg99：**剥掉下拉**（`<select>…</select>` 整块）——下拉里的选项文本**是控件本身**、不算"呈现"。
+//   原来是 `leg26 c` 里的局部助手；`leg52·E` 那条判据也要用它（"上限那行不许再印一遍那个数"）
+//   ⇒ 提到模块级，**只留一份实现**（本仓"同一口径不许两处实现"）。
+const withoutSelects = (s) => String(s).replace(/<select[\s\S]*?<\/select>/g, '');
 // ★★leg52：**参数行的定位助手**（三条锁共用一份实现 —— 本仓"同一口径不许两处实现"）。
 //   三处踩坑换来的口径，写死在这里，别在调用点各写一遍：
 //     ① 锚必须是**带键名的完整属性串** `data-param-cell="<键>"`（宽锚 `data-param-cell=` 会自命中）；
@@ -394,17 +447,26 @@ const textOnly = (html) => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/
 //   ★leg52 续：`withLabelRow` —— 自变量的**组标题行**（`.sw2-param-name`）在"当前"那一行**之前**，
 //     默认切法切不到它。要判"玩家能不能读到标签"就必须把边界**再往前挪一行**
 //     （照本仓"判据要咬玩家真能看到的东西"的口径）。
+// ★★★leg99（用户令「没必要每个参数还要显示当前是什么，当前是什么值就是下拉栏的值」）：
+//   **有控件的那几行不再印值格**（`data-param-cell`）⇒ 那个锚对它们**不存在了**。
+//   ⇒ 这里加一条**受控的退路**：值格找不到时，改锚**控件自己**（`data-param="<键>"`）。
+//   ★为什么退路是受控的：①先试值格（因变量只有它）②再试控件（自变量/尺度上限）③都没有 ⇒ 返回空串
+//     ——**不猜、不退回"随便找一个行头"**（那正是本助手前三次踩坑的错法）。
+//   ★口径一字未变：它要切的仍是"**这个键那一行**"，只是锚从"值的家"换成"控件的家"。
 export const paramRowSeg = (htmlSrc, key, { firstRowOnly = false, withLabelRow = false } = {}) => {
-    const anchor = `data-param-cell="${key}"`;
-    const cell = String(htmlSrc).indexOf(anchor);
+    const src = String(htmlSrc);
+    // ① 值的家（因变量行；leg99 之后自变量/上限行没有它了）
+    let cell = src.indexOf(`data-param-cell="${key}"`);
+    // ② 控件的家（自变量/上限行都挂在控件上——`data-param` 只许控件挂，见判据 ④）
+    if (cell < 0) cell = src.indexOf(`data-action="set-param" data-param="${key}"`);
     if (cell < 0) return '';
-    let start = String(htmlSrc).lastIndexOf('<div class="sw2-row', cell);
+    let start = src.lastIndexOf('<div class="sw2-row', cell);
     if (start < 0) return '';
     if (withLabelRow) {
-        const before = String(htmlSrc).lastIndexOf('<div class="sw2-row', start - 1);
-        if (before >= 0 && String(htmlSrc).slice(before, start).includes('sw2-param-name')) start = before;
+        const before = src.lastIndexOf('<div class="sw2-row', start - 1);
+        if (before >= 0 && src.slice(before, start).includes('sw2-param-name')) start = before;
     }
-    const rest = String(htmlSrc).slice(start);
+    const rest = src.slice(start);
     if (!firstRowOnly) return rest;
     const next = rest.indexOf('<div class="sw2-row', 1);
     return next < 0 ? rest : rest.slice(0, next);
@@ -433,7 +495,9 @@ test('K33/A-3：六页签玩家可见文本零引擎术语（黑名单；标签/
 //   判据写成**关系式**（不钉字面）：面板上的分母必须 = 引擎真源的值，引擎改到哪它就跟到哪。
 test('★leg32：面板分母不再写死——/15 与顶层 /N 都读引擎真源（防"改了引擎面板不变"）', () => {
     const { infoband } = renderBoardHtml(world());
-    const openCap = (infoband.match(/<div class="sw2-big-num">\d+<small>\/(\d+)<\/small>/) || [])[1];
+    // ★leg98：这一格的**标签**从 `div` 改成了 `span`（它现在住在读数区的一行里，与左边的小标签同一行）
+    //   ⇒ 判据按**关系式**取数（本条的口径本来就是"分母必须 = 引擎真源"，与标签名无关）⇒ 放宽到不挑标签。
+    const openCap = (infoband.match(/<[a-z]+ class="sw2-big-num">\d+<small>\/(\d+)<\/small>/) || [])[1];
     const topCap = (infoband.match(/顶层 \d+\/(\d+)/) || [])[1];
     assert.equal(Number(openCap), AGENDA_CAPS.open, `在飞分母应 = AGENDA_CAPS.open(${AGENDA_CAPS.open})，实际 ${openCap}`);
     assert.equal(Number(topCap), AGENDA_CAPS.topLevel, `顶层分母应 = AGENDA_CAPS.topLevel(${AGENDA_CAPS.topLevel})，实际 ${topCap}`);
@@ -539,18 +603,31 @@ test('K33+leg21 观棋·时局句与信息带：时局句只领世情（无世�
     assert.match(infoband, /近10轮事件 0 件/);                    // 本夹具 events 为空 → 0 件
     assert.ok(!infoband.includes('>72<'), '推导出的强度数字不再上面板');
     assert.match(infoband, /逼黄坤入洗煞之局（第32轮）/);         // 浪尖 → 盘算目标（id 不透传）
-    assert.match(infoband, new RegExp(`<div class="sw2-big-num">3<small>/${AGENDA_CAPS.open}</small>`));
+    assert.match(infoband, new RegExp(`<[a-z]+ class="sw2-big-num">3<small>/${AGENDA_CAPS.open}</small>`));
 });
 
-test('leg20 世情句领大势：situation 进时局句主句与信息带（原文措辞；拼装增量保留）', () => {
+test('leg20 世情句领大势：situation 进时局句**与说书那四层顶上那一格**（原文措辞；拼装增量保留）', () => {
+    // ★★leg98 改口径（用户令「**里面有两个大势卡片留一个就好了**」）：**带里的「大势」格撤下**——
+    //   它与说书四层顶上那格是**同一句话**（`canon.situation` 原文照印）。
+    //   照 leg97 裁 `digest` 的同一条口径：**同一件事不说两遍，留"书的原文"那一份**。
+    //   ⇒ 这条旧断言 `infoband.match(/大虞兵压江州…/)` 指的是**已经撤掉的那一格**；
+    //     现在钉的是同一条事实的**新家**（四层顶上），并**反过来**钉住"带里不许再印它"。
     const w = world();
     w.context.setting.frozen.canon.situation = '大虞兵压江州，坊市暗流涌动';
     const { digest, infoband } = renderBoardHtml(w);
+    const { panorama } = renderAll(w, { config: {} });
     assert.match(digest, /大虞兵压江州，坊市暗流涌动/);
-    assert.match(infoband, /大虞兵压江州，坊市暗流涌动。/);
+    assert.match(panorama, /大虞兵压江州，坊市暗流涌动/, '★大势句的新家＝说书四层顶上那一格（原文照印）');
+    assert.ok(!infoband.includes('大虞兵压江州'), '★带里不许再印一次（同一句话不说两遍）');
     assert.match(infoband, /大虞\/万法阁/);   // 张力极性仍在（三件套不丢）
     const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
     assert.match(renderBoardHtml(bare).digest, /大势未聚/);   // 无世情无极性 → 原回退语义不变
+    // ★缺世情时，四层顶上那格要**如实标注**（不许编一句大势）——leg97 就定的口径，这里顺带咬住。
+    //   ★★前置条件（本棒当场踩到的）：`renderPanoramaHtml` 在**一件事都没有**时走**空态**
+    //     （"还没长出可讲的事"）⇒ 根本走不到四层那儿。所以这里必须**先给一件真事**，
+    //     否则这条断言是**空绿**（实测：不给事 ⇒ 断言红，因为空态里当然没有那句话）。
+    const wBare = { ...bare, events: [{ id: 'ev_1_1', title: '某处生变', source: { type: 'state' }, position: 'x', ripples: [], links: {}, closed: false }] };
+    assert.match(renderAll(wBare, { config: {} }).panorama, /这本账没留大势句/, '★缺大势句要如实标注（不许编一句）');
 });
 
 test('K33 观棋·无设定池回退：大势未聚 + 无盘算空态', () => {
@@ -632,10 +709,17 @@ test('leg25 g：位置展示收成**一个入口「地图」**——默认收起
     assert.match(inner, /<\/details>/, 'details 正确闭合');
 });
 
-test('K34 编年页：全量条目 + 大事纪插行 + 旧卷卷行（数据入面）', () => {
+test('K34 编年页：全量条目 + 旧卷卷行（数据入面）；★leg94：里程碑插行已撤', () => {
     const html = renderChronicleHtml(world(), { oldVolumes: VOLUMES });
     assert.match(html, /劳役征发——大虞偏将征调坊市丁壮。/);
-    assert.match(html, /第 1–30 轮已收进大事纪「发兵催战、民生凋敝」/);
+    // ★leg94（用户令：「这个文字出现在编年页签里了」/「这是大事纪旧卷的东西」）：
+    //   里程碑插行（sw2-ch-roll =「第 1–N 轮已收进大事纪「…」」）**已从编年页撤掉**——
+    //   那一纪的标题长在大事纪页的里程碑卡上（见下一条），此处不再重印。
+    //   正向判据 = 两条**都在**（"撤"不等于把这段渲染换了个地方印）；反向判据 = 类名与文案零残留。
+    assert.match(html, /sw2-ch-tools/, '编年工具条在位');
+    assert.match(html, /sw2-ch-layer/, '两层照旧画出来');
+    assert.ok(!html.includes('sw2-ch-roll'), '★里程碑插行不许回潮（编年页）');
+    assert.ok(!html.includes('已收进大事纪'), '★「已收进大事纪」这段话不再出现在编年页');
     assert.match(html, /sw2-vol">卷一/);
     assert.match(html, /data-action="read-volume"/);
     assert.ok(html.indexOf('ch_47_1') === -1);                    // 编年 id 不裸出
@@ -648,11 +732,97 @@ test('K34 大事纪·旧卷页：里程碑卡（span/标题/ids 展开） + 卷�
     assert.match(html, /展开这一纪的条目/);
     assert.ok(html.includes('data-action="open-chain" data-chain="ev_0"'), '大事纪条目行链按钮（C-1 第二入口）');
     assert.ok(html.includes('data-action="open-chain" data-chain="ev_15_1"'), '大事纪条目行链按钮（C-1 第二入口）');
+    // ★★★leg94 改判据（用户实机截图取证：「大事纪更是灾难」）：
+    //   原来这条咬的是「**管理区 ids 仍裸显**」——那个口径正是病：玩家看到的是 `ev_0 链 · ev_15_1 链`。
+    //   ⇒ 新口径是**分层**：id **只许活在该活的三个地方**（`data-chain` 属性 / `title` 悬停 / 对不上标题时的兜底），
+    //     **可见文本里必须换成那一件事的名字**（`m.ids` 与 `m.titles` 同位配对，真账实测一一对应）。
     const rawText = (v) => String(v).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-    assert.ok(rawText(html).includes('ev_0') && rawText(html).includes('ev_15_1'), '管理区 ids 仍裸显');
+    const vis = rawText(html);
+    assert.ok(html.includes('data-chain="ev_0"') && html.includes('title="ev_0"'), '★机器号仍进属性与悬停（A-3 豁免口不变）');
+    assert.ok(!/\bev_15_1\b/.test(vis) && !/\bev_0\b/.test(vis), '★可见文本里不许再裸出机器号');
+    assert.match(vis, /发兵催战/, '★展开的条目要印那一件事的名字（夹具 m_30.titles 首条）');
+    assert.match(vis, /民生凋敝/, '★第二条名字也要在');
     assert.match(html, /sw2-vol">卷一/);
     const empty = renderArchiveHtml(world(), {});
     assert.match(empty, /尚未入卷/);
+});
+
+test('★★★leg94 · 大事纪三处实机病：`[object Object]` / 裸机器号 / 计数口径', () => {
+    // 病（用户截图 · A 局真账）：`m_20 第 1–20 轮 · [object Object] 件事`——`counts` 是 `{events:N}` 对象，
+    //   插值当场 toString；同文件链视图那两处写的是 `.counts.events`（口径就在隔壁，只是这一格漏了）。
+    //   ⇒ 判据两条一起咬：**没那串字** + **数对不对**（只咬前者会空绿：把数删了也能过）。
+    const html = renderArchiveHtml(world(), {});
+    assert.ok(!html.includes('[object Object]'), '★大事纪不许再印 [object Object]');
+    assert.match(html, /第 1–30 轮 · 8 件事/, '★计数取 counts.events（夹具 counts=8 这个数）');
+    // 老账兜底：counts 直接是数字、或整个缺格 —— 都不许炸、不许印 0 件事（退回 ids 条数）
+    const w2 = world();
+    w2.milestones = [{ id: 'm_30', span: { from: 1, to: 30 }, counts: 8, titles: ['发兵催战'], ids: ['ev_0'] }];
+    assert.match(renderArchiveHtml(w2, {}), /· 8 件事/, 'counts 是数字的老账照旧');
+    const w3 = world();
+    w3.milestones = [{ id: 'm_30', span: { from: 1, to: 30 }, titles: ['发兵催战'], ids: ['ev_0', 'ev_15_1'] }];
+    assert.match(renderArchiveHtml(w3, {}), /· 2 件事/, 'counts 缺格 ⇒ 退回 ids 条数（不印 0）');
+    // ids 比 titles 多的那几条：**如实兜底**（印号 + 一句"另有 N 条无名"），不编标题
+    const w4 = world();
+    w4.milestones = [{ id: 'm_30', span: { from: 1, to: 30 }, counts: { events: 3 }, titles: ['发兵催战'], ids: ['ev_0', 'ev_15_1', 'ev_20_1'] }];
+    const h4 = renderArchiveHtml(w4, {});
+    assert.match(h4, /另有 2 条账上没留标题/, '对不上的条目要如实说明（不假装有名字）');
+    assert.ok(h4.includes('>ev_15_1<'), '没名字的那几条照旧用自己的号认');
+});
+
+test('★★★leg94 · 全站扫描：任何一页都不许印 `[object Object]`（守门 · 防同类病再犯）', () => {
+    // 为什么扫**全部面**而不是只扫大事纪：这一族的病根是"**把对象当字符串插值**"，
+    //   它可以在任何一个页面、任何一次改动里复发（`board` 那次就曾经靠一条硬编码注释挡过一回）。
+    const out = renderAll(world(), { config: CONFIG, oldVolumes: VOLUMES });
+    const bad = [];
+    const walk = (v, path) => {
+        if (typeof v === 'string') { if (v.includes('[object Object]')) bad.push(path); return; }
+        if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}[${i}]`));
+        if (v && typeof v === 'object') return Object.entries(v).forEach(([k, x]) => walk(x, `${path}.${k}`));
+    };
+    walk(out, 'renderAll');
+    assert.deepEqual(bad, [], `★这些面里印了 [object Object]：${bad.join('、')}`);
+    // 反向自证：扫描器真的能抓到（不然"零命中"可能只是没扫到东西）
+    const probe = { a: { b: ['ok', 'x[object Object]y'] } };
+    const hit = [];
+    const walk2 = (v, path) => {
+        if (typeof v === 'string') { if (v.includes('[object Object]')) hit.push(path); return; }
+        if (Array.isArray(v)) return v.forEach((x, i) => walk2(x, `${path}[${i}]`));
+        if (v && typeof v === 'object') return Object.entries(v).forEach(([k, x]) => walk2(x, `${path}.${k}`));
+    };
+    walk2(probe, 'probe');
+    assert.deepEqual(hit, ['probe.a.b[1]'], '★扫描器对已知坏串必须报出来');
+});
+
+test('★★★leg94 · 编年账目行：**文本里内嵌的机器号，渲染时换成人话**（账上原文一个字不动）', () => {
+    // 病（用户截图 · 真账原文）：`因事而生：天璇圣地 由「ev_11_1」生「活捉药尘子炼化神丹药力」`——
+    //   引擎在"新盘算的出生行"上写的是号（那一行没有 `eventRef`，号只活在文本里），玩家看到的就是一串码。
+    //   ★夹具事实（先查再说）：`live-world.json` 的热事件只有一个 `ev_0 = 薛铁衣发兵催战`；
+    //     归档那一路用里程碑的 `ids/titles`（`ev_15_1 → 民生凋敝`）。
+    const w = world();
+    w.chronicle = [
+        { id: 'ch_2_4', tick: 2, text: '因事而生：黄坤 由「ev_0」生「逼黄坤入洗煞之局」', kind: 'scheme' },
+        { id: 'ch_2_5', tick: 2, text: '因事而生：某人 由「ev_99_9」生「一件没有来路的事」', kind: 'scheme' },
+    ];
+    const html = String(renderChronicleHtml(w, { view: { ...CHRONICLE_DEFAULT_VIEW, range: 'all' } }));
+    const vis = html.replace(/<[^>]*>/g, ' ');
+    assert.ok(vis.includes('薛铁衣发兵催战'), '★认得出的号要换成人话（那一件事的名字）');
+    assert.ok(!/\bev_0\b/.test(vis), '★换过之后不许再露那个号');
+    assert.ok(vis.includes('ev_99_9'), '★认不出的号**原样留着**（不猜、不编）');
+    assert.ok(html.includes('因事而生：黄坤'), '行原文照旧（只换"印出来的那一格"，不改句子结构）');
+    // 账上原文一个字不动：`text` 还是原来那句
+    assert.equal(w.chronicle[0].text, '因事而生：黄坤 由「ev_0」生「逼黄坤入洗煞之局」');
+    // 归档事件的号也要认得出（真账实测：`ev_24_1`/`ev_39_1` 早已归档，热表里没有它们）
+    const w2 = world();
+    w2.chronicle = [{ id: 'ch_25_1', tick: 25, text: '接着「ev_15_1」往下长', kind: 'ripple' }];
+    const vis2 = String(renderChronicleHtml(w2, { view: { ...CHRONICLE_DEFAULT_VIEW, range: 'all' } })).replace(/<[^>]*>/g, ' ');
+    assert.ok(vis2.includes('民生凋敝'), `★归档里的号（milestones.ids↔titles）也要查得到：${vis2.slice(0, 200)}`);
+    assert.ok(!/\bev_15_1\b/.test(vis2), '★归档那一路换过之后同样不许露号');
+    // 查表本身：热事件优先，归档补位
+    const names = chronicleEventNames(world());
+    assert.equal(names.get('ev_0'), '薛铁衣发兵催战');
+    assert.equal(names.get('ev_15_1'), '民生凋敝', '归档补位');
+    assert.equal(chronicleDisplayText('没有号的句子', names), '没有号的句子', '没有号就原样返回');
+    assert.equal(chronicleDisplayText('', names), '', '空串进空串出');
 });
 
 test('K34 角色与势力页：全量表（三列：名号/归属与来历/在办；状态徽；位置与活跃已退场）', () => {
@@ -753,8 +923,12 @@ test('★leg40b/leg49：位置不承诺查书、**也不再占版面**（旧「�
     const askFirstSentence = askLine.slice(0, askLine.indexOf('。') + 1);
     assert.ok(!askFirstSentence.includes('重查'),
         `★页底不许再承诺行内「重查」钮（本任务只产出单个「查」钮），实际：${askFirstSentence}`);
-    assert.ok(askLine.includes('补全全册实力'),
-        '★并如实说对：全册「连书未明述也推倒重查」仍在——入口是那枚批量按钮（`lookup-batch-all`）');
+    // ★★★leg76：全册批量补全那枚钮**已撤**（用户令「这个按钮根本用不了，要么就改成重抽名册，要么就删了」）
+    //   ⇒ 这一条从"指路到那枚钮"翻成"**不许再指路**"——面板不许承诺一个不存在的入口（leg40b 治过的病）。
+    assert.ok(!askLine.includes('补全全册实力'),
+        '★页底不许再提那枚已撤的批量钮（改口：如实说"不再自动重查"）');
+    assert.ok(askLine.includes('不再自动重查'),
+        '★并如实说清现状：已定案的栏不再自动重查（不指路到一个不存在的地方）');
 });
 
 test('leg25 d 回归：属性区 title 属性不得被内层裸双引号截断（悬停文案要完整）', () => {
@@ -977,10 +1151,14 @@ test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指�
     assert.match(bareHtml, /sw2-sv-chip stale/);
 });
 
-test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表单值来自 config', () => {
+test('K34 设置页：模型通道/操作按钮/旧卷管理，表单值来自 config', () => {
     const html = renderSettingsHtml(world(), { config: CONFIG });
     assert.match(html, /来源：角色卡 \+ 世界信息（自动合订）/);
-    assert.match(html, /<textarea id="sw2_player_desc"[^>]*>我名黄坤，炼气九层/u);
+    // ★★★leg87（用户令「A 删了」）：`<textarea id="sw2_player_desc">` 那条断言**按设计作废**——
+    //   整张「你的开档描述」卡已撤（那段字写进 `meta.playerDesc` 后全仓零处读）。
+    //   ★口径升级（不是删锁）：从"那个框在原位"改成"**那张卡与那个 id 都不许回来**"。
+    assert.ok(!html.includes('sw2_player_desc'), '★开档描述那个 textarea 已撤，不许回潮');
+    assert.ok(!html.includes('你的开档描述'), '★那张卡整张已撤（它承诺的"落成棋子自己的处境"没有消费者）');
     assert.match(html, /id="sw2_base" value="https:\/\/gcli\.ggchan\.dev\/v1"/);
     assert.match(html, /id="sw2_key" value="••••••••••••••••••••"/);
     assert.match(html, /id="sw2_model" value="gemini-3\.1-pro-preview"/);
@@ -1013,23 +1191,52 @@ test('K34 设置页：开档描述/模型通道/操作按钮/旧卷管理，表�
 });
 
 // ★★leg40b（体检 · C4）：**四维残文**——设置页那句「世界从中摘你的底子（兵力/权位/人脉/耳目）」
-//   承诺的是 leg25 c 已按用户令整条删除的四个概念。它躲过禁词锁整整十五棒，原因是**夹具的问题**：
-//   旧夹具的 `playerDesc` 是「我名黄坤，炼气九层。」——不含那四个词，于是"玩家真写一段描述时会带出什么"
-//   从来没进过扫描面。这条用例把口径钉死：**设置页（含玩家描述原样回显）不得出现那四个词**，
-//   且夹具描述**必须**含它们——否则这条锁又会退化成空绿（"夹具不含 ⇒ 永远扫不到"正是它当年失灵的方式）。
-test('★leg40b：设置页零四维残文（且夹具描述含四维词，防这条锁退化成空绿）', () => {
-    for (const term of ['兵力', '权位', '人脉', '耳目']) {
-        assert.ok(CONFIG.playerDesc.includes(term), `★夹具 playerDesc 必须含「${term}」（否则这条锁是空绿）`);
+//   承诺的是 leg25 c 已按用户令整条删除的四个概念。当年它躲过禁词锁整整十五棒，原因是**夹具的问题**：
+//   旧夹具的 `playerDesc` 是「我名黄坤，炼气九层。」——不含那四个词。
+// ★★★leg87 口径升级（用户令「A 删了」）：玩家描述那个框**整张卡已撤** ⇒ "夹具描述必须含四维词"
+//   这条反向自证**失去对象**（没有回显就无所谓"真写一段描述时会带出什么"）。
+//   ⇒ 本锁改成锁**更宽也更准**的一件事：**整个面板产物**（八页签，不只是设置页）里不许出现四维词。
+//     它比原来更宽：当年只扫设置页，而现在夹具世界的实体/编年/设定文本都可能带出这些词
+//     （那条正是 leg40b 的原始教训："扫描面也是覆盖面"）。★不是放宽——是换一个不会空绿的对象。
+test('★leg40b→leg87：整个面板产物零四维残文（四维已整条删除，八个页签一并扫）', () => {
+    const TERMS = ['兵力', '权位', '人脉', '耳目'];
+    const w = world();
+    // ★反向自证（防"扫的是空气"）：夹具**故意**放一个带四维词的实体名进去 ⇒ 若扫描面漏了这一段，
+    //   本用例的前置断言会红，而不是静默通过。这一步替代了原来那条"夹具 playerDesc 必须含四维词"。
+    w.entities.push({ id: 'e_probe', kind: 'character', name: '兵力探针', location: '未明' });
+    const all = renderAll(w, { config: CONFIG, oldVolumes: VOLUMES });
+    const scanned = deepStrings(all).map(textOnly).join('\n');
+    assert.ok(scanned.includes('兵力探针'), '★前置：扫描面真的覆盖到了实体名那一族（否则本锁是空绿）');
+    // ① 界面自己的工作文案零四维：把那枚探针摘掉再扫（探针是"账上的内容"，不是"界面说的话"）
+    const clean = renderAll(world(), { config: CONFIG, oldVolumes: VOLUMES });
+    const visible = deepStrings(clean).map(textOnly).join('\n');
+    assert.ok(visible.length > 3000, `★前置：产物必须有内容（实测 ${visible.length} 字符）`);
+    for (const term of TERMS) {
+        assert.ok(!visible.includes(term), `面板正文不得出现「${term}」（四维已整条删除，leg25 c）`);
     }
-    // ① 界面自己的文案零四维：用**不含**四维词的描述渲染 ⇒ 产物里出现任何一个都是界面在说
-    const plain = renderSettingsHtml(world(), { config: { ...CONFIG, playerDesc: '一段不含旧属性词的描述。' } });
-    const visible = textOnly(plain);
-    for (const term of ['兵力', '权位', '人脉', '耳目']) {
-        assert.ok(!visible.includes(term), `设置页正文不得出现「${term}」（四维已整条删除）`);
-    }
-    // ② 玩家真写的那段字照旧原样回显（不许因为我们删词而把他的输入吃掉）
-    const withTerms = renderSettingsHtml(world(), { config: CONFIG });
-    assert.ok(withTerms.includes(CONFIG.playerDesc), '★玩家描述原样回显（不许删用户自己写的字）');
+});
+
+// ★★★leg87（用户令「这个也有问题，改也改不了是死的不会根据模型变化」）：**单轮超时/输出上限从"读数"变控件**。
+//   这条锁守三件事（每一件都是旧形态真缺的）：
+//     ① **不许再是 readonly**（旧的那一格 leg15 起写着"只读展示态"，一路挂到 leg86 才被人眼抓出来）；
+//     ② **值必须现读 config**（换模型/换网关要能改；旧形态印的是编译期常量 ⇒ 永远一动不动）；
+//     ③ **写通道必须真的存在**（`data-settings` 声明 + 数字校验入口 `sw2NormalizeNumericSetting`），
+//        否则又是一枚"画出来点不动"的控件——正是用户这次抱怨的那类东西。
+test('★★★leg87：单轮超时/输出上限是**可填控件**（不是只读常量），且值现读 config', () => {
+    const html = renderSettingsHtml(world(), { config: CONFIG });
+    assert.match(html, /id="sw2_call_timeout"[^>]*data-settings="callTimeoutSec"/, '★超时那一格必须可写（data-settings 声明写通道）');
+    assert.match(html, /id="sw2_call_tokens"[^>]*data-settings="callMaxTokens"/, '★输出上限那一格同上');
+    assert.ok(!/id="sw2_call_(timeout|tokens)"[^>]*readonly/.test(html), '★不许再挂 readonly（"改也改不了"就是它）');
+    assert.ok(!html.includes('id="sw2_limits"'), '★旧的只读展示框 `sw2_limits` 已撤，不许回潮');
+    // ② 现读 config：给一组**不等于出厂值**的数 ⇒ 印出它们才证明"真的在读"
+    const custom = renderSettingsHtml(world(), { config: { ...CONFIG, callTimeoutSec: 300, callMaxTokens: 32768 } });
+    assert.match(custom, /id="sw2_call_timeout"[^>]*value="300"/, '★填过的超时必须印出来（写死 120 就印不出 300）');
+    assert.match(custom, /id="sw2_call_tokens"[^>]*value="32768"/, '★填过的输出上限必须印出来');
+    // ③ 缺 config 时印**出厂真源**（不是渲染层自己抄的数）
+    const dflt = renderSettingsHtml(world(), { config: {} });
+    assert.match(dflt, new RegExp(`id="sw2_call_tokens"[^>]*value="${PROPOSED_CALL_LIMITS.maxTokens}"`),
+        '★没填过时必须印 `PROPOSED_CALL_LIMITS`（出厂真源，与引擎真正吃的那个数同源）');
+    assert.match(dflt, new RegExp(`id="sw2_call_timeout"[^>]*value="${Math.round(PROPOSED_CALL_LIMITS.timeoutMs / 1000)}"`));
 });
 
 test('K35/A-9 设置页：旧卷清单（卷号/信息/阅卷动作）入面；无卷时"尚未入卷"', () => {
@@ -1062,7 +1269,7 @@ test('K33 编码安全：实体名/编年文本/表单值含 <script> 全转义'
     w.entities.find((e) => e.id === 'e_xie').name = '<script>alert(1)</script>';
     const side = renderBoardHtml(w).side;
     assert.ok(!side.includes('<script>'));
-    const cfg = { ...CONFIG, playerDesc: '<img src=x onerror=alert(1)>' };
+    const cfg = { ...CONFIG, baseUrl: '<img src=x onerror=alert(1)>' };
     const setHtml = renderSettingsHtml(w, { config: cfg });
     assert.ok(!setHtml.includes('<img src=x onerror=alert(1)>'));          // 原串不残存
     assert.ok(setHtml.includes('&lt;img src=x onerror=alert(1)&gt;'));      // 转义后落地
@@ -1078,7 +1285,7 @@ test('K34 防御：全空世界六页签不炸（空态合法）', () => {
     assert.ok(all.archive.includes('尚未入卷'));
 });
 
-test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+浪尖（不再混张力）；张力三件套全归张力行', () => {
+test('K46+leg21 观棋·张力与浪尖各归各格；★★leg98 信息带改**两栏**（世情 3 键 ＋ 三行读数），带里的「大势」格撤下', () => {
     const mk = () => ({
         version: 1, context: {
             world: 'x', tension: 0.5, positions: ['x'],
@@ -1086,38 +1293,78 @@ test('K46+leg21 观棋·大势行与张力行并带：大势=世情句/未聚+�
         },
         entities: [{ id: 'e_a', kind: 'faction', name: '甲宗', location: 'x' }], weights: { e_a: 0.9 },
         agendas: [{ id: 'a_1', owner: 'e_a', goal: '血洗洛城', stage: '用兵', visibility: 'known', maxSteps: 3, progress: 2, closed: true, memory: { promises: [], done: [], blocked: [], turnsAlive: 0 } }],
-        events: [], chronicle: [], milestones: [], meta: { tick: 3, simLog: [] },
+        // ★leg98：**必须给一件真事** —— `renderPanoramaHtml` 在"一件事都没有"时走**空态**
+        //   （"还没长出可讲的事"）⇒ 整块四层（含顶上那格「大势」）根本不渲染，
+        //   下面那条"整页大势只许出现一次"就会**空绿**（实测 0 次 ⇒ 当场红）。
+        //   ★这正是本仓那条纪律：**先让前置条件成立，再断言**（否则测的是空态、不是要测的东西）。
+        events: [{ id: 'ev_1_1', title: '甲宗异动', source: { type: 'state' }, position: 'x', ripples: ['e_a'], links: {}, closed: false }],
+        chronicle: [], milestones: [], meta: { tick: 3, simLog: [] },
     });
     const { infoband, digest } = renderBoardHtml(mk());
-    assert.ok(infoband.includes('sw2-band-label">大势</div>'), '大势行在位');
-    assert.ok(infoband.includes('sw2-band-label">张力 · 结构性三件套'), '张力行独立成行');
-    assert.ok(!infoband.includes('大势 · 结构性张力'), '旧标签（大势顶张力名）废除');
-    assert.ok(infoband.includes('大势未聚（无主张力）。'), '无世情时大势行=未聚（不拼张力）');
-    // ★★leg52（用户令「**大势就放大势，浪尖就放浪尖**」）：浪尖从大势行**撤走**，只留独立那一栏。
-    //   旧断言是 `infoband.includes('浪尖：血洗洛城')`（浪尖入大势句）——那条**正是本棒要治的病**：
+    // ★★★leg98 改口径（用户令「**里面有两个大势卡片留一个就好了**，世情 · 3 键，还有浪尖，张力，盘算数量
+    //   你看看怎么集合起来好看」，并在三套候选里选了**乙**）：
+    //   ① **带里的「大势」格撤下** —— 它与四层顶上那格是**同一句话**（`canon.situation` 原文照印）；
+    //      照 leg97 裁 `digest` 的同一条口径：**同一件事不说两遍，留"书的原文"那一份**。
+    //      ⇒ 旧断言 `infoband.includes('sw2-band-label">大势</div>')` 与那两条"趋势段切片"的断言
+    //        **按新口径重写**（不是删掉了事）：现在钉的是"**带里一次大势都不印**"，
+    //        而"只有一处"这个语义挪到**整页**去核（见下面那条 `说书` 的联动核验）。
+    //   ② 五格平铺 → **两栏**：左＝世情 3 键（竖排）· 右＝三行读数（盘算 / 张力 / 浪尖）。
+    //      理由：这四样的**排版类型本来就不同**（刻度行 / 一句话 / 条目 / 一个数），
+    //      塞进同一条边等宽排开就是"高的顶天花板、矮的留一片空"（用户原话「极为难看」）。
+    assert.ok(infoband.includes('sw2-band-read'), '★读数区（右栏）在位');
+    assert.ok(infoband.includes('世情 · 3 键'), '世情那三格仍在带里（左栏 · 三格是参数页那三格）');
+    assert.ok(!infoband.includes('sw2-band-label">大势</div>'), '★带里不许再有「大势」格（它与四层顶上那格是同一句话）');
+    assert.ok(!infoband.includes('sw2-trend'), '★旧那条大势行（`.sw2-trend`）随撤格退场（不许留成零生产点的死类）');
+    const bandOnly = infoband.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    assert.ok(!bandOnly.includes('大势未聚'), '★带里不再印"大势未聚"那种兜底句（大势那一格已经不在了）');
+    // ② 三行读数各自在位，且**行首小标签**是"这一行是什么"的唯一线索
+    //   ★写法注意：标签里可能带后缀（「浪尖 · 刚收尾的大动作」）⇒ 用正则，别拿 `>浪尖<` 这种紧凑字面量
+    //     （那是本仓"判据被自己写死"的老坑：内容没变、只因多了几个字就假红）。
+    for (const key of ['盘算', '张力', '浪尖']) {
+        assert.match(infoband, new RegExp(`<span class="sw2-readkey">${key}`), `★读数区要有「${key}」那一行的小标签`);
+    }
+    // ★★leg52（用户令「**大势就放大势，浪尖就放浪尖**」）：浪尖从大势行**撤走**，只留独立那一行。
+    //   旧断言是 `infoband.includes('浪尖：血洗洛城')`（浪尖入大势句）——那条**正是要治的病**：
     //   同一屏里 `derivedFrom` 画了两遍（大势行末尾 slice(0,2) + 独立栏 map 全部），
     //   信息带可见字符只有 280，两处合计约占**四分之一**。
-    //   ⇒ 新判据（照 R2「同一事实不许说两遍」写成**可机械核**的形状）：
-    //     ① 浪尖的事实**出现**（在独立栏里，目标名不露 id）；
-    //     ② 大势行那一段里**不许再有浪尖**（"只放大势"）；
-    //     ③ 整个信息带里「浪尖」这个标签**恰好一次**（不是 0 次，也不是 2 次）。
-    const trendSeg = infoband.slice(
-        infoband.indexOf('sw2-band-label">大势'),
-        infoband.indexOf('sw2-band-label">张力'),
-    );
-    assert.ok(!trendSeg.includes('浪尖'), '★大势行只放大势——浪尖不许再挤进这一行');
-    assert.ok(trendSeg.includes('大势未聚（无主张力）。'), '★大势行留的是它自己那一个事实');
-    assert.ok(infoband.includes('浪尖 · 刚收尾的大动作'), '浪尖留在它自己那一栏（分组标题在位）');
+    //   ⇒ 定稿判据（照 R2「同一事实不许说两遍」写成**可机械核**的形状）：
+    //     ① 浪尖的事实**出现**（在它自己那一行里，目标名不露 id）；
+    //     ② 整个信息带里「浪尖」这个词**恰好一次**（不是 0 次，也不是 2 次）。
+    assert.ok(infoband.includes('浪尖 · 刚收尾的大动作'), '★浪尖留在它自己那一行（标签在位）');
     assert.ok(infoband.includes('血洗洛城'), '浪尖的事实照旧上板（目标名不露 id）');
     const tideLabelCount = (infoband.match(/浪尖/g) || []).length;
     assert.equal(tideLabelCount, 1, `★同一屏里「浪尖」只许出现一次（实测 ${tideLabelCount} 次）`);
     // leg25 b（A1b）：张力行不再写「烈度带词 + 百分比」——那个 % 实测只反映事件密度（rival 腿恒为满值），
     //   带词会暗示"引擎判断了天下张力"。改为直说可验证的事实：近 N 轮事件几件。
     assert.ok(!infoband.includes('烈度'), '张力行不再用「烈度」带词（它暗示引擎判断了张力）');
-    assert.ok(infoband.includes('近10轮事件 0 件'), '张力行改说可验证事实：近 N 轮事件数（本夹具 events 为空）');
+    // ★leg98：夹具现在有**一件**真事（为了上面的"大势只许一处"能真渲染出四层）⇒ 这个数从 0 变 1。
+    //   口径没变，仍然是"直说可验证的事实"。
+    assert.ok(infoband.includes('近10轮事件 1 件'), '张力行改说可验证事实：近 N 轮事件数（本夹具 1 件）');
     assert.ok(!infoband.includes('>82<'), '推导出的百分比不再上面板（它只反映事件密度）');
     assert.ok(infoband.includes('魔涨道消（原文方向）'), '方向在张力行（原文措辞）');
     assert.ok(infoband.includes('正邪相争'), '张力极在张力行');
+    // ★★leg98：**"两个大势卡片留一个"** 那条口径的**可机械核**形状。
+    //   ★第一版我写的是"整页「大势」这个词只许出现一次"—— **当场红，实测 3 次，而三次都是对的**
+    //     （本棒留档：这是"尺子错"，不是产品错）：
+    //       ① 四层顶上那格的标签「大势 · 书里写定的局面（原文措辞）」；
+    //       ② 缺世情时的如实标注里那个词（"这本账没留**大势**句"）；
+    //       ③ 那句释义「**大势**是书里写定的**何故**」。
+    //     ⇒ **用户说的是"两个大势卡片留一个"，数的是"卡片"，不是"字"**。
+    //       卡片 = 顶上那一格；释义与缺省标注是说明文，不是卡片。
+    //   ★定稿：钉**那一格**在整页恰好一处（用它的**精确标签**，不是词频），且带里那格确实没了。
+    const { panorama } = renderAll(mk(), { config: {} });
+    const headCount = (panorama.match(/大势 · 书里写定的局面/g) || []).length;
+    assert.equal(headCount, 1, `★★「大势」那**一格**在整页只许一处（实测 ${headCount} 处）——带里那格与四层顶上那格是同一句话`);
+    assert.ok(!infoband.includes('大势 · 书里写定的局面'), '★带里不许再有那一格（它的家在四层顶上）');
+    assert.ok(!infoband.includes('sw2-band-label">大势'), '★带里连那个小标签都不许留');
+    // ★另一半：**有**世情时，那句话本身在整页也只许出现一次（这才是"同一句话不说两遍"的字面口径）
+    const w2 = mk();
+    w2.context.setting.frozen = { canon: { situation: '甲宗兵压江州' } };
+    const p2 = renderAll(w2, { config: {} }).panorama;
+    const b2 = renderBoardHtml(w2).infoband;
+    const sitCount = (`${p2}${b2}`.match(/甲宗兵压江州/g) || []).length;
+    assert.equal(sitCount, 1, `★★那句原文在整页只许出现一次（实测 ${sitCount} 次）：它住四层顶上那一格`);
+    assert.match(p2, /甲宗兵压江州/, '★它确实在四层顶上那格（不是被整句撤掉了）');
     assert.match(digest, /参数：乱象动荡、天时大灾、时局紧绷。/, 'leg26+leg53：参数档位在时局句副句如实列出（三格，民生已撤）');
 });
 
@@ -1251,7 +1498,30 @@ test('细案 spec-chronicle-page-ia（leg50）：五筛退场——旧口径按�
     //     真事件那一支的形状由 `test/chronicle-page.test.js` 的生产者全集判据咬。
     assert.ok(all.includes('开仓放粮') && all.includes('粮道拥堵') && all.includes('旧账：早先的某一行'),
         '一行都没丢（分层只换"上桌方式"，不换"有没有"）');
-    assert.match(all, /第 1–30 轮已收进大事纪「发兵催战」/, 'A-16④：里程碑插行照旧');
+    // ★leg94：A-16④（里程碑插行恒显示）**按用户令作废**——见下一条独立判据（含"不许回潮"守门）。
+    //   里程碑数据本身零改动：档案页里程碑卡那条判据照旧咬它。
+});
+
+test('★leg94：里程碑插行撤出**编年页**（用户令「这个文字出现在编年页签里了」）；数据与档案页不动', () => {
+    // 病（用户 2026-09-20 实机看编年页签）：编年页底部重印了 4 行
+    //   「⚑ 第 1–10/20/30/40 轮已收进大事纪「…」」——那是**大事纪（旧卷）**的东西。
+    // 病灶（源码可证）：`renderChronicleHtml` 把 `world.milestones` 逐纪画一枚 `sw2-ch-roll`；
+    //   而同一句话在大事纪页**已经**长在里程碑卡上（`sw2-milestone` = id + span + 标题 + 展开 + 链）
+    //   ⇒ 编年页那份是**同一事实的第二块屏**（本仓纪律：一份真源、不重印）。
+    // 撤法：删的只是"这一段渲染"，**世界账一个字不动**（milestones 仍是引擎结构摘要，链/记忆桥照读）。
+    const w = filterWorld();
+    const chron = renderChronicleHtml(w);
+    assert.ok(!chron.includes('sw2-ch-roll'), '★编年页不许再有里程碑插行（类名零残留）');
+    assert.ok(!chron.includes('已收进大事纪'), '★那句话本身也不许出现（连"换个类名偷偷印"都堵）');
+    assert.ok(!chron.includes('发兵催战'), '★里程碑标题不进编年页（它归大事纪页）');
+    // 反面：编年的行照旧全在（撤的是插行，不是内容）
+    assert.ok(chron.includes('开仓放粮') && chron.includes('旧账：早先的某一行'), '编年行一行未丢');
+    // 反面：数据与档案页**一个字没动**——同一份 world 进档案页，4 张里程碑卡照旧（该有的还在，才有得撤）
+    const arch = renderArchiveHtml(w, { oldVolumes: VOLUMES });
+    assert.equal((arch.match(/class="sw2-milestone"/g) || []).length, 1, '档案页里程碑卡还在（fixture 只有一纪）');
+    assert.match(arch, /发兵催战/, '里程碑标题在它该在的页上照旧可见');
+    // 反面：观棋页那条**归档提示条**（带「去翻旧账 →」入口）不许被一起误删——它是"从别页指路"。
+    assert.match(renderBoardHtml(world()).feed, /已收进大事纪「发兵催战、民生凋敝」/, '观棋页归档提示条照旧');
 });
 
 test('K41/A-15 入口：事件行「链」按钮（data-action + data-chain + id 悬停）；非事件行无按钮', () => {
@@ -1328,6 +1598,46 @@ test('K41/A-15 链视图渲染：珠链结构 + 事实措辞面 + 暗徽/结局�
     assert.ok(!html.includes('data-action="read-volume"'), '热世界链无阅卷按钮（无纪）');
     // 防御态
     assert.match(renderChainViewHtml(null, { world: w }), /已无从检索/);
+});
+
+test('★★★leg93c：事件链**不再插进编年页**——改走浮层（用户令「点击后直接弹出一个小窗口」）', () => {
+    // 病（用户原话）：「**事件链条点击后不要放在编年页了，直接弹出一个小窗口，
+    //   要不然我在大事纪页签点击还得回到编年页**」。
+    // 根因（源码可证）：旧 `bus['open-chain']` 把渲染好的链视图
+    //   `insertAdjacentHTML('afterbegin')` 到**写死的 `#sw2_view_chronicle`** ⇒
+    //   「链」按钮在**两处**（编年页 + 大事纪·旧卷页，C-1 两个入口），从大事纪点，
+    //   内容却进了**另一个页签** ⇒ 玩家看到"点了没反应"，得自己切回编年页。
+    // ★为什么必须锁**接线层**（照本仓 leg55 那条先例）：渲染器（`renderChainViewHtml`）一直是好的——
+    //   出错的是"**把渲染结果塞到哪儿**"，而那句话只活在 `web/index.js` 的动作总线里。
+    const src = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const at = src.indexOf("bus['open-chain']");
+    assert.ok(at > 0, '动作总线里必须有 open-chain');
+    const body = src.slice(at, at + 4200);
+    // ① 正面：交给浮层（容器 id 一处定义、由常量引用）
+    assert.ok(body.includes('CHAIN_MASK_ID'),
+        '★链视图必须进浮层（`CHAIN_MASK_ID`）——不许再往页签里插');
+    assert.ok(/document\.body\.appendChild\(mask\)/.test(body),
+        '★浮层挂在 `document.body` 上（**不在面板窗口里** ⇒ 面板关着也能看）');
+    // ② 反面：**绝不许**再往编年页那个容器里插
+    assert.ok(!body.includes('sw2_view_chronicle'),
+        '★★链视图不许再插进 `#sw2_view_chronicle`（这就是用户报的那个病：在大事纪点、内容跑到编年页）');
+    assert.ok(!/insertAdjacentHTML/.test(body),
+        '★★尤其不许 `insertAdjacentHTML` 到某个页签容器里');
+    // ③ 三条关闭路径都要在（否则弹出来关不掉 = 另一种"点了没反应"）
+    assert.ok(/function closeChainPopup/.test(src), '收口函数必须在（按钮/点背景/ESC 三条路共用它）');
+    assert.ok(body.includes("bus['chain-close']") || src.slice(at).includes("bus['chain-close']"),
+        '「收起」按钮要走同一条收口');
+    // ④ ★浮层自己的按钮委托（**这条最容易被漏**）：面板的动作总线 `bindActions` 挂在
+    //    `#story_world2_window` 上，而浮层挂在 `document.body` ⇒ 浮层里自带的
+    //    「收起」(`chain-close`) 与「阅卷」(`.sw2-goto`) **走不到那条总线**，会点了没反应。
+    assert.ok(/const goto = t\?\.closest\?\.\('\.sw2-goto'\)/.test(body) || body.includes(".closest?.('.sw2-goto')"),
+        '★浮层必须自己接住 `.sw2-goto`（阅卷 ⇒ 先收浮层再切页签，否则浮层挡住玩家要看的东西）');
+    assert.ok(body.includes('closeChainPopup();') && body.includes('CHAIN_MASK_ID'),
+        '★浮层内的点击与收口必须接上');
+    // ⑤ ESC 用**捕获阶段 + stopPropagation**：面板自己有一条"ESC 关整个窗口"，
+    //    不拦的话按一次 ESC 会**把面板一起关掉**（用户要的是关这个小窗）
+    assert.ok(/addEventListener\('keydown', onEsc, true\)/.test(src),
+        '★ESC 必须在捕获阶段挂（且 `stopPropagation`）——不许连面板一起关');
 });
 
 test('K41/A-15 里程碑穿透渲染：纪珠 + 聚合 parents + 卷区间装配阅卷 + 下沿余尾', () => {
@@ -1595,15 +1905,15 @@ test('★工具条排布（乙 · 分组块）：控件按「一伙的」分组�
     assert.match(css, /\.sw2-ents-gl\s*\{/, '块标签有自己的样式（不是裸文字）');
 });
 
-test('★细案实体页：两处既有入口按细案改挂工具条（不许在改版里丢掉）', () => {
+test('★细案实体页：三态说明按细案改挂工具条（不许在改版里丢掉）', () => {
     const w = world();
-    // ① 全册补全按钮（lookup-batch.test.js:436/447 锁它，原在页眉）
+    // ★★★leg76：原先这里锁的是「⬇ 补全全册实力」那枚钮——**它已被用户拍板撤除**
+    //   （令：「这个按钮根本用不了，要么就改成重抽名册，要么就删了」；依据见 `test/lookup-batch.test.js` 那条）。
+    //   ⇒ 本条翻成**反向锁**：那枚钮与它的进度态都不许回潮。
     const html = renderEntitiesHtml(w);
-    assert.ok(html.includes('data-action="lookup-batch-all"'), '★「⬇ 补全全册实力」入口仍在');
-    assert.ok(html.includes('⬇ 补全全册实力'), '文案不变（既有用例按这句锁）');
-    // 跑到「停止补全」那一态
+    assert.ok(!html.includes('data-action="lookup-batch-all"'), '★已撤的批量钮不许回潮');
     const running = renderEntitiesHtml(w, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } });
-    assert.ok(running.includes('■ 停止补全 4/623'), '★进度态照旧由 config.lookupTask 进渲染层');
+    assert.ok(!running.includes('■ 停止补全'), '★旧的批量进度态也不许回潮（渲染层不再读 lookupTask）');
     // ② 查书三态说明（render.test.js:547/620 锁它，原在页底整行）⇒ 收进可展开的「？」
     assert.ok(html.includes('sw2-ents-asks'), '三态说明改成可展开容器');
     assert.ok(html.includes('账上只记查到的与玩出来的东西'), '★说明文本必须**连续出现**（既有用例用 includes 锁它）');
@@ -1736,11 +2046,263 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   「拾遗（closedRoots）→ newEvents + ripple → 再用那件新事件当源」那条出路
     //   （旧文案只说"引未决事件 / 改成 state"，等于把模型合法的心愿说成不可能）。
     //   ★起名纪律照旧：`leg66-closed-root-path` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
-    assert.equal(PANEL_BUILD, 'leg66-closed-root-path');
+    // ★★★leg67 升位（甲案 · 引用完整性收成单一主人）：**报错文案变了**（不是版式变了）——
+    //   `ref-rules.js` 的判据表给每条"不合法"都补上了**出路**（leg64/leg66 两次实机教训的直接产物：
+    //   报错不给路 ⇒ 模型反复换号重试 ⇒ 每试一次白烧一轮）。三条新句子确实会印在那条裁定栏里：
+    //   entity 源引已灭者 / dialogueFact 命中不了 / dialogueFact 指向账上已有的人。
+    //   ★起名纪律照旧：`leg67-ref-single-owner` 不含下面扫描器里任何一个禁词（`ref`/`single`/`owner`
+    //     都是安全词），形状合 `/^leg\d+-/`。
+    //   ★★leg67 甲-余 再升一格（同一棒第二笔）：收尾甲案时又补了**一族**出路文案——
+    //     "号指向账上不存在的东西"那 9 个引用点（未知实体/未知提议者/未知盘算/已结算盘算不可取消）
+    //     现在都告诉模型"照抄输入里的 id / 先用 newEntities 让他入局"。同一条纪律（报错必须给出路）。
+    //   ★★★leg68 升位（乙-1 · 细案 §3.1 的轻案）：**这一次与前两棒不同，必须如实说清**——
+    //     leg66（闭环出路）与 leg67（判据收口）升位，理由都是"**玩家/模型看得见的文案真的变了**"；
+    //     本棒的升位理由**不是文案变了**，而是"**面板背后那套代码换了**"：
+    //     `settleTick` 的 139 行顺序过程上方现在写着一张 `SETTLE_ORDER` 顺序表 + `test/settle-order.test.js`
+    //     把"表序 = 代码序"锁住（细案 §1.2：顺序承担语义，而那条不变量原先没有主人）。
+    //     ★自证：本棒**没有**任何渲染文案改动 —— 冒烟 8231 字节逐字节未变、`SETTLE_ORDER` 只在引擎侧。
+    //     升位的作用是**让实机位能自证跑的是哪一版**（页脚构建号是用户唯一的验收判据）：
+    //     不升位 ⇒ 改完仍然是 `leg67-ref-residual` ⇒ 用户无法从界面区分"跑到了没有"。
+    //     ⚠别把它读成"乙-1 改了玩家可见面"——**没有**（这条注与 leg66/67 那两条的理由不同）。
+    //   ★起名纪律照旧：`leg68-settle-order-table` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg69 升位（A1 · 进包块级截断留痕）：**理由与 leg68 又不同**——
+    //     leg68 是"面板背后代码换了、玩家可见面没动"；本棒**动了模型看得见的东西**：
+    //     `buildEvolutionPack` 在块级预算真切掉东西时，会往 `setting` 多挂一个 `刻度裁掉` 读数键。
+    //     ★玩家可见面**没动**（面板那句读数与原先逐字相同，只是改读同一个 `fit`；冒烟与行为哈希逐字节不变自证）。
+    //     ⇒ 照 leg66/67 的"模型可见面变了就升位"纪律，本棒够升位。
+    //   ★起名纪律照旧：`leg69-pack-fit-trace` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg70 升位（A6 · 「只抽刻度」抽完能存）：**理由回到 leg62/63 那条老纪律**——
+    //     玩家可见面**真的变了**（不是 leg68 的"背后代码换了"、也不是 leg69 的"模型可见面变了"）：
+    //     ① 草稿栏多一枚「采用这份草稿（只换刻度）」按钮；
+    //     ② 草稿栏多两段如实说明（"只换刻度那三格"·"单次调用 ⇒ 与多块重抽不会逐字相同"·"旧的先打控制台再覆盖"）；
+    //     ③ 草稿栏报"账上现在是几张三档 ⇒ 采用后变成几张三档"；
+    //     ④ 入口那行措辞「只瞄一眼书里的"尺子"」→「瞄一眼书里的"尺子"（可再采用）」。
+    //     ★为什么措辞那一处也必须动：本棒之前"只瞄一眼"是**字面为真**的（那条路确实不入账），
+    //       现在草稿栏多了一枚真会写账的按钮 ⇒ 留着旧话就是本仓最忌讳的"面板印一句不再为真的话"。
+    //   ★起名纪律照旧：`leg70-adopt-scale-draft` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg72b 升位（恢复快照那条通道的**落盘存根** · 真缺陷修）：**理由回到 leg62/63 那条老纪律**——
+    //     玩家可见面**真的变了**：`bus['snapshot-restore']` 那条状态条原先印
+    //     `${r.flushed ? ' · 已落盘' : ' · ⚠ 落盘失败（见控制台）'}`，而 `flushed` 是三态**对象**
+    //     ⇒ 判对象真值**恒真**（真失败也印「已落盘」）；更坏的是取值那行**被换成了存根**
+    //     `const flushed = { ok: true };` ⇒ `restoreSnapshot` **一次 `flushHotMeta()` 都没调**。
+    //     修完这条状态条**才第一次说真话** ⇒ 升位让用户能从页脚认出"跑到修好的这版没有"。
+    //     ★与 leg71/leg72 的"不升位"不矛盾：那两棒是**纯结构搬迁、可见面逐字节没变**。
+    //   ★起名纪律照旧：`leg72-restore-flush-honest` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //     ★本棒第一版起名带 `b`（`leg72b-…`）⇒ 被下面那条**形状锁当场红**（数字后必须紧接连字符）——
+    //       如实留档：形状锁咬住了我自己的起名。
+    //   ★★★leg74 升位（「文风禁令」连账本一起清掉 · 用户令「我不是说不要文风禁令了吗？」）：
+    //     **理由仍是 leg62/63 那条老纪律**——玩家可见面**真的变了**：
+    //     ① 设定页法则栏那段说明过去写「书里写下的规则条条都在这里，**一条不删**」+
+    //        「**文风禁令**、变量指令与格言留在本页给作者看」⇒ **这两句现在是假的**（那一类已不进账）；
+    //     ② 会少掉「文风禁令（N 条）」整段（用户实拍的三条：`必须放在 <content> 标签内` /
+    //        `角色对话：（角色名）` / `旁白：直接写普通段落`）。
+    //     ⇒ 本仓最忌"面板印一个不再为真的数/话" ⇒ 升位，让用户能从页脚认出"跑到清干净的那版没有"。
+    //   ★起名纪律照旧：`leg74-style-rules-purged` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg75 升位（丢弃集从一类推广到三类 · 用户令「把这些全给我删干净了」＋重抽后的面板实拍）：
+    //     **理由仍是同一条老纪律**——玩家可见面**又真的变了**：
+    //     ① 用户重抽后那一屏上还列着「其他（2 条）」是**安装/配置说明**
+    //        （`数据库配置：安装：下载最新版本数据库…` · `表格模板导入：配置方法：状态栏倒数第三个按钮`）
+    //        ⇒ 拍板连 `变量指令`/`其他` 一起清；面板会**再少掉两段**；
+    //     ② 那段说明里 leg74 写的「其余三类…不在此列」口径要改成**三类都不在账本里**（否则又是一句不再为真的话）。
+    //     ⇒ 升位，让用户能从页脚认出"跑到三类都清干净的那版没有"。
+    //   ★起名纪律照旧：`leg75-ledger-world-only` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //     ★本棒第一版起名 `leg75-three-junk-classes-purged` ⇒ **含禁词 `kind`**（`classes` 里的子串）
+    //       ⇒ 被下面那条扫描器当场红。如实留档：扫描器又咬住了我自己的起名（照 leg72b 的先例记一笔）。
+    //   ★★★leg76 升位（撤掉「⬇ 补全全册实力」· 用户令「这个按钮根本用不了，要么就改成重抽名册，要么就删了」）：
+    //     **理由仍是同一条老纪律**——玩家可见面**又真的变了**：角色与势力页工具栏**少了一枚钮**，
+    //     页底那句指路文案也从"入口是那枚钮"改成了"不再自动重查"（不然面板就在承诺一个不存在的入口）。
+    //     ⇒ 升位，让用户能从页脚认出"跑到撤了那枚钮的这版没有"。
+    //   ★起名纪律照旧：`leg76-roster-batch-pull` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //     ★本棒第一版起名 `leg76-entities-batch-removed` ⇒ 含 `entities`，被那条**"工具栏零引擎术语"**
+    //       的扫描器当场红（构建号也画在玩家视线内）⇒ 改成 `roster`/`pull` 这套人话。**第二次**被起名扫描器咬住。
+    //   ★★★leg87 升位（用户令「A 删了 C 也删了」+「这个也有问题，改也改不了是死的」）：
+    //     理由仍是同一条老纪律——**玩家可见面又真的变了**：设置页**少了一整张卡**（「你的开档描述」）、
+    //     那格只读的「单轮演算上限」变成**两个可填输入框**（超时 / 输出上限），世界设定卡那句
+    //     「抽取只拿三样…实力不抄」也改成了实抽的六类。⇒ 升位，让用户能从页脚认出跑的是哪一版。
+    //   ★★★leg89 升位（用户令「注入提示词让聊天llm生产带标签的内容然后插件提取」+「标签点了名的角色
+    //     插件不得出手，告诉插件llm就好了」+「应该还有流逝的时间」→「累加吧」+「角色的行动全都注入」）：
+    //     理由仍是同一条老纪律——**玩家可见面又真的变了**：设置页**多了一张「与聊天模型的接线」卡**
+    //     （三个开关 + 一个可填数字框 + 每轮注入读数），而且这是**插件第一次会动玩家的对话**
+    //     （发消息前往上下文里塞格式指令与名号表）⇒ 升位，让用户能从页脚认出跑的是哪一版。
+    //   ★起名纪律照旧：`leg89-tag-extract` 不含下面扫描器里任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg90 升位（用户实机第二次骂 · ③段注入正文改人话 + 世界模型写标题自带对象）：
+    //     理由与 leg69 同族——**动的是"模型看得见的东西"**，而玩家可见面**没动**：
+    //     ① `src/tick.js` 的 ③段不再拼整条编年（那里面混着引擎记账行），改用事件本体重述成人话；
+    //     ② `src/prompts.js` 新增第 8b 条（事件标题自带对象）+ `MAIN_PROMPT_V` → `v2-agenda-t1-21`。
+    //     ⇒ 按 leg29 立的纪律（模型可见面变了就升位）**必须升**：不升位，用户从页脚分辨不出跑的是哪一版。
+    //   ★起名纪律又过了一遍扫描器：`leg90-tide-plain` 不含下面任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg90 再升一格（同一天第二刀 · 用户真机取证之后）：
+    //     用户按我给的命令读出 `sw2_tags | position=1 depth=1 role=0 | 475字 | 锚点=true`
+    //     ⇒ **注入真到了聊天模型，模型就是不写标签** ⇒ 病在措辞软（原文「**请**用标签标出」+
+    //     「不要为了标签改变你的文风」）。把那段规范改成**硬要求**（必须 + 不写的后果 + 写完自检 +
+    //     合格判据，475 → 878 字）⇒ 又动了**模型看到的东西** ⇒ 再升一格。
+    //   ★起名纪律照旧：`leg90-tags-mandatory` 不含下面任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★★★leg90c 再升一格（**真因修** · 用户：「上下文我好像都没看见注入」）：
+    //     那一句点破了病根——注入位置用了 `IN_CHAT`(=1)，而 ST 的 chat completion 组装
+    //     （`public/scripts/openai.js:1345`）只认 `BEFORE_PROMPT`/`IN_PROMPT`，其余一律 `continue` 丢掉
+    //     ⇒ 那两段**从来没进过发给模型的 prompt**（只躺在 ST 的字典里，所以读数"看着注入了 475 字"）。
+    //     位置改成 `IN_PROMPT`(0) ⇒ 又动了**模型看到的东西**（这次是"从看不到变成看得到"）⇒ 升位。
+    //   ★起名纪律照旧：`leg90c-inject-position` 不含下面任何一个禁词，形状合 `/^leg\d+-/`。
+    //   ★但**本条起名被另一条判据咬了一次**（留档）：`test/param-hub.test.js:414` 与本文 1912 行
+    //     都要求构建号合 `/^leg\d+-/`——**`\d+` 是纯数字** ⇒ `leg90c-…`/`leg90b-…` 都不合格
+    //     （`leg40b` 能过是因为 `leg`+`40`+`b-…`，`\d+` 只吃 `40`）⇒ 定稿 **`leg91-inject-position`**。
+    //   ★★★leg92 再升一格（真缺陷修）：重设注入从"装配那一刻"挪进 `refreshWorld`（世界进内存之后）——
+    //     原来那次 `apply()` 跑在世界载入**之前** ⇒ 两段都空、`clear()` 还把 key 删掉；而用户总闸关着
+    //     ⇒ 世界永远不推 ⇒ 队列的 `refresh` 永远不跑 ⇒ **再也没有第二次机会**（实机症状：开关是 1、
+    //     构建号是新的、`sw2_` 一个都没有）。
+    //   ★★★leg93 再升一格（用户裁示「就甲吧」）：**注入给聊天模型的那段规范原文改了**——
+    //     标签从此必须包在一个 ` ```tags ` 块里（提取器只扫块里，块外一律当正文）。
+    //     为什么算"模型看到的东西变了"：规范原文就是模型读的那一段（`web/inject.js` 的 `tagSpecText()`）。
+    //     ★`CSS_VERSION`（`web/index.js`）**本笔不动**——升位纪律要的是"玩家可见的版面/样式变了才升"，
+    //       本笔那一格正文是**发给聊天模型的**，面板上原来的样式规则一条没改。
+    //     ★`leg93` 这个号已被"交接落盘"那一笔占了 ⇒ 本笔记作 **`leg93b`**（补笔先例）。
+    //   ★★★leg94 再升一格（**玩家可见版面变了** · 用户令「这个文字出现在编年页签里了」）：
+    //     编年页不再印里程碑插行（`sw2-ch-roll`）⇒ 版面真变了 ⇒ 按纪律升。
+    //     ★`CSS_VERSION`（`web/index.js`）**本笔不动**：样式表零改动（删的是一条**无生产点**的死规则，
+    //       不是"换了样式" ⇒ 浏览器缓存没有旧件可吃，升了反而是假信号）。
+    //     ★起名避禁词：本想说 `…-chronicle-roll-off`，`chronicle` 正在下面那张禁词表里 ⇒ 定稿
+    //       **`leg94-oldvol-clean`**（"旧卷那一段清干净了"）。
+    //   ★★★leg94 同一天再升一格（`leg94-oldvol-clean` → **`leg94-storyview`**）：用户实机截图又取回三条证
+    //     ——大事纪里程碑卡印着 `[object Object]`、展开条目全是 `ev_11_2 链`、编年账目行里嵌着 `ev_4_6`，
+    //     并要求"把因果讲成人话" ⇒ 本笔修那三处 + 新增「说书」页签（`src/panorama.js`）。
+    //     ★这次 `CSS_VERSION`（`web/index.js`）**必须同批升**（`20260921-leg94-storyview`）：
+    //       说书视图一整族 `.sw2-pan-*` 是新增样式，与"删一条死规则"那次的情形**正相反**。
+    //   ★★★leg95 再升一格（`leg94-storyview` → **`leg95-linesettles`**）：用户指认说书页那格判词在骗人
+    //     （「**链头没法完结但是为什么每个事件都写个还开着，这些事件都是已经完成了呀，这不是误导人吗？**」）
+    //     ⇒ 点层判词由"借引擎的账目状态"改成**三种状态分开说**：已收场（模型判的）/ 已了结（引擎机械扫的）/
+    //       没人再提了（还开着但再没新事从它长出来）。**玩家可见面真的变了 ⇒ 按纪律升。**
+    //     ★`CSS_VERSION` **本笔也升**（`20260922-leg95-linesettles`）：新增了一条规则 `.sw2-pan-idle`
+    //       （点层第三种状态的颜色，与"还开着"必须长得不一样）。
+    //     ★起名避禁词：`settle`/`closed`/`pending` 这些都在下面那张禁词表里（`line`/`s` 亦须自查）⇒
+    //       定稿 **`leg95-linesettles`**（"一条线怎么收场"，两个词都不在禁词表内）。
+    //   ★★★leg95b 再升一格（`leg95-linesettles` → **`leg95-points`**）：用户实机截图驳回第一刀——
+    //     「**开没开着不应该挂在事件上**」（第一刀只改了判词，状态却仍挂在每一件事上）。
+    //     定稿：**点层一个字都不印状态**，状态只在线头那枚徽上说一次（还在往下长／挂着没了结／已收场）。
+    //     ⇒ 玩家可见文本又变了 ⇒ 按纪律再升。★`CSS_VERSION` 同批 → `20260922-leg95-points`。
+    //     ★起名避禁词：`event` 在禁词表里（"点层"直译会撞）⇒ 定稿 **`leg95-points`**。
+    //   ★★★leg95c 再升一格（`leg95-points` → **`leg95-states`**）：用户第三次指认
+    //     「**这个 7 还是事件的数量啊**」——线头那枚徽写成 `还在往下长 · 7 件没了结`，
+    //     把**事件计数**缝回了一枚"说线的状态"的徽里（而同一行左边已印着「第 0–12 轮 · 8 件事」）。
+    //     定稿：**徽只许说状态、一个数都不带**。⇒ 可见文本又变 ⇒ 按纪律再升。
+    //     ★`CSS_VERSION` 同批 → `20260922-leg95-states`。★起名避禁词：`state` 不在表内（`points` 那次避的是 `event`）。
+    //   ★★★leg96 再升一格（`leg95-states` → **`leg96-badgegrow`**，接手棒）：线头那枚徽的判据用错了信号——
+    //     「还在往下长」原先量的是"**最近有没有事落在这条线上**"（`最晚一件事的轮次 > tick − 窗口`），
+    //     而它该问的是"**最近几轮还有没有新事从这条线长出来**"（结构口径，与引擎 `hasPendingDownstream` 同族）。
+    //     真账取证（装置 `F:/deepseek/tmp/leg96-badge-verify.mjs` 旧法 vs `-after.mjs` 真模块复验）：
+    //     还没收场的线里 **8 条被判反**（A 局 3 · B 局 5）——`血屠魔君现身南疆掀起杀戮`／
+    //     `菩提禅院钟声震荡大荒`／`天庭仙将玄鹤空降长城`／`敖天玄率领龙族精锐封锁东海海域` 这些
+    //     **一个下游都没有**的线，只因"刚落账一件事"就印成"还在往下长"。
+    //     ⇒ 玩家看到的那一态真的变了 ⇒ 按纪律再升。
+    //     ★`CSS_VERSION` **本笔不升**（仍是 `20260922-leg95-states`）：**没有动任何样式规则**——
+    //       三态的颜色/边框早就在（`.sw2-pan-badge` 的 `.live/.stale/.done`），本笔只是判得更准。
+    //       ★与 leg94 那次"只删一条死规则 ⇒ 不升"是**同一条纪律**：**动没动样式，才是升不升 CSS 号的判据**。
+    //   ★★★leg95d 再升一格（`leg96-badgegrow` → **`leg95d-oneline`**）：用户另一路指认
+    //     「**没讲完的事又是啥，这也不对吧**」——线里那一整块**删除**（它既不是计数也不是过程，
+    //     是把账目状态换个说法再列一遍；且"没讲完"是引擎行话，而列出的那几件**全都发生过了**）；
+    //     顺带撤掉统计行那格「N 件悬着 · N 件了结」，并把统计行与两个区块标题**统一成徽那套词**
+    //     （原来同一页三种说法：统计行「13 条还开着」／区块「还开着的线」／徽「还在往下长」）。
+    //     ⇒ 可见文本又变 ⇒ 按纪律再升。★起名 `leg95d-oneline`（全页一套词）。
+    //     ★`CSS_VERSION` **本笔不升**：零样式改动（同 leg96 与 leg94 那次"只删一条死规则"的纪律）。
+    //   ★★★leg97 再升一格（`leg95d-oneline` → **`leg97-places-org`**）：「面」四层落地
+    //     （用户口径「**以人物为切口感觉就不像面了**」⇒ 面是**空间上的一个地方**）——
+    //     说书页从"按线的状态分三段"换成"**大势 → 此刻 → 面 → 线 → 点**"，末尾加一条自证闸。
+    //     ⇒ 玩家可见版面与文案都真的变了 ⇒ 按纪律升。
+    //     ★`CSS_VERSION` **同批升**（`20260922-leg95-states` → **`20260922-leg97-places`**）：
+    //       新增了「面」那一族规则（`.sw2-pan-face` / `-fh` / `-brg` / `-dashi` / `-other` / `-selfcheck`）。
+    //     ★起名避禁词：`leg97-places-org` 不含下面任何一个禁词。
+    //   ★★★leg98 再升一格（`leg97-places-org` → **`leg98-bridgeclean`**）：用户把两张面卡片并排一看，
+    //     问「**你发现什么问题了吗**」⇒ 三处**印在面上的字**失真（取证与判据见 `panorama.test.js`：
+    //     ⑬/⑱ 的桥自指两半、⑫ 的面头那半）：
+    //       ① `大虞` 那张卡的"与别处相连"里印着 `大虞 → 大虞皇陵`（桥自己就是本面 ⇒ 整行不该印）；
+    //       ② 那一行的标签「与别处相连：」读起来像"这一处连着哪几处"（箭头左边其实是**人**）；
+    //       ③ 面头「N 条线在这里交会」把**落脚/路过**糊成一个数（两张卡因此几乎一模一样）。
+    //     ⇒ 可见文本又变 ⇒ 按纪律再升。
+    //     ★`CSS_VERSION` **那一笔不升**：零样式改动 —— 改的全是文本与"印哪几行"（`web/style.css` 没动）。
+    //   ★★★leg98 补（同批第二笔 · 用户令「**是改这一栏的颜色**不是标题文字」——指着**线头那一栏**）：
+    //     那一栏原来 `background:transparent` ⇒ **透出的就是面卡底**（实测两边亮度差 **0**），
+    //     整条栏只靠一条 2px 竖线划分，而竖线对面卡底只有 **1.21:1** ⇒ 栏目与面卡糊成一片。
+    //     ⇒ 给那一栏**自己的底**（`#282f3c` · 对面卡 1.14:1）＋ 竖线提亮 `#3a4356`（live 那条改实色琥珀）。
+    //     ★**这一笔真动了样式** ⇒ `CSS_VERSION` **同批升**（`20260922-leg98-rowbg`）；
+    //       `PANEL_BUILD` 跟着再升一格（页面可见变化）。
+    //   ★★★leg98 补二（同批第三笔 · 用户令「**里面有两个大势卡片留一个就好了**，世情 · 3 键，还有浪尖，
+    //     张力，盘算数量你看看怎么集合起来好看」——三套候选里选了**乙**）：
+    //     信息带**五格平铺 → 两栏**（左＝世情 3 键竖排 · 右＝三行读数）＋ **撤掉带里的「大势」格**
+    //     ⇒ 版面与文案又变 ⇒ 再升一格；★新增三条规则 + `.sw2-tides` 改横排 ⇒ `CSS_VERSION` 同批升。
+    //   ★★★leg98 补四（同批第四笔 · 用户令「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
+    //     **信息带升成页头**（它原来排在页尾，而正文可见 10150 字、它只有 94 字）＋ 这一页**改两栏**
+    //     ⇒ 版面又变 ⇒ 再升一格；★新增 `.sw2-merged-grid/-main/-side` ⇒ `CSS_VERSION` 同批升。
+    // ★★★leg100（用户令「**那行你改一下**」——指收场被拒时那句出路）：**收场被拒的出路话术改成"指对栏"**
+    //   （`src/ref-rules.js` 的 `'eventClosures.event'` 那一格，**只动文案**）：旧话术只指 `pendingEvents`
+    //   那一栏，而用户实机那两个被拒的号（`ev_6_4`/`ev_7_2`）**是从 `recentClosedEvents` 抄的**
+    //   （真机取证：装置 `F:/deepseek/tmp/prototypes/leg100-closure-leak.mjs`：那两个号**不在** 72 条
+    //    `pendingEvents` 里，**却在**那份尾巴 8 条里、且恰好是**头两条**）⇒ 模型照旧话去错的那一栏找、
+    //   找不到 ⇒ 换号重试；而收场是**整步拒** ⇒ 每试一次白烧一轮。新话术把两栏的键名都点出来。
+    //   ⇒ **那句话是拒收时印给模型与用户看的原文**（同 leg64/leg66/leg67 那条：报错给了新出路就该升位）
+    //   ⇒ 升一格 ⇒ 定稿 **`leg100-closureexit`**。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动）——判据仍是那一条：**动没动样式**。
+    //   ★起名避禁词：`closure`/`exit` 都不在下面那张禁词表里（★`event` 在表里，见 leg95 那次改名）。
+    // ★★★leg100 同棒第二笔（用户令「**可以按甲吧**」——甲案：让"归档"与"候选"在给模型的资料里分得开）：
+    //   `pack.js` 的归档那一栏盖 `closed: true`（**裁剪时也跟着留**）+ `prompts.js` 第 15 条补指路
+    //   （同步 `MAIN_PROMPT_V` → `v2-agenda-t1-23`）。★这一笔改的是**给模型看的资料**，而那句话
+    //   （收场被拒的报错）也会跟着多一层说明 ⇒ 可见面又变 ⇒ **同批再升一格** ⇒ **`leg100-archivemark`**。
+    //   ★`CSS_VERSION` **不升**（样式零改动）——判据还是那一条：**动没动样式**。
+    assert.equal(PANEL_BUILD, 'leg100-archivemark');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
-    assert.match(PANEL_BUILD, /^leg\d+-/, '形状：legNN-…（升位链条要能一眼看出来）');
+    // ★★★leg99 再升一格（`leg98-pagecols` → **`leg99-seedborn`**）：**两把"事件出生轮"尺子合成一把**——
+    //   `ev_seed_N` 里的 `N` 是**播种时的枚举号**（`src/seed-roots.js:149`），不是轮次；
+    //   引擎那口按"取首个数字段"读成了第 `N` 轮 ⇒ 种子被算进"近 10 轮"窗口。
+    //   ★玩家看得见的那一笔（真机账 大荒z · 第 12 轮）：信息带张力那行 **83 → 76**
+    //     （装置 `F:/deepseek/tmp/prototypes/leg99-born-impact.mjs`；两个读数实测不受影响：
+    //      张力 freq 腿两口径都早饱和在 1.000、乱象档位把种子剔掉照旧「大乱」）。
+    //   ⇒ 面板上印出来的那个数真的变了 ⇒ 按纪律升位。★**那一笔 `CSS_VERSION` 不升**（样式零改动）。
+    // ★★★leg99 同批第二笔（用户令「**动态流可以不要了**，其他就按那个模板做，但要注意**两列都能独自滑动**」）：
+    //   **动态流撤出并页那一页** ＋ **两栏各自独立滑动**（容器定高、两栏 `overflow-y`、撤掉右栏 sticky）
+    //   ⇒ 玩家可见的**版面真的变了** ⇒ 同批再升一格 ⇒ 定稿 **`leg99-pageflow`**。
+    //   ★★**这一笔与上一笔正相反**：上一笔只动文本 ⇒ CSS 号不升；这一笔真动了 `web/style.css` ⇒ CSS 号**同批升**。
+    //     两笔的判据是同一条（**动没动样式**）——这条纪律同时管"该升"与"不该升"，这正是它的价值。
+    //   ★起名避禁词：`seed`/`born`/`flow` 都不在下面那张禁词表里。
+    // ★★★leg99 同批第三笔（用户令「**没必要每个参数还要显示当前是什么，当前是什么值就是下拉栏的值**」）：
+    //   参数页**撤掉重复印的当前值**（自变量那行整行撤 + 7 个上限撤掉旁边那枚琥珀数字；
+    //   ★因变量「乱象」那一格留着——它没有控件）⇒ 可见文本变了 ⇒ 同批再升一格 ⇒ 定稿 **`leg99-paramquiet`**。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动：`.sw2-row` 的 `em` 是 `flex:1`，撤格后自然补位）
+    //     ——与同批第二笔（动了样式 ⇒ 升）**又一次正相反**，判据是同一条：**动没动样式**。
+    // ★★★leg98 补的锁（**反向自证当场咬出来的缺口**）：`CSS_VERSION` 在这条之前**没有任何断言**——
+    //   全仓只有注释提到它（grep 实测）⇒ 我把 `web/index.js` 那个号**改回旧值**跑，判据**全绿**。
+    //   ⇒ 那个"浏览器吃旧样式表"的病，判据是**防不住**的（只能靠人记得改）。现在把它钉住：
+    //   ★口径：`CSS_VERSION` 与 `PANEL_BUILD` **同批升**的场合由人决定（判据管不了"该不该升"），
+    //     但**"升成了哪个号"必须与构建号对得上**——这就是能机械核的那一半。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
+    assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
+    assert.equal(cssVer, '20260922-leg99-pageflow',
+        `★CSS 号仍是第二笔那一批（这一笔**样式表零改动**：撤格靠既有的 flex 补位）；现为「${cssVer}」`);
+    assert.match(cssVer, /^20\d{6}-leg\d+[a-z]?-[\w-]+$/, '形状：`2026MMDD-legNN…-名字`（升位链条要能一眼看出来）');
+    // ★★★leg99 收窄（原来这条是 `cssVer.includes(PANEL_BUILD)`）：**改管"leg 号必须同批或落后一笔"**。
+    //   ★为什么非改不可：leg99 的**第一笔**只升面板号、不升 CSS 号（文本变了、样式没变），
+    //     两个号第一次停在不同的 leg 上 ⇒ 旧写法（"CSS 号要含着构建号全串"）**当场红**。
+    //   ★口径一个字没放宽：它要守的是"**两个号同批**"，而"同批"本来就只由 **leg 号**表达；
+    //     `rowbg`/`pagecols`/`seedborn`/`pageflow` 那截名字说的是"这一笔干了什么"，两个号各说各的**才是对的**。
+    //   ★它**比旧写法更紧**：不许差两笔以上（差两笔正是"浏览器吃旧样式表"那个病的形状）。
+    const cssLeg = (/leg(\d+[a-z]?)-/.exec(cssVer) || [])[1];
+    const buildLeg = (/leg(\d+[a-z]?)-/.exec(PANEL_BUILD) || [])[1];
+    assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面这条是空绿）');
+    assert.match(cssLeg, /\d+/, '前置：CSS 号里那个 leg 号必须是**数字开头**的（防空绿：`leg-` 也能被上面的正则吃下）');
+    assert.equal(buildLeg, '100', '前置：本笔的构建号就是 leg100（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg99 时它是 `99`，leg100 头一笔时是 `leg100-closureexit`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    // ★口径：**CSS 号的 leg 号只许是"本笔"或"上一笔"**——"同批"只允许差一笔（本笔只升面板号时它落后一格）。
+    //   ★不许写成"只要都是 leg 就行"：那样 leg40 的 CSS 号配 leg99 的构建号也会绿，锁就白设了。
+    const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
+    const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);
+    assert.ok(buildNum - cssNum === 1 || buildNum === cssNum,
+        `★CSS 号的 leg 号（${cssLeg}）必须与构建号（${buildLeg}）**同批或恰好落后一笔**——`
+        + '差两笔以上说明某一个号忘了升（"浏览器吃旧样式表"那个病正是这么来的）');
+    //   ★★★leg93b：形状判据**放宽一格**（同 leg50 那次放宽的理由）——原来是 `/^leg\d+-/`，
+    //     它把"补笔"钉死了：`leg93b-…` **不匹配**（`\d+` 吃完 `93` 就要求 `-`，撞上 `b` 就红）。
+    //     而本仓**本来就在用补笔写法**（`leg40b` 能过纯属侥幸：它 = `leg`+`40`+`b-`，`\d+` 只吃了 `40`；
+    //     `leg90b`/`leg90c` 当年是**被这条判据咬红之后改的名**——那是判据错，不是名字错）。
+    //     ⇒ 补上**可选的一个小写字母**。它要守的没变：**这是一串构建号、升位链条一眼看得出来**。
+    assert.match(PANEL_BUILD, /^leg\d+[a-z]?-/, '形状：legNN-… 或 legNNb-…（升位链条要能一眼看出来）');
 });
 
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -1846,8 +2408,8 @@ test('★★终审 C1：中文输入法组合期不许抢 DOM（源码护栏 + �
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const seg = inputHandlerSrc(web);
     assert.ok(seg.length > 100, '前置：找得到搜索框那条 input 处理（结构切片，不靠固定字节数）');
-    assert.equal(hasCompositionGuard(seg), true,
-        '★input 处理必须先判组合期（`e.isComposing || sw2EntsComposing`）并早退，**且在改状态与重绘之前**');
+    assert.equal(hasCompositionGuard(seg, { cond: 'anyComposing', state: 'viewState.entities().q', redraw: "refreshSections(['entities'])" }), true,
+        '★input 处理必须先判组合期（`e.isComposing || viewState.anyComposing()`）并早退，**且在改状态与重绘之前**');
     const stripped = seg.replace(/[^\n]*isComposing[^\n]*\n/g, '');
     assert.notEqual(stripped, seg, '前置：反向自证真的删掉了东西（否则下面那条等于没测）');
     assert.equal(hasCompositionGuard(stripped), false,
@@ -1863,19 +2425,34 @@ test('★★终审 C1：中文输入法组合期不许抢 DOM（源码护栏 + �
         '★`compositionend` 必须把整串落账**并补一次重绘**（组合期一次都没重绘）');
     assert.match(web, /addEventListener\('compositionend',[\s\S]{0,900}?refreshSections\(\['chronicle'\]\)/,
         '★leg50：编年页那支同理（`compositionend` 落账 + 补一次重绘）');
-    assert.match(web, /^let sw2EntsComposing = false;$/m,
-        '★组合态标志是模块级 `let`（不是函数内临时变量：两个监听要共享它）');
-    assert.match(web, /^let sw2ChronicleComposing = false;$/m,
-        '★leg50：编年页的组合态标志同样是模块级 `let`');
+    // ★★★leg79（丙-web 第四格）：**组合态标志随视图态族搬进 `web/view-state.js`** 了。
+    //   原来的两条断言（`/^let sw2EntsComposing = false;$/m` 钉在 `web/index.js` 上）**跟着符号改指新家**——
+    //   ★它们要说的那条口径**一个字没变**：标志必须是**模块级** `let`（三支监听共享同一个），
+    //     挂在函数里等于没有；变的只是"哪一个文件是它的家"（与 leg78 改指 `hot-ledger.js` 同款处置）。
+    const viewStateSrc = readFileSync(path.join(ROOT, 'web', 'view-state.js'), 'utf8');
+    assert.match(viewStateSrc, /^let sw2EntsComposing = false;$/m,
+        '★组合态标志是**新家**的模块级 `let`（不是函数内临时变量：三支监听要共享它）');
+    assert.match(viewStateSrc, /^let sw2ChronicleComposing = false;$/m,
+        '★leg50：编年页的组合态标志同样是新家的模块级 `let`');
+    //   ★而且接线层**不许自己再存一份镜像**（`sw2EntsComposing = true` 那种直写 = 两份真相）；
+    //     够到它一律走受控口：写 `setXxxComposing()`、读 `anyComposing()`。
+    assert.ok(!/^\s*sw2(Ents|Chronicle)Composing\s*=/m.test(web),
+        '★接线层不许直写组合态标志（那是新家的私有状态）——一律走 `viewState.setXxxComposing()`');
+    assert.match(web, /viewState\.setEntsComposing\(true\)/, '★`compositionstart` 必须真的经 `viewState.setEntsComposing(true)` 置位');
+    assert.match(web, /viewState\.setChronicleComposing\(false\)/, '★`compositionend`（编年那支）必须真的经 `viewState.setChronicleComposing(false)` 清位');
 
     // ★★leg50 追加：编年页搜索框的 input 处理**也要**有组合期早退——
     //   病与药与实体页逐字同款（同一屏里两个搜索框，只护一个等于没护）。
-    //   ★反向自证同上：把 `sw2ChronicleComposing` 那半句删掉，`hasChronicleGuard` 必须变假。
-    const hasChronicleGuard = (s) => /if \(e\.isComposing \|\| sw2EntsComposing \|\| sw2ChronicleComposing\) return;/.test(s);
+    //   ★反向自证同上：把编年页那半句护栏删掉，`hasCompositionGuard` 必须变假。
+    //   ★leg79：两个标志合并成 `viewState.anyComposing()` 一口现读（不许抓进本文件的变量——
+    //     与"取视图对象"同一条道理）⇒ 词表跟着换，**顺序那条口径不放宽**。
+    const hasChronicleGuard = (s) => hasCompositionGuard(s, {
+        cond: 'anyComposing', state: 'viewState.chronicle().q', redraw: "refreshSections(['chronicle'])",
+    });
     const chSeg = inputHandlerSrc(web, '#sw2_ch_q');
     assert.ok(chSeg.length > 80, '前置：找得到编年页搜索框那条 input 处理');
     assert.equal(hasChronicleGuard(chSeg), true, '★编年页 input 处理同样必须先判组合期并早退');
-    const chStripped = chSeg.replace(/sw2ChronicleComposing/g, '');
+    const chStripped = chSeg.replace(/anyComposing\(\)/g, '');
     assert.notEqual(chStripped, chSeg, '前置：反向自证真的删掉了东西');
     assert.equal(hasChronicleGuard(chStripped), false,
         '★反向自证：把编年页那半句护栏删掉，同一条判据必须变假（否则它就是恒真的假绿）');
@@ -1907,31 +2484,66 @@ function inputHandlerSrc(web, selector = '#sw2_ents_q') {
     return '';
 }
 
-function hasCompositionGuard(seg) {
-    // 判据 = ① 有一条以 `isComposing` **与** `sw2EntsComposing` 为条件的早退；② 它排在改状态与重绘之前
-    const re = /if\s*\(([^)]*)\)\s*\{?\s*return\b/g;
+function hasCompositionGuard(seg, vocab = {}) {
+    // 判据 = ① 有一条以 `isComposing` **与**读标志的那一口为条件的早退；② 它排在改状态与重绘之前
+    //   ★leg79：两个标志合并成 `viewState.anyComposing()`（并且视图对象改成 `const xv = viewState.xxx()`
+    //     现取）⇒ 三个词表都参数化。★**顺序那条口径一个字没放宽**（它才是这条判据的命门：
+    //     组合期若先写状态/先重绘，组合已经被打断了，早退也没用了）。
+    //   ★★踩坑留档（本棒第二处"判据自己写窄了"，比 leg71 §4.1 那次更隐蔽）：
+    //     原来那条条件正则 `if\s*\(([^)]*)\)` 是**配对不上就跨语句乱配**的——它遇到
+    //     `if (e.isComposing || viewState.anyComposing())` 时在内层 `(` 上截断、配上**后面另一条语句**的 `)`
+    //     ⇒ 抓到的"条件"根本不是这一条 ⇒ 判据**假红**（不是被注释骗，是它自己把条件切短了）。
+    //   ⇒ 定稿换成**真正配对括号**的扫描器（遇到 `(` 一律嵌套计数），条件取到与 `if (`
+    //     **同一个层级**的那个 `)`——这才是"这条 if 的条件"的定义。
+    const { cond = 'anyComposing', state = 'ev.q', redraw = "refreshSections(['entities'])" } = vocab;
+    const re = /if\s*\(/g;
     let m;
     while ((m = re.exec(seg))) {
-        const cond = m[1];
-        if (!cond.includes('isComposing') || !cond.includes('sw2EntsComposing')) continue;
-        const stateAt = seg.indexOf('sw2EntsView.q');
-        const redrawAt = seg.indexOf("refreshSections(['entities'])");
+        const open = m.index + m[0].length - 1;   // 那个 `(` 的位置
+        let depth = 0;
+        let close = -1;
+        for (let i = open; i < seg.length; i += 1) {
+            if (seg[i] === '(') depth += 1;
+            else if (seg[i] === ')') { depth -= 1; if (depth === 0) { close = i; break; } }
+        }
+        if (close < 0) continue;
+        const c = seg.slice(open + 1, close);
+        if (!c.includes('isComposing') || !c.includes(cond + '(')) continue;
+        //   ★这一条 if 之后必须紧跟 return（否则"判了却继续往下走"= 护栏形同虚设）
+        if (!/^\s*\{?\s*return\b/.test(seg.slice(close + 1, close + 40))) continue;
+        const stateAt = seg.indexOf(state);
+        const redrawAt = seg.indexOf(redraw);
         return stateAt > m.index && redrawAt > m.index;
     }
     return false;
 }
 
 test('★终审 M10：视图态默认值**只有一份真源**（`ENTS_DEFAULT_VIEW` + `makeEntsView()`）', () => {
-    // 病：`src/render.js` 的 `ENTS_DEFAULT_VIEW` 与 `web/index.js` 的 `sw2EntsView` 是**两份字面量**，
+    // 病：`src/render.js` 的 `ENTS_DEFAULT_VIEW` 与视图态持有者各写一份字面量，
     //   靠人同步 ⇒ 本笔加 `scope` 字段时正是两处都要改（下一任漏一处就分叉）。
+    // ★leg79（丙-web 第四格）：视图态族搬进 `web/view-state.js` ⇒ 这条锁**跟着符号改指新家**，
+    //   并且**掰成两半**（两件事本来就不在一个文件里了）：
+    //     ① 持有者（新家）**从渲染层取**默认值——不许自己再写一份；
+    //     ② 接线层**不再**经手视图态字面量，也**不再**自己 import 那两个工厂（它够不到那份状态）。
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const vs = readFileSync(path.join(ROOT, 'web', 'view-state.js'), 'utf8');
     // 计数前先按本仓既有做法**把注释行抹成空白**（`:110` 同款）：说明文字里也会写到这个函数名
-    const code = web.split('\n').map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? ' '.repeat(l.length) : l)).join('\n');
-    assert.match(code, /import[^;]*makeEntsView[^;]*from '\.\.\/src\/render\.js'/, '★接线层从渲染层导入默认值（不许自己再写一份）');
-    assert.equal((code.match(/makeEntsView\(\)/g) || []).length, 2,
+    const blank = (s) => s.split('\n').map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? ' '.repeat(l.length) : l)).join('\n');
+    const vsCode = blank(vs);
+    assert.match(vsCode, /import[^;]*makeEntsView[^;]*from '\.\.\/src\/render\.js'/,
+        '★视图态的新家从渲染层导入默认值（不许自己再写一份）');
+    assert.equal((vsCode.match(/makeEntsView\(\)/g) || []).length, 2,
         '★初始值与关面板复位两处都用同一个工厂（不是两处字面量）');
-    assert.ok(!/let sw2EntsView = \{/.test(web) && !/sw2EntsView = \{ q:/.test(web),
+    assert.ok(!/let sw2EntsView = \{/.test(vs) && !/sw2EntsView = \{ q:/.test(vs),
+        '★新家里不许有第二份视图态字面量');
+    // ② 接线层：不许再写一份字面量，也不许再自己 import 那两个工厂（否则又是"两个地方都能造它"）
+    const code = blank(web);
+    assert.ok(!/let sw2EntsView = \{/.test(web) && !/sw2EntsView = \{ q:/.test(web) && !/let sw2ChronicleView = \{/.test(web),
         '★接线层里不许再有第二份视图态字面量');
+    assert.ok(!/import[^;]*makeEntsView[^;]*from/.test(code) && !/import[^;]*makeChronicleView[^;]*from/.test(code),
+        '★接线层不许再 import 那两个工厂（默认值的取用点只有新家一处）');
+    assert.match(code, /import \{ createViewStateHub \} from '\.\/view-state\.js'/,
+        '★接线层必须从新家取 hub（它够到视图态的唯一通道）');
     // 行为锁：工厂与默认值同形，且 `filters` 是**新数组**（就地 push 不许污染默认值）
     const v = makeEntsView();
     assert.deepEqual(v, ENTS_DEFAULT_VIEW, '工厂产出的形状 = 默认值');
@@ -1988,7 +2600,23 @@ test('★★leg52·B：**参数页撤「推进」卡 ≠ 删处理器**（接线
     //   ⇒ 判据直接读源码，锁住"特判还在"（这是**唯一**能锁它的地方：动作总线上根本没有这个键）。
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     assert.match(web, /action === 'advance-world'/, '★dispatchAction 里那个特判必须还在（否则设置页那枚变死按钮）');
-    assert.match(web, /sw2TickQueue\.advance\(\)/, '★特判必须真的调 tick 队列（不只是判了个名字）');
+    // ★★★leg88 撤回留档：这条判据在 leg87 里一度改成"必须**带着对话**调 advance"
+    //   （`sw2TickQueue.advance(sw2PlayerUtteranceNow())`）——那笔改动服务的是"从你发的话里提取落子"，
+    //   而**用户裁示那不是他要的提取**（他要的是"注入提示词 → 聊天模型产出带标签正文 → 插件从正文正则提取"）
+    //   ⇒ 那一族连同这条断言一起撤回，恢复零参口径。★leg88 当时写明："它接进来的那天，这里仍然要跟着改一次"。
+    // ★★★leg89：那天到了。新形状 = 手动路走 `sw2AdvanceOnce()`（与自动路**共用同一把尺子**）：
+    //   · 递进去的是**最后一条正文**（标签长在里面）；
+    //   · ★而且"同一段正文只推一次"——总闸开着时自动路已经推过这一条，手动再点一次
+    //     会把**同一批标签提两遍**（世界可能把它当两轮用）。这条规矩是本笔新加的，所以要**真锁**：
+    //     不只锁"名字还在"，还锁"它真的调了 tick 队列 + 真的拿了正文 + 真的有那条守卫"。
+    assert.match(web, /sw2AdvanceOnce\(\)/, '★特判必须真的调推进入口（不只是判了个名字）');
+    const onceAt = web.indexOf('export function sw2AdvanceOnce');
+    assert.ok(onceAt > 0, '★`sw2AdvanceOnce` 必须存在（自动路与手动路共用它）');
+    const onceBody = web.slice(onceAt, onceAt + 1800);
+    assert.match(onceBody, /sw2TickQueue\.advance\(mes\)/, '★它必须**带着正文**调 tick 队列（否则标签永远提不到）');
+    assert.match(onceBody, /sw2LatestMessageText\(freshCtx\(\)\)/, '★正文必须**现取**（抓死会读到上一个聊天的最后一条）');
+    assert.match(onceBody, /skipped: 'same-message'/, '★必须有"同一段正文只推一次"的守卫（重复提取是本笔带出来的新风险）');
+    assert.match(web, /advance: \(\) => sw2AdvanceOnce\(\)/, '★自动路也必须走同一个入口（两把尺子 = 迟早分叉）');
 });
 
 test('★★leg52·C：几格合并成一栏 —— **能力零损失**（天时/时局照旧能设、乱象照旧只读）', () => {
@@ -2079,20 +2707,84 @@ test('★★leg52·E：**"一个数两把尺子"收口** —— 参数页 / 设�
     for (const [name, html] of [['参数页', p], ['设定页', s], ['观棋信息带', band]]) {
         assert.ok(html.includes('大灾'), `★★${name} 必须读真源（真源里天时=大灾，镜像里根本没有天时）`);
     }
-    assert.ok(p.includes(`data-param-cell="每轮递线">${SENTINEL_LIMIT}<`),
+    // ★★★leg99（用户令「当前是什么值就是下拉栏的值」）：上限那一行**不再印值格** ⇒ 改咬**控件自己带着的值**。
+    //   ★这条判据的**实质一字未变**（"四个上限也必须读真源"）：旧版咬的是"值格里的字 = 哨兵"，
+    //     现在咬"输入框的 value 属性 = 哨兵"——**更直接**（那正是玩家眼睛看到、也正是会被提交上去的那个数）。
+    //   ★为什么敢换锚：值格与控件本来就同源（`sw2SetParamCell` 只读控件），
+    //     撤掉格之后**控件成了唯一的真相面** ⇒ 咬控件比咬格更贴近事实。
+    const limitValOf = (html) => {
+        const at = html.indexOf('data-param="每轮递线"');
+        return at < 0 ? '' : (/value="([^"]*)"/.exec(html.slice(at, at + 200)) || [])[1] || '';
+    };
+    assert.equal(limitValOf(p), SENTINEL_LIMIT,
         '★★参数页的四个上限也必须读真源（旧版这一栏单独漏掉过，判据在 leg41 抓红过一次）');
+    assert.notEqual(limitValOf(renderParamsHtml(mirrorOnly, { config: {} })), SENTINEL_LIMIT,
+        '前置/反向：不给真源时那个框里就不该是哨兵（否则上面那条两边都绿）');
+    // ★★★leg99（同一条用户令）：**上限那一行也不许再印一遍那个数**——旁边就是输入框，
+    //   同一个数并排出现两次＝同一件事两处表达。
+    //   ★这条是**反向自证咬出来才补的**：本条第一版只钉了"框里带着值"，
+    //     于是"把那枚琥珀色数字加回去"那个变异体**一路全绿**（实测：89/89 通过、fail 0）。
+    //   ★量法：这一行里**可见文本**（剥掉 `<select>` 与属性）**一次都不许**出现那个数——
+    //     数只许住在输入框的 `value` 属性里（属性不算可见文本，正是"控件自己带着值"的形状）。
+    for (const key of ['每轮递线', '每轮事件', '顶层大计', '在飞大计']) {
+        const row = paramRowSeg(p, key, { firstRowOnly: true });
+        assert.ok(row, `前置：上限「${key}」那一行应当切得到`);
+        const val = (/value="([^"]*)"/.exec(row) || [])[1] || '';
+        assert.ok(val, `前置：上限「${key}」的输入框应当带着值`);
+        // ★必须把「常用：…」那一段排除掉：那是**建议档**（`r.options`），
+        //   与当前值**无关**，只是恰好可能同字 —— 本笔第一版没排除它 ⇒ 因为
+        //   `SENTINEL_LIMIT = '9'` 正好在「常用：3 / 6 / 9」里而**假红**（尺子错，不是产品错）。
+        const visibleText = textOnly(withoutSelects(row)).replace(/常用：[^ ]*(?: [^ ]+)*/g, ' ');
+        assert.ok(!new RegExp(`(^|[^\\d])${val}([^\\d]|$)`).test(visibleText),
+            `★★leg99：上限「${key}」那一行把值「${val}」又印了一遍可见文本（它只该住在输入框里）：${visibleText}`);
+    }
     // 反向：**不给** paramEnv 时三个面一律退回读账（口径与 leg41 之前一致，行为不许变）。
     //   ★口径（第三版才定稿）：**不能用"某个档位词一次都不出现"当判据**——
     //     参数页的天时下拉把 **`大灾` 当 `<option>` 画出来了**（档位清单一律上板），
     //     所以"未给真源时 textOnly 里没有大灾"这条**永远不成立**（我自己写了三版才看穿）。
     //   ⇒ 改成**增量判据**：给了真源 ⇒ 该值多出现**恰好一次**（那一格）；不给 ⇒ 一次都不多。
     //     这个形状同时锁住了"真源确实被采纳"与"只被采纳一次"（不是把值又重复画一遍）。
+    // ★★★leg99（同一条用户令）——**这条判据的量法必须换，而口径一字未变**：
+    //   自变量那一格撤掉之后，"真源被采纳"的证据**搬进了下拉的 `selected` 属性**，
+    //   而 `textOnly` 会**把属性整段剥掉** ⇒ 增量恒为 0（实测：1 − 1 = 0，当场红）。
+    //   ★这不是判据"放松"：它原来要证的是"**这个值被画出来了、且只画一处**"，
+    //     现在那个"一处"就是**控件自己带着的那个值** ⇒ 直接读控件：
+    //     `天时` 读下拉的 selected、`每轮递线` 读输入框的 value（上面 `cellText` 已经是这条口径）。
+    //   ★而**"只画一处"这半条没有丢**：`cellText` 读的是"控件里那一个值"，
+    //     配合下面"因变量只读、自变量不许再多印一格"的锁，正好把那半条钉在结构上。
     const countIn = (html, needle) => (textOnly(html).match(new RegExp(needle, 'g')) || []).length;
+    // ★★★leg99（用户令「当前是什么值就是下拉栏的值」）：有控件的那几行**不再印值格** ⇒
+    //   这个助手升级成"**这个键当前显示的值在哪**"：①先找值格（因变量的家）②再找控件自己的值
+    //   （`<select>` 看 `selected` 那一项、`<input>` 看 `value`）——★两边读的都是"玩家眼睛看到的那个值"，
+    //   口径与原来**一字未变**（原来咬"这一格采纳了没有"，现在咬"这个键显示的采纳了没有"）。
+    //   ★它必须在**使用点之前**声明（`const` 有 TDZ——本笔第一版放在后面，当场 ReferenceError）。
+    const cellText = (html, key) => {
+        const at = html.indexOf(`data-param-cell="${key}"`);
+        if (at >= 0) {
+            const gt = html.indexOf('>', at);
+            return html.slice(gt + 1, html.indexOf('</b>', gt));
+        }
+        const attr = html.indexOf(`data-action="set-param" data-param="${key}"`);
+        if (attr < 0) return '';
+        // ★下拉：看 `selected` 那一项；★输入框：**只在那个 `<input …>` 标签里**找 `value`
+        //   （不加这个边界会先撞上选项里的 `value=""`，读到「未定」——本笔当场踩过）。
+        const tagStart = html.lastIndexOf('<', attr);
+        const tag = html.slice(tagStart, html.indexOf('>', attr) + 1);
+        if (/^<input/i.test(tag)) return (/value="([^"]*)"/.exec(tag) || [])[1] || '';
+        const selected = /<option value="([^"]*)" selected>/.exec(html.slice(attr, attr + 900));
+        return selected ? selected[1] : '';
+    };
     const p0 = renderParamsHtml(mirrorOnly, { config: {} });
     const s0 = renderSettingHtml(mirrorOnly, { config: {} });
     const b0 = renderInfoBandHtml(mirrorOnly, { config: {} });
-    assert.equal(countIn(p, '大灾') - countIn(p0, '大灾'), 1,
-        '★参数页：给了真源 ⇒ 「大灾」恰好多画一次（那一格）；镜像里没有它');
+    // ① 参数页：真源被采纳 ⇒ **控件带着它**；不给真源 ⇒ 控件不带着它
+    assert.equal(cellText(p, '天时'), '大灾',
+        '★参数页：给了真源 ⇒ 天时那个下拉必须选中「大灾」（镜像里没有它）');
+    assert.notEqual(cellText(p0, '天时'), '大灾',
+        '★前置/反向：不给真源时那个下拉就不该选中「大灾」（否则上面那条两边都绿）');
+    assert.equal(countIn(p, '大灾') - countIn(p0, '大灾'), 0,
+        '★★leg99：参数页**别处**不许再多画一遍「大灾」（值只住在控件里——旧版那一格已经撤掉）');
+    // ② 设定页 / 信息带：那两页仍然是**文本呈现**（没有控件）⇒ 增量判据原样保留
     assert.equal(countIn(s, '大灾') - countIn(s0, '大灾'), 1,
         '★设定页：同上（旧版这一页读镜像 ⇒ 增量恒为 0，正是本棒要治的病）');
     assert.equal(countIn(band, '大灾') - countIn(b0, '大灾'), 1,
@@ -2105,12 +2797,6 @@ test('★★leg52·E：**"一个数两把尺子"收口** —— 参数页 / 设�
     //     （`大乱` 就在动乱度下拉的选项里），第一版那条字面判据**结构性假红**。
     //     要判的是"**这一格采纳了没有**"，所以按格判。
     //   ★★leg53：`民生度` 已从面板撤下 ⇒ 这里只剩 `动乱度` 一格可判（"民生不许上板"由 `leg53·F` 正向锁）。
-    const cellText = (html, key) => {
-        const at = html.indexOf(`data-param-cell="${key}"`);
-        if (at < 0) return '';
-        const gt = html.indexOf('>', at);
-        return html.slice(gt + 1, html.indexOf('</b>', gt));
-    };
     const sneaky = { 动乱度: '大乱', 天时: '平常' };
     assert.equal(cellText(renderParamsHtml(mirrorOnly, { config: { paramEnv: sneaky } }), '动乱度'), '动荡',
         '★★参数页：真源里的**因变量**不许覆盖账上的值（动乱度仍应是账上的「动荡」）');
@@ -2131,7 +2817,7 @@ test('★★leg52·G：**接线面**——每一次 `renderAll` 都必须带上 
     //   只要有一处 `renderAll(world, {...})` 忘了 `config: renderCfg()`，那一处就会静默退回读镜像，
     //   于是"设定页/信息带偶发画旧值"会以**间歇**的形状回来（最难查的那一类）。
     //   `renderCfg()` 是**唯一**的配置路（leg27 后它撤掉了 `config` 形参，只留这一条），
-    //   而它自己**总是**注入 `paramHub.displayEnv(w)` ⇒ 判据只需保证两件事：
+    //   而它自己**总是**注入 `displayEnv(w)`（leg82 起经受控口 `paramApi.displayEnv(w)`）⇒ 判据只需保证两件事：
     //     ① `renderCfg` 里 `paramEnv` 仍然来自 `displayEnv`（不是另写一处"没有就是空"）；
     //     ② 全仓每一处 `renderAll(` 的 `config` 都**溯源到 `renderCfg()`**。
     //   ★口径（第一版太死，自证抓红留档）：不许把 `config:` 写成**字面** `renderCfg()`——`set-param`
@@ -2142,8 +2828,8 @@ test('★★leg52·G：**接线面**——每一次 `renderAll` 都必须带上 
     const cfgAt = web.indexOf('function renderCfg(');
     assert.ok(cfgAt > 0, '前置：找得到 renderCfg');
     const cfgSeg = web.slice(cfgAt, web.indexOf('\n}', cfgAt));
-    assert.match(cfgSeg, /paramEnv:\s*paramHub\.displayEnv\(/,
-        '★`paramEnv` 必须来自 `paramHub.displayEnv`（值的裁决只许一处——leg41 的"下拉全空白"就是这么来的）');
+    assert.match(cfgSeg, /paramEnv:\s*paramApi\.displayEnv\(/,
+        '★`paramEnv` 必须来自 `displayEnv`（值的裁决只许一处——leg41 的"下拉全空白"就是这么来的）');
     // ② 每一处 renderAll 的 config 都要溯源到 renderCfg
     const calls = [...web.matchAll(/renderAll\(/g)];
     assert.ok(calls.length >= 2, `前置：接线层有多处 renderAll（实测 ${calls.length} 处）`);
@@ -2356,8 +3042,8 @@ test('★★★leg53·F：**民生那一格从玩家可见面彻底撤下**（�
 
     // 扫**参数面**：一个字节都不许再出现「民生」
     //   ★口径（第一版写错，自证抓红留档）：**不许扫"全部产物"**——`民生` 是普通汉语词，
-    //     它会出现在**剧情内容**里（本夹具就有里程碑标题「发兵催战、**民生**凋敝」，
-    //     那是模型写的正文，跟参数格毫无关系）⇒ 扫全产物是**结构性假红**。
+    //     它会出现在**剧情内容**里（本夹具的里程碑标题「发兵催战、**民生**凋敝」就是模型写的正文，
+    //     跟参数格毫无关系）⇒ 扫全产物是**结构性假红**。
     //     要判的是"**参数口径**里还有没有它"，所以只扫**吃参数的那四个面**。
     const w = world();
     const full = renderAll(w, { config: CONFIG, oldVolumes: VOLUMES });
@@ -2378,7 +3064,13 @@ test('★★★leg53·F：**民生那一格从玩家可见面彻底撤下**（�
         assert.ok(html.includes('乱象') || html.includes('动乱度'), `前置③：${name} 确实画了参数（否则"没民生"毫无意义）`);
     }
     // ★**剧情里的「民生」不受影响**（这是有意的：那个词是模型的正文，不是我们的参数格）
-    assert.ok(full.chronicle.includes('民生凋敝'), '★剧情正文里的「民生」照旧（那不是我方参数口径）');
+    //   ★leg94 改判据：原来这条拿 `full.chronicle` 里那句里程碑标题（「发兵催战、民生凋敝」）当证据，
+    //     而里程碑插行 leg94 已撤出编年页 ⇒ 那条断言**不是坏了、是所指没了**（结构性连带，非回归）。
+    //     改判**账上那份**：`民生度` 照旧躺在参数面里（`PARAM_KEYS` + `setting.dynamic.env` 都认它），
+    //     撤的只是"某一页不再画它"——**账与面分开**这条口径一个字不动。
+    //     （"模型写的正文字里有「民生」"这件事的证据仍在：观棋页归档提示条那条判据印着「民生凋敝」。）
+    assert.ok(PARAM_KEYS.includes('民生度') && w.context.setting.dynamic.env['民生度'] === '艰难',
+        '★撤的只是"某一页不再画它"：账上那个键与它的值照旧在（账 ≠ 面）');
 });
 
 test('★★leg53·G：**乱象那一格的"依据"必须说实话**——它是引擎每轮算的，不是书里原话', () => {

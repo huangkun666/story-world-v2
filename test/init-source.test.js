@@ -333,7 +333,13 @@ test('防御上限：仅超现实量级才裁剪（机制保留，正常世界�
     const bigEntries = [];
     for (let i = 0; i < 300; i += 1) bigEntries.push({ key: `k${i}`, content: `条目${i}：` + '字'.repeat(200) });
     const r = composeInitSource({ character: null, worldInfoEntries: bigEntries });
-    assert.equal(r.truncated, false); // 6 万字符世界书默认上限下全量
+    // ★leg69 更正注释（原文写着"6 万字符世界书默认上限下全量"，与实现不符）：
+    //   真实上限是 `INIT_SOURCE_HARD_CEILING = 500000`（`init-source.js:24`），**不是 6 万**
+    //   （6 万是另一个模块的**块尺寸** `ROSTER_CHUNK_CHAR`，与 `composeInitSource` 无关——
+    //   该模块**没有块概念**，它是"超上限就切尾巴"）。
+    //   ⇒ 本夹具 ≈ 300×205 ≈ **6.15 万字符**，离闸还差 **8.3 倍**：它只验"小书不被裁"，
+    //     **没有**验到"顶到 50 万时怎么裁"（那件事本仓至今无夹具；真账最惨一本合订到 50.8 万）。
+    assert.equal(r.truncated, false); // 默认上限 50 万；本条夹具 ≈6.15 万 ⇒ 全量（但没顶到闸）
     assert.ok(r.usedChars > 50000);
     const tiny = composeInitSource({ character: CARD, worldInfoEntries: bigEntries, budget: 500 });
     assert.equal(tiny.truncated, true); // 注入极小防御上限验证机制仍在

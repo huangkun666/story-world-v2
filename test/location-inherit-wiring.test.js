@@ -211,13 +211,23 @@ test('leg25 f：★loadWorld 加载链里必须有位置继承这一刀（防"�
         '★渲染的是**推断后**的世界（否则界面还是旧的）');
 });
 
-test('leg25 f：★三处生产调用点都必须把条目喂给收口（防再次断线）', async () => {
+test('leg25 f：★两处生产调用点都必须把条目喂给收口（防再次断线）', async () => {
     const src = await readFile(new URL('../web/index.js', import.meta.url), 'utf8');
-    // 三个入口各必须出现一次「bookEntries: await bookEntriesForInherit()」：
-    //   ① lookupOneEntity（面板行内查/重查）② runBatchChunk（批量补全）③ advanceTick 的 preStep（每轮前置步）
+    // 各入口必须出现一次「bookEntries: await bookEntriesForInherit()」：
+    //   ① lookupOneEntity（面板行内查）② advanceTick 的 preStep（每轮前置步）
+    // ★★★leg76：原先是**三处**——第三处是 `runBatchChunk`（全册批量补全），该族已随用户拍板整族删除
+    //   （令：「这个按钮根本用不了，要么就改成重抽名册，要么就删了」；依据见 `test/lookup-batch.test.js`）。
+    //   ⇒ 门槛由 3 收到 2，**其余口径一个字不放宽**（少一处照样红）。
     const wired = [...src.matchAll(/bookEntries:\s*await\s+bookEntriesForInherit\(\)/g)];
-    assert.ok(wired.length >= 3, `★三处调用点都要传条目（实际 ${wired.length} 处）`);
-    assert.match(src, /export async function bookEntriesForInherit\(\)/, '取书口本身仍在');
+    assert.ok(wired.length >= 2, `★两处调用点都要传条目（实际 ${wired.length} 处）`);
+    // ★leg80：取书族**搬到 `web/book-source.js`** 之后，这条锁改成"两半"（★口径一个字没放宽，**加严**）：
+    //   ① 接线层必须**从新家 import 它**（旧家仍是门面 ⇒ 本文件以及外部消费者 import 零改动）；
+    //   ② 接线层**不许自己留实现**（函数体只在新家一处）——这一半是本棒新加的。
+    //   ★★签名一个字没放宽：`bookEntriesForInherit()` **仍然零参**（上面那条正则就是零参形态在咬）。
+    assert.match(src, /\bimport \{[^}]*\bbookEntriesForInherit\b[^}]*\} from '\.\/book-source\.js'/,
+        '★leg80：取书口必须从新家 import 进接线层（= 旧家仍是门面，消费者 import 零改动）');
+    assert.ok(!/function\s+bookEntriesForInherit\s*\(/.test(src),
+        '★leg80：接线层**不许再有自己的实现**（函数体只在新家 `web/book-source.js` 一处）');
     // 反向锁：**不再调用那个从未定义的函数**。用码点拼出禁名，免得本断言把禁名自己写进仓库；
     //   比对前先剥掉注释——该名字**只许留在解释这段历史的注释里**，代码里出现就是再次断线。
     const banned = '\u0062\u006f\u006f\u006b\u0045\u006e\u0074\u0072\u0069\u0065\u0073\u0043\u0061\u0063\u0068\u0065\u0064';

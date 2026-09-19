@@ -6,7 +6,8 @@
 // 纪律：只读副本；不打印任何密钥；数真产物不数断言。
 import { readFileSync } from 'node:fs';
 import { characterBookEntries, inheritLocations } from '../web/index.js';
-import { renderAll, PANEL_BUILD } from '../src/render.js';
+import { renderAll } from '../src/render.js';
+import { PANEL_BUILD } from '../src/render-base.js';   // ★leg85：共用底搬进 render-base.js
 
 function cardFromPng(file) {
     const buf = readFileSync(file);
