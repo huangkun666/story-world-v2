@@ -227,8 +227,8 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 //     ⇒ **样式真变了 ⇒ 再升一格**。
 //   ★★★leg98 补四 → **`20260922-leg98-pagecols`**（用户令「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
 //     **信息带升成页头** ＋ 这一页**改两栏** ⇒ 新增 `.sw2-merged-grid/-main/-side`（右栏 sticky、窄屏退单列）；★★★leg99 两笔：动态流撤出 ＋ **两栏各自独立滑动**（动了样式）⇒ 升，理由见 `web/style.css` 那三族规则上方。
-//   ★★★leg101 `fitwindow` → **`20260922-leg101-fitwindow`**：本笔**真动了样式**（面板窗口改定高 flex、当前页吃余高、grid 高度改 100%）⇒ 同批升。起因：用户实机截图「窗口太小了，最重要的说书都没位置了」。
-const CSS_VERSION = '20260922-leg101-fitwindow';
+//   ★★★leg102 `fullscreen` → **`20260922-leg102-fullscreen`**：窗口宽度 `1120px`→`100%`、高度 `88vh`→`calc(100vh - 40px)`（用户令「占满整个屏幕吧」）⇒ 真动了样式 ⇒ 同批升。
+const CSS_VERSION = '20260922-leg102-fullscreen';
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;

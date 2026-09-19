@@ -273,9 +273,18 @@
 //     调常数等于再猜一次；而 `100%` 由 flex 分配的真高度解得出来 ⇒ **页签多一行少一行都不再算错**。
 //   ★这是"玩家可见版面真变了" ⇒ **`PANEL_BUILD` 升一格**；**`CSS_VERSION` 同批升**
 //     （动了样式才是升 CSS 号的判据 —— 本笔**真动了**，与 leg100 那两笔"样式零改动 ⇒ 不升"**正相反**）。
-//   ★起名避禁词：`fit` / `window` 都不在禁词表内（禁的是 `agenda`/`tick`/`ssot`/`schema`/`chronicle`/
-//     `entity`/`kind`；★`event` 也在表内）⇒ 定稿 **`leg101-fitwindow`**。
-export const PANEL_BUILD = 'leg101-fitwindow';
+//   ★起名避禁词：`fit` / `window` 都不在禁词表内 ⇒ 定稿 **`leg101-fitwindow`**。
+// ★★★leg102 `fullscreen`（用户令「**占满整个屏幕吧**」）：leg101 之后用户回「**老样子没变大**」——
+//   实测（用户 Console 读数）证明 leg101 **完全生效**（`height=790px | overflow:hidden`），
+//   病在**窗口本身没变大**：`88vh` 相对旧 `max-height:88%` 只差一点点，而**宽度是写死的 `1120px`**
+//   （1080p 上只占 58%）⇒「太小」是**宽高两头都小**。★这一笔按用户那句话定口径：**占满整屏**。
+//   ①宽度 `1120px` → `100%`；②高度 `88vh` → `calc(100vh - 40px)`（40px = 遮罩两侧留边）。
+//   ★用 vh/百分比而不是更大的常数：窗口多大由**视口**决定，不必替别人的屏幕猜一个数。
+//   ★`.sw2-view.sw2-active` 与 `.sw2-merged-grid` 一个字没改——它们吃 flex 分出来的余高，
+//     窗口一变大自动跟着变大（这正是 leg101 改结构的红利）。
+//   ⇒ 玩家可见版面又变 ⇒ **同批再升一格**；`CSS_VERSION` 同批升（真动了样式）。
+//   ★起名避禁词：`fullscreen` 不在表内 ⇒ 定稿 **`leg102-fullscreen`**。
+export const PANEL_BUILD = 'leg102-fullscreen';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

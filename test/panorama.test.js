@@ -748,6 +748,10 @@ test('★★★leg99 · 说书⑳：**两栏各自独立滑动**（用户令「�
     const shell = ruleOf('.sw2-window');
     assert.ok(shell, '★前置：必须取得到 `.sw2-window` 那条规则（取不到 ⇒ 下面三条空绿）');
     assert.match(shell, /display:\s*flex/, '★前置：面板外壳必须是 flex 列（否则上面的 `height:100%` 解不出来）');
+    //   ★leg102 `fullscreen`：外壳的**尺寸口径**也钉一下——leg101 只钉了 flex/overflow，
+    //     而用户实机反馈正是"窗口本身没变大"（`1120px` 写死 + `88vh` 只比旧值大一点点）。
+    assert.match(shell, /width:\s*100%/, '★窗口宽度不许再写死（`1120px` 正是"两侧空白"的来源）');
+    assert.match(shell, /height:\s*calc\(100vh/, '★窗口高度要按视口算（占满整屏，别再给一个固定占比）');
     assert.match(shell, /overflow:\s*hidden/, '★前置：外壳不许再自己滚（撤掉那条 `overflow:auto` 才是"内外滚动条打架"的治法）');
     const activeView = ruleOf('.sw2-view.sw2-active');
     assert.ok(activeView, '★前置：必须取得到 `.sw2-view.sw2-active` 那条规则');

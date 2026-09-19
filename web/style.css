@@ -22,20 +22,20 @@
   padding:20px;box-sizing:border-box;background:rgba(13,16,21,.55);
 }
 .sw2-window-mask.sw2-open{display:flex;}
-/* ★★★leg101 `fitwindow`：外壳改**定高 flex 列**，撤掉它自己的 `overflow:auto`。
-   病（用户 2026-09-19 实机截图 + 一句「窗口太小了，最重要的说书都没位置了」）：leg99 第二笔把"滚动"
-   从外壳**下放到两栏**（理由见下面 `.sw2-merged-grid` 那一段），但**外壳那条 `overflow:auto` 没撤**
-   ⇒ 滚动条打架：两栏在内部滚、外壳也在滚，**外壳滚到哪内容就被裁到哪**（截图底部那句被切一半）。
-   ①`height:88vh` 替 `max-height:88%`：百分比高要先有确定包含块，而 flex 分配要的是**确定高度**；
-     `88vh` 是"视口百分比"，与原来那 88% 同一个意思、**少了祖先链这一层不确定**。
-   ②`overflow:hidden`：外壳**不再自己滚**——滚动归各页（见下面 `.sw2-view.sw2-active`）。
-     这一步同时把"内部滚 + 外部滚"那对打架的滚动条**去掉一条**，且**不需要改 `.sw2-merged-grid` 那个高度**
-     （外壳不再滚 ⇒ 那条 `calc(88vh - 190px)` 顶多把内层压在视口内，不再有人能把它滚出去）。
-   ★为什么动它而不是动那个 `190px`：190px 是按"页头一行 ＋ 信息带"估的，**页签那一行没算进去**
-     （实测外壳里实打实是 头部 ~61 ＋ 状态条 ~31 ＋ 页签 ~50 ＋ 页内边距 ⇒ 远超 190）。
-     但**没有浏览器就量不出真值**（leg89 §5.5）⇒ 改常数的治法等于再猜一次；这里改成**不靠猜**的那种。 */
+/* ★★★leg102 `fullscreen`（用户令「**占满整个屏幕吧**」——承接 leg101：leg101 治的是
+   "内外两条滚动条打架"，但**窗口本身没变大**（88vh 相对旧 max-height:88% 只差一点点），
+   所以用户看到的仍是"老样子没变大"。★这一笔按用户那句话定口径：**占满整屏**。
+   两处一起改（"太小"是宽高两头都小，不是只有高度）：
+   ① **宽度**：`1120px` 是**写死的**——1080p 上只占 58%，用户看到的两侧空白就是这么来的
+      ⇒ 改 `100%`（遮罩有 `padding:20px` ⇒ 实际 = 视口宽 − 40px，两侧各留 20px 的边）。
+   ② **高度**：`88vh` ⇒ `calc(100vh - 40px)`（同上：那 40px 就是遮罩的两侧留边）。
+   ★为什么用 vh/百分比而不是调成更大的常数：**窗口多大由视口决定**，屏幕大小不同的人拿到的
+     都是"占满"，不必替他们猜一个数（leg101 那条"不靠猜"的纪律，这里是它第二次用）。
+   ★`border-radius:12px` 留着：占满屏但仍是"一扇窗"，不是把 ST 自己的界面盖掉一块。
+   ★下面 `.sw2-view.sw2-active` 与 `.sw2-merged-grid` 那两条**一个字不用改**——它们吃的是
+     flex 分配出来的余高（leg101 落的），窗口一变大，它们自动跟着变大。 */
 .sw2-window{
-  width:1120px;max-width:100%;height:88vh;display:flex;flex-direction:column;overflow:hidden;
+  width:100%;height:calc(100vh - 40px);display:flex;flex-direction:column;overflow:hidden;
   background:var(--sw2-panel);color:var(--sw2-text);
   border:1px solid var(--sw2-line);border-radius:12px;
   box-shadow:0 20px 70px rgba(0,0,0,.6);

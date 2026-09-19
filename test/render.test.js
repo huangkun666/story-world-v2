@@ -2257,7 +2257,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ★`CSS_VERSION` **同批升**（本笔**真动了样式**——与 leg100 那两笔"零改动 ⇒ 不升"正相反，
     //     判据是同一条：**动没动样式**）。
     //   ★起名避禁词：`fit`/`window` 都不在下面那张表里。
-    assert.equal(PANEL_BUILD, 'leg101-fitwindow');
+    assert.equal(PANEL_BUILD, 'leg102-fullscreen');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2287,7 +2287,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
     assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
-    assert.equal(cssVer, '20260922-leg101-fitwindow',
+    assert.equal(cssVer, '20260922-leg102-fullscreen',
         `★CSS 号必须与构建号同批（leg101 本笔**真动了样式**：外壳定高 flex ＋ 当前页吃余高 ＋ grid 高度改 100%）；现为「${cssVer}」`);
     assert.match(cssVer, /^20\d{6}-leg\d+[a-z]?-[\w-]+$/, '形状：`2026MMDD-legNN…-名字`（升位链条要能一眼看出来）');
     // ★★★leg99 收窄（原来这条是 `cssVer.includes(PANEL_BUILD)`）：**改管"leg 号必须同批或落后一笔"**。
@@ -2300,7 +2300,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const buildLeg = (/leg(\d+[a-z]?)-/.exec(PANEL_BUILD) || [])[1];
     assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面这条是空绿）');
     assert.match(cssLeg, /\d+/, '前置：CSS 号里那个 leg 号必须是**数字开头**的（防空绿：`leg-` 也能被上面的正则吃下）');
-    assert.equal(buildLeg, '101', '前置：本笔的构建号就是 leg101（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg100 时它是 `100`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '102', '前置：本笔的构建号就是 leg101（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg100 时它是 `100`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
     // ★口径：**CSS 号的 leg 号只许是"本笔"或"上一笔"**——"同批"只允许差一笔（本笔只升面板号时它落后一格）。
     //   ★不许写成"只要都是 leg 就行"：那样 leg40 的 CSS 号配 leg99 的构建号也会绿，锁就白设了。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
