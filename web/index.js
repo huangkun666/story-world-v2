@@ -29,6 +29,13 @@ import { createHotLedgerHub } from './hot-ledger.js';
 //   ★旧家不再留任何"参数族的实现"：hub 装配、自证面、撤销、写格留痕、忙闩、DOM 镜像、最近世界
 //     全部只有新家那一份（判据跑在**剥注释后的源码**上——注释里可以留档、代码里不许再有定义）。
 import { createParamApi } from './param-panel.js';
+// ★★★leg103（A3）：**「覆盖现存世界」的告知文案与事实归一**整族搬进 `web/world-replace.js`
+//   （`worldToBeReplaced` / `initWorldOverwriteNotice` / 新增 `importOverwriteNotice`）。
+//   ★为什么搬：那一族是**纯文案 + 纯归一**（零 DOM、零引擎依赖），而且现在有了**两个**入口
+//     （初始化 / 导入）⇒ 两处文案必须同一口径，收在一处才不会各写各的。
+//   ★**不做 re-export**（leg71 立的规矩：re-export 会让"它到底住哪"重新变模糊）——
+//     原消费者（`test/init-overwrite-guard.test.js`）**改指向新家**。
+import { worldToBeReplaced, initWorldOverwriteNotice, importOverwriteNotice } from './world-replace.js';
 // ★★★leg89：**注入面**整族单独一个模块（`web/inject.js`）——插件第一次"会动你的对话"。
 //   ★它只认识"字符串 + 注入口"，不认识引擎：标签规范与名册那两段的组装是**纯函数**
 //     （`tagSpecText`/`rosterText`/`buildInjections`，Node 可直接测）；本文件只负责
@@ -605,7 +612,8 @@ export const sw2AutoAdvanceOn = (world) => autoAdvanceOn(world);
 export function sw2OnMessageReceived(hotWorld, { advance, setStatus: status } = {}) {
     if (!autoAdvanceOn(hotWorld)) {
         if (typeof status === 'function') {
-            status('⏸ 插件已关（发消息不自动推进）· 参数页「插件总闸」可开 · 或按参数页的「推进一轮」手动推');
+            // ★leg103：指路改「设置页」（leg52 已把「推进一轮」从参数页撤走，唯一入口在 `render.js:2103`）；同句另三处在 `:2083`/`:2478`/`render.js:580`。
+            status('⏸ 插件已关（发消息不自动推进）· 参数页「插件总闸」可开 · 或按设置页的「推进一轮」手动推');
         }
         return { advanced: false, reason: 'autoAdvance=off' };
     }
@@ -615,7 +623,6 @@ export function sw2OnMessageReceived(hotWorld, { advance, setStatus: status } = 
 
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 // ★★★leg46：**参数全生命周期收进 `src/param-hub.js`，本文件只留接线**（用户令「重构代码吧，我已经没有耐心了」）。
-//
 // 这一格的性质（为什么是"推倒"而不是"再补一层"）：
 //   "改档位 → 刷新回默认"从 leg26 到 leg45 被修了**七轮**，判据 662→693 全绿而实机一次都没好。
 //   七轮全在**症状附近**改代码（三态返回 / 回读核对 / 抢回 / 延后重试 / 本地兜底 / 覆盖层 /
@@ -1079,52 +1086,9 @@ export function namePlayerPiece(world, parsedName) {
 }
 
 // ---------- ★leg40b（I-1）：**覆盖现存世界的守门**（用户点单修；这条会真丢用户数据）----------
-// 病灶（体检 §3.2 I-1）：`bus['init-world']` 原来**一声不响就覆盖现存世界**——
-//   没有确认框、没有存在性检查，而同文件的「回到此步」**有**确认框（同一份代码里两种标准）。
-//   更贵的是**顺序**：起根（读整本书，真账实测 170–490 秒）与抽取都跑在 `writeHotMeta` **之前**，
-//   于是用户**在覆盖真正发生前一句提示都看不到**，只看见状态条慢慢跑了几分钟。
-//   ⇒ 修法两条：① 加确认框 + 存在性检查；② ★把闸放在**最前面**（第一行，任何一次模型调用之前）。
-// 判据（都能机械核，见 test/init-overwrite-guard.test.js）：
-//   · **存世界在 ⇒ 必问**（不按"推进过才问"分层：tick 0 的世界也是用户的账）；
-//   · **问了才烧调用**——取消路径**一次模型调用都不许发**；
-//   · **什么都不做**——取消后盘上/内存里的世界逐字节原样；
-//   · **没窗口**（`window.confirm` 不存在，Node/vm 里）⇒ 照旧放行，**绝不因为"问不出来"就把人卡死**。
-//   · 文案只说**用户看得懂的事实**（名字 / 推进到第几轮 / 多少条名号 / 被换掉的时刻），
-//     不出现 tick/entity 这类引擎词（A-3），也不评价世界好坏。
-/** 把热账归一成「要被换掉的那个世界」的事实面；没有世界就返回 null（= 没有可丢的东西）。 */
-export function worldToBeReplaced(world) {
-    if (!world || typeof world !== 'object') return null;
-    const tick = world?.meta?.tick;
-    return {
-        name: String(world?.context?.world || '').trim() || '未名世界',
-        tick: Number.isFinite(tick) ? tick : null,
-        entities: Array.isArray(world?.entities) ? world.entities.length : 0,
-        savedAt: String(world?.savedAt || '').trim(),
-    };
-}
-
-/** 覆盖确认的文案（**玩家视线内的文本**：人话、零引擎术语、可逐条被用例核）。
- *  ★入参契约（本函数**只吃归一后的 brief**，不吃世界本体）：这是踩过的一格——
- *    第一版写成"吃世界"，于是调用方把 `worldToBeReplaced()` 的结果又喂进来 ⇒ 二次归一出「未名世界 / ? 轮」。
- *    同一个形状、两种身份 = 本仓"一字段一义"要治的病 ⇒ 契约写死：**先 `worldToBeReplaced()`，再喂结果**。
- *  brief 为 null/空名 ⇒ ''（= 调用方据此不问）。 */
-export function initWorldOverwriteNotice(brief) {
-    const old = brief && typeof brief === 'object' ? brief : null;
-    if (!old || !old.name) return '';
-    const lines = [
-        `「✨ 开始新世界」会**换掉**当前这个世界「${old.name}」。`,
-        '',
-        '将被换掉（世界账）：',
-        `· 已推进 ${old.tick == null ? '?' : old.tick} 轮${old.entities ? ` · 记着 ${old.entities} 条名号` : ''}`,
-        `· 这个世界的进度、事件、盘算都会从头开始（它背后的对话记录不受影响）`,
-        '· 换掉前会自动给当前状态拍一份快照（换错了可以再退回来）',
-        '',
-        '换掉之前没有任何调用能先替你试一下，所以先问你一句。',
-        '点「确定」= 换掉它；点「取消」= 什么都不做（世界一个字节不动，也不会发生任何调用）。',
-    ];
-    if (old.savedAt) lines.push('', `（这份世界最后落盘：${old.savedAt}）`);
-    return lines.join('\n');
-}
+// ★★★leg103：这一族文案与归一**已整族搬进 `web/world-replace.js`**（含本段全部留档：两种标准、
+//   顺序之病、那条假承诺的查实与治法等）——接线层只负责**问与动手**。导出面原样保持：
+//   `worldToBeReplaced` / `initWorldOverwriteNotice` 仍从本模块 re-export（判据与外部调用方零改动）。
 
 // ★★★leg80（丙-web · 第五格）：**取书族已整族搬进 `web/book-source.js`**——
 //   卡读取（`characterWorldNames` / `characterBookEntries`）· ST ctx 取书（`collectWorldInfoEntries(ctx, character)` /
@@ -2080,7 +2044,7 @@ export async function loadWorld() {
     snapHub.refreshSnapshots();   // leg27 后：快照清单随世界加载刷新（异步，回来再重绘一次）
     // ★leg33d：关着的时候**明说**（否则"世界怎么不动了"会被当成 bug；面板照常可用）
     if (!autoAdvanceOn(world2)) {
-        setStatus('⏸ 插件已关 · 自动推进不生效（发消息/切聊天都不动世界）· 参数页「插件总闸」可开 · 也可按参数页的「推进一轮」手动推');
+        setStatus('⏸ 插件已关 · 自动推进不生效（发消息/切聊天都不动世界）· 参数页「插件总闸」可开 · 也可按设置页的「推进一轮」手动推');
     }
 }
 
@@ -2475,7 +2439,7 @@ if (typeof window !== 'undefined') {
                 setStatus('▶ 插件已开 · 发消息会自动推进世界（要停请回参数页按「关」）'
                     + (hotNow ? '' : ' · ⚠ 但还没有世界：先「✨ 开始新世界」'));
             } else {
-                setStatus('⏸ 插件已关 · 世界原样留在盘上（没有清账、没有拆线）· 要看按观棋窗口、要推按参数页的「推进一轮」');
+                setStatus('⏸ 插件已关 · 世界原样留在盘上（没有清账、没有拆线）· 要看按观棋窗口、要推按设置页的「推进一轮」');
             }
             return;
         }
@@ -2743,6 +2707,21 @@ if (typeof window !== 'undefined') {
                 const text = await file.text();
                 const res = await verifyImportBundle(text);
                 if (!res.ok) { setStatus(`⚠ 导入被拒：${res.error}`); return; }
+                // ★★★leg103（A3）：**导入与初始化同等破坏力，就必须问同一句**。
+                //   病：这条路原来选错文件就直接 `writeHotMeta` + `loadWorld`，一声不响换掉当前世界；
+                //   而隔壁「✨ 开始新世界」有确认框（同一份代码里两种标准）。
+                //   ★两个契约：① 闸在**任何改动之前**（`writeHotMeta` 是第一个破坏动作）；
+                //     ② 无 `window.confirm` ⇒ 放行，绝不因为"问不出来"把人卡死（与初始化同一条）。
+                const target = worldToBeReplaced(loadHotAccount(readHotMeta()));
+                if (target) {
+                    const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+                        ? window.confirm(importOverwriteNotice(target))
+                        : true;
+                    if (!ok) {
+                        setStatus(`已取消——世界「${target.name}」原样不动（没有导入，也没有发生任何调用）`);
+                        return;
+                    }
+                }
                 writeHotMeta(hotAccountShape(res.world));   // leg41：导入的账带它自己那份 env；随后 loadWorld 会把真源镜像补上
                 const store = volumeStore();
                 for (const v of res.volumes) await store.put(v);
@@ -2772,6 +2751,13 @@ if (typeof window !== 'undefined') {
                 setStatus(`已取消——世界「${target.name}」原样不动（没有覆盖，也没有发生任何调用）`);
                 return;
             }
+            // ★★★leg103：**让那句承诺变成真的**（原来它是假的，见 `world-replace.js` 头部留档）——
+            //   在确认之后、**任何改动与任何模型调用之前**先给当前世界拍一份自保快照。
+            //   ★为什么必须在这里：`requestSnapshot` 的唯一调用点是 `writeHotMeta` 末尾，而抽取在它之前，
+            //     所以不补这一下的话，用户以为的"退路"拍到的是**刚抽出来的新世界**（退回来还是新的）。
+            //   ★零阻塞：拍快照失败绝不许挡住初始化（照 `requestSnapshot` 自己的纪律）。
+            try { snapHub.requestSnapshot(loadHotAccount(readHotMeta()), '换掉前自保'); }
+            catch (err) { console.warn('[story-world-v2] 换掉前自保快照没拍成（不影响初始化）:', err?.message || err); }
         }
         try {
             const settings = modelSettings() || {};

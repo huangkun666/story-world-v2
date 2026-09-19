@@ -145,14 +145,16 @@ test('leg26 c：参数页——值不重复、因变量不给旋钮、自变量�
     //   ★断言口径（**自己踩过一次**）：不许拿键名 `民生度/张力推手` 去找卡片正文——面板一律走
     //     `LABELS.env`（乱象/时局），`民生度` 只出现在**属性**里；要锁的是"卡里真把两种性质
     //     分开说清了"，所以直接锁**那句人话本身**（它同时是"玩家读得到"的证明）。
-    //   ★★leg53：改成三格之后，那句人话从「民生 / 乱象 … 只读」变成「引擎每轮算的」+ 对乱象的说明。
+    //   ★★leg53：改成三格之后，那句人话从「民生 / 乱象 … 只读」变成「每轮自动算的」+ 对乱象的说明。
+    //   ★★★leg103：措辞又从「引擎每轮算的」升级成**零引擎术语**的「每轮自动算的」
+    //     （用户令"捋一遍"之后把 `引擎/落账/账本/进包/接线` 补进了 BLACKLIST ⇒ 同步改这条锁的口径）。
     assert.equal((html.match(/sw2-atmo-card/g) || []).length, 1, '★这几格应合并成**一张**「世界气氛与条件」卡');
     assert.ok(html.includes('世界气氛与条件'), '合并后的卡要有名字');
     const atmoCardHtml = html.slice(html.indexOf('sw2-atmo-card'), html.indexOf('</details>', html.indexOf('sw2-atmo-card')));
     assert.ok(/天时 \/ 时局[\s\S]{0,120}你定的条件/.test(atmoCardHtml),
         '★卡内须写明"天时/时局 = 你定的条件"（合并 ≠ 混为一谈）');
-    assert.ok(/乱象<\/b>是<b>引擎每轮算的/.test(atmoCardHtml),
-        '★卡内须写明"乱象 = 引擎每轮算的"（leg53：它现在真有生产者了，说法必须跟着变）');
+    assert.ok(/乱象<\/b>是<b>每轮自动算的/.test(atmoCardHtml),
+        '★卡内须写明"乱象 = 每轮自动算的"（leg53：它现在真有生产者了，说法必须跟着变；leg103：去掉引擎术语）');
     assert.ok(!atmoCardHtml.includes('民生'),
         '★leg53：卡内不许再提民生（那一格已撤——没有生产者，永远「未定」）');
     // ④ ★leg40c 续：**控件之外的元素一律不许挂 `data-param`**
@@ -2257,7 +2259,18 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ★`CSS_VERSION` **同批升**（本笔**真动了样式**——与 leg100 那两笔"零改动 ⇒ 不升"正相反，
     //     判据是同一条：**动没动样式**）。
     //   ★起名避禁词：`fit`/`window` 都不在下面那张表里。
-    assert.equal(PANEL_BUILD, 'leg102-fullscreen');
+    //   ★★★leg103 又一格 ⇒ **`leg103-plainwords`**：玩家可见文字**真变了**——
+    //     ① 三处状态栏 + 一处总闸提示的指路从「参数页/观棋窗口」统一成「**设置页**」（leg52 已把按钮撤走，
+    //        指路却一直没跟着改）；② `引擎/落账/账本/进包/接线` 这批行话从玩家视线里清掉（并补进 `BLACKLIST`）；
+    //     ③ 参数页那段开发备注（`★实机例子（leg63 用户报的）`）与四处 Markdown `**` 残留一并清掉；
+    //     ④ 设置页那张卡名 `与聊天模型的接线` → `插件对你的对话做了什么`；
+    //     ⑤ 覆盖确认文案改口径（新增"导入"那一份，并把"会先拍快照"那句**变成真的**）。
+    //   ★`CSS_VERSION` **本笔不动**（一个字样式都没改——判据仍是"动没动样式"）。
+    //   ★起名避禁词：`plain`/`words` 都不在下面那张表里。
+    //   ★★★leg103 同棒第六笔 ⇒ **`leg103-switchglow`**：**参数页那两个"开/关"按钮的高亮不动**
+    //     （用户实机「这两个按钮又切换不了了」——写盘成功、显示格也变了，只有高亮没人管）。
+    //     ⇒ 玩家可见的**控件状态**真变了（这一格从"点了没反应"变回"点一下就亮/灭"）。
+    assert.equal(PANEL_BUILD, 'leg103-switchglow');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2300,7 +2313,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const buildLeg = (/leg(\d+[a-z]?)-/.exec(PANEL_BUILD) || [])[1];
     assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面这条是空绿）');
     assert.match(cssLeg, /\d+/, '前置：CSS 号里那个 leg 号必须是**数字开头**的（防空绿：`leg-` 也能被上面的正则吃下）');
-    assert.equal(buildLeg, '102', '前置：本笔的构建号就是 leg101（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg100 时它是 `100`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '103', '前置：本笔的构建号就是 leg103（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg102 时它是 `102`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
     // ★口径：**CSS 号的 leg 号只许是"本笔"或"上一笔"**——"同批"只允许差一笔（本笔只升面板号时它落后一格）。
     //   ★不许写成"只要都是 leg 就行"：那样 leg40 的 CSS 号配 leg99 的构建号也会绿，锁就白设了。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
@@ -2934,6 +2947,56 @@ test('★★leg52·F：BLACKLIST 漏网「派生源」—— 注释里禁的字�
     assert.ok(!full.setting.includes('派生源'), '★设定页措辞已改成玩家话');
 });
 
+test('★★★leg103·G：BLACKLIST 第二批漏网（引擎/落账/入账/账本/进包/接线）——每条都必须真在数组里，且产物里一条都不许有', () => {
+    // 病与 leg52·F **同一个机理**：判据只扫渲染产物，而**数组里没有的词等于不存在**。
+    //   这一批不是靠人眼想起来的，是把八页产物整段抽出来扫（装置 `F:/deepseek/tmp/prototypes/leg103-copy-audit.mjs`）量出来的：
+    //   引擎×12 · 落账×5 · 账本×3 · 进包×1 · 接线×1 —— 全在玩家视线里，全都不在数组里。
+    const SECOND_BATCH = ['引擎', '落账', '入账', '账本', '进包', '接线'];
+    for (const term of SECOND_BATCH) {
+        assert.ok(BLACKLIST.includes(term), `★leg103 补的词「${term}」必须在数组里（否则下面那条全量扫描对它等于不存在）`);
+    }
+    const full = renderAll(world(), { config: CONFIG, oldVolumes: VOLUMES });
+    const text = deepStrings(full).map(textOnly).join('\n');
+    for (const term of SECOND_BATCH) {
+        const at = text.indexOf(term);
+        assert.ok(at < 0, `★产物里还有「${term}」：…${at < 0 ? '' : text.slice(Math.max(0, at - 40), at + 40)}…`);
+    }
+    // ★反向自证（防这条锁退化成空绿）：这两页是**真的有内容**的——它扫的不是空气。
+    assert.ok(text.includes('盘算'), '前置：产物里有正文（否则上面那条扫的是空气）');
+    assert.ok(full.params.length > 1000 && full.settings.length > 1000, '前置：参数页与设置页真渲染了东西');
+});
+
+test('★leg103·H：那四句指路必须指向按钮真正所在的页签（设置页），不许再指参数页/观棋窗口', () => {
+    // 病（用户实机路线）：三处状态栏 + 一处总闸提示都在教玩家"去按「推进一轮」"，
+    //   而 leg52 已把那枚按钮从参数页撤走 ⇒ 指路指向一个**没有该按钮**的页签。
+    // ★★本判据第一版**自己红了一次**（如实留档）：它拿 `/观棋窗口的「推进一轮」/` 扫整个 `render.js` 源码，
+    //   而 `render.js:142` 那段**历史注释**正引用着这句旧话（"状态栏三处说「要推请按观棋窗口的…」"）⇒ 假红。
+    //   ⇒ 口径改成**判玩家真会读到的产物**（`textOnly` 之后的面板文本）＋ `web/` 那侧只判**状态栏字符串**。
+    //     注释里引用旧话是**留档**，不是回潮；产物里出现旧话才是回潮。
+    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const full = renderAll(world(), { config: CONFIG, oldVolumes: VOLUMES });
+    const panelText = deepStrings(full).map(textOnly).join('\n');
+    // 反面：玩家可见文本里不许再出现这两种指法
+    assert.ok(!panelText.includes('参数页的「推进一轮」'), '★面板上不许再指「参数页的「推进一轮」」');
+    assert.ok(!panelText.includes('观棋窗口的「推进一轮」'), '★面板上不许再指「观棋窗口的「推进一轮」」（观棋是页签，不是窗口）');
+    // 正面：总闸那句必须指出**设置页**
+    // ★本判据第二版又自己红了一次（如实留档）：`textOnly` 把每个标签折成**换行**，
+    //   于是 `按<b>设置页</b>的…` 取出来是 `按\n设置页\n的…` ⇒ 直接 includes 那句会假红。
+    //   ⇒ 折白之后再判（判的是"玩家连起来读到的字"，与标签怎么切无关）。
+    const flat = panelText.replace(/\s+/g, '');
+    assert.ok(flat.includes('按设置页的「推进一轮」'), '★参数页总闸那句必须指设置页');
+    // `web/` 那侧的状态栏是**源码里的字符串**（要真机触发才印出来）⇒ 只能扫源码，但只扫 `setStatus/status(` 那些行
+    const statusLines = web.split('\n').filter((l) => /(setStatus|status)\(/.test(l));
+    assert.ok(statusLines.length >= 3, `前置：状态栏调用点应当有若干处（实测 ${statusLines.length}）`);
+    for (const l of statusLines) {
+        assert.ok(!/参数页的「推进一轮」/.test(l), `★状态栏还在指参数页：${l.trim().slice(0, 80)}`);
+    }
+    assert.ok(statusLines.some((l) => l.includes('设置页的「推进一轮」')), '★状态栏必须指「设置页的「推进一轮」」');
+    // 前置自证：那枚按钮**真的**在设置页（否则"指对页签"是一句空话）
+    assert.ok(full.settings.includes('data-action="advance-world"'), '前置：设置页真有那枚按钮');
+    assert.ok(!full.params.includes('data-action="advance-world"'), '前置：参数页确实没有它（这正是当初指错的原因）');
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════════
 // ★★★ leg53（用户指认「**民生和乱象没人消费啊也没人生产**」）：本棒的锁。
 //   取证（全仓 grep 的机械结论，见 `src/unrest.js` 头部）：写点只有「初始化抽书」一处，
@@ -3084,23 +3147,26 @@ test('★★★leg53·F：**民生那一格从玩家可见面彻底撤下**（�
         '★撤的只是"某一页不再画它"：账上那个键与它的值照旧在（账 ≠ 面）');
 });
 
-test('★★leg53·G：**乱象那一格的"依据"必须说实话**——它是引擎每轮算的，不是书里原话', () => {
+test('★★leg53·G：**乱象那一格的"依据"必须说实话**——它是每轮自动算的，不是书里原话', () => {
     // 病（本棒取证）：那一格的「依据」原来写死 `书里原话`——而真账里那个 `动荡` 确实来自抽书，
-    //   可**引擎从不算它** ⇒ 一句"书里原话"就把"这一格没有生产者"这件事盖住了（用户正是这么发现的）。
-    // ⇒ leg53 之后：乱象有生产者了（`src/unrest.js`），那一格必须如实写「引擎每轮算的」。
+    //   可**没有生产者在算它** ⇒ 一句"书里原话"就把"这一格没有生产者"这件事盖住了（用户正是这么发现的）。
+    // ⇒ leg53 之后：乱象有生产者了（`src/unrest.js`），那一格必须如实写「每轮自动算的」。
+    // ★★★leg103：这一格原来写的是「引擎每轮算的」——**玩家话里不许有"引擎"**（已进 BLACKLIST）⇒
+    //   与自变量那一格的「只照抄你选的」同批改成**零引擎术语**的说法；锁的三件事一件没少
+    //   （① 因变量如实标明自动算 ② 不许糊成"书里原话" ③ 那份名单来自生产者、面板不自立一份）。
     const w = world();                                   // 夹具 env 带 动乱度:'动荡' + 天时/张力推手
     const html = renderParamsHtml(w, { config: CONFIG });
     const atmo = html.slice(html.indexOf('sw2-atmo-card'), html.indexOf('data-action="param-undo"'));
     const depRow = paramRowSeg(atmo, '动乱度', { firstRowOnly: true });
-    assert.ok(depRow.includes('引擎每轮算的'), '★乱象那一格必须写明"引擎每轮算的"（它现在真有生产者）');
+    assert.ok(depRow.includes('每轮自动算的'), '★乱象那一格必须写明"每轮自动算的"（它现在真有生产者）');
     assert.ok(!depRow.includes('书里原话'), '★不许再糊成"书里原话"（那是治这条病的反面）');
     // 两个自变量仍是"你定的条件"这一支（口径不许被顺手改掉）
     for (const key of ['天时', '张力推手']) {
         const row = paramRowSeg(atmo, key, { withLabelRow: true });
-        assert.ok(row.includes('引擎只照抄'), `★自变量「${key}」仍须标明"引擎只照抄"`);
+        assert.ok(row.includes('只照抄你选的'), `★自变量「${key}」仍须标明"只照抄你选的"`);
     }
     // ★口径来源必须**一处**：那份"谁是谁算的"的名单住在生产者那边，渲染层只 import
     assert.deepEqual([...ENGINE_DERIVED_ENV], ['动乱度'],
-        '★"引擎每轮算的"那份名单必须来自 `unrest.js`（面板不许自己另写一份名单）');
+        '★"每轮自动算的"那份名单必须来自 `unrest.js`（面板不许自己另写一份名单）');
 });
 

@@ -187,7 +187,7 @@ ctx.renderExtensionTemplateAsync('third-party/story-world-v2', 'settings')
 **零依赖、无构建步骤**——`git clone` 下来直接就能跑，不需要 `npm install`。**在插件目录里**执行：
 
 ```bash
-node --test                # 全量测试（本版：1078 / 1078，约 3 秒）
+node --test                # 全量测试（本版：1085 / 1085，约 3 秒）
 node demo/smoke-demo.js    # 合成冒烟：50 轮曲线 + 断言（终态 8231 字节 · PASS · 警告 0）
 ```
 

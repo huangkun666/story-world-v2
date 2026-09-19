@@ -455,12 +455,25 @@ function sw2ControlText(ctl) {
  *     手底下的控件销毁重建 ⇒ 浏览器对**新节点**再吐一笔带旧值的事件 ⇒"点一次写两次"）。
  *   ★找不到这个键的控件 / 不是下拉（开关按钮有它自己的画法）⇒ **什么都不做**（退让）。
  */
-export function sw2SetParamControl(key) {
+// ★★★leg103：**开关高亮与下拉/输入框"对齐控件"必须用同一份世界取值逻辑**（一处口径，不新增第二套）。
+//   次序（照本族已写死的语义：`setWorld` 是**明确指令** ⇒ 本族自己记的那一格优先，见本文件 130–143 行的留档）：
+//     ① 本族收到的**明确世界**（`sw2HubLastWorld`：`setLastWorld` / 撤销 / 写账补镜像都往这写）
+//     ② hub 读写过的**那个桶**（`currentWorldName()`）
+//     ③ 注入的取值函数（`getLastWorldNow()`，允许为 null）
+//     ④ 聊天账里的热账世界（兜底）
+//   ★为什么必须自己收成一句：两个函数各写一遍，迟早出现"下拉按 A 世界对齐、开关按 B 世界对齐"（两把尺子）。
+function sw2ParamWorldForDisplay() {
+    return sw2HubLastWorld || paramHub.currentWorldName() || getLastWorldNow() || readHotMeta()?.world || null;
+}
+
+// ★★`win` 这个形参是**给判据用的**（照 `sw2SyncParamSwitch` 同一形状）：真机上永远走 `getElementById`，
+//   而判据要能喂一个假窗口进来、**不必把 `document` 整份打桩**。缺省 null ⇒ 行为与从前逐字节相同。
+export function sw2SetParamControl(key, win = null) {
     try {
         if (typeof document === 'undefined') return false;
-        const win = document.getElementById(WINDOW_ID);
-        if (!win) return false;
-        const el = win.querySelector(`[data-action="set-param"][data-param="${key}"]`);
+        const root = win || document.getElementById(WINDOW_ID);
+        if (!root) return false;
+        const el = root.querySelector(`[data-action="set-param"][data-param="${key}"]`);
         // ★★★leg54：**`<input>` 也必须被对齐**（世界尺度那四个框从下拉换成了数字输入框）。
         //   旧版这一行只认 `SELECT` ⇒ 换控件之后它会**静默退让**，而这一退让的后果正是它当初要治的病：
         //   玩家"手滑把框清空"之后，控件上空着、真源里还是老值 ⇒ 屏幕上留着一次**假的改动**
@@ -468,13 +481,24 @@ export function sw2SetParamControl(key) {
         //   ★`sw2ControlText`/下面写回的那两处**本来就同时认 SELECT 与 INPUT**（当初就写对了）——
         //     只有这一道类型闸漏了，是个"改了一处、没改配套那一处"的实例。
         const tag = String(el?.tagName || '').toUpperCase();
-        if (!el || (tag !== 'SELECT' && tag !== 'INPUT')) return false;
+        if (!el || (tag !== 'SELECT' && tag !== 'INPUT')) {
+            // ★★★leg103（用户实机「这两个按钮又切换不了了」）：**开关那一排按钮也必须被对齐**。
+            //   病：本函数开局就 `return false`（那排里 `querySelector` 取到的是第一枚 **BUTTON**），
+            //   而参数**写盘成功、显示格也变了**——只有**按钮的高亮**没人管，而"开/关"这个视觉信号
+            //   恰恰只活在高亮上（`.sw2-primary`），格里的字反而是从按钮读的 ⇒ 玩家看到的是
+            //   "状态栏说已经开了、按钮却一动不动"（两个控件同时说两件事）。
+            //   ★机理与 leg54 那次**一模一样**：写格那条路（`sw2ParamControlOf` / `sw2ControlText`）
+            //     三态全认（SELECT/INPUT/BUTTON），对齐控件这条只认前两态 ⇒ 又是"改了一处、没改配套那处"。
+            //   ★它为什么一直没被发现：改参数后**面板不再重画**（leg46 续·五 定稿）⇒ 原来靠重画
+            //     "顺手画对"的那一下没了，而按钮高亮是**唯一一处只由重画画出来的状态**。
+            return sw2SyncParamSwitch(key, win);
+        }
         // ★裁决只问一处：`paramHub.displayEnv`（真源 > 本页刚写的权威值 > 账上镜像 > 出厂默认）
         // ★★★leg48：**桶名取"hub 真正读写过的那个桶"**（`currentWorldName()`），不取"当下那个世界对象"——
         //   病因（真浏览器现场）：`loadWorld` 走空态/轮转失败时把**空态世界**交给面板，
         //   面板于是去读"未名世界"那个空桶 ⇒ 按出厂默认把控件写成 3，而玩家的档位其实在"大荒z"桶里。
         //   读的桶必须与写的桶是同一个 —— 这一条被违反过九轮，是"改了回默认"的机理。
-        const env = paramHub.displayEnv(paramHub.currentWorldName() || sw2HubLastWorld || getLastWorldNow() || readHotMeta()?.world || null);
+        const env = paramHub.displayEnv(sw2ParamWorldForDisplay());
         const want = Object.prototype.hasOwnProperty.call(env, key) ? String(env[key]) : '';
         if (String(el.value ?? '') === want) return false;      // 已经一致 ⇒ 一个字节都不动
         el.value = want;
@@ -482,6 +506,50 @@ export function sw2SetParamControl(key) {
         return true;
     } catch (err) {
         console.warn('[story-world-v2] 控件对齐失败（不影响参数本体）', String(err?.message || err));
+        return false;
+    }
+}
+
+/**
+ * ★★★leg103：**开关那一排按钮的高亮按真源对齐**（`开`/`关` 两枚按钮，亮着的那枚 = 当前态）。
+ *
+ * 口径（三条，都能机械核）：
+ *   ① **只改视觉**（`sw2-primary` 的增删）——**绝不碰按钮上的文字**，更**绝不派发** `click`/`input`/`change`
+ *      （本函数是"写入之后的对齐"，自己再吐事件就会把刚写成的值覆盖回去，正是 leg48 那个"点一次写两次"的坑）；
+ *   ② **重入点与 `bus['set-param']` 分开**：本函数只从"一笔写操作结束"那一处被调（`sw2SyncParamCells` 那条路
+ *      读的是格、不是按钮）⇒ 不会与 `paramBusy` 忙闩互相牵扯；
+ *   ③ **找不到按钮 ⇒ 如实返回 false，不猜**（照本仓"空就是空"的纪律：宁可不动，也不许凭空造一个高亮出来）。
+ *
+ * @returns {boolean} 真的动了高亮 ⇒ true；本来就一致 / 这一排不存在 ⇒ false
+ */
+export function sw2SyncParamSwitch(key, win = null) {
+    try {
+        if (typeof document === 'undefined') return false;
+        const root = win || document.getElementById(WINDOW_ID);
+        if (!root) return false;
+        const btns = [...root.querySelectorAll(`[data-action="set-param"][data-param="${key}"]`)]
+            .filter((b) => String(b.tagName || '').toUpperCase() === 'BUTTON');
+        if (!btns.length) return false;                       // 不是开关那一排 ⇒ 不猜
+        const env = paramHub.displayEnv(sw2ParamWorldForDisplay());
+        // ★缺席键**不是"关"**：本仓口径是"空着就是空着"（`未定`）——但**面板认的值**里通常已经有出厂默认
+        //   （`displayEnv` 的第三顺位只补 `LIMIT_KEYS`，开关不在其中 ⇒ 开关缺席就是真缺席）。
+        //   两枚都不亮 = 「未定」，与 `sw2ControlText`（`?!primary ⇒ '未定'`）同一口径。
+        const has = Object.prototype.hasOwnProperty.call(env, key);
+        const on = has && String(env[key]) === '1';
+        let moved = false;
+        for (const b of btns) {
+            // 亮着的必须是"点了会得到当前态"的那一枚：开 ⇒ 「开」钮亮；关 ⇒ 「关」钮亮；未定 ⇒ 两枚都不亮
+            const isOnBtn = String(b.getAttribute('data-value') || '') === '1';
+            const want = has && (isOnBtn === on);
+            const hasCls = b.classList.contains('sw2-primary');
+            if (want === hasCls) continue;
+            if (want) b.classList.add('sw2-primary'); else b.classList.remove('sw2-primary');
+            moved = true;
+        }
+        if (moved) console.info(`[story-world-v2] 开关高亮按真源对齐：${key} → ${has ? (on ? '开' : '关') : '未定'}`);
+        return moved;
+    } catch (err) {
+        console.warn('[story-world-v2] 开关高亮对齐失败（不影响参数本体）', String(err?.message || err));
         return false;
     }
 }
@@ -618,6 +686,9 @@ export function createParamApi({ freshCtx: _freshCtx, sw2ExtensionSettings: _set
         sw2CollectLiveParamValues,
         sw2SetParamCell,
         sw2SetParamControl,
+        // ★★★leg103：开关那一排按钮的**高亮**对齐（`sw2SetParamControl` 内部也会调它；
+        //   这一口单列出来是给判据用的——判据要能单独调它，不必绕道 `sw2SetParamControl`）。
+        sw2SyncParamSwitch,
         sw2SyncParamCells,
 
         /** 参数操作忙闩（按参数键记；`bus['set-param']` 那一笔用）。

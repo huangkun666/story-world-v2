@@ -141,7 +141,8 @@ import { TENSION_WINDOW, recentEventCount } from './setting.js';   // A1b：张�
 //      可选档位，"可选：A / B / C / D" 那一行是第二遍）一并收掉。
 //   ⑥ **按钮名对不上**——状态栏三处说「要推请按观棋窗口的「推进一轮」」，而面板上真正的按钮
 //      叫「▶ 手动推进一步」且在**设置页**（用户在观棋页是找不到它的）。统一叫「推进一轮」，
-//      并把它挪到**参数页**（那一页就是"你对世界的输入"，推进也是输入）。
+//      ★leg103 勘正：旧注释写"并把它挪到参数页"——那个方向后来被 leg52 推翻（推进是**动作**不是输入，
+//      参数页那枚已撤），**唯一入口在设置页**；同批把状态栏与提示里四处「参数页/观棋窗口」全改成设置页。
 //   ⑦ **第二刀（删什么都不做的东西）**：参数页「记进编年史书」开关**一个字节都不写**
 //      （leg26 交接 §7 E2 自己登记过"我顺手加的面，落点未核验"）⇒ 撤掉；
 //      零引用导出 `paramBand` / `dependentKeys` / `independentKeys` / `FORCE_MODES` /
@@ -530,7 +531,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         return `<div class="sw2-row sw2-param-name"><b>${LABELS.env[r.key] || escapeHtml(r.key)}</b></div>`
             + `<div class="sw2-row"><span>设定为</span>`
             + `<select class="sw2-param-select" data-action="set-param" data-param="${escapeHtml(r.key)}">${opts.join('')}</select>`
-            + `<em>引擎只照抄</em></div>`;
+            + `<em>只照抄你选的</em></div>`;
     };
     // ★★leg52（用户令「保留天时/时局的下拉，只把说明文字折叠、四键合并成一栏」）：
     //   `knob` 从"整张卡"降级成"卡里的一行"（**行内容一字未改**，只是不再各自包一张卡）。
@@ -552,7 +553,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     const readout = (r) => `<div class="sw2-row">`
         + `<span>${LABELS.env[r.key] || escapeHtml(r.key)} <span class="sw2-param-kind sw2-param-kind-dep">因变量</span></span>`
         + `<b class="sw2-param-val" data-param-cell="${escapeHtml(r.key)}">${escapeHtml(r.value)}</b>`
-        + `<em>${r.value === PARAM_UNSET ? '还没有据 ⇒ 空着' : (ENGINE_DERIVED_ENV.includes(r.key) ? '引擎每轮算的' : '书里原话')}</em></div>`;
+        + `<em>${r.value === PARAM_UNSET ? '还没有据 ⇒ 空着' : (ENGINE_DERIVED_ENV.includes(r.key) ? '每轮自动算的' : '书里原话')}</em></div>`;
 
     // 开关类参数（写记忆 / 记编年史书）——同一页、同一条写通道，渲染成开关而不是下拉
     // leg27 h：开关卡下面挂**上次投递的实测事实**（用户两次靠肉眼发现记忆没生效 ⇒ 必须有自证面）。
@@ -577,7 +578,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         const stateLine = key === 'autoAdvance'
             ? (on
                 ? '<em>现在：发消息会自动推进世界（每收到一条消息推进一轮）</em>'
-                : '<em style="color:#e0a0a0">现在：插件静默 —— 发消息不推进、切聊天不自动载入；要推请按观棋窗口的「推进一轮」</em>')
+                : '<em style="color:#e0a0a0">现在：插件静默 —— 发消息不推进、切聊天不自动载入；要推请按<b>设置页</b>的「推进一轮」</em>')
             : pushLine(key);
         return `<div class="sw2-set-card sw2-actions-inline${conf.master ? ' sw2-master-switch' : ''}">`
             + `<h4 style="flex:1;margin:0">${escapeHtml(conf.label)}${conf.master ? ' <span class="sw2-param-kind">总闸</span>' : ''}</h4>`
@@ -633,7 +634,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //   构建号不在这页上，就只能靠猜（本仓老坑：改了代码但浏览器吃旧 index.js）。
         //   ★leg52：构建号**不折**（它是排障用的，折起来就等于没有）。
         + `<div class="sw2-hint" style="margin-bottom:8px">构建 <b>${escapeHtml(PANEL_BUILD)}</b> —— 若这里不是最新那串，请 <b>Ctrl+F5</b>（浏览器缓存了旧面板）。</div>`
-        + foldHint('这一栏决定<b>这个世界允许跑多宽</b>；改完<b>下一轮生效</b>（已落账的账不回改）。'
+        + foldHint('这一栏决定<b>这个世界允许跑多宽</b>；改完<b>下一轮生效</b>（已经记到账上的不回改）。'
             + '七个框都能<b>直接填数</b>——没有上限，填多少就是多少。',
             '出厂默认就是现在这几个数。这几个上限之间会互相掩盖，一次只调一个才看得出是哪一个在起作用。'
             // ★★leg63：**把"互相掩盖"讲成人话**（用户当场问「这个会相互掩盖是什么意思」）——
@@ -641,7 +642,8 @@ export function renderParamsHtml(world, { config = {} } = {}) {
             + '<br>具体是这么回事：一轮里能新起几件大计，要同时过三道——'
             + '<b>每轮最多新起几件大计</b>（先判）→ <b>同时最多几件大计</b> → <b>同时在办总数上限</b>。'
             + '三道是<b>依次</b>判的，最先顶住的那道决定"这轮拒了几件"，后面的根本没轮到。'
-            + '所以只抬后面那道、前面那道没抬 ⇒ 数字变了但<b>看不出任何变化</b>，这就是"互相掩盖"。'            + '<br>★实机例子（leg63 用户报的）：把「每轮递几条线」抬到 10、模型真提了 10 条，'
+            + '所以只抬后面那道、前面那道没抬 ⇒ 数字变了但<b>看不出任何变化</b>，这就是"互相掩盖"。'
+            + '<br>举个例子：把「每轮递几条线」抬到 10、模型真提了 10 条，'
             + '但「每轮最多新起几件大计」还是出厂 3 ⇒ 第 4 条起全被拒，'
             + '观棋窗口只报"被拒"、不说"是哪个数拒的"，看起来就像"参数白调了"。'
             + '⇒ 想让一轮里真的多长几件事，<b>「每轮递几条线」与「每轮最多新起几件大计」要一起抬</b>。'
@@ -709,16 +711,16 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     const atmoCard = `<div class="sw2-set-card sw2-atmo-card" style="grid-column:1/-1">`
         + `<h4>世界气氛与条件</h4>`
         + foldHint('这一栏是<b>世界的样子</b>，不是世界的开关。',
-            '<b>天时 / 时局</b>是你定的条件（引擎照抄摆放，<b>不参与任何判断</b>）。'
+            '<b>天时 / 时局</b>是你定的条件（只照抄摆放，<b>不参与任何判断</b>）。'
             // ★★★leg55（leg54 §6.4 的第二处）：这里原写死「看近 **10** 轮里…」，而**机制本身**是
             //   `src/unrest.js` 的「乱象档位 = 近 `TENSION_WINDOW` 轮里"出事"铺开到几个不同地点」
             //   （`UNREST_WINDOW = TENSION_WINDOW`）⇒ 面板在**替机制承诺一个它没写死的数**：
             //   `TENSION_WINDOW` 一改（它是"定案"值，改它要报批），这句说明就变成谎话，而**代码照旧是对的**
             //   ——正是 leg54 那个 4096 的同一种病（**UI 比代码先过期**）。
             //   ★同一文件里 `TENSION_WINDOW` 已被现读三处（`:649`/`:1540`/`:1541`）⇒ 本处只是漏网那处。
-            + `<b>乱象</b>是<b>引擎每轮算的</b>：看近 ${TENSION_WINDOW} 轮里"出事"铺到了几个<b>不同的地点</b>——`
+            + `<b>乱象</b>是<b>每轮自动算的</b>：看近 ${TENSION_WINDOW} 轮里"出事"铺到了几个<b>不同的地点</b>——`
             + '地点越散、档位越重；同一个地方出十件事，也只算一个地点。'
-            + '它不发明事实：只从账上已经落账的事里数，一个字都不添。'
+            + '它不发明事实：只从账上已经记下的事里数，一个字都不添。'
             + '世界变宽变窄是下面那张「世界尺度」的事，与这一栏无关。',
             { summary: '这几格分别是什么' })
         + indep.map(knobRow).join('')
@@ -750,8 +752,8 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //   而现在 **乱象是引擎每轮算出来的**（`src/unrest.js`）⇒ 那句对乱象不成立了。
         //   ⇒ 定稿：分两句说清**三种性质**（你定的条件 / 引擎每轮算的 / 都是只读呈现），
         //     而不是用一句"档位……"把它们糊在一起（那正是本棒要治的"一个词盖住两件事"）。
-        + `<div class="sw2-sv-sub" style="margin-top:10px"><b>天时 / 时局</b>是你定的条件，引擎照抄摆放、`
-        + `<b>不参与任何判断</b>；<b>乱象</b>是引擎每轮从账上真发生的事算出来的读数。`
+        + `<div class="sw2-sv-sub" style="margin-top:10px"><b>天时 / 时局</b>是你定的条件，只照抄摆放、`
+        + `<b>不参与任何判断</b>；<b>乱象</b>是每轮自动从账上真发生的事算出来的读数。`
         + `两个都不改世界的走向——走向由世界上正在发生的事决定，不由这几个词决定。</div>`;
 }
 
@@ -902,7 +904,7 @@ export function renderSideHtml(world) {
         .map(([loc, list]) => `<div class="sw2-locgroup">`
             + `<div class="sw2-locgroup-head"><span class="sw2-locgroup-name">${escapeHtml(loc)}</span>`
             + `<span class="sw2-locgroup-n">${list.length} 人</span>`
-            + (derivedAt(loc) ? '<small class="sw2-quiet-note" title="这个地点是引擎从组织条目的驻地结构推出来的（成员推定在所属组织驻地），**不是书里对这个名号自己的明述**">（推）</small>' : '')
+            + (derivedAt(loc) ? '<small class="sw2-quiet-note" title="这个地点是从组织条目的驻地结构推出来的（成员推定在所属组织驻地），<b>不是书里对这个名号自己的明述</b>">（推）</small>' : '')
             + `</div>`
             + `<div class="sw2-locchips">${list.map((e) => chip(e, world)).join('')}</div>`
             + `</div>`);
@@ -910,7 +912,7 @@ export function renderSideHtml(world) {
         ? `<div class="sw2-locgroup sw2-locgroup-unknown">`
             + `<div class="sw2-locgroup-head"><span class="sw2-locgroup-name">位置未载</span>`
             + `<span class="sw2-locgroup-n">${unknown.length} 人</span></div>`
-            + `<div class="sw2-locgroup-note">书里没写他们在何处——**不是"在别处"，是不知道**。`
+            + `<div class="sw2-locgroup-note">书里没写他们在何处——<b>不是「在别处」，是不知道</b>。`
             + `其中 ${unknown.filter((e) => e.parent).length} 人知道归属（只是其组织条目没写驻地）、`
             + `${unknown.filter((e) => !e.parent).length} 人无归属。他们照常在世界里活动，不被位置筛掉。</div>`
             + `<div class="sw2-locchips">${unknown.map((e) => chip(e, world)).join('')}</div>`
@@ -935,7 +937,7 @@ export function renderSideHtml(world) {
         + `<span class="sw2-map-brief">${byLoc.size} 处 · ${known} 人有处可循`
         + (unknown.length ? ` · 未载 ${unknown.length} 人` : '')
         + `</span></summary>`
-        + `<div class="sw2-map-note" title="位置只是把账上已有的空间结构摆出来。引擎不据此筛选谁、也不判断两人能否相遇（那是笔的事）">`
+        + `<div class="sw2-map-note" title="位置只是把账上已有的空间结构摆出来。不据此筛选谁、也不判断两人能否相遇（那是笔的事）">`
         + `各归何处（${byLoc.size} 处 / ${known} 人有处可循）——按处聚合，仅供查看；`
         + `位置不参与筛选，「未载」也不代表在别处。</div>`
         + `<div class="sw2-side">${locGroups.join('')}${unknownHtml}</div>`
@@ -1757,7 +1759,7 @@ export function renderScaleDraftHtml(draft, world = null) {
         + `<div class="sw2-hint">要用这份草稿取代账本里的刻度（<b>${oldTables}</b> 张表 / <b>${oldTiers}</b> 档 ⇒ `
         + `<b>${scales.length}</b> 张表 / <b>${nTiers}</b> 档）——<b>只换刻度那三格</b>，法则/名册/史略/张力一个字不动；`
         + `旧的那一份会先打到控制台再覆盖。</div>`
-        + `<div class="sw2-hint">★代价如实说：草稿是<b>一次调用</b>抽的，而「只重抽设定」走<b>多块 + 块间合并</b>`
+        + `<div class="sw2-hint"><b>代价如实说</b>：草稿是<b>一次调用</b>抽的，而「只重抽设定」走<b>多块 + 块间合并</b>`
         + `⇒ 两边<b>不会逐字相同</b>；想走生产那条管线就用「只重抽设定」。</div>`
         + `<div style="margin-top:8px"><button class="sw2-btn sw2-primary" data-action="adopt-scale-draft">采用这份草稿（只换刻度）</button>`
         + `<button class="sw2-btn" data-action="clear-scale-draft" style="margin-left:8px">清掉这一栏</button></div></div>`;
@@ -1888,8 +1890,8 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             ? `<div class="sw2-hint">其中 <b>${ruleStat.判据.length}</b> 条每轮进模型的包：`
                 + `<b>判断依据 ${ruleStat.判据条数}</b> 条（写实力/好感/战果/物价时按它算）· `
                 + `<b>世界观设定 ${ruleStat.世界观条数}</b> 条（照它写才对味）；`
-                + `其余 ${ruleTotal - ruleStat.判据.length} 条留在本页与账本里，不进每轮包。</div>`
-            : `<div class="sw2-hint">这一栏<b>一条都没进每轮包</b>：进包只取「判断依据」与「世界观设定」两类`
+                + `其余 ${ruleTotal - ruleStat.判据.length} 条留在本页与账里，不进每轮包。</div>`
+            : `<div class="sw2-hint">这一栏<b>一条都没进每轮包</b>：每轮只带「判断依据」与「世界观设定」两类`
                 + `${ruleStat.未标数 ? `，而这份账 ${ruleStat.未标数} 条全是「${escapeHtml(RULE_CLASS_NONE)}」（老账没抽过类别）` : ''}`
                 + ' ——对设定不满意就按上面的「只重抽设定」再抽一次，新账才会带上类别。</div>')
         : '';
@@ -1899,7 +1901,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
             + `<b>「判断依据」与「世界观设定」两类进每轮的包</b>——`
             + `前者是"这一轮写剧情要拿它算/判"的硬规则（DC 检定、换算率、好感/心防锁…），`
             + `后者是"这个世界怎么运转"（照它写才对味）。`
-            + `★<b>其余三类（文风禁令 / 变量指令 / 其他）不是世界事实，不在此列也不在账本里</b>`
+            + `★<b>其余三类（文风禁令 / 变量指令 / 其他）不是世界事实，不在此列也不在账里</b>`
             + `——正文写法规矩、脚本指令、安装与配置说明都归那三类：抽取时已明令不交，记账时也按标注丢弃。</div>`
             + rulePackLine + ruleSections + ruleUnmarkedRows + `</div>`
         : `<div class="sw2-set-card"><h4>法则（0 条）</h4><div class="sw2-sv-row"><span>（无）</span></div></div>`;
@@ -1930,10 +1932,10 @@ export function renderSettingHtml(world, { config = {} } = {}) {
         // ★leg70：把 `world` 一起传进去——草稿栏要报"账上现在几张三档"（采用前把要换掉的那份摆出来）
         + (world.context?.__scaleDraft ? renderScaleDraftHtml(world.context.__scaleDraft, world) : '')
         + `<div class="sw2-sv-grid">`
-        + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>张力现状（演变层 · 引擎算 · 每轮随动）</h4>`
+        + `<div class="sw2-set-card" style="grid-column:1/-1"><h4>张力现状（演变层 · 每轮自动算 · 随动）</h4>`
         + `<div class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')} <span class="sw2-int">${fmtPct(t.intensity)}</span></div>`
         + `<div class="sw2-clash-sub">${escapeHtml(t.direction ? t.direction + '（原文方向）' : '僵持（无明确方向）')} · 近${TENSION_WINDOW}轮事件 ${recentEventCount(world)} 件</div>`
-        + `<div style="margin-top:6px;font-size:12px;color:var(--sw2-text-faint)">上面这个数是引擎每轮重算的读数（惯性平滑，0–1）。<b>它目前主要由"近${TENSION_WINDOW}轮事件数"驱动</b>——公式里的"两强对峙度"一项实测恒为满值（势力四维普遍为空时会全体同值），所以它并不表示"引擎判断了天下张力"。</div>`
+        + `<div style="margin-top:6px;font-size:12px;color:var(--sw2-text-faint)">上面这个数是每轮重算的读数（惯性平滑，0–1）。<b>它目前主要由"近${TENSION_WINDOW}轮事件数"驱动</b>——公式里的"两强对峙度"一项实测恒为满值（势力四维普遍为空时会全体同值），所以它并不表示"这里判断了天下张力"。</div>`
         + `<div class="sw2-env">${envRows}</div>`
         + `<div style="margin-top:8px;font-size:12px;color:var(--sw2-text-faint)">${envTitle}</div>`
         + `<div style="margin-top:10px"><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button><span class="sw2-hint">只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div></div>`
@@ -1949,7 +1951,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
                 //   只有 4 张表 24 档进得去 ⇒ **那句话当年就是不准确的**。现在按账上的真实读数分开说。
                 + (scaleFit
                     ? `<div class="sw2-hint">其中 <b>${scaleFit.表}</b> 张表 / <b>${scaleFit.档}</b> 档 / <b>${scaleFit.维}</b> 维每轮进模型的包当锚`
-                        + `（写实力/属性时按书里的尺子写，不自造形容词）；表与档太多时按账本顺序取前面那些。</div>`
+                        + `（写实力/属性时按书里的尺子写，不自造形容词）；表与档太多时按账上顺序取前面那些。</div>`
                     : '')
                 // ★★★leg64 第四轮（按需查表）：**如实报"模型这一轮点名要了哪几张"**。
                 //   病：`lookupScales` 这条通道如果不报，作者就看不出"目录到底有没有被用上"
@@ -1967,7 +1969,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
                     ? `<div class="sw2-hint">其余 <b>${scaleCards.length - scaleFit.表}</b> 张没进包（装不下）——`
                         + `它们的<b>表名仍每轮进包</b>（一份"目录"：只有名字与规模，不带档位内容，`
                         + `实测 ${scaleCards.length - scaleFit.表} 张只要几百字符），`
-                        + `模型因此知道书里还有哪些尺、写到时可以点名要；档位内容留在本页与账本里。</div>`
+                        + `模型因此知道书里还有哪些尺、写到时可以点名要；档位内容留在本页与账里。</div>`
                     : '')
                 + `</div>`
             : '')
@@ -2077,7 +2079,7 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         //     `display:flex;gap:12px` + 卡底/边框）——第一版把它**套在**外层那张卡里面，
         //     于是渲染出**卡里套卡**（三条并排又各自带框），布局是乱的。
         //     ⇒ 定稿：外层用普通容器包住（下面 `.sw2-inject-box`），开关行仍是它自己那张卡。
-        + `<div class="sw2-set-card"><h4>与聊天模型的接线</h4><div class="sw2-inject-box">`
+        + `<div class="sw2-set-card"><h4>插件对你的对话做了什么</h4><div class="sw2-inject-box">`
         + injSwitch('injectTagSpec', cfg.injectSwitches?.injectTagSpec, '让聊天模型按标签写行动')
         + injSwitch('injectRoster', cfg.injectSwitches?.injectRoster, '把名号表递进对话')
         + injSwitch('injectWorldTide', cfg.injectSwitches?.injectWorldTide, '把上轮世界动向递进对话')
@@ -2086,11 +2088,11 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         + `<div class="sw2-hint"><b>这是插件第一次会动你的对话</b>：发消息前，它往上下文里塞两段——`
         + `① 请聊天模型用标签标出「谁做了什么」的格式要求；② 本世界的名号表（让它写名字时有的可抄）。`
         + `★两段都贴着最后一条消息、以系统身份注入，<b>关掉即恢复原样</b>（插件退回"只看不碰"）。`
-        + `「世界动向」那一段会让剧情更容易围着账本转，<b>所以默认关</b>。`
+        + `「世界动向」那一段会让剧情更容易围着这本账转，<b>所以默认关</b>。`
         + `<br>正文里抽出来的行动会递给世界模型当"<b>已经发生过的事</b>"——`
         + `点过名的角色这一轮不再替它出手（写在插件提示词里），世界照常按自己的逻辑往下演。`
         + `<br><b>读不出的名字不硬塞</b>：账上/书上没有的名字不会被凭空造成人——那一条会如实报出来，`
-        + `并**照样递给世界模型看**（它想不想让这人入局由它按情节提议）。`
+        + `并<b>照样递给世界模型看</b>（它想不想让这人入局由它按情节提议）。`
         + `<br>${cfg.injectLine ? escapeHtml(String(cfg.injectLine)) : '（还没注入过——世界推一轮后这里会显示注入了多少字）'}`
         // ★★★leg92：**"注入跑过没有"必须单独可见**——用户报「开关是 1、构建号是新的、`sw2_` 一个都没有」，
         //   而原来这一格只有一句含糊兜底话（"还没注入过"），把"从没跑过"与"跑了但注入 0 字"混成一句
@@ -2275,7 +2277,7 @@ export function renderChainViewHtml(chain, { world, volumes = [] } = {}) {
         + `<div class="sw2-cv-col">来路 · 上承（▲ 向更早）</div><div class="sw2-cv-rail">${cvUpBeads(world, up, volumes)}</div>`
         + `<div class="sw2-cv-axis"></div>${hero}<div class="sw2-cv-axis"></div>`
         + cvDownTree(world, chain.down || [], volumes)
-        + `<div class="sw2-cv-foot">全部为一手事实拼句：来路/牵动取自账本指针与落账文本，引擎不新编一字。</div>`
+        + `<div class="sw2-cv-foot">全部为一手事实拼句：来路/牵动取自账上的指针与原文，不新编一字。</div>`
         + `</div>`;
 }
 
@@ -2296,7 +2298,7 @@ export function renderSnapshotsHtml(world, { config = {} } = {}) {
         // ★leg27 d（用户实拍「怎么一下子多了这么多」时那一屏）：旧行同时打「第 N 轮」**和** `reason`，
         //   而 reason 默认就是"落账" ⇒ 每行都重复一遍"落账"，信息量为零还占宽。现在只打**触发词**，
         //   轮次由 `· 第 N 轮` 承担（两者一个事实，不打两遍）。
-        const trigger = String(s.reason || '').replace(/（.*?）$/, '').trim() || '落账';
+        const trigger = String(s.reason || '').replace(/（.*?）$/, '').trim() || '世界有变化';
         return `<div class="sw2-row" data-snap="${escapeHtml(s.id)}">`
             + `<span class="sw2-snap-id">${escapeHtml(s.id)}</span>`
             + `<span class="sw2-snap-tick">${escapeHtml(trigger)} · 第 ${s.tick == null ? '?' : s.tick} 轮</span>`
@@ -2306,11 +2308,11 @@ export function renderSnapshotsHtml(world, { config = {} } = {}) {
             + `</div>`;
     };
     const head = `<div class="sw2-sv-head"><div><div class="sw2-sv-title">快照 · 每一步都能退回去</div>`
-        + `<div class="sw2-sv-sub">每一次落账（演化 / 查书 / 批量补全 / 初始化）都会拍一份。存<b>插件本地库</b>（不占聊天文件），保留最近 <b>15 步</b>。`
+        + `<div class="sw2-sv-sub">每一次变化（演化 / 查书 / 批量补全 / 初始化）都会拍一份。存<b>插件本地库</b>（不占聊天文件），保留最近 <b>15 步</b>。`
         + `<b>回到某一步 = 只回世界账</b>，对话记录不动。</div></div>`
         + `<div class="sw2-sv-cards"><span class="sw2-sv-chip ${rows.length ? 'ok' : 'stale'}">${escapeHtml(snap?.text || '快照 —')}</span></div></div>`;
     if (!snap) {
-        return head + `<div class="sw2-hint">快照清单还没读到（首次落账后出现；若一直为空请 Ctrl+F5 并看控制台）。</div>`;
+        return head + `<div class="sw2-hint">快照清单还没读到（世界第一次变化之后出现；若一直为空请 Ctrl+F5 并看控制台）。</div>`;
     }
     if (!rows.length) {
         return head + `<div class="sw2-hint">还没有快照——世界每落一次账就会拍一份（当前 0 份）。</div>`;

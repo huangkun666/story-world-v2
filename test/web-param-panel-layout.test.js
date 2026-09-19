@@ -128,12 +128,12 @@ const API_SURFACE = [
     'lastWorld', 'setLastWorld',
     'gatherParamEvidence', 'paramEvidenceText', 'sw2ParamUndoState', 'sw2ParamDiag', 'sw2UndoParam',
     'sw2WriteHotMetaEnsuringParams', 'playerIsTouchingParams', 'sw2CollectLiveParamValues',
-    'sw2SetParamCell', 'sw2SetParamControl', 'sw2SyncParamCells', 'paramBusy', 'reset',
+    'sw2SetParamCell', 'sw2SetParamControl', 'sw2SyncParamSwitch', 'sw2SyncParamCells', 'paramBusy', 'reset',
 ];
 
 /** ★受控口里**不该**碰到某种 DOM 的那些（DOM 守卫判据用）。 */
 const THROWS_IS_WINDOW_ID = [
-    'sw2SetParamCell', 'sw2SetParamControl', 'sw2SyncParamCells', 'sw2CollectLiveParamValues',
+    'sw2SetParamCell', 'sw2SetParamControl', 'sw2SyncParamSwitch', 'sw2SyncParamCells', 'sw2CollectLiveParamValues',
 ];
 
 // ─────────────────────────── 测试台：假依赖（含 hot-ledger 的注入） ───────────────────────────
@@ -175,6 +175,9 @@ const api = createParamApi({
 
 /** 建一个"够用就好"的假世界（hub 认的是 `context.setting.dynamic` 这三层）。 */
 const makeWorld = (name = '大荒z') => ({ context: { world: name, setting: { dynamic: { env: {} } } } });
+
+/** ★leg103：总闸那个开关的键（与 `web/index.js:586` 的 `AUTO_ADVANCE_KEY` 同一把尺）。 */
+const AUTO_ADVANCE = 'autoAdvance';
 
 /**
  * ★假 DOM：提供 `getElementById`（返回假窗口）、`querySelector`（返回假控件）、
@@ -590,4 +593,101 @@ test('★★leg82 ⑨：`sw2UndoParam` 的撤销主路必须真能走通（且�
         '★★`sw2UndoParam` 撤销成功后要 `refreshSections([\'params\', \'board\'])` 让面板重画，'
         + '而 `refreshSections` 在本模块里没有任何绑定 ⇒ 那句被 try 吞掉 ⇒ '
         + '玩家看到"按了撤销、参数退回去了、可画面还是旧值"（正是本族 leg48 那条"格与控件分叉"的同族观感）');
+});
+
+// ─────────────────── ⑩ ★★★leg103：开关那一排按钮的高亮（用户实机「这两个按钮又切换不了了」） ───────────────────
+
+/**
+ * ★假 DOM：**开关那一排**（两枚 `<button>`，`data-value` = 1 / 0）。
+ *   ★它必须比 ① 那个台子更严：**一旦被写属性、被派发事件、被改文字，就当场抛**——
+ *   因为本笔的口径是"只改高亮那一件事"，其余一律不许碰（派发事件会把刚写成的值覆盖回去 = leg48 那个坑）。
+ */
+function makeFakeSwitchDom({ litValue = null } = {}) {
+    const mk = (value, lit) => {
+        const cls = new Set(lit ? ['sw2-btn', 'sw2-primary'] : ['sw2-btn']);
+        return {
+            tagName: 'BUTTON',
+            getAttribute: (a) => (a === 'data-value' ? value : (a === 'data-param' ? AUTO_ADVANCE : null)),
+            setAttribute: () => { throw new Error('★开关按钮不许被写属性'); },
+            dispatchEvent: () => { throw new Error('★不许派发事件（自己吐事件会覆盖刚写成的值）'); },
+            click: () => { throw new Error('★不许替玩家点击'); },
+            classList: {
+                contains: (c) => cls.has(c),
+                add: (c) => { cls.add(c); return undefined; },
+                remove: (c) => { cls.delete(c); return undefined; },
+            },
+            _lit: () => cls.has('sw2-primary'),
+        };
+    };
+    const b1 = mk('1', litValue === '1');
+    const b0 = mk('0', litValue === '0');
+    const btns = [b1, b0];                       // ★顺序与渲染一致：先「开」后「关」（`render.js` 的 switchRow）
+    Object.defineProperty(b1, 'textContent', { set: () => { throw new Error('★不许改按钮文字'); }, get: () => '开' });
+    Object.defineProperty(b0, 'textContent', { set: () => { throw new Error('★不许改按钮文字'); }, get: () => '关' });
+    // ★★假窗口必须同时提供两个口（这是**反向自证逼出来的**）：`sw2SetParamControl` 走
+    //   `querySelector`（取一枚，真机上开关那一排它取到的是**第一枚 BUTTON**，正是病灶的形状），
+    //   `sw2SyncParamSwitch` 走 `querySelectorAll`（取那一排）。
+    //   ★第一版只给了 `querySelectorAll` ⇒ 判据只测到新函数、**没走产品真入口**，
+    //     变异演练当场报"没咬住"（拆掉开关那一支，判据照旧全绿）⇒ 补上这两口才咬得住。
+    const win = { querySelector: () => b1, querySelectorAll: () => btns };
+    const doc = { getElementById: () => win };
+    return { doc, win, b1, b0 };
+}
+
+test('★★★leg103·⑩：开关那一排按钮的**高亮**必须按真源对齐（只改高亮，不碰文字/不派发事件）', () => {
+    // 病（用户实机截图 + 「这两个按钮又切换不了了」）：写盘成功、显示格也变了，
+    //   **只有按钮的高亮没人管** —— 而"开/关"这个视觉信号只活在高亮（`.sw2-primary`）上。
+    //   机理：写格那条路（`sw2ParamControlOf` / `sw2ControlText`）三态全认（SELECT/INPUT/BUTTON），
+    //   而"对齐控件"这条（`sw2SetParamControl`）开局只认 SELECT/INPUT ⇒ 开关那一排**直接 return**。
+    //   它一直没被发现，是因为改参数后面板**不再重画**（leg46 续·五 定稿）——
+    //   原来靠重画"顺手画对"的那一下没了，而高亮恰恰是**唯一只由重画画出来的状态**。
+    assert.equal(typeof api.sw2SyncParamSwitch, 'function', '★`sw2SyncParamSwitch` 必须由受控口交出来（判据要能单独调它）');
+
+    const savedDoc = globalThis.document;
+    const fake = makeFakeSwitchDom({ litValue: '0' });          // 起点：真源说关、高亮也在「关」⇒ 一致态
+    globalThis.document = fake.doc;
+    try {
+        // ① 真源 = 开 ⇒ 「开」那枚必须亮、「关」那枚必须灭
+        //   ★台子要照**真机次序**搭：hub 得先"见过"这个世界（真机上就是玩家在参数页动过这一格 ⇒
+        //     接线层 `paramApi.set(...)`）。不这么做的话 `currentWorldName()` 是 null，
+        //     面板按**出厂默认**作答（本仓那条"读的桶必须与写的桶同一个"的老病），
+        //     测的就不是本笔要咬的那件事了 —— 这是**我搭台子踩的一脚**，如实留档。
+        //   ★★入口必须是**产品真入口** `sw2SetParamControl`（接线层在一笔操作结束时调的就是它）：
+        //     只调 `sw2SyncParamSwitch` 的话，把 `sw2SetParamControl` 里那一支整个拆掉判据照旧全绿
+        //     —— 这是反向自证（`leg103-mutate-switch.mjs`）当场抓出来的，第一版判据就栽在这儿。
+        const wOn = makeWorld('大荒z');
+        api.set(wOn, AUTO_ADVANCE, '1');
+        api.setLastWorld(wOn);
+        const moved = api.sw2SetParamControl(AUTO_ADVANCE);
+        assert.equal(moved, true, '★从"关"变"开"必须真的动了高亮（返回 true）');
+        assert.equal(fake.b1._lit(), true, '★真源是"开" ⇒ 「开」那枚必须亮（它是玩家唯一能读到的状态信号）');
+        assert.equal(fake.b0._lit(), false, '★「关」那枚必须灭（两枚同时亮 = 画面自相矛盾）');
+
+        // ② 幂等：已经一致 ⇒ 一个字节都不动（返回 false，且不抛）
+        assert.equal(api.sw2SetParamControl(AUTO_ADVANCE), false, '★已经一致 ⇒ 不许再动（幂等）');
+
+        // ③ 真源 = 关 ⇒ 反过来（换一个世界，避免踩到上一个世界的真源）
+        const wOff = makeWorld('大荒A');
+        api.set(wOff, AUTO_ADVANCE, '0');
+        api.setLastWorld(wOff);
+        assert.equal(api.sw2SetParamControl(AUTO_ADVANCE), true, '★从"开"变"关"同样要动');
+        assert.equal(fake.b0._lit(), true, '★真源是"关" ⇒ 「关」那枚必须亮');
+        assert.equal(fake.b1._lit(), false, '★「开」那枚必须灭');
+
+        // ④ ★★缺席键**不是"关"**：本仓口径是"空着就是空着" ⇒ 两枚都不许亮（`未定`）
+        const wNone = makeWorld('大荒B');
+        api.setLastWorld(wNone);                                 // 这个世界的真源里没有这个键
+        api.sw2SetParamControl(AUTO_ADVANCE);
+        assert.equal(fake.b1._lit() || fake.b0._lit(), false,
+            '★★这一格没有值时两枚都不许亮 —— 把"空着"画成"关"就是替引擎下判断（本仓"空就是空"）');
+
+        // ⑤ 这一格没有控件（真机上"这个键没画控件"就是**根本没有节点**）⇒ 如实返回 false，不猜
+        //   ★台子上必须**两个口都是空**：`sw2SetParamControl` 先走 `querySelector`（空 ⇒ `el` 为 null），
+        //     再落到开关那一支走 `querySelectorAll`（空 ⇒ 没有按钮）⇒ 两条路都得体退让。
+        const emptyWin = { querySelector: () => null, querySelectorAll: () => [] };
+        assert.equal(api.sw2SetParamControl('每轮递线', emptyWin), false,
+            '★找不到控件/按钮 ⇒ 返回 false（宁可不动，也不许凭空造一个高亮出来）');
+    } finally {
+        if (savedDoc === undefined) delete globalThis.document; else globalThis.document = savedDoc;
+    }
 });

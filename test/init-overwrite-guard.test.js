@@ -160,7 +160,10 @@ test('leg40b·I-1：平时没有世界时不问（守门只在"真有东西可�
 
 // ---------- ⑤ 事实面与文案：可被逐条核（tick 0 的世界也算"有东西可丢"）----------
 test('leg40b·I-1：世界事实面归一 + 文案口径（tick 0 也算有世界；无世界给空串）', async () => {
-    const mod = await import('../web/index.js?guard5');
+    // ★★★leg103（A3）：这一族（`worldToBeReplaced` / `initWorldOverwriteNotice`）已整族搬进
+    //   `web/world-replace.js`（纯文案 + 纯归一，零 DOM 零引擎依赖），接线层**不做 re-export**
+    //   （leg71 规矩）⇒ 本消费方**改指向新家**。
+    const mod = await import('../web/world-replace.js');
     const { worldToBeReplaced, initWorldOverwriteNotice } = mod;
 
     assert.equal(worldToBeReplaced(null), null, '没有世界 ⇒ null（调用方据此决定"不问"）');
