@@ -22,8 +22,20 @@
   padding:20px;box-sizing:border-box;background:rgba(13,16,21,.55);
 }
 .sw2-window-mask.sw2-open{display:flex;}
+/* ★★★leg101 `fitwindow`：外壳改**定高 flex 列**，撤掉它自己的 `overflow:auto`。
+   病（用户 2026-09-19 实机截图 + 一句「窗口太小了，最重要的说书都没位置了」）：leg99 第二笔把"滚动"
+   从外壳**下放到两栏**（理由见下面 `.sw2-merged-grid` 那一段），但**外壳那条 `overflow:auto` 没撤**
+   ⇒ 滚动条打架：两栏在内部滚、外壳也在滚，**外壳滚到哪内容就被裁到哪**（截图底部那句被切一半）。
+   ①`height:88vh` 替 `max-height:88%`：百分比高要先有确定包含块，而 flex 分配要的是**确定高度**；
+     `88vh` 是"视口百分比"，与原来那 88% 同一个意思、**少了祖先链这一层不确定**。
+   ②`overflow:hidden`：外壳**不再自己滚**——滚动归各页（见下面 `.sw2-view.sw2-active`）。
+     这一步同时把"内部滚 + 外部滚"那对打架的滚动条**去掉一条**，且**不需要改 `.sw2-merged-grid` 那个高度**
+     （外壳不再滚 ⇒ 那条 `calc(88vh - 190px)` 顶多把内层压在视口内，不再有人能把它滚出去）。
+   ★为什么动它而不是动那个 `190px`：190px 是按"页头一行 ＋ 信息带"估的，**页签那一行没算进去**
+     （实测外壳里实打实是 头部 ~61 ＋ 状态条 ~31 ＋ 页签 ~50 ＋ 页内边距 ⇒ 远超 190）。
+     但**没有浏览器就量不出真值**（leg89 §5.5）⇒ 改常数的治法等于再猜一次；这里改成**不靠猜**的那种。 */
 .sw2-window{
-  width:1120px;max-width:100%;max-height:88%;overflow:auto;
+  width:1120px;max-width:100%;height:88vh;display:flex;flex-direction:column;overflow:hidden;
   background:var(--sw2-panel);color:var(--sw2-text);
   border:1px solid var(--sw2-line);border-radius:12px;
   box-shadow:0 20px 70px rgba(0,0,0,.6);
@@ -59,7 +71,16 @@
 .sw2-tab:hover{color:var(--sw2-text);background:var(--sw2-card);}
 .sw2-tab.sw2-active{color:var(--sw2-text);background:var(--sw2-card-2);box-shadow:inset 0 -2px 0 var(--sw2-amber);}
 .sw2-view{display:none;padding:16px 18px 20px;}
-.sw2-view.sw2-active{display:block;}
+.sw2-view.sw2-active{display:block;flex:1 1 auto;min-height:0;overflow:auto;}
+/* ★★★leg101 `fitwindow`：**当前那一页**吃掉外壳剩下的整块高度，并成为它自己的滚动面。
+   为什么非有这一条：外壳现在是定高 flex 列（见顶部 `.sw2-window`），页签与页脚 `flex:none`，
+   中间必须有东西**把余高接住**——否则 flex 容器按内容排，`.sw2-merged-grid{height:100%}`
+   的百分比高度在 `auto` 高度的父级里**解不出来**（会退回 auto ⇒ 两栏又滚不动）。
+   ★`overflow:auto` 放在**页**上而不是外壳上：非并页那几页（编年/设定/实体…）本来靠外壳滚，
+     外壳一改成 `overflow:hidden` 它们就会被裁 ⇒ 滚动权必须**按页**给出，一出事只影响这一页。
+   ★用类选择器 `.sw2-view.sw2-active`（不是在 `.sw2-view` 上写 `flex:1`）：非当前页是 `display:none`、
+     但**它们仍然是这个 flex 容器里的项**——`display:none` 的项不参与布局，两者本就等价，
+     这里取更明确的一头：**只有当前页吃高度**。 */
 .sw2-placeholder{padding:26px 20px;border:1px dashed var(--sw2-line);border-radius:10px;color:var(--sw2-text-faint);font-size:13px;text-align:center;}
 .sw2-col-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;display:flex;align-items:center;gap:8px;margin-bottom:8px;}
 .sw2-col-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
@@ -141,8 +162,21 @@
        否则单列里那两栏会各自变成一口小井，反而更难读。 */
 .sw2-merged-grid{
   display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start;
-  height:calc(88vh - 190px);min-height:320px;
+  height:100%;min-height:320px;
 }
+/* ★★★leg101 `fitwindow`：高度由 `calc(88vh - 190px)` 改成 **`100%`**。
+   为什么（这一条是上一行那个 `190px` 的正解，不是微调）：
+     那个 `190px` 是按"页头一行 ＋ 信息带"估的，而外壳里实打实还有 **状态条 ＋ 页签行 ＋ 页内边距**
+     （实测约 61+31+50+32 ≈ 174，加页头那行就远超 190）⇒ grid 比外壳真正剩下的高度**更高**，
+     于是它把外壳撑出滚动条 —— 那正是"内部滚 + 外部滚打架"的机理。
+     而**没有浏览器就量不出那个数的真值**（leg89 §5.5：本仓没有浏览器，版面的真机行为只有人能验）
+     ⇒ 继续调常数等于再猜一次。改成 `100%`：父级 `.sw2-view.sw2-active` 现在被 flex 分配了
+     **确定高度**（见上面那条），`100%` 因而解得出来 —— **页签多一行少一行、字号变没变，都不再算错**。
+   ★两条配套（缺一条这条就退回老病）：
+     ①外壳不再自己滚（`.sw2-window{overflow:hidden}`）——否则 grid 仍可能被外壳滚出去；
+     ②外层不加 `overflow:hidden`：窄屏那条媒体查询把它取消成 `height:auto` 时，
+       内容必须还能把容器撑开（裁掉就是真丢内容）。
+   ★`min-height:320px` 留着：屏幕很矮时宁可整页滚，也不许把两栏压成两条缝（leg99 那条口径不变）。 */
 /* ★两栏各自独立滑动（用户令「两列都能独自滑动」）：
    左＝故事轴（长，约万字的正文在这里滚）、右＝盘算总览 ＋ 地图（短，但跟着自己的滚动条走）。
    ★`overscroll-behavior:contain`：滚到一栏的头/尾时**别把滚动传给面板外壳**（否则又变成"整页跟着动"）。*/

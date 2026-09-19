@@ -2246,7 +2246,18 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   （同步 `MAIN_PROMPT_V` → `v2-agenda-t1-23`）。★这一笔改的是**给模型看的资料**，而那句话
     //   （收场被拒的报错）也会跟着多一层说明 ⇒ 可见面又变 ⇒ **同批再升一格** ⇒ **`leg100-archivemark`**。
     //   ★`CSS_VERSION` **不升**（样式零改动）——判据还是那一条：**动没动样式**。
-    assert.equal(PANEL_BUILD, 'leg100-archivemark');
+    // ★★★leg101 `fitwindow`（用户令「**没事不急你直接改吧**」，起因是他贴实机截图并说
+    //   「**窗口太小了，最重要的说书都没位置了**」）：**修面板把内容裁掉那个版面病**——三处全在
+    //   `web/style.css`：①外壳改定高 flex 列并撤掉它自己的 `overflow:auto`（治"内外两条滚动条打架"）
+    //   ②`.sw2-view.sw2-active` 吃余高并把滚动**按页**给出 ③`.sw2-merged-grid` 的
+    //   `height:calc(88vh - 190px)` **改 `100%`**（那个 190px 是估的、且漏算了状态条与页签行 ⇒
+    //   grid 比外壳真剩下的高度更高，正是打架的机理）。★**没有浏览器就量不出真值**（leg89 §5.5）
+    //   ⇒ 不调常数、改结构，让高度由 flex 分配、**页签多一行少一行都不再算错**。
+    //   ⇒ 玩家可见版面**真变了** ⇒ 再升一格 ⇒ **`leg101-fitwindow`**。
+    //   ★`CSS_VERSION` **同批升**（本笔**真动了样式**——与 leg100 那两笔"零改动 ⇒ 不升"正相反，
+    //     判据是同一条：**动没动样式**）。
+    //   ★起名避禁词：`fit`/`window` 都不在下面那张表里。
+    assert.equal(PANEL_BUILD, 'leg101-fitwindow');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2276,8 +2287,8 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
     assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
-    assert.equal(cssVer, '20260922-leg99-pageflow',
-        `★CSS 号仍是第二笔那一批（这一笔**样式表零改动**：撤格靠既有的 flex 补位）；现为「${cssVer}」`);
+    assert.equal(cssVer, '20260922-leg101-fitwindow',
+        `★CSS 号必须与构建号同批（leg101 本笔**真动了样式**：外壳定高 flex ＋ 当前页吃余高 ＋ grid 高度改 100%）；现为「${cssVer}」`);
     assert.match(cssVer, /^20\d{6}-leg\d+[a-z]?-[\w-]+$/, '形状：`2026MMDD-legNN…-名字`（升位链条要能一眼看出来）');
     // ★★★leg99 收窄（原来这条是 `cssVer.includes(PANEL_BUILD)`）：**改管"leg 号必须同批或落后一笔"**。
     //   ★为什么非改不可：leg99 的**第一笔**只升面板号、不升 CSS 号（文本变了、样式没变），
@@ -2289,7 +2300,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const buildLeg = (/leg(\d+[a-z]?)-/.exec(PANEL_BUILD) || [])[1];
     assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面这条是空绿）');
     assert.match(cssLeg, /\d+/, '前置：CSS 号里那个 leg 号必须是**数字开头**的（防空绿：`leg-` 也能被上面的正则吃下）');
-    assert.equal(buildLeg, '100', '前置：本笔的构建号就是 leg100（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg99 时它是 `99`，leg100 头一笔时是 `leg100-closureexit`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '101', '前置：本笔的构建号就是 leg101（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg100 时它是 `100`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
     // ★口径：**CSS 号的 leg 号只许是"本笔"或"上一笔"**——"同批"只允许差一笔（本笔只升面板号时它落后一格）。
     //   ★不许写成"只要都是 leg 就行"：那样 leg40 的 CSS 号配 leg99 的构建号也会绿，锁就白设了。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);

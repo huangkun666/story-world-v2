@@ -257,7 +257,25 @@
 //     冒烟 **8231 字节逐字节未变**（引擎零漂移——本笔没动账、没动读数，只动了"给模型看的形状"）。
 //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动）——判据仍是那一条：**动没动样式**。
 //   ★起名避禁词：`archive` / `mark` 都不在禁词表内 ⇒ 定稿 **`leg100-archivemark`**。
-export const PANEL_BUILD = 'leg100-archivemark';
+// ★★★leg101 `fitwindow`（用户令「**没事不急你直接改吧**」，起因是他贴了实机截图并说
+//   「**窗口太小了，最重要的说书都没位置了**」）：**修面板把内容裁掉那个版面病**。
+//   ★病（两处，都在 `web/style.css`，且是 leg99 那一笔留下的）：
+//     ①**内外两条滚动条打架**：leg99 把"滚动"从外壳下放到两栏（`.sw2-merged-main/-side{overflow-y:auto}`），
+//       但**外壳那条 `overflow:auto` 没撤** ⇒ 两栏在内部滚、外壳也在滚，**外壳滚到哪内容就被裁到哪**；
+//     ②**`calc(88vh - 190px)` 里那个 190px 不够**：它是按"页头一行 ＋ 信息带"估的，而外壳里实打实
+//       还有 状态条 ＋ 页签行 ＋ 页内边距（实测约 61+31+50+32）⇒ grid 比外壳真剩下的高度**更高**，
+//       于是它把外壳撑出滚动条——**这正是①那个打架的机理**。
+//   ★修法（三处，全在 `web/style.css`，**一个字都没改产品的行为**）：
+//     ①`.sw2-window` → `height:88vh; display:flex; flex-direction:column; overflow:hidden`（撤 `max-height:88%` + `overflow:auto`）；
+//     ②`.sw2-view.sw2-active` → `flex:1 1 auto; min-height:0; overflow:auto`（当前页吃掉余高，滚动**按页**给出）；
+//     ③`.sw2-merged-grid` → `height:calc(88vh - 190px)` **改 `height:100%`**。
+//   ★★为什么是"改结构"而不是"把 190 调大"：**没有浏览器就量不出那个数的真值**（leg89 §5.5 那条自律），
+//     调常数等于再猜一次；而 `100%` 由 flex 分配的真高度解得出来 ⇒ **页签多一行少一行都不再算错**。
+//   ★这是"玩家可见版面真变了" ⇒ **`PANEL_BUILD` 升一格**；**`CSS_VERSION` 同批升**
+//     （动了样式才是升 CSS 号的判据 —— 本笔**真动了**，与 leg100 那两笔"样式零改动 ⇒ 不升"**正相反**）。
+//   ★起名避禁词：`fit` / `window` 都不在禁词表内（禁的是 `agenda`/`tick`/`ssot`/`schema`/`chronicle`/
+//     `entity`/`kind`；★`event` 也在表内）⇒ 定稿 **`leg101-fitwindow`**。
+export const PANEL_BUILD = 'leg101-fitwindow';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

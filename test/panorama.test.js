@@ -700,10 +700,27 @@ test('★★★leg99 · 说书⑳：**两栏各自独立滑动**（用户令「�
     // ★咬的是**关系**不是色值：①两栏都有纵向滚动 ②容器有定高（没有定高就永远滚不动）
     //   ③窄屏退回单列时**必须把定高与滚动一起取消**（否则单列变成两口小井）。
     const css = readFileSync(new URL('../web/style.css', import.meta.url), 'utf8');
+    // ★★★leg101 `fitwindow`：**先剥 CSS 注释，再按字面取规则**（做版面时当场发现的判据缺陷）。
+    //   原写法把选择器直接拼进 `new RegExp`，两个病都不出声：
+    //     ①转义只加一个反斜杠 ⇒ 选择器里那个 `.` 成了通配符；
+    //     ②更要命：**本仓注释里大量写「选择器{…}」这种字面引用**（如 "`.sw2-merged-grid{height:100%}`"）
+    //       ⇒ 正则**优先命中注释**，取回来的 body 是**注释片段**——读数直接撒谎。
+    //       本笔实测：真规则在 9459，它命中的是 4134 的注释；leg101 那条 `height:100%` 恰好让
+    //       "第一条命中"从注释变成真规则 ⇒ 两条**本来就在空转**的断言当场红了，这才暴露。
+    //     ③取不到时返回空串，而下面的断言**全是"body 里必须有 X"** ⇒ 一条都没命中时**照样绿**。
+    //   ⇒ 三件事一起做：**先剥注释** ＋ **按字面转义** ＋ **空 body 当场红**。
+    //   ★判据跑在注释上，就是本仓"空绿"家族的一员——这一条是它被当场抓住的样子。
+    //   ★本块**不写字面正则**：一律 `new RegExp(拼出来的模式串)`，免得又被转义层吃掉一层。
+    const SPACE_RE = new RegExp('\\s*\\n\\s*', 'g');
+    const cssFlat = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(SPACE_RE, '');
+    const ESC_CHARS = ['\\]', '\\', '.', '*', '+', '?', '^', '$', '{', '}', '(', ')', '|', '['].join('');
+    const ESC_RE = new RegExp('[' + ESC_CHARS + ']', 'g');
     const ruleOf = (sel) => {
-        const m = new RegExp(`\\${sel}\\{([^}]*)\\}`).exec(css.replace(/\s*\n\s*/g, ''));
+        const esc = sel.replace(ESC_RE, '\\$&');
+        const m = new RegExp(esc + '\\{([^}]*)}').exec(cssFlat);
         return m ? m[1] : '';
     };
+
     // ① 两栏各自能滚
     for (const sel of ['.sw2-merged-main', '.sw2-merged-side']) {
         const body = ruleOf(sel);
@@ -713,8 +730,29 @@ test('★★★leg99 · 说书⑳：**两栏各自独立滑动**（用户令「�
     }
     // ② 容器必须**定高**——"里面能滚"的前提是"外面有确定的高度"
     const grid = ruleOf('.sw2-merged-grid');
-    assert.match(grid, /height:\s*calc\(/, '★★两栏容器必须有**确定高度**（`calc(...)`；没有它内容会把容器撑开、两栏永远滚不动）');
+    assert.ok(grid, '★前置：样式里必须真有 `.sw2-merged-grid` 这条规则（取不到 ⇒ 下面全是空绿）');
+    //   ★★★leg101 `fitwindow` 改了**这条高度的写法**（不是取消这条口径）：
+    //     原来是 `height:calc(88vh - 190px)`——那个 190px 是**估的**（按"页头一行 ＋ 信息带"），
+    //     而外壳里实打实还有 状态条 ＋ 页签行 ＋ 页内边距 ⇒ grid 比外壳真剩下的高度**更高**，
+    //     于是它把外壳撑出滚动条：**"内部滚 + 外部滚"打架**，外壳滚到哪内容就被裁到哪
+    //     （用户实机截图 + 「窗口太小了，最重要的说书都没位置了」）。
+    //     ★**没有浏览器就量不出那个数的真值**（leg89 §5.5）⇒ 本笔不调常数、改结构：
+    //     外壳成定高 flex 列、当前页`.sw2-view.sw2-active` 吃掉余高 ⇒ grid 用 `height:100%`。
+    //     它咬的**仍然是同一件事**：容器的高度必须是**确定值**（`auto` 才是那个病）。
+    assert.match(grid, /height:\s*(calc\(|100%)/,
+        '★★两栏容器必须有**确定高度**（无浏览器时由 flex 分配 ⇒ `100%`；`auto` 会让内容撑开容器、两栏永远滚不动）');
     assert.match(grid, /min-height:\s*\d+px/, '★要有下限（屏幕矮时宁可整页滚，也不许把两栏压成两条缝）');
+    //   ★★本笔新增的前置自证（为什么 `height:100%` 不是又一次猜测）：它必须**真的**有一个
+    //     被 flex 分配了确定高度的父级——否则 `100%` 在 `auto` 高度的父级里解不出来、退回 `auto`，
+    //     那就从"猜一个数"退化成"什么都没有"。
+    const shell = ruleOf('.sw2-window');
+    assert.ok(shell, '★前置：必须取得到 `.sw2-window` 那条规则（取不到 ⇒ 下面三条空绿）');
+    assert.match(shell, /display:\s*flex/, '★前置：面板外壳必须是 flex 列（否则上面的 `height:100%` 解不出来）');
+    assert.match(shell, /overflow:\s*hidden/, '★前置：外壳不许再自己滚（撤掉那条 `overflow:auto` 才是"内外滚动条打架"的治法）');
+    const activeView = ruleOf('.sw2-view.sw2-active');
+    assert.ok(activeView, '★前置：必须取得到 `.sw2-view.sw2-active` 那条规则');
+    assert.match(activeView, /flex:\s*1/,
+        '★前置：当前页要吃掉外壳余高（grid 的 `100%` 由它给）');
     // ③ ★反向之"过犹不及"：窄屏退回单列时，定高与两栏滚动**必须一起取消**（否则单列里两口小井）
     const narrow = (/@media \(max-width:980px\)\{([\s\S]*?)\}\s*$/m.exec(css.replace(/\s*\n\s*/g, '')) || [])[1] || '';
     assert.ok(narrow.includes('.sw2-merged-grid'), '★前置：窄屏那条媒体查询里得真有并页这两栏的规则');
