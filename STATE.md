@@ -138,8 +138,9 @@
 
 ## 4. 上一棒
 
-- **leg106**（2026-09-21）：**文档结构重塑**（本文件 + `docs/index.json` + `scripts/audit-docs.mjs` + 三份历史文件加墓碑）+ **发布流程收进仓**（`scripts/publish-release.mjs` / `verify-release.mjs`）+ **发布面追赶**（leg103–106 四棒一次补齐）。
-  交接：`docs/session-handoff-2026-09-21-leg106.md`（§1 病与治法 · §2 待办纪律 · §5 踩的坑）。
+- **leg106**（2026-09-21 · **十二笔**）：**文档结构重塑**（本文件 + `docs/index.json` + `scripts/audit-docs.mjs` + 三份历史文件加墓碑）+ **发布流程收进仓**（`scripts/publish-release.mjs` / `verify-release.mjs`）+ **发布面追赶**（leg103–106 四棒一次补齐，远端核验 8/8 + 终检 20/20）。
+  交接：`docs/session-handoff-2026-09-21-leg106.md`（§1 病与治法 · §2 待办纪律 · **§5 踩的坑十条** · §8 留给下一任）。
+  ★**下一笔最该做**：**接线层的端到端判据**（`web/index.js` 3099/3100 余量 1 行，而"点了没反应"全长在这一层，它是唯一没有判据站岗的层）。
 - **leg105**（2026-09-21）：编年·账目层的死分页器撤了（用户令「没用就删了吧」）——双重死控件查实（渲染侧没人消费 + 接线侧 `data-layer` 不拾）⇒ **删，不修**；同批补拾 `data-layer`。
   交接：`docs/session-handoff-2026-09-20-leg105.md`（§0 一句话 · §5 留下的活 · §6 三条最该带走的）。
 - ★**leg100–105 没有独立交接文档**（内容只活在已冻结的 `docs/START-HERE.md` 按棒段里）；`docs/` 根最新独立交接 = leg99。
