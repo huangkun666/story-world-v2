@@ -461,9 +461,12 @@ test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（
         //   上面那条差异检查（`:433`）已经会在缺处理器时咬红；这一段是**正向点名**（治"点名的必须在"）。
         //   ★与本笔同时**撤掉**旧五筛动作 `set-filter`：撤了却留着渲染端 `data-action` = 死控件，
         //     而这条审计正好是抓那个的（本笔一上手它就红了，那是它在干活，不是它坏了）。
+        //   ★★leg105 改造：账目层分页器已撤 ⇒ 产物里**只剩事件层**的 `ch-page` 钮。处理器**必须留**
+        //     （事件层那枚还活着），但"产物里真有控件"那条断言对 `ch-page` **收掉**——
+        //     它退化为与 `ents-page` 同族：**关键在钮上带着哪层**，判据的家在编年页自己的文件里。
         for (const act of ['ch-layer', 'ch-closed', 'ch-range', 'ch-scope', 'ch-page']) {
             assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
-            assert.ok(actions.includes(act), `★${act} 的控件真的在产物里（否则上面那条是空锁）`);
+            if (act !== 'ch-page') assert.ok(actions.includes(act), `★${act} 的控件真的在产物里（否则上面那条是空锁）`);
         }
         assert.ok(!handlers.has('set-filter'), '★旧五筛动作 `set-filter` 已撤（细案 §3.5）');
     } finally {

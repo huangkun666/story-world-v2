@@ -1264,6 +1264,11 @@ test('K35/A-9 阅卷视图：卷段行还原（编年行形状→HTML，引擎 i
     assert.ok(!text.includes('ev_3')); // id 只在悬停，不进可见文本
     const empty = renderVolumeReadHtml('卷二', []);
     assert.match(empty, /（空卷）/);
+    // ★★★leg104（A4）：它现在住**浮层**（`web/volume-popup.js`）⇒ 产物多一层"头"（照链浮层那套壳）：
+    assert.match(html, /class="sw2-cv-head"/, '★头照链浮层那套壳（`sw2-cv-head`）：同一类东西同一种长相');
+    assert.match(html, /data-action="volume-close"[^>]*>收起</, '★★必须带一枚「收起」（浮层里那唯一的关闭口）');
+    assert.match(html, /旧卷「卷一」 · 2 行 · 只读/, '★头里印卷号与行数（行数从 `rows` 现算，不是写死的字面量）');
+    assert.match(empty, /旧卷「卷二」 · 0 行/, '★空卷也如实印 0 行（不藏、不编）');
 });
 
 test('K33 编码安全：实体名/编年文本/表单值含 <script> 全转义', () => {
@@ -2270,7 +2275,26 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ★★★leg103 同棒第六笔 ⇒ **`leg103-switchglow`**：**参数页那两个"开/关"按钮的高亮不动**
     //     （用户实机「这两个按钮又切换不了了」——写盘成功、显示格也变了，只有高亮没人管）。
     //     ⇒ 玩家可见的**控件状态**真变了（这一格从"点了没反应"变回"点一下就亮/灭"）。
-    assert.equal(PANEL_BUILD, 'leg103-switchglow');
+    // ★★★leg104（同笔两件：① C2 重绘时把滚动位置放回去 ② A4 旧卷展开改挂浮层）⇒ **`leg104-scrollkeep`**：
+    //   ① `refreshWorld` / `refreshSections` 那两个"整块换 DOM"的重绘通道，现在**先取后放**滚动位置
+    //      （页 ＋ 并页两栏，新家 `web/scroll-keep.js`）⇒ 每轮推进不再把玩家弹回栏顶；
+    //   ② 旧卷展开从"插进编年页"改成"挂 `document.body` 的浮层"（新家 `web/volume-popup.js`）——
+    //      旧住法会被每轮重绘**无声吞掉**，且展开后没有收起口；现在有头 ＋ 一枚「收起」。
+    //   ⇒ 两件都是玩家看得见的行为变了 ⇒ 升一格。★本笔**没动 `web/style.css`**，但 `CSS_VERSION`
+    //     **同批升**（理由：两个号的 leg 差 ≤1 这条耦合锁 —— 见 `src/render-base.js` 里 leg104 那一段）。
+    // ★★★leg104 同棒**第三笔**（**样式一批**）⇒ **`leg104-cues`**：①`disabled` 的按钮终于看得出来不能点
+    //   （全仓此前零 `:disabled`；翻不动的翻页键曾带着手型、hover 还变色）②`.sw2-chip` 不再一律给手型
+    //   （页头那两枚是纯 `<span>`）③档位条/步点**灭的那一格**从 1.07–1.10:1 提到 3.34:1（算出来的对比度）
+    //   ④窄屏不再裁掉信息带右栏 ＋ 实体行补 620 断点。★**观感那批（字号/灰字/徽的套数）故意没动**，等用户看图拍板。
+    // ★★★leg105（用户令「这个分页器有啥用我没看到有啥用」「页数也不会跳，没用就删了吧」）⇒ **`leg105-deadpager`**：
+    //   编年·**账目层的分页器撤了**（双重死控件：①细案 §3.1 让账目组**全量**给出去 ⇒ 分页器切的
+    //   `sel.books.rows` 没人消费——页码翻了行一条不动；②`dispatchAction` 的 payload 白名单不拾
+    //   `data-layer` ⇒ 点了翻的是**事件层**的账，账目层页码连跳都不跳。账目层是四只折叠抽屉，
+    //   没有"主列表"可翻——修好也还是"在收起的名单上翻页"那个反模式，细案 §3.4 当初就该豁免它）。
+    //   ⇒ 删，不修；事件层那枚照旧（「全部轮次」下 126 条真事件翻 3 页，有真用）。
+    //   ★同批把 `data-layer` 补进 `web/index.js` 的 payload 白名单（事件层那枚不再靠兜底活着）。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动：分页器那行是 flex 行内一块，撤掉自然补位）。
+    assert.equal(PANEL_BUILD, 'leg105-deadpager');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2300,8 +2324,9 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
     assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
-    assert.equal(cssVer, '20260922-leg102-fullscreen',
-        `★CSS 号必须与构建号同批（leg101 本笔**真动了样式**：外壳定高 flex ＋ 当前页吃余高 ＋ grid 高度改 100%）；现为「${cssVer}」`);
+    assert.equal(cssVer, '20260923-leg104-cues',
+        `★CSS 号本笔（leg105）**不升**：样式表零改动（撤的是一行 flex 里的分页器，无规则可动；`
+        + `现为「${cssVer}」——若真动了样式再按纪律同批升`);
     assert.match(cssVer, /^20\d{6}-leg\d+[a-z]?-[\w-]+$/, '形状：`2026MMDD-legNN…-名字`（升位链条要能一眼看出来）');
     // ★★★leg99 收窄（原来这条是 `cssVer.includes(PANEL_BUILD)`）：**改管"leg 号必须同批或落后一笔"**。
     //   ★为什么非改不可：leg99 的**第一笔**只升面板号、不升 CSS 号（文本变了、样式没变），
@@ -2313,7 +2338,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const buildLeg = (/leg(\d+[a-z]?)-/.exec(PANEL_BUILD) || [])[1];
     assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面这条是空绿）');
     assert.match(cssLeg, /\d+/, '前置：CSS 号里那个 leg 号必须是**数字开头**的（防空绿：`leg-` 也能被上面的正则吃下）');
-    assert.equal(buildLeg, '103', '前置：本笔的构建号就是 leg103（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg102 时它是 `102`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '105', '前置：本笔的构建号就是 leg105（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg104 时它是 `104`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
     // ★口径：**CSS 号的 leg 号只许是"本笔"或"上一笔"**——"同批"只允许差一笔（本笔只升面板号时它落后一格）。
     //   ★不许写成"只要都是 leg 就行"：那样 leg40 的 CSS 号配 leg99 的构建号也会绿，锁就白设了。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);

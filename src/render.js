@@ -1294,15 +1294,24 @@ export function renderChronicleHtml(world, { oldVolumes = [], view = {} } = {}) 
     //   ★撤的是**插行**（一段渲染），不是数据：`world.milestones` 一个字不动，档案页/链/记忆桥照旧读它。
     //   ★另一处同款提示（观棋页归档提示条 `sw2-milestone-strip`）**保留**：它带「去翻旧账 →」入口，
     //     是**从别的页指路**，不是在家门口重印自己的门牌。
-    // ── 事件层（细案 §3.1）：近来（默认展开）+ 更早（收起）——**每层一枚分页器**，就在该层第一行右端 ──
+    // ── 事件层（细案 §3.1）：近来（默认展开）+ 更早（收起）——**一枚分页器**，就在该层第一行右端 ──
+    //   ★leg105：**账目层的分页器撤了**（用户实机原话：「这个分页器有啥用我没看到有啥用」「页数也不会跳，没用就删了吧」）。
+    //     死因有二，都查实了：
+    //     ①**渲染侧**：细案 §3.1 定的"全量给出去（不分页）" ⇒ `bookGroups` 四组永远画全量账行，
+    //       分页器切的 `sel.books.rows`（本页 60 条）**根本没人消费**——页码翻到天上去，行一条不动（双重死控件之一）；
+    //     ②**接线侧**：`dispatchAction` 组装 `ch-page` payload 的白名单里没有 `data-layer`
+    //       （leg63 那枚钮是照事件层的样子抄的）⇒ 点了**永远在翻事件层的游标**——账目层页码连"跳"都不会跳，
+    //       这就是用户看到的全貌（之二）。
+    //     ★账目层是四只**折叠抽屉**，没有"主列表"可翻——就算把两处都修好，得到的仍是
+    //       "在收起的名单上翻页"那个反模式（细案 §3.4 当初就该豁免它）。⇒ **删**，不修。
+    //     ★事件层那枚**照旧活着**：「全部轮次」下 126 条真事件翻 3 页，它有真用。
     const hot = sel.groups.hot, older = sel.groups.older;
     const eventLayer = `
 ${chroniclePagerHtml(sel.events, 'event')}
 ${chronicleGroupHtml('hot', hot.label, `第 ${Math.max(1, sel.tick - (sel.rangeN ?? 0) + 1)}–${sel.tick} 轮 · 共 ${hot.hit} 行`, hot.rows, true)}
 ${sel.rangeN == null ? '' : chronicleGroupHtml('old', older.label, `第 1–${Math.max(1, sel.tick - sel.rangeN)} 轮 · 共 ${older.hit} 行（展开看）`, older.rows, false)}`;
-    // ── 账目层（细案 §3.1）：四个子组（走一步 / 了结 / 起因 / 结清）──
+    // ── 账目层（细案 §3.1）：四个子组（走一步 / 了结 / 起因 / 结清）——**无分页器**（leg105）──
     const bookLayer = `
-${chroniclePagerHtml(sel.books, 'book')}
 ${sel.bookGroups.map((bg) => chronicleGroupHtml(bg.key, bg.label, `共 ${bg.hit} 行`, bg.rows, false)).join('\n')}`;
     // 层显示：`layer` 是"只看"（chips）管的——被筛掉的层整块不出现（★判据按"不出现 details.sw2-ch-group"咬）
     const showEvent = v.layer !== 'book';
@@ -2131,6 +2140,11 @@ export function renderVolumeListHtml(oldVolumes = []) {
 }
 
 // K35：阅卷还原视图——卷段行（storage.volumeToChronicleRows 产物）→ 编年行 HTML（A-3：引擎 id 只进悬停）
+// ★★★leg104（A4）：**加一层头**（卷号 · 行数 · 只读 ＋ 一枚「收起」）——它现在住**浮层**
+//   （`web/volume-popup.js`）：旧实现把产物插进编年页，而那一页每轮整块重绘
+//   ⇒ 展开的旧卷被**无声吞掉**、且展开之后**没有收起口**。
+//   ★**行**那一半一字没动（`sw2-ch-line` / `sw2-ch-round` / `sw2-ref` 全在，判据照旧咬得到）；
+//     头里印的是**卷号**（面板旧卷清单里本来就是它），不是引擎 id ⇒ A-3 不受影响。
 export function renderVolumeReadHtml(volumeId, rows = []) {
     const line = (r) => `<div class="sw2-ch-line${r.eventRef ? ' sw2-ch-event' : ''}">`
         + `<span class="sw2-ch-round">${escapeHtml(r.tick)}</span>`
@@ -2138,7 +2152,10 @@ export function renderVolumeReadHtml(volumeId, rows = []) {
         + (r.eventRef ? `<span class="sw2-ref" title="${escapeHtml(r.eventRef)}">？</span>` : '')
         + `</div>`;
     const body = rows.length ? rows.map(line).join('') : '<div class="sw2-ch-line"><span class="sw2-ch-text">（空卷）</span></div>';
-    return `<div class="sw2-chronicle" id="sw2_volume_read" data-volume="${escapeHtml(volumeId)}">${body}</div>`;
+    return `<div class="sw2-cv"><div class="sw2-cv-head">`
+        + `<div class="sw2-cv-t">旧卷「${escapeHtml(volumeId)}」 · ${rows.length} 行 · 只读</div>`
+        + `<button class="sw2-btn sw2-cv-close" data-action="volume-close">收起</button></div>`
+        + `<div class="sw2-chronicle" id="sw2_volume_read" data-volume="${escapeHtml(volumeId)}">${body}</div></div>`;
 }
 
 // ============ K41 链视图（细案 §3.2/§3.3 → A-15 渲染面；珠链形态=chain-view-mockup.html v3 沙漏） ============

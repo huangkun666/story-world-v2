@@ -291,11 +291,12 @@ test('细案 §T2 · ★分层真结构锁 + 反向对照（不许用 includes("
 test('细案 §T2/§3.4 · 每层一枚分页器（数出来 2 枚、各带自己的 layer）；空结果只印「命中 0」', () => {
     const w = synthWorld();
     const html = renderChronicleHtml(w, { view: makeChronicleView() });
-    assert.equal((html.match(/class="sw2-ch-pager"/g) || []).length, 2, '两枚分页器（事件层/账目层各一）');
+    assert.equal((html.match(/class="sw2-ch-pager"/g) || []).length, 1, '★leg105：只该有**事件层那一枚**（账目层的分页器是双重死控件，已撤——用户令「没用就删了吧」）');
+    assert.ok(!html.includes('sw2-ch-pager" data-layer="book"'), '★账目层不再有分页器（分页器容器必带 data-layer；它若死灰复燃这条当场红）');
     assert.match(html, /data-layer="event"/);
-    assert.match(html, /data-layer="book"/);
     const bookOnly = renderChronicleHtml(w, { view: { ...makeChronicleView(), layer: 'book' } });
-    assert.equal((bookOnly.match(/class="sw2-ch-pager"/g) || []).length, 1, '只看账目 ⇒ 只剩一枚分页器（层被动过就不该留死控件）');
+    assert.equal((bookOnly.match(/class="sw2-ch-pager"/g) || []).length, 0, '只看账目 ⇒ 一枚分页器都不该有（那层的分页器已撤；层被动过就不该留死控件）');
+    // ★反向对照：`chroniclePagerHtml` 若死灰复燃到账目层，上面两条当场红（分页钮必带 data-layer）。
     const empty = renderChronicleHtml(w, { view: { ...makeChronicleView(), q: '绝无此词' } });
     assert.match(empty, /命中 <b>0<\/b>/);
     assert.ok(!empty.includes('显示第 0–0 条'), '空态不印"显示第 0–0 条"');

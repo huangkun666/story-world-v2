@@ -42,6 +42,10 @@ import { worldToBeReplaced, initWorldOverwriteNotice, importOverwriteNotice } fr
 //     "什么时候设、拿哪个世界设"，以及把读数报出来。设计见 `docs/spec-tagged-actions-extraction.md` §6。
 import { createInjector } from './inject.js';
 import { mergedMainHtml } from './page-compose.js';   // ★leg98 补四：并页那一页怎么拼（页头＋信息带升页头＋两栏）——理由见该模块头部
+// ★★★leg104（C2）：**重绘时把滚动位置放回去**（页 ＋ 并页两栏）——病与口径见该模块头部（零 import 的真叶子）。
+import { captureScrollPositions, restoreScrollPositions } from './scroll-keep.js';
+// ★★★leg104（A4）：**旧卷展开改挂浮层**（它原来插进编年页 ⇒ 每轮重绘把它**无声吞掉**，且展开后没有收起口）。
+import { openVolumePopup, closeVolumePopup } from './volume-popup.js';
 // ★★★leg89：标签读数那一行走**它自己那一份印法**（`tagReadoutLine` 是唯一口径）——
 //   ★不在渲染层重写一遍（本仓"一个数两把尺子"那条禁令：面板印的必须是引擎算的同一份）。
 import { tagReadoutLine } from '../src/tag-extract.js';
@@ -234,8 +238,11 @@ const CSS_HREF = new URL('./style.css', import.meta.url).href;
 //     ⇒ **样式真变了 ⇒ 再升一格**。
 //   ★★★leg98 补四 → **`20260922-leg98-pagecols`**（用户令「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
 //     **信息带升成页头** ＋ 这一页**改两栏** ⇒ 新增 `.sw2-merged-grid/-main/-side`（右栏 sticky、窄屏退单列）；★★★leg99 两笔：动态流撤出 ＋ **两栏各自独立滑动**（动了样式）⇒ 升，理由见 `web/style.css` 那三族规则上方。
-//   ★★★leg102 `fullscreen` → **`20260922-leg102-fullscreen`**：窗口宽度 `1120px`→`100%`、高度 `88vh`→`calc(100vh - 40px)`（用户令「占满整个屏幕吧」）⇒ 真动了样式 ⇒ 同批升。
-const CSS_VERSION = '20260922-leg102-fullscreen';
+//   ★★★leg104 → **`20260923-leg104-scrollkeep`**：★**样式零改动**（`web/style.css` 一个字节没动）；同批升的理由是
+//     两个号的 **leg 差 ≤1** 那条耦合锁（leg103 没动样式 ⇒ 本号停在 leg102，只升面板号那条锁就当场红）——见 `src/render-base.js`。
+//   ★★★leg104 同棒**第三笔**（样式一批）→ **`20260923-leg104-cues`**：本笔**真动了样式**（`:disabled` 一族
+//     ＋ chip 手型 ＋ 档位条/步点灭态色 ＋ 窄屏两条兜底）⇒ 按纪律同批升（这一格的作用就是"别让玩家吃旧样式表"）。
+const CSS_VERSION = '20260923-leg104-cues';
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;
@@ -464,6 +471,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
                 console.info(`[story-world-v2] ${name} 页上有控件正被操作 —— 本轮整页刷新押后该页`);
                 continue;
             }
+            const keep = captureScrollPositions(el);   // ★leg104（C2）：重绘前先记住这一页的滚动位置（页 ＋ 并页两栏）
             if (name === 'panorama') {
                 // ★leg97 并页：这一页是**四层 ＋ 观棋那几块**拼出来的（见 `mergedMainHtml`）。
                 //   2026-09-08 实机那条教训仍在：board 是**五块对象**，直填 innerHTML 会渲染成 `[object Object]`。
@@ -471,6 +479,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
             } else {
                 el.innerHTML = out[name];
             }
+            restoreScrollPositions(el, keep);          // ★leg104（C2）：重绘后放回去（缺席的那几格它自己会跳过）
         }
         refreshSettingsHints(); // 密钥 placeholder 随渲染刷新（表单值由 cfg 注入）
         // 第十三棒：每轮进展计数——「编年 +N 行」直接区分模型空步 vs 引擎未落账（账目可读性）
@@ -1469,11 +1478,13 @@ function refreshSections(names) {
                 console.info(`[story-world-v2] ${name} 页上有控件正被操作 —— 本次重绘押后（避免销毁正在展开的下拉）`);
                 continue;
             }
+            const keep = captureScrollPositions(el);   // ★leg104（C2）：局部重绘同理——先记后放（见并页那处的口径）
             if (name === 'panorama') {
                 el.innerHTML = mergedMainHtml(out);   // ★leg97 并页：四层 ＋ 观棋那几块（唯一一处组合）
             } else if (typeof out[name] === 'string') {
                 el.innerHTML = out[name];
             }
+            restoreScrollPositions(el, keep);
         }
     } catch (err) {
         console.warn('[story-world-v2] 局部重绘失败（不影响落账）', String(err?.message || err));
@@ -2519,15 +2530,18 @@ if (typeof window !== 'undefined') {
             const volume = await volumeStore().get(volId);
             if (!volume) { setStatus(`⚠ 卷「${volId}」不在库中`); return; }
             const rows = volumeToChronicleRows(volume);
-            const html = renderVolumeReadHtml(volId, rows);
-            const chronicle = document.getElementById('sw2_view_chronicle');
-            if (!chronicle) return;
-            chronicle.insertAdjacentHTML('afterbegin', html);
+            // ★★★leg104（A4）：进**浮层**，不再插进编年页——那一页每轮整块重绘（`refreshWorld`／
+            //   `refreshSections`）⇒ 展开的旧卷被**无声吞掉**，而且展开之后没有收起口。
+            //   ★链浮层若开着先收掉：**一次只留一层**（两个浮层各挂一条 ESC，叠着按一下会散架）。
+            bus['chain-close']?.();
+            openVolumePopup(renderVolumeReadHtml(volId, rows));
             setStatus(`已展开旧卷「${volId}」（${rows.length} 行 · 只读）`);
         } catch (err) {
             setStatus(`⚠ 阅卷失败：${err?.message || err}`);
         }
     };
+    // ★leg104（A4）：收起旧卷浮层（浮层里那枚「收起」/ 点空白 / ESC 三条路都走它；这里给总线留一个点名）。
+    bus['volume-close'] = () => closeVolumePopup();
 
     // ---------- leg50（细案 spec-chronicle-page-ia）：编年页工具条五个动作 ----------
     // 口径与实体页四枚动作**完全同款**：改状态一行 + 只重绘本页（选数据一行都不写在这里，
@@ -2950,7 +2964,7 @@ function bindActions() {
             return;
         }
         const action = el.getAttribute('data-action');
-        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity'), name: el.getAttribute('data-name'), force: el.getAttribute('data-force'), snap: el.getAttribute('data-snap'), tick: el.getAttribute('data-tick'), param: el.getAttribute('data-param'), value: el.getAttribute('data-value'), key: el.getAttribute('data-key') };
+        const payload = { source: el.getAttribute('data-source'), vol: el.getAttribute('data-vol'), chain: el.getAttribute('data-chain'), filter: el.getAttribute('data-filter'), entity: el.getAttribute('data-entity'), name: el.getAttribute('data-name'), force: el.getAttribute('data-force'), snap: el.getAttribute('data-snap'), tick: el.getAttribute('data-tick'), param: el.getAttribute('data-param'), value: el.getAttribute('data-value'), key: el.getAttribute('data-key'), layer: el.getAttribute('data-layer') };
         dispatchAction(action, payload, e);
     });
     // ★细案实体页：搜索框（`#sw2_ents_q`）走 input 通道——`refreshSections` 换掉 innerHTML 会**夺焦点**，

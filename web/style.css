@@ -59,7 +59,12 @@
    "同一事实不说两遍"要治的东西（★终审留档：本条原先举 `.sw2-ecert` 当先例，而那个类**零生产者**
    且在本文件里被写了两遍；那两条规则已在终审 M7 一并删掉，行号也不再引用——它当年指的还是 `:275`）。
    故把细案那条里**新增**的三条并进这里，`.on` / `-n` 两条态规则归实体页那一段。 */
-.sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;cursor:pointer;background:var(--sw2-card);font-family:inherit;}
+/* ★★★leg104（样式一批 · **假可点**）：基础规则**不再给手型**——`settings.html:13-14` 那两枚 chip 是
+   纯 `<span>`（「世界：—」/「轮次」），给了 `cursor:pointer` 就是"看着能点、点了一点反应没有"。
+   ⇒ 手型只给**真的是按钮**的那些（实体页工具条与筛选行用的是 `<button class="sw2-chip">`）。
+   判据（`test/style-cues-layout.test.js`）两面都咬：span 那一侧不许有手型、button 那一侧必须有。 */
+.sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;cursor:default;background:var(--sw2-card);font-family:inherit;}
+.sw2-chip[data-action],button.sw2-chip{cursor:pointer;}
 .sw2-chip.sw2-tick{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-family:"Cascadia Mono",Consolas,monospace;}
 .sw2-close{width:30px;height:30px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--sw2-text-faint);cursor:pointer;}
 .sw2-close:hover{background:var(--sw2-card);color:var(--sw2-text);}
@@ -187,6 +192,19 @@
 @media (max-width:980px){
   .sw2-merged-grid{grid-template-columns:minmax(0,1fr);height:auto;min-height:0;}
   .sw2-merged-main,.sw2-merged-side{height:auto;overflow:visible;padding-right:0;}
+  /* ★★★leg104（样式一批 · **窄屏丢内容**）：信息带首栏原来写死 `flex:0 0 340px`（`.sw2-infoband:114`
+     那条），窄屏上它把右边那栏（盘算 / 张力 / 浪尖三行读数）压到 **0 宽**，而 `.sw2-infoband` 有
+     `overflow:hidden` ⇒ **不是挤，是真裁掉**。⇒ 窄屏改**竖排**：两段各占一行、分界线从竖改横。 */
+  .sw2-infoband{flex-direction:column;}
+  .sw2-infoband > .sw2-band-block:first-child{flex:1 1 auto;}
+  .sw2-band-block + .sw2-band-block{border-left:none;border-top:1px solid var(--sw2-line-soft);}
+}
+
+/* ★★★leg104：**第二条断点**（全表此前只有上面那条 980）——理由：实体行首列写死 `212px`
+   （`.sw2-entity-row:437`），620 以下其余两栏只剩两三个字的宽，读起来是碎行。
+   ★为什么不放进 980 那条：980 的平板放得下三栏，在那里改成单列是**无理由的退化**（本仓忌"面板抢玩家的手"）。 */
+@media (max-width:620px){
+  .sw2-entity-row{grid-template-columns:minmax(0,1fr);gap:4px;}
 }
 
 /* ---------- 观棋：盘算总览 + 动态流 + 位置速览 ---------- */
@@ -199,7 +217,11 @@
 .sw2-agenda-card .sw2-agoal{font-size:13px;line-height:1.5;}
 .sw2-agenda-card .sw2-astage{margin-top:4px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--sw2-text-faint);}
 .sw2-agenda-card .sw2-aprog{display:flex;gap:3px;margin-left:auto;}
-.sw2-dotstep{width:6px;height:6px;border-radius:50%;background:var(--sw2-card-2);display:inline-block;}
+/* ★★★leg104（样式一批 · **没点亮的格子看不见**）：灭的那一格原来用 `--sw2-card-2`（#262c38）
+   压在卡片底 `--sw2-card`（#20252f）上＝ **1.10:1**（实测算出来的，等于没画）⇒ 一根"3/4"的档位条
+   只能读成"3"，玩家无从知道一共几格。改用 `--sw2-text-faint`（#6b7590）＝ **3.34:1**
+   （过 WCAG 对"有含义的图形"那条 3:1 线），亮的那一格仍是琥珀（约 8:1）⇒ 亮/灭一眼分得开。 */
+.sw2-dotstep{width:6px;height:6px;border-radius:50%;background:var(--sw2-text-faint);display:inline-block;}
 .sw2-dotstep.on{background:var(--sw2-amber);}
 .sw2-agenda-card .sw2-asteps{font-family:"Cascadia Mono",Consolas,monospace;font-size:10.5px;}
 .sw2-agenda-empty{grid-column:1/-1;font-size:12.5px;color:var(--sw2-text-faint);padding:10px;border:1px dashed var(--sw2-line);border-radius:8px;text-align:center;}
@@ -244,9 +266,12 @@
      （每格只是"我在我自己那张表里的第几档"，档与档之间没有共同单位）⇒ 分段让它看起来就是刻度。
    ★`gap:2px` + 每格圆角：让"格数"一眼可数（连续条数不出来）；不写字、不写百分数（leg26 红线）。 */
 .sw2-gearbar{display:inline-flex;gap:2px;align-items:center;justify-self:stretch;width:100%;max-width:120px;}
-.sw2-gearbar i{flex:1 1 0;height:5px;border-radius:2px;background:var(--sw2-line-soft);min-width:8px;}
+/* ★★★leg104（样式一批 · 同上面 `.sw2-dotstep` 那条）：档位条**灭的格子**原来是 `--sw2-line-soft`
+   （#242a36）压在带底 `--sw2-card`（#20252f）上＝ **1.07:1** ⇒ 看不见；改 `--sw2-text-faint`＝ **3.34:1**。
+   ★"没有数据"那一档（`-unset`）的虚框同理：描边也要看得见（不然一格都不显，玩家以为这行坏了）。 */
+.sw2-gearbar i{flex:1 1 0;height:5px;border-radius:2px;background:var(--sw2-text-faint);min-width:8px;}
 .sw2-gearbar i.on{background:var(--sw2-amber);}
-.sw2-gearbar-unset i{background:transparent;border:1px dashed var(--sw2-line-soft);}
+.sw2-gearbar-unset i{background:transparent;border:1px dashed var(--sw2-text-faint);}
 .sw2-env-row.sw2-nodata .sw2-gearbar{opacity:.7;}
 /* leg26：参数页的下拉（世界参数档位）——沿用面板既有观感，不新造组件 */
 .sw2-param-select{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:3px 7px;font-size:12px;font-family:inherit;min-width:96px;line-height:1.4;}
@@ -579,6 +604,16 @@
 .sw2-btn.sw2-primary:hover{filter:brightness(1.06);}
 .sw2-btn.sw2-danger{border-color:rgba(223,108,98,.5);color:var(--sw2-red);}
 .sw2-btn.sw2-danger:hover{background:rgba(223,108,98,.1);}
+/* ★★★leg104（样式一批 · **不能点的按钮必须看得出来**）：全仓此前**零 `:disabled` 规则**（grep 实测），
+   而 `src/render.js` 真的在产出 disabled 按钮（参数页「撤销改写」`:693` · 编年分页器 `:1252/:1254` ·
+   实体分页器 `:1560/:1562`）⇒ 翻不动的「‹ 上一页 / 下一页 ›」带着**手型鼠标**、hover **还变色**，
+   点了没反应 ⇒ 玩家只能怀疑插件坏了。★`not-allowed` 是"这件事现在不行"的标准说法（不是"坏了"）；
+   ★下面两条压住 hover 那一族（`.sw2-btn:hover` 换边色 · `.sw2-primary:hover` 提亮 · `.sw2-danger:hover`
+   泛红底）——**不许把一个不能点的按钮画得跟能点的一样**。 */
+.sw2-btn:disabled{cursor:not-allowed;opacity:.45;}
+.sw2-btn:disabled:hover{border-color:var(--sw2-line);}
+.sw2-btn.sw2-primary:disabled:hover{filter:none;}
+.sw2-btn.sw2-danger:disabled:hover{background:var(--sw2-card-2);}
 .sw2-cold-mgmt{font-size:13px;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:7px;}
 .sw2-cold-mgmt .sw2-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
 .sw2-cold-mgmt b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;}
