@@ -39,8 +39,8 @@
 | `CSS_VERSION` | **`20260923-leg104-cues`** | `web/index.js`（`injectCss()`） |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-23`** | `src/prompts.js` |
 | `web/index.js` 行数 | **3099 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`） | `split('\n').length` |
-| 发布仓 main | **`leg103-switchglow`**（★**落后三棒**：leg104/105/106 未推） | 见 §5 发布流程 |
-| release tag | `v1.0.0-preview.1` → **`1a54424`（= leg100 那一版）** | 从 release 下载的人拿到旧面板 |
+| 发布仓 main | **`8e04fca`** · 构建号 **`leg105-deadpager`**（★leg106 已推：leg103–106 四棒一次补齐，远端核验 20/20） | `node scripts/verify-release.mjs` |
+| release tag | `v1.0.0-preview.1` → **`1a54424`（= leg100 那一版）** | ★点 release 下载的人拿到旧面板（语义待裁定，见 §3-A） |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） | `test/browser-compat.test.js` |
 
 **三个"真的变了才升"的号（判据锁着）**：
@@ -128,6 +128,8 @@
 
 ### 已办结（近三棒，别再重做）
 
+- ✔ **发布面追赶（leg106 已办结）**：发布仓 main `f6368fc` → **`8e04fca`**（leg103–106 四棒一次补齐，远端核验 20/20）。
+  ★**仍未决的只剩 tag 语义**（见上表 A）：tag 还指 leg100 那一版 ⇒ 点 release 下载的人拿到旧面板。
 - ✔ **C2 每轮重绘把滚动位置弹回顶部** — leg104 已修（`web/scroll-keep.js` 在位，`web/index.js:474/482` 取后放回）。
 - ✔ **`:disabled` 样式 / 断点 / A4 旧卷浮层** — leg104 已修（`web/style.css:613` 那一族在位）。
 - ✔ **leg105**：编年·账目层死分页器已撤 + `data-layer` 补拾 + 判据/细案跟改。
