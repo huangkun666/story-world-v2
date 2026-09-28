@@ -67,7 +67,7 @@ const src = {
 const PUBLISHED_BUILD = 'leg145b-own-errors';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
 //   ★leg146 勘正：这一版**面板一个字没改**（改的是聊天侧那一段注入的写法与读数）⇒ `PANEL_BUILD` **不升**
 //     ⇒ 它仍等于源码那个号（"本地这一版就是发布的那一版"）。**别为了让这里好看而升位**——号跟的是面板。
-const PUBLISHED_COMMIT_REF = '778af70';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
+const PUBLISHED_COMMIT_REF = '32c8e39';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
 // ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
 //   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
 //   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。

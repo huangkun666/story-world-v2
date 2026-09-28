@@ -29,6 +29,7 @@
 import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';   // 条目指纹的键归一（与起根同一份契约）
 import { bookFingerprint } from '../src/fingerprint.js';                        // ★leg112：书指纹（与抽取同一条算法）
 import { checkBookSource } from '../src/book-check.js';                          // ★leg112：换书检测（纯函数，只判断不说谎）
+import { macroNamesFromCtx } from '../src/macros.js';                            // ★leg148：酒馆宏的真名对
 
 export function characterWorldNames(character) {
     const out = [];
@@ -115,7 +116,12 @@ export async function currentBookFingerprint(ctx) {
     try {
         const character = pickCharacter(ctx);
         const { entries } = await collectWorldInfoEntries(ctx, character);
-        const res = composeInitSource({ character, worldInfoEntries: entries || [] });
+        // ★★★leg148：**必须与 `autoComposeSource`（抽取那一条路）用同一份宏真名**——
+        //   两处只要有一处替换、另一处不替换，算出来的就是**两个不同的合订文本** ⇒
+        //   `stored !== fresh` ⇒ 每个玩家一开面板就被判"书换了"（假警报，而且看起来完全像真的）。
+        //   ⇒ 口径：**换名这一步在两条路上都做，用的是同一把尺子**（`macroNamesFromCtx` 一处定义）。
+        const macroNames = macroNamesFromCtx(getCtx, character);
+        const res = composeInitSource({ character, worldInfoEntries: entries || [], macroNames });
         if (!res?.ok || !res.text) return { fresh: '', usedChars: 0, entries: (entries || []).length };
         return { fresh: bookFingerprint(res.text), usedChars: res.usedChars ?? res.text.length, entries: (entries || []).length };
     } catch (err) {

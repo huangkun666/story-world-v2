@@ -107,10 +107,16 @@ test('★★leg80 丙-web②：新模块只许 import `../src/init-source.js`，
     //        （要在浏览器里才活）、不许出现 `window` / `document`（Node 里要能直接导入）。
     //   ★为什么这三条必须在本模块（不能挪去接线层）：本模块是"书怎么取"的唯一主人，
     //     换书检测要的正是"照抽取口径重算一遍书文"⇒ 挪走就得多写一份取书口径（第二把尺子）。
+    //   ★★★leg148 同步（**第 4 条** · 社区用户报的 bug：账上多出一条叫 `{{user}}` 的角色）：
+    //     `macroNamesFromCtx`——换书检测这条路**必须与抽取那条路用同一份宏真名**。
+    //     两处只要有一处替换、另一处不替换，算出来的就是两个不同的合订文本 ⇒ `stored !== fresh`
+    //     ⇒ **每个玩家一开面板都被判"书换了"**（假警报，而且看起来完全像真的）。
+    //     ★边界一条没放宽：它仍**不含 `window`/`document`**，仍是真叶子（`src/macros.js` 零 import）。
     const WANT = [
         "import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';",
         "import { bookFingerprint } from '../src/fingerprint.js';",
         "import { checkBookSource } from '../src/book-check.js';",
+        "import { macroNamesFromCtx } from '../src/macros.js';",
     ];
     assert.equal(imports.length, WANT.length,
         `★\`web/book-source.js\` 的 import 面共 ${WANT.length} 条（逐条登记在案）；实际 ${imports.length} 条：${imports.join(' | ')}`);

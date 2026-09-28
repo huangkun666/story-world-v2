@@ -46,6 +46,8 @@ import { worldToBeReplaced, initWorldOverwriteNotice, importOverwriteNotice } fr
 //     （`tagSpecText`/`rosterText`/`buildInjections`，Node 可直接测）；本文件只负责
 //     "什么时候设、拿哪个世界设"，以及把读数报出来。设计见 `docs/spec-tagged-actions-extraction.md` §6。
 import { createInjector, ledgerVolumes } from './inject.js';
+import { macroNamesFromCtx } from '../src/macros.js';   // ★leg148：酒馆宏的真名对（{{user}} → 人设名）
+import { normalizeMacroEntities } from './world-entity-migration.js';   // ★leg148：存量局——把"宏做的你"并回棋子
 import { mergedMainHtml } from './page-compose.js';   // ★leg98 补四：并页那一页怎么拼（页头＋信息带升页头＋两栏）——理由见该模块头部
 // ★★★leg104（C2）：**重绘时把滚动位置放回去**（页 ＋ 并页两栏）——病与口径见该模块头部（零 import 的真叶子）。
 import { captureScrollPositions, restoreScrollPositions } from './scroll-keep.js';
@@ -1119,6 +1121,10 @@ export function namePlayerPiece(world, parsedName) {
     return { renamed: true, name: nm };
 }
 
+// ★★★leg148：**"把宏做的你并回棋子"那一族已整族搬进 `web/world-entity-migration.js`**
+//   （理由：本文件有 3100 行硬锁，机制代码加进来就顶破 ⇒ 照本仓做法**搬一族出去，不抬锁**）。
+//   接线层只负责接上：下面载入期那一步调 `normalizeMacroEntities`。病灶与新家口径 ⇒ 那个文件头。
+
 // ---------- ★leg40b（I-1）：**覆盖现存世界的守门**（用户点单修；这条会真丢用户数据）----------
 // ★★★leg103：这一族文案与归一**已整族搬进 `web/world-replace.js`**（含本段全部留档：两种标准、
 //   顺序之病、那条假承诺的查实与治法等）——接线层只负责**问与动手**。导出面原样保持：
@@ -1137,7 +1143,7 @@ export async function autoComposeSource() {
     const ctx = getCtx();
     const character = pickCharacter(ctx);
     const { entries: worldInfoEntries, worldSources } = await collectWorldInfoEntries(ctx, character);
-    const res = composeInitSource({ character, worldInfoEntries });
+    const res = composeInitSource({ character, worldInfoEntries, macroNames: macroNamesFromCtx(getCtx, character) });
     res.sourceDiag = { // 诊断附加元数据（非契约字段，仅控制台消费）
         identity: { characterId: ctx?.characterId ?? null, groupId: ctx?.groupId ?? null, chatId: ctx?.chatId ?? null },
         character: { name: character?.name ?? null, world: character?.world ?? null, hasBook: Boolean(character?.character_book || character?.data?.character_book) },
@@ -1965,7 +1971,7 @@ export async function loadWorld() {
     // leg25 f：**位置继承也挂在加载期**（零 token、幂等、只填空位）——打开面板即见效，
     //   不必等玩家推一轮或点「查」。与名册落账共用同一份条目，一次落盘。
     const loc = inheritLocations(hotWorld, { entries: bookEntriesForSeed });
-    const world2 = loc.ssot;
+    let world2 = loc.ssot;   // ★leg148：`let`——下面"并回宏实体"那一步会换一份世界（`macroSync.ssot`）
     // ★★leg32h：**玩家棋子身份每轮校准一次**（幂等、零 token、先于落盘）。
     //   为什么需要：棋子建得太早（初始化那一刻），而"主角名"可能**后来才进世界**——
     //   真实案例：主角「黄坤」在第 42 轮被模型当新实体入局，而棋子从第 1 轮就叫「你」
@@ -1973,6 +1979,13 @@ export async function loadWorld() {
     //   这里在每次载入时用 ST 的人设名（`name1`）校准：**同名实体已存在 ⇒ 认领它、把空棋子并掉**
     //   （`namePlayerPiece` 的两个分支），没有则只给棋子改名。★拿不到名字就什么都不做（不猜）。
     const personaNow = (() => { try { return String(getCtx()?.name1 || '').trim(); } catch (_) { return ''; } })();
+    // ★★★leg148：**先把"宏做的你"并回棋子，再校准名字**——顺序不能反（`namePlayerPiece` 按名字认领，
+    //   那枚 `{{user}}` 还在就可能被认成"你"）。它只动引用、不碰名字 ⇒ 本族口径见新家文件头。
+    const macroSync = normalizeMacroEntities(world2, { nameLower: personaNow || '你' });
+    if (macroSync.ssot) world2 = macroSync.ssot;
+    if (macroSync.merged) {
+        try { console.info('[story-world-v2] 并回：账上那枚酒馆占位符做的"你"', { names: macroSync.names, merged: macroSync.merged }); } catch (_) { /* 诊断面失败不影响世界 */ }
+    }
     const pieceSync = personaNow ? namePlayerPiece(world2, personaNow) : { renamed: false };
     // ★★leg40（用户拍板后的形状）：**起根只在两处发生**——
     //   ① **初始化**（`bus['init-world']`，新世界开局那一步）；
@@ -1989,14 +2002,15 @@ export async function loadWorld() {
     //     `migrated1 !== migrated` = 法则账清旧账（leg74）这一次。
     //   少了后一项 ⇒ 只发生文风禁令清理时**不写盘**：面板是对的（内存干净），
     //   而盘上那份老账照旧带着写法规矩（导出/换机/看账都还能看到）。
-    if (changed || loc.inherited > 0 || migrated !== hot || migrated1 !== migrated || pieceSync.renamed || autoKeyAdded || replayedPendingEnv) {   // 两次清理各算各的（ref 判等，幂等不空写）
+    if (changed || loc.inherited > 0 || migrated !== hot || migrated1 !== migrated || pieceSync.renamed || macroSync.merged > 0 || autoKeyAdded || replayedPendingEnv) {   // 两次清理各算各的（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(world2));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
         if (!flushed.ok) console.warn('[story-world-v2] 账本写回未落盘', { reason: flushed.reason, seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited, 棋子校准: pieceSync, 补回本地档位: replayedPendingEnv });
-        else if (backfilled > 0 || loc.inherited > 0 || pieceSync.renamed || autoKeyAdded || replayedPendingEnv) {
+        else if (backfilled > 0 || loc.inherited > 0 || pieceSync.renamed || macroSync.merged > 0 || autoKeyAdded || replayedPendingEnv) {
             console.info('[story-world-v2] 名册落账可重入：本次补齐', {
                 归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0, 位置: loc.inherited,
                 棋子校准: pieceSync,   // ★leg32h：认领/改名/并掉空棋子都要留痕（用户能看见"主角认领了没有"）
+                并回宏实体: macroSync.merged ? `${macroSync.merged} 枚（${macroSync.names.join('、')}）` : '无',   // ★leg148
                 插件总闸: autoKeyAdded ? `${AUTO_ADVANCE_KEY}=${world2.context.setting.dynamic.env[AUTO_ADVANCE_KEY]}（首次写入）` : '已写过，不碰',
                 补回本地档位: replayedPendingEnv ? '是（上次落盘没确认，这次重落）' : '无',
             });

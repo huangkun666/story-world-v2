@@ -13,6 +13,10 @@
 //       但它们的**题名照样进名册与未编译台账**（`catalog.skipped`）。
 //   实测：三国 827 条里 563 条禁用 = 全书的 81%；旧口径下引擎只看得到 18.9%（名册只能从 JS 里捞名字）。
 // 分层归属：编排层（只组文本，不落账不结算）。防御上限提案态（铁律 2，随报批）。
+//
+// ★★★leg148：**条目原文里的酒馆宏由本文件换成真名**（`{{user}}` → 人设名、`{{char}}` → 角色名）——
+//   机制、病灶与"为什么必须在源头换"⇒ `src/macros.js` 头注。一句话：**酒馆的宏不该变成世界里的人**。
+import { substituteMacros } from './macros.js';
 
 export const INIT_PIECE_CAPS = {          // 卡四件套各自上限（字符 · 提案态 · v1 spend 同款）
     description: 1200,
@@ -60,6 +64,17 @@ function labelOf(e) {
     const n = String(e?.name ?? '').trim();
     if (n) return n;
     return normalizeEntryKey(e);
+}
+
+// ★★★leg148：**条目里不许留着酒馆的宏**（病灶与"三道关口为什么都拦不住它" ⇒ `src/macros.js` 头注）。
+//   为什么替换这一步必须在**送进抽取之前**（而不是在账上事后擦）：宏换成真名之后，抽出来的名字
+//   **就是玩家真名**，而 `web/index.js` 的 `namePlayerPiece`（认领棋子那把尺子）只比名字相不相等
+//   ⇒ 它当场认领，棋子与实体**合成一个**。在账上事后擦就只能靠"猜哪个实体是玩家"——那是不许做的事。
+//   ★替换**只在 `composeInitSource` 产出文本那一层做一次**（见那里的头注）：
+//     `labelOf` 那一族在探测期还要用来**配对**（壳声明的标题 ↔ 条目题名），两边口径必须一样，
+//     只给一半加替换会让声明面整个配不上。⇒ 本文件内部一律读原文，**出口才换**。
+function macroSub(text, macroNames) {
+    return macroNames ? substituteMacros(text, macroNames) : String(text ?? '');
 }
 
 function normalizeEntry(e) {
@@ -170,6 +185,9 @@ export function deriveTitleRoster(worldInfoEntries, character = null) {
     const seenTitle = new Set();
     const keySet = new Set();
     for (const e of raw) {
+        // ★★★leg148：题名这一栏**只读原文**（不替换）——替换之后 `{{user}}正史` 会变成 `怪璃正史`，
+        //   而**书里没有一个字叫「怪璃正史」** ⇒ 把替换后的题名当名号报上去，就是"凭空造了一个名号"
+        //   （红线：只提取不创作）。纯宏题名的挡法在下游：`sanitizeCanon` 的形状闸 + 实体名的形状闸。
         const t = labelOf(e);
         if (t && !seenTitle.has(t)) { seenTitle.add(t); titles.push(t); }
         for (const field of [e?.key, e?.keys]) {
@@ -237,6 +255,9 @@ export function compileCompleteness(worldInfoEntries, character = null, { compil
     for (const e of allEntries(worldInfoEntries, character)) {
         const content = String(e.content ?? '').trim();
         if (!content) continue;
+        // ★★★leg148：这里**读原文标签**（*Entry 那一版）与 `composeInitSource` 收集 `compiledTitles`
+        //   的口径**必须一样**——否则"编译覆盖 12/12"会变成两把尺子量出来的假读数。
+        //   （这一族的替换只在 `composeInitSource` 产出文本那一层做，见那里的头注。）
         const t = labelOf(e);
         if (!t || seen.has(t) || !SETTING_TITLE_RE.test(t)) continue;
         seen.add(t);
@@ -422,10 +443,17 @@ function pickedLines(worldInfoEntries, character, picked) {
  * @param {Array}  [opts.worldInfoEntries] ST 世界信息条目数组
  * @param {number} [opts.budget]     防御性总上限（默认 INIT_SOURCE_HARD_CEILING；测试可注入小值验证机制）
  * @param {boolean} [opts.includeDeclared] ★leg60：是否补读"声明面选中的料"（默认 true）。关掉 = 退回旧口径（只读启用条目）
+ * @param {{playerName?:string,charName?:string}|null} [opts.macroNames]
+ *   ★★★leg148：酒馆宏的真名对（`{{user}}` → 人设名、`{{char}}` → 角色名）。
+ *   **缺省 `null` = 一个字都不换**（逐字节回到今天，判据 K2 那一族要的正是这个）；
+ *   **传了就对整份产出文本换一次**（读不到的名字换成 `PLAYER_NAME_UNKNOWN` 记号 ⇒ 下游形状闸必然挡住它）。
+ *   ★为什么是"出口换一次"而不是"入口逐条换"：探测期 `labelOf` 那一族还要用来**配对**
+ *     （壳声明的标题 ↔ 条目题名），两边口径必须一样，只给一半加替换会让声明面整个配不上。
+ *   ⇒ 本文件内部一律读原文，**出口才换**——这样"选哪些条目"这件事一个字节都不受影响。
  * @returns {{ok:boolean, text?:string, label?:string, usedChars?:number, truncated?:boolean,
  *            worldName?:string, entryCount?:number, pieceCount?:number, catalog?:object, reason?:string}}
  */
-export function composeInitSource({ character = null, worldInfoEntries = [], budget = INIT_SOURCE_HARD_CEILING, includeDeclared = true } = {}) {
+export function composeInitSource({ character = null, worldInfoEntries = [], budget = INIT_SOURCE_HARD_CEILING, includeDeclared = true, macroNames = null } = {}) {
     const worldName = typeof character?.name === 'string' && character.name.trim() ? character.name.trim() : '';
 
     const parts = [];
@@ -483,7 +511,11 @@ export function composeInitSource({ character = null, worldInfoEntries = [], bud
 
     return {
         ok: true,
-        text: used.join('\n'),
+        // ★★★leg148：**出口换一次**——整份产出文本里的酒馆宏在这里统一换成真名。
+        //   `macroNames` 缺省 null ⇒ `macroSub` 原样返回 ⇒ **逐字节回到今天**（零漂移）。
+        //   ★`usedChars` 报的是**换之前**的长度：换名会改字符数（`{{user}}` 9 字 → 真名 2–3 字），
+        //     而那个数是"这份书文多长"的读数，跟"装不装得下"无关（预算那一步早在上面的循环里判完）。
+        text: macroSub(used.join('\n'), macroNames),
         label: '自动合订（角色卡 + 世界信息/内置世界书）',
         usedChars: total,
         truncated: total < allLen,

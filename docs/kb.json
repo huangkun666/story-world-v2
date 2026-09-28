@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "44a4aa16-d7b6c977",
+  "fingerprint": "7b90c26a-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "44a4aa16",
+  "sourceFingerprint": "7b90c26a",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -99,6 +99,7 @@
     "docs/session-handoff-2026-09-28-leg145-mobile.md",
     "docs/session-handoff-2026-09-28-leg145b-publish-and-own-errors.md",
     "docs/session-handoff-2026-09-28-leg146-worldside-state.md",
+    "docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md",
     "docs/spec-b2-chronicle-via-recall.md",
     "docs/spec-chat-ledger-conflict.md",
     "docs/spec-chronicle-in-pack.md",
@@ -154,6 +155,7 @@
     "src/ledger-recall.js",
     "src/limits.js",
     "src/lines.js",
+    "src/macros.js",
     "src/observatory.js",
     "src/pack.js",
     "src/panorama.js",
@@ -201,6 +203,7 @@
     "web/status-bar.js",
     "web/view-state.js",
     "web/volume-popup.js",
+    "web/world-entity-migration.js",
     "web/world-replace.js"
   ],
   "facts": {
@@ -209,13 +212,16 @@
     "mainPromptV": "v2-agenda-t1-30",
     "cssVersion": "20260927-leg145-mobile",
     "version": "1.0.0",
-    "srcModules": 47,
-    "webModules": 18,
-    "tests": 116,
+    "srcModules": 48,
+    "webModules": 19,
+    "tests": 117,
     "demos": 76,
-    "docs": 161,
-    "latestHandoff": "session-handoff-2026-09-28-leg146-worldside-state.md",
+    "docs": 162,
+    "latestHandoff": "session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md",
     "lastCommits": [
+      "3d283b6 story-world-v2 leg147 交接：对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案（一行代码没动）",
+      "ce9f72c story-world-v2 leg147 发布记账：发布点读数跟到 32c8e39（★按规矩不重推）",
+      "7a9f49e story-world-v2 leg147：README 里五处过时的话改成现在的实情",
       "af487d6 story-world-v2 leg146 发布记账：v1.0.0 正式版（tag -> 778af70）与发布点读数；★按规矩不再重推",
       "c59156f story-world-v2 leg146 发布记账：发布点常数跟到 2d66e01（STATE.md §1 同行）",
       "3ea296c story-world-v2 leg146：账上改成了什么，真的递到聊天模型手里",
@@ -224,26 +230,23 @@
       "5332da6 story-world-v2 leg145b：状态条那行字重新属于这个插件（未捕获异常分流：自家的进状态条、别人的只进控制台）",
       "de74e41 story-world-v2 发布：另打 tag `v1.0.0-preview.2` ＋ 建新 release（面板 leg145-mobile）",
       "8005fac story-world-v2 发布记账：把\"当前发布点\"更新到 leg145-mobile（`15cd9e5`）",
-      "e9bddca story-world-v2 发布流程修复：打通\"导出件里跑守门\"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）",
-      "ecb38db story-world-v2 leg129–leg145：长期记忆与检索收口 → 面板七页重排 → 抽取并发 → 手机端适配（17 棒一次提交）",
-      "faad1f5 story-world-v2 leg128：把上下文那条链打通（含多因点）＋ 修掉逐行量包那个性能病",
-      "852aa5b story-world-v2 leg128：上下文设计总稿（散稿整合成一份 · 「一条线在包里长什么样」定案 · 砍掉四件没用的设计）"
+      "e9bddca story-world-v2 发布流程修复：打通\"导出件里跑守门\"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）"
     ]
   },
   "counts": {
-    "cards": 258,
+    "cards": 262,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
       "待拍板": 4,
       "缺口": 19,
-      "交接": 93,
+      "交接": 94,
       "细案": 25,
       "索引": 2,
       "知识库": 11,
-      "当前值": 17,
+      "当前值": 18,
       "怎么跑": 2,
-      "代码地图": 66
+      "代码地图": 68
     }
   },
   "cards": [
@@ -345,7 +348,7 @@
       "title": "STATE.md · 2. 红线与规矩（逐字搬家，不许改写）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 72,
+      "line": 73,
       "where": "> **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。**",
       "keys": [
         "STATE",
@@ -376,7 +379,7 @@
       "title": "STATE.md · 3.  未决事项（唯一一份活儿清单）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 134,
+      "line": 135,
       "where": "> 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写\"已办结（哪棒）\"。",
       "keys": [
         "STATE",
@@ -407,8 +410,8 @@
       "title": "STATE.md · 4. 上一棒",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 175,
-      "where": "- **本次**（2026-09-28 · **发布补齐 ＋ leg145b**）：用户令「**把所有更新推送到远端**」⇒ 查明\"远端\"两条路",
+      "line": 176,
+      "where": "- **本次**（2026-09-28 · **对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案**）：起点是他要发的**宣传文案**",
       "keys": [
         "STATE",
         "入口",
@@ -488,7 +491,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 371,
+      "line": 378,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -4656,6 +4659,38 @@
       ]
     },
     {
+      "id": "handoff#147",
+      "title": "交接 leg147（2026-09-28）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1. 用户原话（逐字） ／ 2.2 发布 ／ 4. 硬读数（哪些是亲手验的） ／ 5.  本笔最值钱的四条 ／ ④ 他会当场把方向拽正，而且拽得对（第二次了） ／ 6.  如实登记（本笔的边界，别把没做的当做了） ／ 7.  下一任做什么（活儿单）",
+      "keys": [
+        "交接",
+        "leg147",
+        "2026-09-28",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md",
+        "0. 一句话",
+        "1. 用户原话（逐字）",
+        "2. 交付 A：README 五处过时的话 ＋ 一次发布跟上（已提交、已推）",
+        "2.1 改了什么（五处，全是文字；产品代码一个字节没动）",
+        "2.2 发布",
+        "3. 交付 B：「世界时报」细案（没落盘 · 一行代码没动）",
+        "4. 硬读数（哪些是亲手验的）",
+        "5.  本笔最值钱的四条",
+        "① 对外文案是唯一没有判据看着的地方——所以它最容易变成假话",
+        "② \"从别的插件看来的新功能\"，可能正是你自己删过的东西",
+        "③ \"生产有了、消费没有\"这层窗户纸，是用户一句追问捅破的",
+        "④ 他会当场把方向拽正，而且拽得对（第二次了）",
+        "6.  如实登记（本笔的边界，别把没做的当做了）",
+        "7.  下一任做什么（活儿单）",
+        "8. 别做的事"
+      ]
+    },
+    {
       "id": "spec#b2-chronicle-via-recall",
       "title": "细案 b2-chronicle-via-recall",
       "kind": "细案",
@@ -5832,7 +5867,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 47,
-      "where": "**1395 / 1395 · fail 0 · skipped 0 · todo 0**（★leg146 加 **+5**；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
+      "where": "**1416 / 1416 · fail 0 · skipped 0 · todo 0**（★leg148 加 **+21**——社区用户报的\"宏变成人\"那个 bug；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
       "keys": [
         "当前值",
         "读数",
@@ -6156,11 +6191,44 @@
       ]
     },
     {
+      "id": "value#★leg148：",
+      "title": "当前值 · ★leg148：酒馆宏不是人",
+      "kind": "当前值",
+      "src": "STATE.md",
+      "line": 57,
+      "where": "世界书原文里的 `{{user}}`／`{{char}}` **送出抽取前就换成真名**（读不到真名 ⇒ 只挡不猜）；纯占位符形状的**名号不许入册、不许入局**；存量局那枚\"宏做的你\"**并回棋子**（引用一起搬：`playerId`／` ｜ 复量：`src/init-source.js` · `src/abstract.js` · `src/settle.js` · `web/index.js` · `w",
+      "keys": [
+        "当前值",
+        "读数",
+        "判据",
+        "构建号",
+        "行数",
+        "★leg148：酒馆",
+        "STATE.md",
+        "STATE · story-world v2 现状（接手第一入口）",
+        "0. 三十秒版：这台东西是什么",
+        "0.5  活儿在哪（接手第一件事）",
+        "1.  当前权威读数（唯一出处）",
+        "2. 红线与规矩（逐字搬家，不许改写）",
+        "2.1 最高准则：没命令，不准动一个字节（用户 2026-09-11 立）",
+        "2.2 四条不可越的线",
+        "2.3 动手前的规矩（六条）",
+        "2.4 待办纪律（leg106 立，治\"任务堆积\"）",
+        "3.  未决事项（唯一一份活儿清单）",
+        "等你拍板的（2 条）",
+        "下一笔：待你点头（都是待选项、不是命令）",
+        "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
+        "4. 上一棒",
+        "5. 现场（本机）",
+        "5.1 发布流程"
+      ]
+    },
+    {
       "id": "value#CSS_VERS",
       "title": "当前值 · CSS_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 57,
+      "line": 58,
       "where": "**`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`）",
       "keys": [
         "当前值",
@@ -6193,7 +6261,7 @@
       "title": "当前值 · MAIN_PROMPT_V",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 58,
+      "line": 59,
       "where": "**`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补\"时间那一栏怎么读 ＋ 每件事各自写 at\"）",
       "keys": [
         "当前值",
@@ -6226,8 +6294,8 @@
       "title": "当前值 · web/index.js 行数",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 59,
-      "where": "**3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**：本仓 LF-only）",
+      "line": 60,
+      "where": "**3096 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg148 **+14**——并回宏实体那一族搬去 `web/world-entity-migrat ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**：本仓 LF-only）",
       "keys": [
         "当前值",
         "读数",
@@ -6259,8 +6327,8 @@
       "title": "当前值 · 发布仓 main",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 60,
-      "where": "**`778af70`** · 构建号 **`leg145b-own-errors`**（leg146 那一笔＋其后一笔\"读数跟上\"） ｜ 复量：`node scripts/verify-release.mjs`",
+      "line": 61,
+      "where": "**`32c8e39`** · 构建号 **`leg145b-own-errors`**（leg147：README 五处过时的话） ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",
@@ -6292,7 +6360,7 @@
       "title": "当前值 · release tag",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 61,
+      "line": 62,
       "where": "★**`v1.0.0` → `778af70`（leg146 · 正式版，`prerelease:false`）** · 旧 `preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原样不动** ｜ 复量：`node scripts/verify-release.mjs`（会联网）· 一次性装置 `F:/deepseek/tmp/leg146/leg146-tag",
       "keys": [
         "当前值",
@@ -6325,7 +6393,7 @@
       "title": "当前值 · 发布点读数的语义（leg124 立）",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 62,
+      "line": 63,
       "where": "**\"已发布到哪一版\"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audit-docs.mjs ｜ 复量：守门 R8",
       "keys": [
         "当前值",
@@ -6358,7 +6426,7 @@
       "title": "当前值 · 版本号",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 63,
+      "line": 64,
       "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js`",
       "keys": [
         "当前值",
@@ -6689,6 +6757,21 @@
         "src",
         "lines",
         "lines.js"
+      ]
+    },
+    {
+      "id": "file#src/macros.js",
+      "title": "src/macros.js",
+      "kind": "代码地图",
+      "src": "src/macros.js",
+      "line": 1,
+      "where": "story-world-v2/src/macros.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "macros",
+        "macros.js"
       ]
     },
     {
@@ -7397,6 +7480,21 @@
       ]
     },
     {
+      "id": "file#web/world-entity-migration.js",
+      "title": "web/world-entity-migration.js",
+      "kind": "代码地图",
+      "src": "web/world-entity-migration.js",
+      "line": 1,
+      "where": "story-world-v2/web/world-entity-migration.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "world-entity-migration",
+        "world-entity-migration.js"
+      ]
+    },
+    {
       "id": "file#web/world-replace.js",
       "title": "web/world-replace.js",
       "kind": "代码地图",
@@ -7413,7 +7511,7 @@
     },
     {
       "id": "test#all",
-      "title": "判据在哪（test/ 共 116 个 *.test.js）",
+      "title": "判据在哪（test/ 共 117 个 *.test.js）",
       "kind": "代码地图",
       "src": "test",
       "line": 1,
@@ -7469,6 +7567,7 @@
         "location-inherit-wiring",
         "long-task",
         "lookup-batch",
+        "macro-placeholder",
         "mobile-layout",
         "model-catalog",
         "model-channel",

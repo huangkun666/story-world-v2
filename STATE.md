@@ -44,7 +44,7 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **1395 / 1395 · fail 0 · skipped 0 · todo 0**（★leg146 加 **+5**；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
+| 判据 | **1416 / 1416 · fail 0 · skipped 0 · todo 0**（★leg148 加 **+21**——社区用户报的"宏变成人"那个 bug；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
 | 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0** | `node demo/smoke-demo.js` |
 | `PANEL_BUILD` | **`leg145b-own-errors`** | `src/render-base.js`（★leg145b 升：**异常分流**——只有自家的错进状态条） |
 | ★手机端 | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ 视口高 **`100dvh`** · 浮层**整屏** · 手机上 <12px 的小字**整批抬到 12px**。★**版面**走 `≤620px`、**手感**走 `(pointer:coarse)`（鼠标不匹配 ⇒ **桌面零改动**） | `web/style.css` 末尾两条媒体查询（★620 那条**搬到了文件末尾**：它原来写在基础规则前面 ⇒ **一直是死的**）· 判据 `test/mobile-layout.test.js`（8 条，含棘轮） |
@@ -54,10 +54,11 @@
 | ★leg137 时间那条链 | **① 解析器**两级尝试（真机 **0 条**，留作保险）。**② 时间**：`newEvents[]` 多一格 **`at`** ＋ 包里多**「时间」一栏** ＋ `纪事`/`相关往事` 带 `timeMark`；★**引擎不替模型顺延** | `src/tag-extract.js` · `src/schemas/world-step.schema.js` · `src/settle.js` · `src/pack.js` · `src/prompts.js` |
 | ★leg141/141b：窗口 ＋ **关系网** | 窗口 **984px** · 事迹拆两格 · ★★★**初始化第一次把书里明写的关系种进账**（`ssot.relations` **24 条**，**24/24 反查书有据**）· **麾下**（最多 **12 人** ⇒ 不收上限）· **层级只当边读，绝不写进 `relations`**；★world-step 提议**仍必带因**。逐条 ⇒ `docs/done-archive.md` | `src/abstract.js` · `src/schemas/ssot.schema.js` · `src/fingerprint.js` · `web/entity-window.js` · `src/pack.js` |
 | ★leg139：通道 ＋ 回档 ＋ 两道闸 | **模型调用走 `XMLHttpRequest`**（页面 `fetch` 可能被别的扩展换掉）· **回档**：`requestSnapshot` 曾把"锚点世界"记成"当前世界"（已修）· **两道机械闸**：起根"书里原话"必须真在书文里 · `canon.settings` 过名册那道出处校验。逐条 ⇒ `docs/done-archive.md` | `src/transport-http.js` · `web/snapshot-store.js` · `src/seed-roots.js` · `src/abstract.js` |
+| ★leg148：**酒馆宏不是人** | 世界书原文里的 `{{user}}`／`{{char}}` **送出抽取前就换成真名**（读不到真名 ⇒ 只挡不猜）；纯占位符形状的**名号不许入册、不许入局**；存量局那枚"宏做的你"**并回棋子**（引用一起搬：`playerId`／`agendas[].owner`／`relations` 两端）。★新家 `src/macros.js`（那把尺子）＋ `web/world-entity-migration.js`（存量局） | `src/init-source.js` · `src/abstract.js` · `src/settle.js` · `web/index.js` · `web/book-source.js` · 判据 `test/macro-placeholder.test.js`（21 条） |
 | `CSS_VERSION` | **`20260927-leg145-mobile`** | `web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-30`** | `src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
-| `web/index.js` 行数 | **3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
-| 发布仓 main | **`778af70`** · 构建号 **`leg145b-own-errors`**（leg146 那一笔＋其后一笔"读数跟上"） | `node scripts/verify-release.mjs` |
+| `web/index.js` 行数 | **3096 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg148 **+14**——并回宏实体那一族搬去 `web/world-entity-migration.js` 之后仍净增，余量只剩 **4 行**） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
+| 发布仓 main | **`32c8e39`** · 构建号 **`leg145b-own-errors`**（leg147：README 五处过时的话） | `node scripts/verify-release.mjs` |
 | release tag | ★**`v1.0.0` → `778af70`（leg146 · 正式版，`prerelease:false`）** · 旧 `preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原样不动** | `node scripts/verify-release.mjs`（会联网）· 一次性装置 `F:/deepseek/tmp/leg146/leg146-tag-release.mjs` |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audit-docs.mjs` 顶部 | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） | `test/browser-compat.test.js` |
@@ -174,16 +175,15 @@
 
 ## 4. 上一棒
 
-- **本次**（2026-09-28 · **发布补齐 ＋ leg145b**）：用户令「**把所有更新推送到远端**」⇒ 查明"远端"两条路
-  （★monorepo `origin/main` **推不得**：本地历史里仍有 8 份私有对局快照）⇒ 他拍**发布仓**。
-  ★**leg129–leg145 十七棒此前一个字节都没提交** ⇒ 一次提交 ⇒ `--dry-run` **咬出发布流程两处断点**
-  （`kb/` 不进发布树却进了索引指纹 · 生成物**现读 git** 而导出件没有 git）⇒ 修 ⇒ 上线
-  （`leg105-deadpager` → **`leg145-mobile`**，现 **`0622ca2`**）＋ tag **`v1.0.0-preview.2`**。
-  ★另一件：手机端那条 `SpeechSynthesisUtterance is not defined` **是 ST 自带 TTS 抛的、本插件只是替它背锅**
-  ⇒ 他选「**就第三个**」⇒ **leg145b**（判据 1384 → 1390 · 冒烟 8351 逐字节未变）。全文与活儿单 ⇒
-  `docs/session-handoff-2026-09-28-leg145b-publish-and-own-errors.md`。
-- **上一棒**（2026-09-28 · **手机端适配**）⇒ `docs/session-handoff-2026-09-28-leg145-mobile.md`
-  （★它的 §7① 真机验收**仍未做**）。
+- **本次**（2026-09-28 · **对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案**）：起点是他要发的**宣传文案**
+  ⇒ 逐条对账**当场照出一段讲的是六周前已删的记忆通道**（还带 Discord 链接叫用户去开一个不存在的开关）
+  ⇒ README 五处过时的话改掉、推发布仓（`778af70` → **`32c8e39`**，逐字节 8/8）＋ 发布点读数跟上
+  （**只落本地、不重推**）。★后半是设计讨论：**「世界时报」细案**（把"世界整体"这一层接到账上已有的
+  `天时`/`乱象` 两把尺上）——**只在对话里、没落盘、一行代码没动**；顺带查明这两格是"**生产有了、消费没有**"。
+  ★他收尾**当场点了两处鸡肋**（大事纪 · 卷）。全文与活儿单 ⇒
+  `docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md`。
+- **上一棒**（2026-09-28 · **账上改成了什么，真的递到模型手里**）⇒
+  `docs/session-handoff-2026-09-28-leg146-worldside-state.md`（★它的 §6 那批真机验收**仍未做**）。
 - **更早的** ⇒ `docs/done-archive.md`（**存档，不是待办**）。
 
 ---

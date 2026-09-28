@@ -9,26 +9,26 @@
     "panelVersion": "1.0.0"
   },
   "current": {
-    "tests": "1395/1395",
+    "tests": "1416/1416",
     "smokeBytes": 8351,
     "panelBuild": "leg145b-own-errors",
     "cssVersion": "20260927-leg145-mobile",
     "mainPromptV": "v2-agenda-t1-30",
-    "webIndexLines": 3082,
+    "webIndexLines": 3096,
     "webIndexLineLock": 3100
   },
   "docs": {
-    "stateBytes": 19454,
+    "stateBytes": 20141,
     "startHereBytes": 292796,
     "frozenIndexBytes": 326960,
     "ledgerFullBytes": 978029,
-    "docsFiles": 213,
-    "docsBytesLf": 6122313,
+    "docsFiles": 214,
+    "docsBytesLf": 6160067,
     "docsCountNote": "★不含生成物 docs/index.json 自己（自指计数会让文件永不收敛——见 §⑤ 留档）；★字节按 **LF 归一**数（读进来减掉 CRLF 的字节）：判据锁着它，而检出状态（CRLF/LF）因机而异，不该把\"结账机怎么结账\"算进文档体积（实测差异：leg105 交接 CRLF 12532B vs LF 12387B，正好差它的 145 个 CRLF）。",
-    "handoffsRoot": 93,
+    "handoffsRoot": 94,
     "handoffsArchive": 34,
     "latestLedgerLeg": 125,
-    "latestHandoffLeg": 146
+    "latestHandoffLeg": 147
   },
   "release": {
     "repo": "huangkun666/story-world-v2",
@@ -37,8 +37,8 @@
       "build": "leg145b-own-errors",
       "tag": "v1.0.0",
       "tagCommit": "778af70",
-      "commit": "778af70",
-      "commitRef": "778af70",
+      "commit": "32c8e39",
+      "commitRef": "32c8e39",
       "date": "2026-09-28"
     },
     "note": "★**\"已发布到哪一版\"这个读数只有 `STATE.md` §1 是人核过的真值**（本文件没有网络，也不知道远端现在是什么）。这里两格分得很清：`sourceBuild` = 源码现在的号（现读，随改随变）；`published` = 人上次核过的发布点（常数，改它 = 一次发布）。远端真值一律用 node scripts/verify-release.mjs 核。"

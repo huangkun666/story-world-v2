@@ -25,6 +25,7 @@ import { resolveLimits, EVENT_CAP_PER_TICK, AGENDA_CAP_PER_TICK, AGENDA_CAP_TOP_
 //   ⚠必须是 `import` + `export` 两句——`export { X } from './y.js'` **不建立本地绑定**（本棒实测：
 //   只写 re-export 时模块内 `normalizePosition is not defined`，被新用例当场抓红）。
 import { normalizePosition } from './position.js';
+import { isMacroPlaceholder } from './macros.js';   // ★leg148：酒馆占位符不是一个名字（入局那道门）
 export { normalizePosition };
 // ★★★leg74 立、leg75 推广（用户令「把这些全给我删干净了」）：**"不算世界"的那几类不进法则账**
 //   （`文风禁令` / `变量指令` / `其他`——丢弃集唯一定义在 `abstract-tier.js` 的 `RULE_CLASSES_DROP`）。
@@ -881,12 +882,24 @@ function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate
 //   （`= resolveLimits(world)`：账上设了按账上、没设回出厂 1 ⇒ 逐字不变）。
 //   为什么过去那个理由不成立：注释写的是"一次调太多，每个都得重跑基线"——那是**保守**，
 //   而真账里它会咬人：模型一轮提两个新人 ⇒ 第二个直接拒（"入局限额"那条裁定就是这个）。
-function spawnEntities(world, gstep, tick, warnings, chronicle, lim = { 每轮入局: ENTITY_BIRTH_PER_TICK }) {
+// ★★★leg148：**导出供判据真跑**（照 `STATE.md` §2.3 第 6 条"接线必须有测试：真跑或注入 fake ctx"）。
+//   它是纯函数（世界由形参递进来、就地改、返回 born 清单），不碰 IO/时钟 ⇒ 直接调用即可真验。
+//   本笔要验的那一条：**模型提议一枚叫 `{{user}}` 的实体时，这道门必须丢它**（宏不是一个名字）。
+export function spawnEntities(world, gstep, tick, warnings, chronicle, lim = { 每轮入局: ENTITY_BIRTH_PER_TICK }) {
     const born = [];
     const cap = Number(lim?.每轮入局) > 0 ? Number(lim.每轮入局) : ENTITY_BIRTH_PER_TICK;
     for (const ne of gstep.newEntities || []) {
         if (born.length >= cap) {
             warnings.push(`裁定: 入局限额（每 tick 新生 ≤${cap}）：「${ne.name}」被拒`);
+            continue;
+        }
+        // ★★★leg148：**酒馆的宏不是一个名字**（社区用户报的：账上多出一条叫 `{{user}}` 的角色）。
+        //   这里是"人入局"的那道门 ⇒ 与 `sanitizeCanon` 的册子门**同一把尺子**（一处定义在 `src/macros.js`）。
+        //   为什么只挡不猜：读不到玩家真名时**绝不替它编一个名字**（红线 2：空着就是空着）；
+        //   而"该不该把宏换成真名"是**送进抽取之前**那一步的事（`composeInitSource` 出口），
+        //   到了这里还带着宏 ⇒ 它就不该是一枚实体。
+        if (isMacroPlaceholder(ne.name)) {
+            warnings.push(`提议丢弃: 「${ne.name}」是酒馆占位符（不是一个名字，不建实体）`);
             continue;
         }
         if (world.entities.some((e) => e.name === ne.name)) {

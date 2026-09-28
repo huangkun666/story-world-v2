@@ -33,6 +33,7 @@
 //     seed 入账 schema PASS；「渡虚帝.Organs=界渊长城/须弥界域」照旧出名。
 // ============================================================================================
 import { bookFingerprint } from './fingerprint.js';
+import { isMacroPlaceholder } from './macros.js';   // ★leg148：酒馆占位符不是一个名字（实体名那一格）
 import { PARAM_GEARS, PARAM_KEYS, normalizeParam } from './params.js';
 // leg24 片2：不再从 settle 借 ENTITY_ATTR_DEFAULT（该常量已删）——名册入账不预填数值
 import { computeWeight } from './weight.js';
@@ -1488,6 +1489,13 @@ export function sanitizeCanon(raw, { sourceText = '' } = {}) {
             if (!it || typeof it !== 'object') { errors.push('bookEntities 含非对象项（已弃）'); continue; }
             const name = String(it.name ?? '').trim();
             if (!name) { errors.push('bookEntities 项缺 name（已弃）'); continue; }
+            // ★★★leg148：**酒馆的宏不是一个名字**（社区用户报的：账上多出一条叫 `{{user}}` 的角色）。
+            //   为什么只能在这里挡：`{{user}}` **真的在原文里** ⇒ 出处闸放行（它拦的是"编造"，
+            //   不拦"抄了个宏"）——这与 `FIELD_KEY_RE` 上面那段注释说的是**同一件事**
+            //   （「占位符那一条与 §D 的 `<user>` 同族：它真的在原文里，所以出处闸抓不住它」）。
+            //   ★上次那一格加在**键名**上，这次补在**实体名**上。
+            //   ★口径（红线 2：空着就是空着）：**只挡、不猜**——绝不替它编一个名字。
+            if (isMacroPlaceholder(name)) { errors.push(`bookEntities 名号是酒馆占位符（不入册）：${name}`); continue; }
             // ★leg60：同名重复不再"整条丢"——**别名并进已收的那条**（"缺什么补什么"同款）。
             //   旧法只 `continue`：模型在同一块里把 `曹操` 出两次、别名各带一半（孟德 / 阿瞒）时，
             //   第二条被整条丢弃 ⇒ 半个别名表消失（而别名正是跨块归一的唯一输入）。

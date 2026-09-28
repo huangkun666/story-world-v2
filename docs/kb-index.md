@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**258 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `44a4aa16-d7b6c977`（源文件 44a4aa16 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**262 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `7b90c26a-d7b6c977`（源文件 7b90c26a · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -14,8 +14,8 @@
 | 构建号 | `leg145b-own-errors` |
 | 提示词号 | `v2-agenda-t1-30` |
 | 版本 | `1.0.0`（ST 扩展） |
-| 规模 | src **47** · web **18** · 判据 **116** · 探针 **76** · 文档 **161** |
-| 最新交接 | `session-handoff-2026-09-28-leg146-worldside-state.md` |
+| 规模 | src **48** · web **19** · 判据 **117** · 探针 **76** · 文档 **162** |
+| 最新交接 | `session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md` |
 
 ## 卡片（按类分组）
 
@@ -26,9 +26,9 @@
 | STATE.md · 0. 三十秒版：这台东西是什么 | `STATE.md:13` | 一个跑在 SillyTavern 里的**活世界引擎**。你每推进一步 RP，世界演化一步：势力与角色按自己的盘算行动，事件从行动里长出来、带因果。 |
 | STATE.md · 0.5  活儿在哪（接手第一件事） | `STATE.md:29` | ／ 你要知道的 ／ 只看这一处 ／ |
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:40` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
-| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:72` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
-| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:134` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 上一棒 | `STATE.md:175` | - **本次**（2026-09-28 · **发布补齐 ＋ leg145b**）：用户令「**把所有更新推送到远端**」⇒ 查明"远端"两条路 |
+| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:73` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
+| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:135` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
+| STATE.md · 4. 上一棒 | `STATE.md:176` | - **本次**（2026-09-28 · **对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案**）：起点是他要发的**宣传文案** |
 | STATE.md · 5. 现场（本机） | `STATE.md:191` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`，**不是** `F:\deepseek`；分支 **`main`**——★ |
 
 ### 活儿（12）
@@ -36,7 +36,7 @@
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
 | 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:371` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:378` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -81,7 +81,7 @@
 | 缺口 E2 | `docs/session-handoff-2026-09-22-leg109b-defects.md:122` | 名册只列活人 ⇒ 账上死了的人从聊天模型视野里整个消失；而给世界模型的"离场名册"不报死没死（有意为之，防编事实） |
 | 缺口 E3 | `docs/session-handoff-2026-09-22-leg109b-defects.md:123` | 同一人的 实力 两边可以不同（账本可改、聊天模型看到的是书里原值） |
 
-### 交接（93）
+### 交接（94）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -178,6 +178,7 @@
 | 交接 leg145（2026-09-28） | `docs/session-handoff-2026-09-28-leg145-mobile.md:1` | 0. 一句话 ／ 1. 用户原话（逐字） ／ 2. 交付：本笔改了什么（逐文件） ／ 3. 硬读数（哪些是亲手验的） ／ 4.  本笔最值钱的三条 ／ 5.  我栽的三跤（如实登记） ／ 跤一：装置骗了我一次——四张截图 |
 | 交接 leg145（2026-09-28） | `docs/session-handoff-2026-09-28-leg145b-publish-and-own-errors.md:1` | 0. 一句话 ／ 1. 用户原话（逐字） ／ 2. 交付：本笔改了什么（逐文件） ／ 3. 硬读数（哪些是亲手验的） ／ 4.  本笔最值钱的六条 ／ ② 未提交的工作会挡住一切下游动作 ／ ④ "看起来像失职的"，先查 |
 | 交接 leg146（2026-09-28） | `docs/session-handoff-2026-09-28-leg146-worldside-state.md:1` | 1. 用户原话（逐字） ／ ③ 两处顺手查出的同族缺陷（同一段里的） ／ 3. 治法（逐文件） ／ 4. 硬读数（哪些是亲手验的） ／ 5.  本棒最值钱的四条 ／ ① 用户以为已经生效的那一半，可能从来没印出来过 ／  |
+| 交接 leg147（2026-09-28） | `docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md:1` | 0. 一句话 ／ 1. 用户原话（逐字） ／ 2.2 发布 ／ 4. 硬读数（哪些是亲手验的） ／ 5.  本笔最值钱的四条 ／ ④ 他会当场把方向拽正，而且拽得对（第二次了） ／ 6.  如实登记（本笔的边界，别把没做 |
 
 ### 细案（25）
 
@@ -232,11 +233,11 @@
 | 知识库 09-glossary · 术语表 | `kb/09-glossary.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
 | 知识库机器可读索引（kb-index.json） | `kb/kb-index.json:1` | 文件 / 符号 / 术语 / 决策 / 红线 / 流水线阶段（★快照，会过期） |
 
-### 当前值（17）
+### 当前值（18）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:47` | **1395 / 1395 · fail 0 · skipped 0 · todo 0**（★leg146 加 **+5**；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --tes |
+| 当前值 · 判据 | `STATE.md:47` | **1416 / 1416 · fail 0 · skipped 0 · todo 0**（★leg148 加 **+21**——社区用户报的"宏变成人"那个 bug；逐棒增减 ⇒ `docs/done-archive. |
 | 当前值 · 冒烟 | `STATE.md:48` | **PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js` |
 | 当前值 · PANEL_BUILD | `STATE.md:49` | **`leg145b-own-errors`** ｜ 复量：`src/render-base.js`（★leg145b 升：**异常分流**——只有自家的错进状态条） |
 | 当前值 · ★手机端 | `STATE.md:50` | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ 视口高 **`100dvh`** |
@@ -246,13 +247,14 @@
 | 当前值 · ★leg137 时间那条链 | `STATE.md:54` | **① 解析器**两级尝试（真机 **0 条**，留作保险）。**② 时间**：`newEvents[]` 多一格 **`at`** ＋ 包里多**「时间」一栏** ＋ `纪事`/`相关往事` 带 `timeMark`； |
 | 当前值 · ★leg141/141b：窗口 ＋ 关系网 | `STATE.md:55` | 窗口 **984px** · 事迹拆两格 · ★★★**初始化第一次把书里明写的关系种进账**（`ssot.relations` **24 条**，**24/24 反查书有据**）· **麾下**（最多 **12 人** |
 | 当前值 · ★leg139：通道 ＋ 回档 ＋ 两道闸 | `STATE.md:56` | **模型调用走 `XMLHttpRequest`**（页面 `fetch` 可能被别的扩展换掉）· **回档**：`requestSnapshot` 曾把"锚点世界"记成"当前世界"（已修）· **两道机械闸**：起根" |
-| 当前值 · CSS_VERSION | `STATE.md:57` | **`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
-| 当前值 · MAIN_PROMPT_V | `STATE.md:58` | **`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
-| 当前值 · web/index.js 行数 | `STATE.md:59` | **3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） ｜ |
-| 当前值 · 发布仓 main | `STATE.md:60` | **`778af70`** · 构建号 **`leg145b-own-errors`**（leg146 那一笔＋其后一笔"读数跟上"） ｜ 复量：`node scripts/verify-release.mjs` |
-| 当前值 · release tag | `STATE.md:61` | ★**`v1.0.0` → `778af70`（leg146 · 正式版，`prerelease:false`）** · 旧 `preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原 |
-| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:62` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audi |
-| 当前值 · 版本号 | `STATE.md:63` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
+| 当前值 · ★leg148：酒馆宏不是人 | `STATE.md:57` | 世界书原文里的 `{{user}}`／`{{char}}` **送出抽取前就换成真名**（读不到真名 ⇒ 只挡不猜）；纯占位符形状的**名号不许入册、不许入局**；存量局那枚"宏做的你"**并回棋子**（引用一起搬：`p |
+| 当前值 · CSS_VERSION | `STATE.md:58` | **`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
+| 当前值 · MAIN_PROMPT_V | `STATE.md:59` | **`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
+| 当前值 · web/index.js 行数 | `STATE.md:60` | **3096 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg148 **+14**——并回宏实体那一族搬去 `web/world-ent |
+| 当前值 · 发布仓 main | `STATE.md:61` | **`32c8e39`** · 构建号 **`leg145b-own-errors`**（leg147：README 五处过时的话） ｜ 复量：`node scripts/verify-release.mjs` |
+| 当前值 · release tag | `STATE.md:62` | ★**`v1.0.0` → `778af70`（leg146 · 正式版，`prerelease:false`）** · 旧 `preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原 |
+| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:63` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audi |
+| 当前值 · 版本号 | `STATE.md:64` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
 
 ### 怎么跑（2）
 
@@ -261,7 +263,7 @@
 | 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:47` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
 | 怎么发布（导出独立根树 → 仓外跑判据冒烟 → 推 → 远端逐字节核） | `scripts/publish-release.mjs:1` | node scripts/publish-release.mjs（推）· node scripts/verify-release.mjs（远端只读终检） |
 
-### 代码地图（66）
+### 代码地图（68）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -282,6 +284,7 @@
 | src/ledger-recall.js | `src/ledger-recall.js:1` | story-world-v2/src/ledger-recall.js |
 | src/limits.js | `src/limits.js:1` | leg40b 续：尺度上限的唯一真源 + 可调档位（用户令：「能不能直接把这些闸门参数直接放进参数页？」→ 拍板"甲+乙档全开"）。 |
 | src/lines.js | `src/lines.js:1` | story-world-v2/src/lines.js |
+| src/macros.js | `src/macros.js:1` | story-world-v2/src/macros.js |
 | src/observatory.js | `src/observatory.js:1` | story-world-v2/src/observatory.js |
 | src/pack.js | `src/pack.js:1` | story-world-v2/src/pack.js |
 | src/panorama.js | `src/panorama.js:1` | story-world-v2/src/panorama.js |
@@ -329,11 +332,15 @@
 | web/status-bar.js | `web/status-bar.js:1` | story-world-v2/web/status-bar.js |
 | web/view-state.js | `web/view-state.js:1` | story-world-v2/web/view-state.js |
 | web/volume-popup.js | `web/volume-popup.js:1` | story-world-v2/web/volume-popup.js |
+| web/world-entity-migration.js | `web/world-entity-migration.js:1` | story-world-v2/web/world-entity-migration.js |
 | web/world-replace.js | `web/world-replace.js:1` | story-world-v2/web/world-replace.js |
-| 判据在哪（test/ 共 116 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
+| 判据在哪（test/ 共 117 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `3d283b6 story-world-v2 leg147 交接：对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案（一行代码没动）`
+- `ce9f72c story-world-v2 leg147 发布记账：发布点读数跟到 32c8e39（★按规矩不重推）`
+- `7a9f49e story-world-v2 leg147：README 里五处过时的话改成现在的实情`
 - `af487d6 story-world-v2 leg146 发布记账：v1.0.0 正式版（tag -> 778af70）与发布点读数；★按规矩不再重推`
 - `c59156f story-world-v2 leg146 发布记账：发布点常数跟到 2d66e01（STATE.md §1 同行）`
 - `3ea296c story-world-v2 leg146：账上改成了什么，真的递到聊天模型手里`
@@ -343,7 +350,4 @@
 - `de74e41 story-world-v2 发布：另打 tag `v1.0.0-preview.2` ＋ 建新 release（面板 leg145-mobile）`
 - `8005fac story-world-v2 发布记账：把"当前发布点"更新到 leg145-mobile（`15cd9e5`）`
 - `e9bddca story-world-v2 发布流程修复：打通"导出件里跑守门"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）`
-- `ecb38db story-world-v2 leg129–leg145：长期记忆与检索收口 → 面板七页重排 → 抽取并发 → 手机端适配（17 棒一次提交）`
-- `faad1f5 story-world-v2 leg128：把上下文那条链打通（含多因点）＋ 修掉逐行量包那个性能病`
-- `852aa5b story-world-v2 leg128：上下文设计总稿（散稿整合成一份 · 「一条线在包里长什么样」定案 · 砍掉四件没用的设计）`
 

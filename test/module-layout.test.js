@@ -294,7 +294,14 @@ test('★★leg71 丙案⑤：切割**没有引入新环**（与基线逐条对�
     //     它是本笔"20–30 分钟 → 约 10 分钟"那一刀的全部机制（抽取两遍 ＋ 起根，三处共用同一个）。
     //     ★它**不 import 任何东西**（真叶子：不认识"块""抽取""网关"——降不降并发那条策略住调用方）
     //     ⇒ 环基线照旧一条未动（这里是"加模块但没加环"的**第七个**先例）。
-    assert.equal(files.length, 49, `★src 模块数 = 49（leg71 新增 2 个：shape 与 tier；★leg85 新增 1 个：render-base；★leg89 新增 1 个：tag-extract；★leg94 新增 1 个：panorama；★leg112 新增 1 个：book-check；★leg113 新增 1 个：chronicle-brief；★leg115 新增 1 个：ledger-recall；★leg125 **删除** 2 个：memory-bridge · recall；★leg128 新增 1 个：lines；★leg144 新增 1 个：parallel-run）；实为 ${files.length} ⇒ 有人加了/删了模块，请同步本判据`);
+    //   ★★★leg148 同步（**新增 1 个** · 社区用户报的 bug：账上多出一条叫 `{{user}}` 的角色）：
+    //     `src/macros.js`＝**酒馆宏那一格**（认出纯占位符形状 ＋ 把 `{{user}}`/`{{char}}` 换成真名）。
+    //     ★它**不 import 任何东西**（真叶子：不认识账、不认识模型——只认字符串）
+    //     ⇒ 环基线照旧一条未动（这里是"加模块但没加环"的**第八个**先例）。
+    //     ★为什么它必须单独成模块：这把尺子有**两个消费者**（`init-source.js` 的合订出口
+    //     与 `abstract.js` / `settle.js` 的形状闸），而"同一个判断两处各写一份"正是本仓
+    //     为"两份规则表分叉"付过账的那个病（leg117）。
+    assert.equal(files.length, 50, `★src 模块数 = 50（leg71 新增 2 个：shape 与 tier；★leg85 新增 1 个：render-base；★leg89 新增 1 个：tag-extract；★leg94 新增 1 个：panorama；★leg112 新增 1 个：book-check；★leg113 新增 1 个：chronicle-brief；★leg115 新增 1 个：ledger-recall；★leg125 **删除** 2 个：memory-bridge · recall；★leg128 新增 1 个：lines；★leg144 新增 1 个：parallel-run；★leg148 新增 1 个：macros）；实为 ${files.length} ⇒ 有人加了/删了模块，请同步本判据`);
 });
 
 test('★leg71 丙案⑥：环检测器**不是空绿**（反向自证：塞一个真环进去，它必须报出来）', () => {
