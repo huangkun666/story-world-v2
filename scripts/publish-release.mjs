@@ -198,7 +198,7 @@ const commit = gitT(['commit-tree', rootTree, '-p', remoteSha], {
 log(`   新提交 = ${commit.slice(0, 7)}（父 = ${remoteSha.slice(0, 7)}）· 构建号 ${panelBuild}`);
 
 // ── ⑤ 推 ──────────────────────────────────────────────────────────
-log('\n⑤ 推送发布仓 main（**不带 tag**——tag/release 的语义要用户裁定，见 STATE.md §3-A）');
+log('\n⑤ 推送发布仓 main（**不带 tag**——tag 只跟 release 走，见 STATE.md §3-A）');
 // ★★leg106（实战）：本机到 github.com 的链路**时通时断**——实测同一分钟里
 //   `ls-remote` 前两次 `Failed to connect / Recv failure: Connection was reset`、后两次成功；
 //   而 `push` 头一次就是 reset。**网络抖动绝不能被读成"推送失败"**（人会以为是自己脚本写错了）。

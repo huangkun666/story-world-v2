@@ -92,7 +92,7 @@ const tags = (await api(`/repos/${REPO}/tags`)).body || [];
 const rels = (await api(`/repos/${REPO}/releases`)).body || [];
 console.log(`  ℹ tags：${tags.map((t) => `${t.name}→${t.commit.sha.slice(0, 7)}`).join(' ') || '（无）'}`);
 console.log(`  ℹ releases：${rels.map((r) => `${r.tag_name}${r.prerelease ? '(预览)' : ''}`).join(' ') || '（无）'}`);
-console.log(`  ℹ ★tag 语义未定 ⇒ 若 tag 落后于 main，**点 release 下载的人拿到的是旧面板**（见 STATE.md §3-A）`);
+console.log(`  ℹ ★tag 只跟 release 走（2026-09-28 用户拍）⇒ tag 一般落后 main 若干笔；**点 release 下载的人拿到的是"最近那个 release"那一版**，不是 main 尖端（见 STATE.md §3-A）`);
 
 console.log(`\n远端核验 ${ok + bad} 项：${ok} ✔ · ${bad} ✘`);
 process.exit(bad === 0 ? 0 : 1);
