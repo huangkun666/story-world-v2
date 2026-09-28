@@ -9,21 +9,21 @@
     "panelVersion": "1.0.0"
   },
   "current": {
-    "tests": "1384/1384",
+    "tests": "1390/1390",
     "smokeBytes": 8351,
-    "panelBuild": "leg145-mobile",
+    "panelBuild": "leg145b-own-errors",
     "cssVersion": "20260927-leg145-mobile",
     "mainPromptV": "v2-agenda-t1-30",
-    "webIndexLines": 3086,
+    "webIndexLines": 3082,
     "webIndexLineLock": 3100
   },
   "docs": {
-    "stateBytes": 19415,
+    "stateBytes": 19426,
     "startHereBytes": 292796,
     "frozenIndexBytes": 326960,
     "ledgerFullBytes": 978029,
     "docsFiles": 211,
-    "docsBytesLf": 6050092,
+    "docsBytesLf": 6050139,
     "docsCountNote": "★不含生成物 docs/index.json 自己（自指计数会让文件永不收敛——见 §⑤ 留档）；★字节按 **LF 归一**数（读进来减掉 CRLF 的字节）：判据锁着它，而检出状态（CRLF/LF）因机而异，不该把\"结账机怎么结账\"算进文档体积（实测差异：leg105 交接 CRLF 12532B vs LF 12387B，正好差它的 145 个 CRLF）。",
     "handoffsRoot": 91,
     "handoffsArchive": 34,
@@ -32,7 +32,7 @@
   },
   "release": {
     "repo": "huangkun666/story-world-v2",
-    "sourceBuild": "leg145-mobile",
+    "sourceBuild": "leg145b-own-errors",
     "published": {
       "build": "leg145-mobile",
       "tag": "v1.0.0-preview.2",

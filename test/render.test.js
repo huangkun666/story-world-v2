@@ -2431,7 +2431,13 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ⇒ 玩家可见版面真变了（而且是他用手指立刻能感到的那种）⇒ 再升一格。
     //   ★同批 `CSS_VERSION` **也升**（`web/style.css` 真动了）。
     //   ★起名避禁词：`mobile` 不在表里。
-    assert.equal(PANEL_BUILD, 'leg145-mobile');
+    // ★★★leg145b（用户实机报的）⇒ **`leg145b-own-errors`**：把"未捕获异常"**分流**——
+    //   只有**本插件自己抛的**才进状态条，别人抛的（实测：SillyTavern 自带 TTS 的
+    //   `SpeechSynthesisUtterance is not defined`）只进控制台。判别按插件根目录、从 `import.meta.url` 现算；
+    //   全文与实测见 `web/status-bar.js` 的 `isOwnError`／判据 `test/status-bar-error-scope.test.js`。
+    //   ⇒ 玩家可见的那行字真的会变（他报的就是"这行为什么是别人的"）⇒ 再升一格（补笔写法，同 `leg144b`）。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动——下面那条 `CSS_PIN` 同时咬两头）。
+    assert.equal(PANEL_BUILD, 'leg145b-own-errors');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2485,7 +2491,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '145', '前置：本笔的构建号就是 leg145（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg145 之前它是 `144b`，再之前是 `144`，再之前是 `143`，再之前是 `142`，再之前是 `141b`，再之前是 `141`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '145b', '前置：本笔的构建号就是 leg145b（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg145b 之前它是 `145`，再之前是 `144b`，再之前是 `144`，再之前是 `143`，再之前是 `142`，再之前是 `141b`，再之前是 `141`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

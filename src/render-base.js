@@ -547,7 +547,20 @@
 //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了）。
 //   ★`MAIN_PROMPT_V` **不升**（`src/prompts.js` 一行未碰）。
 //   ★起名避禁词：`mobile` 不在两张表里（`agenda`/`tick`/`ssot`/`schema`/`chronicle`/`entity`/`kind` 都不沾）。
-export const PANEL_BUILD = 'leg145-mobile';
+// ★★★leg145b（**用户实机报的**）⇒ **`leg145b-own-errors`**：**状态条那行字重新属于这个插件**。
+//   病：`web/index.js` 挂的是**全局** `window` 钩子（`error` ＋ `unhandledrejection`）
+//   ⇒ 页面上**任何人的**未捕获异常都写进本插件的状态条。实测那一回是 **SillyTavern 自带 TTS** 抛的：
+//   `public/scripts/extensions/tts/system.js` 里一段**只在手机/平板上跑**的 iOS 变通
+//   （`if (isMobile())` 之后第一次点击就裸构造 `SpeechSynthesisUtterance`、**没做能力检测**）
+//   ⇒ 手机上你点第一下页面它就 ReferenceError，而本插件**一行语音代码都没有**
+//   （全仓 `speechSynthesis` / `SpeechSynthesisUtterance` **零命中**，实测）。
+//   治法：分流口 `reportWinError` 搬进 `web/status-bar.js`（判别按**插件根目录**、从 `import.meta.url` 现算）——
+//   **自己的错进状态条，别人的错只进控制台**（★别人的也留痕："看不到"比"看错"更坏）。
+//   ⇒ 玩家可见的那行字**真的会变**（他报的就是"这行为什么是别人的"）⇒ 再升一格（补笔写法，同 `leg144b`）。
+//   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动）——判据 `CSS_PIN` 同时咬"该升"与"不该升"两头。
+//   ★`MAIN_PROMPT_V` **不升**（`src/prompts.js` 一行未碰）。
+//   ★起名避禁词：`own` / `errors` 不在两张表里。
+export const PANEL_BUILD = 'leg145b-own-errors';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

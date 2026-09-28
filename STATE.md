@@ -44,9 +44,9 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **1384 / 1384 · fail 0 · skipped 0 · todo 0**（★leg145 加 **+8**；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
+| 判据 | **1390 / 1390 · fail 0 · skipped 0 · todo 0**（★leg145b 加 **+6**；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
 | 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0** | `node demo/smoke-demo.js` |
-| `PANEL_BUILD` | **`leg145-mobile`** | `src/render-base.js`（★leg145 升：**手机端适配**——这一笔只动样式） |
+| `PANEL_BUILD` | **`leg145b-own-errors`** | `src/render-base.js`（★leg145b 升：**异常分流**——只有自家的错进状态条） |
 | ★手机端 | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ 视口高 **`100dvh`** · 浮层**整屏** · 手机上 <12px 的小字**整批抬到 12px**。★**版面**走 `≤620px`、**手感**走 `(pointer:coarse)`（鼠标不匹配 ⇒ **桌面零改动**） | `web/style.css` 末尾两条媒体查询（★620 那条**搬到了文件末尾**：它原来写在基础规则前面 ⇒ **一直是死的**）· 判据 `test/mobile-layout.test.js`（8 条，含棘轮） |
 | ★抽取并发度 | **缺省 2 路**。★**它是设置项**：设置页「模型通道」→「同时问几块」（**只设下限不设上限**，用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；★遇失败**当场退回 1 路** | `web/model-channel.js`（`SETTINGS_NUM_RANGE` 唯一真源）· 名册遍＋设定遍＋起根**共用**这一个数（`src/abstract.js` · `src/seed-roots.js`）· 机制住 `src/parallel-run.js` |
 | `包预算` 出厂值 | **50000**（leg135 抬的：用户令「我预算抬到50000token」） | `src/limits.js`（旋钮，面板可改；档位 30000/50000/60000） |
@@ -56,7 +56,7 @@
 | ★leg139：通道 ＋ 回档 ＋ 两道闸 | **模型调用走 `XMLHttpRequest`**（页面 `fetch` 可能被别的扩展换掉）· **回档**：`requestSnapshot` 曾把"锚点世界"记成"当前世界"（已修）· **两道机械闸**：起根"书里原话"必须真在书文里 · `canon.settings` 过名册那道出处校验。逐条 ⇒ `docs/done-archive.md` | `src/transport-http.js` · `web/snapshot-store.js` · `src/seed-roots.js` · `src/abstract.js` |
 | `CSS_VERSION` | **`20260927-leg145-mobile`** | `web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-30`** | `src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
-| `web/index.js` 行数 | **3086 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145 **一行没加**——那一笔只动样式 ＋ 号） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
+| `web/index.js` 行数 | **3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
 | 发布仓 main | **`2a86cfa`** · 构建号 **`leg145-mobile`**（leg129–145 一次补齐；★记账提交会再压一笔在上面） | `node scripts/verify-release.mjs` |
 | release tag | **`v1.0.0-preview.2` → `2a86cfa`（leg145）** · 旧 `preview.1`→`1a54424` 不动 | ★点 release 下载的人现在拿到 leg145（§3-A） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audit-docs.mjs` 顶部 | 守门 R8 |

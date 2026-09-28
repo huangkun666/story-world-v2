@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "5d06a5e2-d7b6c977",
+  "fingerprint": "97bd26b6-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "5d06a5e2",
+  "sourceFingerprint": "97bd26b6",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -203,17 +203,18 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg145-mobile",
+    "panelBuild": "leg145b-own-errors",
     "mainPromptV": "v2-agenda-t1-30",
     "cssVersion": "20260927-leg145-mobile",
     "version": "1.0.0",
     "srcModules": 47,
     "webModules": 18,
-    "tests": 115,
+    "tests": 116,
     "demos": 76,
     "docs": 159,
     "latestHandoff": "session-handoff-2026-09-28-leg145-mobile.md",
     "lastCommits": [
+      "de74e41 story-world-v2 发布：另打 tag `v1.0.0-preview.2` ＋ 建新 release（面板 leg145-mobile）",
       "8005fac story-world-v2 发布记账：把\"当前发布点\"更新到 leg145-mobile（`15cd9e5`）",
       "e9bddca story-world-v2 发布流程修复：打通\"导出件里跑守门\"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）",
       "ecb38db story-world-v2 leg129–leg145：长期记忆与检索收口 → 面板七页重排 → 抽取并发 → 手机端适配（17 棒一次提交）",
@@ -224,8 +225,7 @@
       "cdc68c2 story-world-v2 leg127：量出 §8 那条曲线（干净合成世界 900 轮 × 三档起根密度 · N=5 已拍）+ 四条实测发现 + 卷摘要细案与理论对齐 + 登记两件新活儿",
       "12e896e story-world-v2 leg126：E1 卷摘要细案（待拍板）+ 长期记忆理论骨架（单亲森林·合流事件·纪的三级·卷纪正交）+ 立\"证据分等级\"的规矩（用户令：先进行理论分析）",
       "d763a6c story-world-v2 leg125：交接（删掉'投给柚月の记忆'那条过剩通道 + 状态条改说人话 + 批次表三格误判勘正 + 卷摘要留给下一任）",
-      "4c78625 story-world-v2 leg125：删掉'投给柚月の记忆'那条过剩通道（用户令：解耦就解耦，直接删了）+ 状态条改说人话（B8：只说'已保存'）+ 现读代码勘正批次表 C4/E2/E3 三格误判",
-      "a3733ad story-world-v2 leg124：交接（知识索引 ＋ \"活儿在哪\"那一格 ＋ 逐句留档用户四句打断）"
+      "4c78625 story-world-v2 leg125：删掉'投给柚月の记忆'那条过剩通道（用户令：解耦就解耦，直接删了）+ 状态条改说人话（B8：只说'已保存'）+ 现读代码勘正批次表 C4/E2/E3 三格误判"
     ]
   },
   "counts": {
@@ -5764,7 +5764,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 47,
-      "where": "**1384 / 1384 · fail 0 · skipped 0 · todo 0**（★leg145 加 **+8**；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
+      "where": "**1390 / 1390 · fail 0 · skipped 0 · todo 0**（★leg145b 加 **+6**；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
       "keys": [
         "当前值",
         "读数",
@@ -5829,7 +5829,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 49,
-      "where": "**`leg145-mobile`** ｜ 复量：`src/render-base.js`（★leg145 升：**手机端适配**——这一笔只动样式）",
+      "where": "**`leg145b-own-errors`** ｜ 复量：`src/render-base.js`（★leg145b 升：**异常分流**——只有自家的错进状态条）",
       "keys": [
         "当前值",
         "读数",
@@ -6159,7 +6159,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 59,
-      "where": "**3086 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145 **一行没加**——那一笔只动样式 ＋ 号） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**：本仓 LF-only）",
+      "where": "**3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**：本仓 LF-only）",
       "keys": [
         "当前值",
         "读数",
@@ -7345,7 +7345,7 @@
     },
     {
       "id": "test#all",
-      "title": "判据在哪（test/ 共 115 个 *.test.js）",
+      "title": "判据在哪（test/ 共 116 个 *.test.js）",
       "kind": "代码地图",
       "src": "test",
       "line": 1,
@@ -7446,6 +7446,7 @@
         "snapshot-restore-migration",
         "snapshot",
         "spawn-cap",
+        "status-bar-error-scope",
         "storage-rotation-persist",
         "storage",
         "streams",

@@ -68,7 +68,7 @@ import { createLongTask, LONG_TASK_LABELS } from './long-task.js';
 // ★★★leg109：**状态条那一族**（写那行字 / 未捕获异常那一句 / 挂样式表）搬进 `web/status-bar.js`。
 //   ★为什么搬：本文件有行数硬锁 `< 3100`，而 B4 那笔实测要 9 行、余量只有 4 行
 //     ⇒ 用户当场拍板"把状态条搬出去"（搬的账与理由写在那个文件头部）。
-import { setStatus, reportTrouble, injectCss } from './status-bar.js';
+import { setStatus, injectCss, reportWinError } from './status-bar.js';
 // ★★★leg89：标签读数那一行走**它自己那一份印法**（`tagReadoutLine` 是唯一口径）——
 //   ★不在渲染层重写一遍（本仓"一个数两把尺子"那条禁令：面板印的必须是引擎算的同一份）。
 import { tagReadoutLine } from '../src/tag-extract.js';
@@ -294,16 +294,12 @@ function getCtx() {
 //     （否则"装好 fake ctx 直接调取书口"的测试会先跑 ⇒ 静默拿到一本空书）。
 setCtxSource(getCtx);
 
-function onWinError(e) {
-    try {
-        // ★leg91：把 `v`（事件对象本身）也带上——被中止的 fetch 抛的是 DOMException，
-        //   它的 message 只有一句 `signal is aborted without reason`，**看不出是谁、哪一轮**中止的。
-        //   带上事件对象，控制台里还能展开 stack/type 去定位（用户实机就是靠这一行找到"世界步在超时"）。
-        const es = e?.reason || e || null;
-        // ★leg109：写状态条那一句收进 `web/status-bar.js`（原来是这里与 `setStatus` 两个写手写同一格）。
-        reportTrouble(String(e?.message || e?.reason?.message || e?.reason || '未知异常'), es);
-    } catch (_) {}
-}
+// ★★★leg145b：**未捕获异常的分流搬进 `web/status-bar.js`**（`reportWinError`）——这里只留挂载那两行。
+//   原来这里是 `onWinError`：它**不过滤**，页面上**任何人的**异常都写进状态条。实测那一回：手机端
+//   SillyTavern 自带 TTS 抛的 `SpeechSynthesisUtterance is not defined` 印在了本插件面板上
+//   （本插件一行语音代码都没有）。⇒ 现在**自己的错进状态条、别人的错只进控制台**。
+//   ★leg91 那条留档（把**事件对象本身**也带进控制台，好展开 stack 定位"是谁、哪一轮中止的"）
+//     随实现一并搬进 `reportWinError`，一个字没丢。
 
 // 弹窗压顶内联规则（v1 同款：id 特异性保证任何加载顺序下固定位、压过 ST 自身弹层）
 function modalBoost() {
@@ -3048,8 +3044,8 @@ function initPanel(ctx) {
     window[NAMESPACE] = { loaded: true, version: VERSION };
     injectCss(CSS_VERSION);   // ★leg109：号仍在上面那一处（判据按本文件的 `const CSS_VERSION = '…'` 取值），只是"拼进地址"那一步搬进了模块
     modalBoost();
-    window.addEventListener('error', onWinError);
-    window.addEventListener('unhandledrejection', onWinError);
+    window.addEventListener('error', reportWinError);
+    window.addEventListener('unhandledrejection', reportWinError);
     ensureWindow(ctx).then(() => {
         bindTabs();
         bindActions();

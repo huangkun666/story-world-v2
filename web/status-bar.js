@@ -40,6 +40,60 @@ export function reportTrouble(text, cause = null) {
 }
 
 /**
+ * 本插件自己的根目录（`…/story-world-v2/`）——用来分辨"这条异常是不是我们抛的"。
+ * ★**必须现算**：本文件在 `web/`,它的上一级就是插件根。
+ *   写死 `story-world-v2` 就等于把目录名变成第二份真相（那份"安装契约"已经有一处了，见 README）。
+ */
+const SELF_BASE = new URL('../', import.meta.url).href;
+
+/**
+ * 这条未捕获异常**是不是本插件抛的**？
+ *
+ * ＝＝ 为什么需要它（leg145b · 用户实机报的）＝＝
+ *   `web/index.js` 挂的是**全局** `window` 钩子（`error` ＋ `unhandledrejection`）
+ *   ⇒ 页面上**任何**未捕获异常都会流到这里。实测那一回是 **SillyTavern 自带 TTS 扩展**抛的：
+ *   `public/scripts/extensions/tts/system.js` 里有一段**只在手机/平板上跑**的 iOS 变通
+ *   （`if (isMobile())` 之后在第一次点击时裸构造 `SpeechSynthesisUtterance`，**没做能力检测**）
+ *   ⇒ 玩家的面板上印着 `⚠ 未捕获异常：SpeechSynthesisUtterance is not defined`，
+ *   而**这个插件一行语音代码都没有**（全仓 `speechSynthesis` 零命中）。
+ *   状态条那行字本该只说自己的事——这就是"两处真相"在显示层的形状。
+ *
+ * ★口径（保守优先）：**拿不到出处就当自己的**——宁可多报一句，也绝不许把自己的错悄悄吞掉。
+ *   ① `error` 事件：看 `e.filename`（出错的那个脚本地址）——它可靠，有它就以它为准；
+ *   ② 没有 `filename` 时看 stack（`unhandledrejection` 走这条：rejection 事件不带 filename）；
+ *   ③ 两头都拿不到 ⇒ 算自己的。
+ * @param {any} e `error` 或 `unhandledrejection` 事件对象
+ * @returns {boolean}
+ */
+export function isOwnError(e) {
+    try {
+        const file = String(e?.filename || '');
+        if (file) return file.includes(SELF_BASE);
+        const stack = String(e?.error?.stack || e?.reason?.stack || '');
+        if (stack) return stack.includes(SELF_BASE);
+        return true;
+    } catch (_) {
+        return true;                 // 判别本身出错 ⇒ 当自己的（不许因此把那句话吞掉）
+    }
+}
+
+/**
+ * 未捕获异常的**分流口**（`web/index.js` 的两个 `addEventListener` 直接挂它）。
+ * · **自己的** ⇒ 照旧 `reportTrouble`（状态条 ＋ 控制台）；
+ * · **别人的** ⇒ ★**只进控制台**——状态条那行字重新属于这个插件。
+ *   ★为什么别人的也要留痕：**"看不到"比"看错"更坏**——排查时你还得知道页面上有别人在报错。
+ * @param {any} e `error` 或 `unhandledrejection` 事件对象
+ */
+export function reportWinError(e) {
+    try {
+        const text = String(e?.message || e?.reason?.message || e?.reason || '未知异常');
+        const cause = e?.reason || e || null;
+        if (isOwnError(e)) { reportTrouble(text, cause); return; }
+        try { console.warn('[story-world-v2] 这条异常不是本插件抛的（故不进状态条）', text, cause); } catch (_) {}
+    } catch (_) {}
+}
+
+/**
  * 样式表的地址。★与 `web/index.js` **同在 `web/` 目录** ⇒ 这一句在两个文件里算出来是**同一个串**
  *   （搬家的前提，已核）。★★但那个**版本号**（`CSS_VERSION`）**没有搬**：它必须留在
  *   `web/index.js`（`test/render.test.js` 是按那个文件里的 `const CSS_VERSION = '…'` 取值的，
