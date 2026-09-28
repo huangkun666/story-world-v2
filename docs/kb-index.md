@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**256 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `97bd26b6-d7b6c977`（源文件 97bd26b6 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `030d92f5-d7b6c977`（源文件 030d92f5 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -247,7 +247,7 @@
 | 当前值 · CSS_VERSION | `STATE.md:57` | **`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | 当前值 · MAIN_PROMPT_V | `STATE.md:58` | **`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
 | 当前值 · web/index.js 行数 | `STATE.md:59` | **3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） ｜ |
-| 当前值 · 发布仓 main | `STATE.md:60` | **`2a86cfa`** · 构建号 **`leg145-mobile`**（leg129–145 一次补齐；★记账提交会再压一笔在上面） ｜ 复量：`node scripts/verify-release.mjs` |
+| 当前值 · 发布仓 main | `STATE.md:60` | **`992ec3d`** · 构建号 **`leg145b-own-errors`**（leg129–145b 合并补齐；★记账提交会再压一笔在上面） ｜ 复量：`node scripts/verify-release |
 | 当前值 · release tag | `STATE.md:61` | **`v1.0.0-preview.2` → `2a86cfa`（leg145）** · 旧 `preview.1`→`1a54424` 不动 ｜ 复量：★点 release 下载的人现在拿到 leg145（§3-A） |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:62` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audi |
 | 当前值 · 版本号 | `STATE.md:63` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
@@ -332,6 +332,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `5332da6 story-world-v2 leg145b：状态条那行字重新属于这个插件（未捕获异常分流：自家的进状态条、别人的只进控制台）`
 - `de74e41 story-world-v2 发布：另打 tag `v1.0.0-preview.2` ＋ 建新 release（面板 leg145-mobile）`
 - `8005fac story-world-v2 发布记账：把"当前发布点"更新到 leg145-mobile（`15cd9e5`）`
 - `e9bddca story-world-v2 发布流程修复：打通"导出件里跑守门"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）`
@@ -343,5 +344,4 @@
 - `cdc68c2 story-world-v2 leg127：量出 §8 那条曲线（干净合成世界 900 轮 × 三档起根密度 · N=5 已拍）+ 四条实测发现 + 卷摘要细案与理论对齐 + 登记两件新活儿`
 - `12e896e story-world-v2 leg126：E1 卷摘要细案（待拍板）+ 长期记忆理论骨架（单亲森林·合流事件·纪的三级·卷纪正交）+ 立"证据分等级"的规矩（用户令：先进行理论分析）`
 - `d763a6c story-world-v2 leg125：交接（删掉'投给柚月の记忆'那条过剩通道 + 状态条改说人话 + 批次表三格误判勘正 + 卷摘要留给下一任）`
-- `4c78625 story-world-v2 leg125：删掉'投给柚月の记忆'那条过剩通道（用户令：解耦就解耦，直接删了）+ 状态条改说人话（B8：只说'已保存'）+ 现读代码勘正批次表 C4/E2/E3 三格误判`
 

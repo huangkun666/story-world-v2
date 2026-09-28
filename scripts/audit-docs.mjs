@@ -64,9 +64,14 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg145-mobile';         // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
-const PUBLISHED_COMMIT_REF = '2a86cfa';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
-const PUBLISHED_TAG = 'v1.0.0-preview.2';        // ★同一发布点的 tag（与它指向**同一笔**；旧 `v1.0.0-preview.1` → `1a54424` 留着不动——tag 不可变）
+const PUBLISHED_BUILD = 'leg145b-own-errors';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+const PUBLISHED_COMMIT_REF = '992ec3d';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
+// ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
+//   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
+//   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。
+//   ★**别把 `tagCommit` 接回 `PUBLISHED_COMMIT_REF`**——那会让生成物谎报"tag 指着 main 的尖端"。
+const PUBLISHED_TAG = 'v1.0.0-preview.2';        // ★最近那个 release 的 tag
+const PUBLISHED_TAG_COMMIT = '2a86cfa';          // ★它**真的**指向哪一笔（= leg145-mobile 那一版；更旧的 `v1.0.0-preview.1` → `1a54424` 同样留着）
 //   ★本格**必然比远端 tip 落后至多一笔，这是设计使然**：它记的是"哪一笔把这一版送上线"，
 //     而"把它改成新值"这件事本身又要再提交、再推一次才到得了远端 ⇒ 永远有一笔纯记账提交压在它上面。
 //     （与 STATE.md §1 那一行 leg107 写的"★leg106 交接写完之后又推过一笔"是同一个形状。）
@@ -292,7 +297,7 @@ const index = {
         published: {
             build: PUBLISHED_BUILD,
             tag: PUBLISHED_TAG,
-            tagCommit: PUBLISHED_COMMIT_REF,
+            tagCommit: PUBLISHED_TAG_COMMIT,
             commit: PUBLISHED_COMMIT_REF,
             commitRef: PUBLISHED_COMMIT_REF,
             date: PUBLISHED_COMMIT_DATE,
