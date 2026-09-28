@@ -58,10 +58,10 @@
 | `CSS_VERSION` | **`20260927-leg145-mobile`** | `web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-30`** | `src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
 | `web/index.js` 行数 | **3096 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg148 **+14**——并回宏实体那一族搬去 `web/world-entity-migration.js` 之后仍净增，余量只剩 **4 行**） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
-| 发布仓 main | **`32c8e39`** · 构建号 **`leg145b-own-errors`**（leg147：README 五处过时的话） | `node scripts/verify-release.mjs` |
+| 发布仓 main | **`55276b3`** · 构建号 **`leg145b-own-errors`**（leg148：酒馆宏不再变成世界里的人） | `node scripts/verify-release.mjs` |
 | release tag | ★**`v1.0.0` → `778af70`（leg146 · 正式版，`prerelease:false`）** · 旧 `preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原样不动** | `node scripts/verify-release.mjs`（会联网）· 一次性装置 `F:/deepseek/tmp/leg146/leg146-tag-release.mjs` |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audit-docs.mjs` 顶部 | 守门 R8 |
-| 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） | `test/browser-compat.test.js` |
+| 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处） | `test/browser-compat.test.js` |
 
 **三个"真的变了才升"的号（判据锁着）**：
 - 动了 `web/style.css` ⇒ **必须同批升 `CSS_VERSION`**；没动样式 ⇒ **不升**（判据只看"动没动样式"）。
@@ -175,16 +175,14 @@
 
 ## 4. 上一棒
 
-- **本次**（2026-09-28 · **对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案**）：起点是他要发的**宣传文案**
-  ⇒ 逐条对账**当场照出一段讲的是六周前已删的记忆通道**（还带 Discord 链接叫用户去开一个不存在的开关）
-  ⇒ README 五处过时的话改掉、推发布仓（`778af70` → **`32c8e39`**，逐字节 8/8）＋ 发布点读数跟上
-  （**只落本地、不重推**）。★后半是设计讨论：**「世界时报」细案**（把"世界整体"这一层接到账上已有的
-  `天时`/`乱象` 两把尺上）——**只在对话里、没落盘、一行代码没动**；顺带查明这两格是"**生产有了、消费没有**"。
-  ★他收尾**当场点了两处鸡肋**（大事纪 · 卷）。全文与活儿单 ⇒
-  `docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md`。
-- **上一棒**（2026-09-28 · **账上改成了什么，真的递到模型手里**）⇒
-  `docs/session-handoff-2026-09-28-leg146-worldside-state.md`（★它的 §6 那批真机验收**仍未做**）。
-- **更早的** ⇒ `docs/done-archive.md`（**存档，不是待办**）。
+- **本次**（2026-09-28 · ★**紧急修：酒馆的宏不该变成世界里的人**）：社区用户报「**他自己的角色和世界书的
+  user 都被抽象了出来**」⇒ 根因是**我们绕过酒馆、直接读世界书原文**，宏 `{{user}}` 原样进了抽取、
+  模型照抄成一个角色（**三道关口全是空的**：从没替换过 · 契约只要求非空 · 出处闸因"宏真在书里"放行）。
+  ⇒ **送进抽取前换成真名**（读不到就只挡不猜）＋ **形状闸** ＋ 存量局**并回棋子**（引用一起搬）。
+  ★同场用户定了设计方向（**「肯定是前者，正文不需要我们操心」**）。全文 ⇒
+  `docs/session-handoff-2026-09-28-leg148-macro-placeholder.md`。
+- **上一棒** ⇒ `docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md`
+  （★它的 §7 活儿单**本笔一条没动**）。**更早的** ⇒ `docs/done-archive.md`（**存档，不是待办**）。
 
 ---
 

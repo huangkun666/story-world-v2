@@ -170,7 +170,7 @@ const NAMESPACE = 'STORY_WORLD_V2';
 // ★1.0.0（发布首版）：本常量与 `manifest.json` 的 `version` 是**同一个版本号的两处写法**，
 //   必须同批改——`test/browser-compat.test.js` 用 `sw2Version()` 锁住它，改一处不改另一处当场红。
 //   ⚠ 别把它当"内部构建号"用：内部构建号是 `src/render.js` 的 `PANEL_BUILD`（面板页脚印的那行）。
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const WINDOW_ID = 'story_world2_window';
 // ★leg93c：事件链**浮层**的容器 id（挂在 `document.body` 上、**不在面板窗口里** ⇒ 面板关着也能看）。
 //   一处定义、三处引用（建/收/查），免得又出现"同名副本 = 本仓最贵的病"。

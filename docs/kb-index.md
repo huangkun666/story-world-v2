@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**262 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `7b90c26a-d7b6c977`（源文件 7b90c26a · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**263 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `82953e9f-d7b6c977`（源文件 82953e9f · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -13,9 +13,9 @@
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
 | 构建号 | `leg145b-own-errors` |
 | 提示词号 | `v2-agenda-t1-30` |
-| 版本 | `1.0.0`（ST 扩展） |
-| 规模 | src **48** · web **19** · 判据 **117** · 探针 **76** · 文档 **162** |
-| 最新交接 | `session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md` |
+| 版本 | `1.0.1`（ST 扩展） |
+| 规模 | src **48** · web **19** · 判据 **117** · 探针 **76** · 文档 **163** |
+| 最新交接 | `session-handoff-2026-09-28-leg148-macro-placeholder.md` |
 
 ## 卡片（按类分组）
 
@@ -28,15 +28,15 @@
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:40` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
 | STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:73` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
 | STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:135` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 上一棒 | `STATE.md:176` | - **本次**（2026-09-28 · **对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案**）：起点是他要发的**宣传文案** |
-| STATE.md · 5. 现场（本机） | `STATE.md:191` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`，**不是** `F:\deepseek`；分支 **`main`**——★ |
+| STATE.md · 4. 上一棒 | `STATE.md:176` | - **本次**（2026-09-28 · ★**紧急修：酒馆的宏不该变成世界里的人**）：社区用户报「**他自己的角色和世界书的 |
+| STATE.md · 5. 现场（本机） | `STATE.md:189` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`，**不是** `F:\deepseek`；分支 **`main`**——★ |
 
 ### 活儿（12）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
 | 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:378` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:401` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -81,7 +81,7 @@
 | 缺口 E2 | `docs/session-handoff-2026-09-22-leg109b-defects.md:122` | 名册只列活人 ⇒ 账上死了的人从聊天模型视野里整个消失；而给世界模型的"离场名册"不报死没死（有意为之，防编事实） |
 | 缺口 E3 | `docs/session-handoff-2026-09-22-leg109b-defects.md:123` | 同一人的 实力 两边可以不同（账本可改、聊天模型看到的是书里原值） |
 
-### 交接（94）
+### 交接（95）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -179,6 +179,7 @@
 | 交接 leg145（2026-09-28） | `docs/session-handoff-2026-09-28-leg145b-publish-and-own-errors.md:1` | 0. 一句话 ／ 1. 用户原话（逐字） ／ 2. 交付：本笔改了什么（逐文件） ／ 3. 硬读数（哪些是亲手验的） ／ 4.  本笔最值钱的六条 ／ ② 未提交的工作会挡住一切下游动作 ／ ④ "看起来像失职的"，先查 |
 | 交接 leg146（2026-09-28） | `docs/session-handoff-2026-09-28-leg146-worldside-state.md:1` | 1. 用户原话（逐字） ／ ③ 两处顺手查出的同族缺陷（同一段里的） ／ 3. 治法（逐文件） ／ 4. 硬读数（哪些是亲手验的） ／ 5.  本棒最值钱的四条 ／ ① 用户以为已经生效的那一半，可能从来没印出来过 ／  |
 | 交接 leg147（2026-09-28） | `docs/session-handoff-2026-09-28-leg147-readme-truth-and-world-times.md:1` | 0. 一句话 ／ 1. 用户原话（逐字） ／ 2.2 发布 ／ 4. 硬读数（哪些是亲手验的） ／ 5.  本笔最值钱的四条 ／ ④ 他会当场把方向拽正，而且拽得对（第二次了） ／ 6.  如实登记（本笔的边界，别把没做 |
+| 交接 leg148（2026-09-28） | `docs/session-handoff-2026-09-28-leg148-macro-placeholder.md:1` | 0. 一句话 ／ 1. 用户原话（逐字） ／ 2. 交付：两刀 ＋ 一次发布（已提交、已上线） ／ 2.1 病（一句话） ／ 2.3 改了什么（五处 ＋ 两个新家） ／ 2.4 存量局那一刀的纪律（三格） ／ 2.5 发 |
 
 ### 细案（25）
 
@@ -251,10 +252,10 @@
 | 当前值 · CSS_VERSION | `STATE.md:58` | **`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | 当前值 · MAIN_PROMPT_V | `STATE.md:59` | **`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
 | 当前值 · web/index.js 行数 | `STATE.md:60` | **3096 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg148 **+14**——并回宏实体那一族搬去 `web/world-ent |
-| 当前值 · 发布仓 main | `STATE.md:61` | **`32c8e39`** · 构建号 **`leg145b-own-errors`**（leg147：README 五处过时的话） ｜ 复量：`node scripts/verify-release.mjs` |
+| 当前值 · 发布仓 main | `STATE.md:61` | **`55276b3`** · 构建号 **`leg145b-own-errors`**（leg148：酒馆宏不再变成世界里的人） ｜ 复量：`node scripts/verify-release.mjs` |
 | 当前值 · release tag | `STATE.md:62` | ★**`v1.0.0` → `778af70`（leg146 · 正式版，`prerelease:false`）** · 旧 `preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原 |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:63` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audi |
-| 当前值 · 版本号 | `STATE.md:64` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
+| 当前值 · 版本号 | `STATE.md:64` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
 
 ### 怎么跑（2）
 
@@ -338,6 +339,10 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `c4cd678 story-world-v2 leg148 交接补：把这一场探讨过的设计写进交接（§8 附件）`
+- `38769fe story-world-v2 leg148 交接：酒馆的宏不该变成世界里的人（紧急修 ＋ 推发布仓）`
+- `2d42165 story-world-v2 leg148 发布记账：发布点读数跟到 55276b3（★按规矩不重推）`
+- `6694971 story-world-v2 leg148：酒馆的宏不该变成世界里的人（社区用户报的 bug）`
 - `3d283b6 story-world-v2 leg147 交接：对外文案里的假话 ＋ 一次发布跟上 ＋「世界时报」细案（一行代码没动）`
 - `ce9f72c story-world-v2 leg147 发布记账：发布点读数跟到 32c8e39（★按规矩不重推）`
 - `7a9f49e story-world-v2 leg147：README 里五处过时的话改成现在的实情`
@@ -346,8 +351,4 @@
 - `3ea296c story-world-v2 leg146：账上改成了什么，真的递到聊天模型手里`
 - `d298210 story-world-v2 leg145b 交接：九节交接文档 ＋ STATE.md/台账收口（§3-A 的 A 项办结）`
 - `9ab6ace story-world-v2 发布记账：leg145b 上线后的读数跟上（main `992ec3d` · 构建号 `leg145b-own-errors`）`
-- `5332da6 story-world-v2 leg145b：状态条那行字重新属于这个插件（未捕获异常分流：自家的进状态条、别人的只进控制台）`
-- `de74e41 story-world-v2 发布：另打 tag `v1.0.0-preview.2` ＋ 建新 release（面板 leg145-mobile）`
-- `8005fac story-world-v2 发布记账：把"当前发布点"更新到 leg145-mobile（`15cd9e5`）`
-- `e9bddca story-world-v2 发布流程修复：打通"导出件里跑守门"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）`
 
