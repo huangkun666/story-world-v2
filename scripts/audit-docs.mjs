@@ -64,8 +64,12 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg105-deadpager';      // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
-const PUBLISHED_COMMIT_REF = '7f3a7df';          // ★同一发布点的**代码提交**（STATE.md §1 "发布仓 main" 那行）
+const PUBLISHED_BUILD = 'leg145-mobile';         // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+const PUBLISHED_COMMIT_REF = '15cd9e5';          // ★同一发布点的**代码提交**（把 leg145 送上线的那一笔；STATE.md §1 "发布仓 main" 那行）
+//   ★本格**必然比远端 tip 落后至多一笔，这是设计使然**：它记的是"哪一笔把这一版送上线"，
+//     而"把它改成新值"这件事本身又要再提交、再推一次才到得了远端 ⇒ 永远有一笔纯记账提交压在它上面。
+//     （与 STATE.md §1 那一行 leg107 写的"★leg106 交接写完之后又推过一笔"是同一个形状。）
+//     ★所以：**别为了"追上 tip"而反复重推**——那只会再造出一笔记账提交，永远追不上。
 // ★★（发布阻塞勘正 · 2026-09-28）：这一格**必须与 REF 一样是常数**，不许现读 git。
 //   病（实测）：`published.date` 原先写的是 `gitLine('log -1 --format=%cs ' + REF)`——那是"问本机"，
 //     而发布流程把子树导成**独立根树**（`git read-tree`，导出件**不在任何 git 仓库里**）
@@ -73,7 +77,7 @@ const PUBLISHED_COMMIT_REF = '7f3a7df';          // ★同一发布点的**代�
 //     （实测原文：`release.published.commit: 类型不同 ｜ release.published.date: 类型不同`）。
 //   ★口径回到本脚本 leg106 自己那条："一切'问本机'的结果不进这个文件"。
 //     日期与哈希一样是**人核过的事实**：值仍照 `git log -1 --format=%cs <REF>` 取，取完写死在这里。
-const PUBLISHED_COMMIT_DATE = '2026-09-22';
+const PUBLISHED_COMMIT_DATE = '2026-09-28';
 // ★守门用的禁词（见 R8）：这几个名字在生成物里**一律不许再出现**——它们分不清"本地号"与"已发布号"。
 const FORBIDDEN_RELEASE_KEYS = ['publishedBuild', 'publishedTag', 'publishedTagCommit'];
 const entriesDeep = (o, path = '', acc = []) => {

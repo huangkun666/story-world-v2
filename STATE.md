@@ -57,7 +57,7 @@
 | `CSS_VERSION` | **`20260927-leg145-mobile`** | `web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-30`** | `src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
 | `web/index.js` 行数 | **3086 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145 **一行没加**——那一笔只动样式 ＋ 号） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
-| 发布仓 main | **`7f3a7df`** · 构建号 **`leg105-deadpager`**（leg103–106 四棒一次补齐；★leg106 交接写完之后又推过一笔，本行 leg107 现读勘正） | `node scripts/verify-release.mjs` |
+| 发布仓 main | **`15cd9e5`** · 构建号 **`leg145-mobile`**（leg129–145 一次补齐；★本行写**送这一版上线的那一笔**） | `node scripts/verify-release.mjs` |
 | release tag | `v1.0.0-preview.1` → **`1a54424`（= leg100 那一版）** | ★点 release 下载的人拿到旧面板（见 §3-A） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audit-docs.mjs` 顶部 | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） | `test/browser-compat.test.js` |

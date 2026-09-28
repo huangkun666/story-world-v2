@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**256 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `0a62e514-d7b6c977`（源文件 0a62e514 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `dc72522f-d7b6c977`（源文件 dc72522f · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -247,7 +247,7 @@
 | 当前值 · CSS_VERSION | `STATE.md:57` | **`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | 当前值 · MAIN_PROMPT_V | `STATE.md:58` | **`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
 | 当前值 · web/index.js 行数 | `STATE.md:59` | **3086 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145 **一行没加**——那一笔只动样式 ＋ 号） ｜ 复量：`split |
-| 当前值 · 发布仓 main | `STATE.md:60` | **`7f3a7df`** · 构建号 **`leg105-deadpager`**（leg103–106 四棒一次补齐；★leg106 交接写完之后又推过一笔，本行 leg107 现读勘正） ｜ 复量：`node sc |
+| 当前值 · 发布仓 main | `STATE.md:60` | **`15cd9e5`** · 构建号 **`leg145-mobile`**（leg129–145 一次补齐；★本行写**送这一版上线的那一笔**） ｜ 复量：`node scripts/verify-release. |
 | 当前值 · release tag | `STATE.md:61` | `v1.0.0-preview.1` → **`1a54424`（= leg100 那一版）** ｜ 复量：★点 release 下载的人拿到旧面板（见 §3-A） |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:62` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audi |
 | 当前值 · 版本号 | `STATE.md:63` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
@@ -332,6 +332,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `e9bddca story-world-v2 发布流程修复：打通"导出件里跑守门"那两处（知识索引指纹不再含 kb/ ＋ 生成物不再现读 git）`
 - `ecb38db story-world-v2 leg129–leg145：长期记忆与检索收口 → 面板七页重排 → 抽取并发 → 手机端适配（17 棒一次提交）`
 - `faad1f5 story-world-v2 leg128：把上下文那条链打通（含多因点）＋ 修掉逐行量包那个性能病`
 - `852aa5b story-world-v2 leg128：上下文设计总稿（散稿整合成一份 · 「一条线在包里长什么样」定案 · 砍掉四件没用的设计）`
@@ -343,5 +344,4 @@
 - `4c78625 story-world-v2 leg125：删掉'投给柚月の记忆'那条过剩通道（用户令：解耦就解耦，直接删了）+ 状态条改说人话（B8：只说'已保存'）+ 现读代码勘正批次表 C4/E2/E3 三格误判`
 - `a3733ad story-world-v2 leg124：交接（知识索引 ＋ "活儿在哪"那一格 ＋ 逐句留档用户四句打断）`
 - `03d948e story-world-v2 知识索引（第二笔）：搜索真能搜到 + 防"白屏但全绿" + 修我自己踩的反引号坑`
-- `dd01840 story-world-v2 知识索引：全部知识立即可查（真源现抽 + 过期即红）+ 立"活儿在哪"那一格`
 
