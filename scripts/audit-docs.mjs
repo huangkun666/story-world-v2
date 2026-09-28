@@ -65,7 +65,8 @@ const src = {
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
 const PUBLISHED_BUILD = 'leg145-mobile';         // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
-const PUBLISHED_COMMIT_REF = '15cd9e5';          // ★同一发布点的**代码提交**（把 leg145 送上线的那一笔；STATE.md §1 "发布仓 main" 那行）
+const PUBLISHED_COMMIT_REF = '2a86cfa';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
+const PUBLISHED_TAG = 'v1.0.0-preview.2';        // ★同一发布点的 tag（与它指向**同一笔**；旧 `v1.0.0-preview.1` → `1a54424` 留着不动——tag 不可变）
 //   ★本格**必然比远端 tip 落后至多一笔，这是设计使然**：它记的是"哪一笔把这一版送上线"，
 //     而"把它改成新值"这件事本身又要再提交、再推一次才到得了远端 ⇒ 永远有一笔纯记账提交压在它上面。
 //     （与 STATE.md §1 那一行 leg107 写的"★leg106 交接写完之后又推过一笔"是同一个形状。）
@@ -290,8 +291,8 @@ const index = {
         //   ⇒ 推送被自己的守门拦下。★**值一个字节没变**：`PUBLISHED_COMMIT_REF` 就是那个提交哈希本身。
         published: {
             build: PUBLISHED_BUILD,
-            tag: 'v1.0.0-preview.1',
-            tagCommit: '1a54424',
+            tag: PUBLISHED_TAG,
+            tagCommit: PUBLISHED_COMMIT_REF,
             commit: PUBLISHED_COMMIT_REF,
             commitRef: PUBLISHED_COMMIT_REF,
             date: PUBLISHED_COMMIT_DATE,
