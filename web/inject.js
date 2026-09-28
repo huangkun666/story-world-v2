@@ -27,7 +27,7 @@
 //   `ledger-recall.js`（**零 import 的真叶子**，只读调用方递进来的账）⇒ 不引回环、不碰 DOM。
 //   为什么取数放在这里而不是编排层：`apply()` 是**唯一**同时拿得到 `getCtx()`（上一轮正文＋这一轮输入）
 //   与 `getWorld()`（账）的地方；而 `web/index.js` 只剩 **1 行**余量（硬锁 `<3100`）⇒ **不许再往那里加**。
-import { recallLedger, RECALL_MODES, formatRecalled } from '../src/ledger-recall.js';
+import { recallLedger, RECALL_MODES, formatRecalled, timeMarkAt } from '../src/ledger-recall.js';
 // ★★★leg123：**格名表从引擎那一侧取**（`tag-extract.js` 是真源，零 import 的叶子 ⇒ 浏览器侧安全、不成环）
 import { CHANGE_FIELDS, CHANGE_FIELD_KIND } from '../src/tag-extract.js';
 // ★★★leg119：卷库那一侧（浏览器 IndexedDB）——取"冷档里的编年行"要用它。
@@ -355,22 +355,54 @@ export function sw2RecallQueryText(ctx, cap = 400) {
  *      `prev` 没有 ⇒ 只说现值，**绝不许**编一句"书里是空的"。
  *   ③ ★**截断必须说出来**（不许静默——`leg112` 撤掉的那条静默闸是血证）。
  *
+ * ＝＝ ★★★leg146 修的三处（用户令：「在世界侧被修改过的实体，就一定要把**它现在在世界侧的样子**告诉模型」）＝＝
+ *   ① ★**原值那一半以前在真机上根本没印出来**：读数写成 `r.prev.value`，而生产落账写的是**裸字符串**
+ *      `prev`（见下面循环里那段注释）⇒ 用户以为"两边同列"，实际只有前半句。**判据为什么没咬住**：
+ *      `test/ledger-divergence.test.js` 的夹具用了 `prev: { value, source }` 这个**生产上任何一条路都不写**的形状
+ *      ⇒ 绿的是夹具，不是生产（本仓老教训："判据通过了，不等于它量的是那件事"）。
+ *   ② ★**"书里原样"这四个字是一个**断言**，要凭证据说**：有 `prior` 看它自己的 `source`，没有就问
+ *      `entity.fieldSource[field]`（发票）；证不出来就说「这之前是「…」」——**不许拿账上的上一版冒充书里那句**。
+ *      ★★★**leg146b 用户令：「别写书里原样了，就写属性变更即可」⇒ 那套"凭发票说出处"的逻辑整条撤掉**
+ *      （不留死码）：现在只写「**改之前 → 改之后**」，一个字不提书。
+ *   ③ ★**`status` 不进属性行**：它是引擎簿记栏（值域 `active/retired/dead`），照印就是往对话里塞内部枚举值；
+ *      改它的路只有"带因复活"一条 ⇒ 说人话「已重回场上」。
+ *   ④ ★★★**leg146b 用户令：「把轮换成时间」**：那两格时间**不自己造**，读账上既有那把尺子 `timeMarkAt`
+ *      （`ledger-recall.js:203`）：`timeMark`（**那时是什么时候**，正文【此刻】原话）优先，退 `elapsed`
+ *      （**那一轮此后又过了多久**，正文【时长】原话）；**账上没记 ⇒ 什么都不写**（空着就是空着），
+ *      **绝不退回"第 N 轮"**。★段首那句也从「跟书不一样的地方」改成「**已经发生的改变**」，
+ *      段尾那句「别照书里的旧样子写」改成「**别照从前的样子写**」（同一句令：不写书里那套对照）。
+ *
  * ★**不注入"引擎推的值"那一族**（`位置来源 === '结构推导'`）：细案第一版有它，**实测后整条删掉**——
  *   真账上它是 **142 条 / 4000 字**，而且**根本不是冲突**（书里没写 ≠ 书里写了别的）；
  *   照原文注入等于把账本状态塞进对话，**正好犯上面那条口径**。
  *
  * @param {object} ssot 世界账（**只读**，本函数不改它一个字节）
- * @param {object} [opts] `{ maxChars }` 字符硬上限（★提案态；实测基准：3 人 ＝ 109 字）
+ * @param {object} [opts] `{ maxChars, volumes }`——`maxChars` 字符硬上限（★提案态；实测基准：3 人 ＝ 109 字）；
+ *   `volumes` = 卷（冷档）里的编年行（时间印记可能落在已经轮转进卷的行上，`timeMarkAt` 两处都看）
  * @returns {string} 那一段人话；★**没有分歧 ⇒ 空串**（调用方据此"没有就不挂这一段"）
  */
 export const DIVERGENCE_DEFAULT = Object.freeze({ maxChars: 600 });
 
-export function ledgerDivergenceText(ssot, { maxChars = DIVERGENCE_DEFAULT.maxChars } = {}) {
+export function ledgerDivergenceText(ssot, { maxChars = DIVERGENCE_DEFAULT.maxChars, volumes = null } = {}) {
     const entities = ssot?.entities || [];
     if (!entities.length) return '';
     const ef = ssot?.meta?.entityFields || {};
 
-    // ① 已死：轮次从编年行的**号**里解（`ch_<轮次>_fate_<实体id>`）
+    // ★★★leg146b（用户令：「**把轮换成时间，别写书里原样了，就写属性变更即可**」）：**时间印记**这一处读法
+    //   **不自己造**——账上早有一把尺子：`timeMarkAt`（`ledger-recall.js:203`，leg115 立、leg137 分两格）。
+    //   · `timeMark`＝**那时是什么时候**（时间点，正文【此刻】的原话）；
+    //   · `elapsed`＝**那一轮此后又过了多久**（相对量，正文【时长】的原话）。
+    //   ★两格分开摆、**只摆原话不做算术**（红线 `STATE.md` §2.2 第 1 条：时间也归这条管）。
+    //   ★★**账上没记时间 ⇒ 什么都不写**（空着就是空着）——**绝不退回"第 N 轮"**（那是引擎轮次，用户点名不要它）。
+    const timeOf = (t) => {
+        if (!Number.isInteger(t)) return '';
+        const tm = timeMarkAt(ssot, t, volumes);
+        if (tm.timeMark) return `（${tm.timeMark}）`;
+        if (tm.elapsed) return `（那一轮此后又过了：${tm.elapsed}）`;
+        return '';
+    };
+
+    // ① 已死：轮次从编年行的**号**里解（`ch_<轮次>_fate_<实体id>`）⇒ 再换成账上的**时间印记**
     const fateTick = new Map();
     for (const r of ssot?.chronicle || []) {
         const m = /^ch_(\d+)_fate_(.+)$/.exec(String(r?.id || ''));
@@ -380,21 +412,44 @@ export function ledgerDivergenceText(ssot, { maxChars = DIVERGENCE_DEFAULT.maxCh
     for (const e of entities) {
         if (e?.status !== 'dead' || !e.name) continue;
         const t = fateTick.get(e.id);
-        const when = Number.isInteger(t) ? `（第 ${t} 轮）` : '';
-        rows.push({ tick: Number.isInteger(t) ? t : -1, text: `  · ${e.name}：已死${when}` });
+        rows.push({ tick: Number.isInteger(t) ? t : -1, text: `  · ${e.name}：已死${timeOf(t)}` });
     }
 
-    // ② 被事件改过的格（**原值 · 现值 · 轮次**三样一起摆出来）
+    // ★★★leg146b（用户令：「**把轮换成时间，别写书里原样了，就写属性变更即可**」）：**时间印记**那一处读法
+    //   **不自己造**——账上早有一把尺子：`timeMarkAt`（`ledger-recall.js:203`，leg115 立、leg137 分的两格）。
+    //   · `timeMark`＝**那时是什么时候**（一个时间点，正文【此刻】的原话）；
+    //   · `elapsed`＝**那一轮此后又过了多久**（相对量，正文【时长】的原话）。
+    //   ★两格分开摆、**只摆原话不做算术**（红线 `STATE.md` §2.2 第 1 条：时间也归这条管）。
+    //   ★★**账上没记时间 ⇒ 什么都不写**（空着就是空着）——**绝不退回"第 N 轮"**（那是引擎轮次，用户点名不要它）。
+    // ② 被事件改过的格（**写成一次属性变更**：改之前 → 改之后 ＋ 时间）
     const byId = new Map(entities.map((e) => [e.id, e]));
     for (const [id, rec] of Object.entries(ef)) {
         const e = byId.get(id);
         if (!e?.name) continue;
         for (const [field, r] of Object.entries(rec?.fields || {})) {
             if (r?.source !== '变更') continue;
-            const prev = typeof r?.prev?.value === 'string' && r.prev.value ? r.prev.value : '';
-            const was = prev ? `，书里原样是「${prev}」` : '';      // ★原值缺了就不说（红线 2）
             const t = Number.isInteger(r?.tick) ? r.tick : -1;
-            rows.push({ tick: t, text: `  · ${e.name}的〈${field}〉：账上是「${r?.value ?? ''}」${was}${t >= 0 ? `（第 ${t} 轮）` : ''}` });
+            const when = timeOf(t);
+            // ★★leg146：**`status` 不进属性行**——它是**引擎的簿记栏**，不是"书里的属性"；照原样印出来
+            //   就是「账上是「active」」这种内部枚举值（犯 `STATE.md` §2.5 的人话红线）。
+            //   而改 `status` 的路**只有一条**：`check-step.js:355-359` 明写"status 只用来带因复活"
+            //   ⇒ 用**账上自己那句话**的人话报（`settle.js:1048`「带着因由重回场上」）。
+            //   ★当前仍是 `dead` 的不报"重回"（先复活、后又覆灭 ⇒ 与①段那条「已死」自相矛盾）。
+            if (field === 'status') {
+                if (e.status === 'dead' || r?.value === 'dead') continue;
+                rows.push({ tick: t, text: `  · ${e.name}：已重回场上${when}` });
+                continue;
+            }
+            // ★★★leg146 修（上一笔的正题）：原值那一半的读法以前**只认 `{value}` 一种形状**，而**生产落账写的是
+            //   **裸字符串**（`settle.js:1009/1071` 与 `:1191/1197` 都是 `prev = ent[field]`；判据
+            //   `entity-writeback.test.js:74` 正是按字符串断言的）⇒ `.value` 恒 `undefined` ⇒ 真机上
+            //   **改之前那个值从来没印出来过**（真账实测：黑山老妖〈实力〉那一条只剩后半句）。
+            //   三种形状都认，顺序照 `web/entity-window.js:145` 那把**既有正确读法**：**链式留痕 `prior` 优先，否则 `prev`**。
+            const priorRec = r?.prior && typeof r.prior === 'object' ? r.prior : null;
+            const prev = [priorRec?.value, r?.prev, r?.prev?.value].find((v) => typeof v === 'string' && v) || '';
+            // ★★★leg146b：**不写出处、不写"书里原样"**（用户令）——只把"**从什么变成了什么**"摆出来。
+            //   ⇒ `prior` / `entity.fieldSource` 那套**凭发票说话**的逻辑据此**整条撤掉**（不留死码）。
+            rows.push({ tick: t, text: `  · ${e.name}的〈${field}〉：${prev ? `${prev} → ` : ''}${r?.value ?? ''}${when}` });
         }
     }
 
@@ -412,10 +467,10 @@ export function ledgerDivergenceText(ssot, { maxChars = DIVERGENCE_DEFAULT.maxCh
     if (!kept.length) return '';      // 一个字都放不下 ⇒ 宁可不挂（空着就是空着）
     const cut = rows.length - kept.length;
     return [
-        '【这一局里跟书里不一样的地方】',
+        '【这一局里已经发生的改变】',
         ...kept,
         cut > 0 ? `  （★这一栏只列了最近 ${kept.length} 条，另有 ${cut} 条没放进来——不是没有）` : '',
-        '（这些是这一局里真的发生过、已经记在账上的改变——正文按这里写，别照书里的旧样子写；'
+        '（这些是这一局里真的发生过、已经记在账上的改变——正文按这里写，别照从前的样子写；'
         + '也不要把这一段当台词念出来。）',
     ].filter(Boolean).join('\n');
 }
@@ -536,10 +591,13 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         let ledger = '';
         let ledgerNote = '（这段没开）';
         if (ledgerOn) {
+            // ★★★leg146b：**卷先取**——分歧那一段也要用它读时间印记（时间点可能落在已经轮转进卷的行上；
+            //   `timeMarkAt` 与检索层看的是**同一份**账，见 `ledger-recall.js:206-209`）。
+            const vols = ledgerVolumes();
             // ★★★leg121：**"跟书不一样"那一段不依赖检索**——无条件先算。
             //   它答的是"现在哪里不一样"，与"取哪几条往事"是两个问题 ⇒
             //   **检索空手而归时它照旧在**（判据 D6 锁着；这是它与本段其余部分唯一的结构差别）。
-            const div = ledgerDivergenceText(world);
+            const div = ledgerDivergenceText(world, { volumes: vols });
             let recalled = '';
             let recallNote = '没取';
             let q = '';
@@ -550,7 +608,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
                 //   字面关键词**并用**当兜底（它单独用会栽：玩家正文与账本用词本来就不同，实测命中 0 条）。
                 // ★★★leg119：**卷要一起看**——轮转把最旧的编年整段搬进卷之后，不接这一格就会**悄悄少一半**
                 //   （见本模块上面那一族注释；世界模型那一侧走 `pack.js` 的**同一个** `volumes` 参数）。
-                const vols = ledgerVolumes();
+                //   ★leg146b：`vols` 已提到上面取（分歧那一段的时间印记也要用它）。
                 const got = recallLedger(world, { modes: [RECALL_MODES.BY_NAMES, RECALL_MODES.BY_KEYWORD], text: q, maxChars: LEDGER_RECALL_DEFAULT.maxChars, volumes: vols });
                 recalled = got.ok ? formatRecalled(world, got.items, { volumes: vols }) : '';
                 recallNote = got.ok ? `${recalled.length} 字` : `没命中（${got.reason}）`;

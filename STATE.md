@@ -44,7 +44,7 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **1390 / 1390 · fail 0 · skipped 0 · todo 0**（★leg145b 加 **+6**；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
+| 判据 | **1395 / 1395 · fail 0 · skipped 0 · todo 0**（★leg146 加 **+5**；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
 | 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0** | `node demo/smoke-demo.js` |
 | `PANEL_BUILD` | **`leg145b-own-errors`** | `src/render-base.js`（★leg145b 升：**异常分流**——只有自家的错进状态条） |
 | ★手机端 | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ 视口高 **`100dvh`** · 浮层**整屏** · 手机上 <12px 的小字**整批抬到 12px**。★**版面**走 `≤620px`、**手感**走 `(pointer:coarse)`（鼠标不匹配 ⇒ **桌面零改动**） | `web/style.css` 末尾两条媒体查询（★620 那条**搬到了文件末尾**：它原来写在基础规则前面 ⇒ **一直是死的**）· 判据 `test/mobile-layout.test.js`（8 条，含棘轮） |

@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "3a5907c4-d7b6c977",
+  "fingerprint": "e3147140-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "3a5907c4",
+  "sourceFingerprint": "e3147140",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -98,6 +98,7 @@
     "docs/session-handoff-2026-09-27-leg144-parallel-extract.md",
     "docs/session-handoff-2026-09-28-leg145-mobile.md",
     "docs/session-handoff-2026-09-28-leg145b-publish-and-own-errors.md",
+    "docs/session-handoff-2026-09-28-leg146-worldside-state.md",
     "docs/spec-b2-chronicle-via-recall.md",
     "docs/spec-chat-ledger-conflict.md",
     "docs/spec-chronicle-in-pack.md",
@@ -212,9 +213,10 @@
     "webModules": 18,
     "tests": 116,
     "demos": 76,
-    "docs": 160,
-    "latestHandoff": "session-handoff-2026-09-28-leg145b-publish-and-own-errors.md",
+    "docs": 161,
+    "latestHandoff": "session-handoff-2026-09-28-leg146-worldside-state.md",
     "lastCommits": [
+      "d298210 story-world-v2 leg145b 交接：九节交接文档 ＋ STATE.md/台账收口（§3-A 的 A 项办结）",
       "9ab6ace story-world-v2 发布记账：leg145b 上线后的读数跟上（main `992ec3d` · 构建号 `leg145b-own-errors`）",
       "5332da6 story-world-v2 leg145b：状态条那行字重新属于这个插件（未捕获异常分流：自家的进状态条、别人的只进控制台）",
       "de74e41 story-world-v2 发布：另打 tag `v1.0.0-preview.2` ＋ 建新 release（面板 leg145-mobile）",
@@ -225,18 +227,17 @@
       "852aa5b story-world-v2 leg128：上下文设计总稿（散稿整合成一份 · 「一条线在包里长什么样」定案 · 砍掉四件没用的设计）",
       "d8590a2 story-world-v2 leg127：交接（§8 那条曲线 N=5 ＋ 砍掉\"卷摘要\"那件过剩设计 ＋ 四条实测发现 ＋ 全仓 25 处日期勘误 09-26→09-25）",
       "48a5459 story-world-v2 leg127：摒弃 E1 卷摘要（≈250:1 的图注 · 与原文同形状 · 进不了包）+ 定\"摘要只长在纪上\" + 批次表与活儿清单同步",
-      "cdc68c2 story-world-v2 leg127：量出 §8 那条曲线（干净合成世界 900 轮 × 三档起根密度 · N=5 已拍）+ 四条实测发现 + 卷摘要细案与理论对齐 + 登记两件新活儿",
-      "12e896e story-world-v2 leg126：E1 卷摘要细案（待拍板）+ 长期记忆理论骨架（单亲森林·合流事件·纪的三级·卷纪正交）+ 立\"证据分等级\"的规矩（用户令：先进行理论分析）"
+      "cdc68c2 story-world-v2 leg127：量出 §8 那条曲线（干净合成世界 900 轮 × 三档起根密度 · N=5 已拍）+ 四条实测发现 + 卷摘要细案与理论对齐 + 登记两件新活儿"
     ]
   },
   "counts": {
-    "cards": 257,
+    "cards": 258,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
       "待拍板": 4,
       "缺口": 19,
-      "交接": 92,
+      "交接": 93,
       "细案": 25,
       "索引": 2,
       "知识库": 11,
@@ -487,7 +488,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 353,
+      "line": 371,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -4623,6 +4624,37 @@
       ]
     },
     {
+      "id": "handoff#146",
+      "title": "交接 leg146（2026-09-28）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-09-28-leg146-worldside-state.md",
+      "line": 1,
+      "where": "1. 用户原话（逐字） ／ ③ 两处顺手查出的同族缺陷（同一段里的） ／ 3. 治法（逐文件） ／ 4. 硬读数（哪些是亲手验的） ／ 5.  本笔最值钱的四条 ／ ① 用户以为已经生效的那一半，可能从来没印出来过 ／ 6.  如实登记（本棒两笔的边界） ／ 7. 别做的事",
+      "keys": [
+        "交接",
+        "leg146",
+        "2026-09-28",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-09-28-leg146-worldside-state.md",
+        "1. 用户原话（逐字）",
+        "2. 病：三条（逐条带证据，都是现读代码/现跑读数）",
+        "① 「书里原样是「…」」那半句，真机上从来没印出来过",
+        "② 判据为什么没咬住：夹具用的形状生产上不存在 ＋ 那两轮真模型实验没测这一半",
+        "③ 两处顺手查出的同族缺陷（同一段里的）",
+        "3. 治法（逐文件）",
+        "4. 硬读数（哪些是亲手验的）",
+        "5.  本笔最值钱的四条",
+        "① 用户以为已经生效的那一半，可能从来没印出来过",
+        "② \"判据通过了，不等于它量的是那件事\"——第三次复发，新变种：夹具与生产分叉",
+        "③ \"看不见的输出\"要有一次人工复量（同①，但值得单独记）",
+        "④ 用户会当场改口径，而且改得对——顺着他改，别留恋自己刚写的那套",
+        "6.  如实登记（本棒两笔的边界）",
+        "7. 别做的事"
+      ]
+    },
+    {
       "id": "spec#b2-chronicle-via-recall",
       "title": "细案 b2-chronicle-via-recall",
       "kind": "细案",
@@ -5799,7 +5831,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 47,
-      "where": "**1390 / 1390 · fail 0 · skipped 0 · todo 0**（★leg145b 加 **+6**；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
+      "where": "**1395 / 1395 · fail 0 · skipped 0 · todo 0**（★leg146 加 **+5**；逐棒增减 ⇒ `docs/done-archive.md`） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
       "keys": [
         "当前值",
         "读数",
