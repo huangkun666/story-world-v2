@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**258 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `e3147140-d7b6c977`（源文件 e3147140 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `fe79b0f7-d7b6c977`（源文件 fe79b0f7 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -249,7 +249,7 @@
 | 当前值 · CSS_VERSION | `STATE.md:57` | **`20260927-leg145-mobile`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | 当前值 · MAIN_PROMPT_V | `STATE.md:58` | **`v2-agenda-t1-30`** ｜ 复量：`src/prompts.js`（★leg137：第 9 条补"时间那一栏怎么读 ＋ 每件事各自写 at"） |
 | 当前值 · web/index.js 行数 | `STATE.md:59` | **3082 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg145b **−4**——异常钩子搬去 `status-bar.js`） ｜ |
-| 当前值 · 发布仓 main | `STATE.md:60` | **`992ec3d`** · 构建号 **`leg145b-own-errors`**（leg129–145b 合并补齐；★记账提交会再压一笔在上面） ｜ 复量：`node scripts/verify-release |
+| 当前值 · 发布仓 main | `STATE.md:60` | **`2d66e01`** · 构建号 **`leg145b-own-errors`**（leg146 那一笔；★它上面还会压一笔"读数跟上") ｜ 复量：`node scripts/verify-release.mjs |
 | 当前值 · release tag | `STATE.md:61` | **`v1.0.0-preview.2` → `2a86cfa`（leg145）** · 旧 `preview.1`→`1a54424` 不动 ｜ 复量：★点 release 下载的人现在拿到 leg145（§3-A） |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:62` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audi |
 | 当前值 · 版本号 | `STATE.md:63` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.0`**（两处，判据锁着第二处） ｜ 复量：`test/browser-compat.test.js` |
@@ -334,6 +334,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `3ea296c story-world-v2 leg146：账上改成了什么，真的递到聊天模型手里`
 - `d298210 story-world-v2 leg145b 交接：九节交接文档 ＋ STATE.md/台账收口（§3-A 的 A 项办结）`
 - `9ab6ace story-world-v2 发布记账：leg145b 上线后的读数跟上（main `992ec3d` · 构建号 `leg145b-own-errors`）`
 - `5332da6 story-world-v2 leg145b：状态条那行字重新属于这个插件（未捕获异常分流：自家的进状态条、别人的只进控制台）`
@@ -345,5 +346,4 @@
 - `852aa5b story-world-v2 leg128：上下文设计总稿（散稿整合成一份 · 「一条线在包里长什么样」定案 · 砍掉四件没用的设计）`
 - `d8590a2 story-world-v2 leg127：交接（§8 那条曲线 N=5 ＋ 砍掉"卷摘要"那件过剩设计 ＋ 四条实测发现 ＋ 全仓 25 处日期勘误 09-26→09-25）`
 - `48a5459 story-world-v2 leg127：摒弃 E1 卷摘要（≈250:1 的图注 · 与原文同形状 · 进不了包）+ 定"摘要只长在纪上" + 批次表与活儿清单同步`
-- `cdc68c2 story-world-v2 leg127：量出 §8 那条曲线（干净合成世界 900 轮 × 三档起根密度 · N=5 已拍）+ 四条实测发现 + 卷摘要细案与理论对齐 + 登记两件新活儿`
 

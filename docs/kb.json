@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "e3147140-d7b6c977",
+  "fingerprint": "fe79b0f7-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "e3147140",
+  "sourceFingerprint": "fe79b0f7",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -216,6 +216,7 @@
     "docs": 161,
     "latestHandoff": "session-handoff-2026-09-28-leg146-worldside-state.md",
     "lastCommits": [
+      "3ea296c story-world-v2 leg146：账上改成了什么，真的递到聊天模型手里",
       "d298210 story-world-v2 leg145b 交接：九节交接文档 ＋ STATE.md/台账收口（§3-A 的 A 项办结）",
       "9ab6ace story-world-v2 发布记账：leg145b 上线后的读数跟上（main `992ec3d` · 构建号 `leg145b-own-errors`）",
       "5332da6 story-world-v2 leg145b：状态条那行字重新属于这个插件（未捕获异常分流：自家的进状态条、别人的只进控制台）",
@@ -226,8 +227,7 @@
       "faad1f5 story-world-v2 leg128：把上下文那条链打通（含多因点）＋ 修掉逐行量包那个性能病",
       "852aa5b story-world-v2 leg128：上下文设计总稿（散稿整合成一份 · 「一条线在包里长什么样」定案 · 砍掉四件没用的设计）",
       "d8590a2 story-world-v2 leg127：交接（§8 那条曲线 N=5 ＋ 砍掉\"卷摘要\"那件过剩设计 ＋ 四条实测发现 ＋ 全仓 25 处日期勘误 09-26→09-25）",
-      "48a5459 story-world-v2 leg127：摒弃 E1 卷摘要（≈250:1 的图注 · 与原文同形状 · 进不了包）+ 定\"摘要只长在纪上\" + 批次表与活儿清单同步",
-      "cdc68c2 story-world-v2 leg127：量出 §8 那条曲线（干净合成世界 900 轮 × 三档起根密度 · N=5 已拍）+ 四条实测发现 + 卷摘要细案与理论对齐 + 登记两件新活儿"
+      "48a5459 story-world-v2 leg127：摒弃 E1 卷摘要（≈250:1 的图注 · 与原文同形状 · 进不了包）+ 定\"摘要只长在纪上\" + 批次表与活儿清单同步"
     ]
   },
   "counts": {
@@ -6259,7 +6259,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 60,
-      "where": "**`992ec3d`** · 构建号 **`leg145b-own-errors`**（leg129–145b 合并补齐；★记账提交会再压一笔在上面） ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`2d66e01`** · 构建号 **`leg145b-own-errors`**（leg146 那一笔；★它上面还会压一笔\"读数跟上\") ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",

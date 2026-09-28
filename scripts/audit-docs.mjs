@@ -65,7 +65,9 @@ const src = {
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
 const PUBLISHED_BUILD = 'leg145b-own-errors';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
-const PUBLISHED_COMMIT_REF = '992ec3d';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
+//   ★leg146 勘正：这一版**面板一个字没改**（改的是聊天侧那一段注入的写法与读数）⇒ `PANEL_BUILD` **不升**
+//     ⇒ 它仍等于源码那个号（"本地这一版就是发布的那一版"）。**别为了让这里好看而升位**——号跟的是面板。
+const PUBLISHED_COMMIT_REF = '2d66e01';          // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
 // ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
 //   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
 //   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。
