@@ -1,8 +1,11 @@
 // story-world-v2/src/transport-http.js
-// 主调用 HTTP 传输（S6 接线）：OpenAI 兼容 chat/completions，零依赖（Node 24 原生 fetch）。
+// 主调用 HTTP 传输（S6 接线）：OpenAI 兼容 chat/completions，零依赖。
 // base 归一化：末尾去斜杠；无 /v1 自动补（gcli.ggchan.dev 网关与 deepseek 均兼容 /v1 路径）。
 // 配置源：env（ST_OPENAI_BASE / ST_OPENAI_KEY / ST_WORLD_MODEL 或 OPENAI_*）→ 酒馆预设（st-preset.js）。
 // 测试注入假 fetchImpl。
+// ★★发送通道（本次改）：**浏览器走 `XMLHttpRequest`、Node 走原生 `fetch`**——因为页面的 `fetch`
+//   可能已被别的扩展换掉，换掉之后它会往我们的请求体里塞它自己的记忆（实测与证据见下方长注）。
+//   显式注入的 `fetchImpl` 仍然优先（判据与 demo 走这条）。
 // K36 异步可靠性（细案 §3.3 → A-5）：主调用超时（AbortController）+ max_tokens 上限，
 //   两个数字为提案态（铁律 2，标注待报批；随 K36 报批批/长跑回填定案），参数化可覆盖、测试用小值。
 
@@ -71,16 +74,124 @@ function markTimeout(err) {
     return err;
 }
 
-export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = fetch, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★本次（用户令「**这个通道绝对不能有**」）：**页面的 fetch 被别的扩展换掉了，而我们的模型调用走了它**。
+//
+// 病（亲手查实；这条通道**不在我们仓里**，所以"搜代码"永远搜不到它）：
+//   · 我们的地址是 `normalizeBase(baseUrl) + '/chat/completions'`，而 `normalizeBase` 会补 `/v1`
+//     ⇒ 真实地址形如 `https://<网关>/v1/chat/completions`。
+//   · 别的扩展（本机实测：`yuzuki-Memory`）在页面里**把 `window.fetch` 换成了自己的函数**，
+//     并按"地址里有没有 `/v1/chat/completions`"决定要不要动这个请求体——它会拿**你聊天里最后两条正文**
+//     去它绑定的记忆库里检索，把命中的记忆**当成一条 system 消息塞进请求体**（它以为这是聊天请求）。
+//   · 而本文件原来的写法是 `fetchImpl = fetch`（缺省参数在**调用那一刻**求值）
+//     ⇒ 我们每一次抽取/起根/演算的提示词里，都**悄悄多了一段用户正文的记忆**。
+//   后果（真账实测，与"书"逐字对过）：
+//     ① 设定面多出一条 `玉爪儿`——书里一个字都没有；全账 1345 个名字里**只有它一个**对不上书文；
+//     ② 起根 6 条里有 2 条的"书里原话"其实是记忆库里的句子（在书里最长只对得上 **3 个字**）。
+//
+// 治法：**我们的调用不走页面那个 fetch**——浏览器改走 `XMLHttpRequest`（它没被换），
+//   Node 侧（demo / scripts / 判据）仍走原生 `fetch`（那边没有补丁这回事）。
+//   ★为什么不是"把 fetch 抄一份留着"：抄的那一份**谁先加载谁说了算**，赌不过别人的加载顺序；
+//     `XMLHttpRequest` 是**另一套 API**，别人的补丁碰不到它 ⇒ 这才是形态上的隔离。
+//   契约一个字不改：仍只发 `messages:[{role:'user',content:prompt}]`；超时/中止语义照旧——
+//   `xhrSender` 忠实照抄真 fetch 被中止时的形状（抛 DOMException、reason 不参与），
+//   与上面 leg93d 那条判据锁的形状**同形**（两条路必须表现一致，否则状态条上又是一句看不懂的英文）。
+const NATIVE_FN_RE = /\{\s*\[native code\]\s*\}/;
+
+/**
+ * 页面的 `fetch` 有没有被换过（形态判据：浏览器原生函数打印出来带 `[native code]`；被 JS 包一层就不带）。
+ * ★只回答"**页面**上这一问"：不是浏览器（Node 侧 demo/scripts/判据）⇒ 返回 `null`（不适用，不猜）——
+ *   因为 Node 的 `fetch` 本来就是 JS 实现（undici），拿它当"被换过"是**假话**。
+ * ★它只用来**如实报一句**，不参与任何取舍：**绕过页面 fetch 这件事是无条件的**（见 `pickSender`），
+ *   所以即使有人用 Proxy 包（那种包法打印出来仍带 `[native code]`）判不出来，通道也照样是干净的。
+ */
+export function pageFetchLooksPatched() {
+    try {
+        if (typeof window === 'undefined' || typeof window.fetch !== 'function') return null;
+        return !NATIVE_FN_RE.test(Function.prototype.toString.call(window.fetch));
+    } catch (_) { return null; }
+}
+
+/** XHR 版的"发送一次"：返回形状与 fetch 一致（`{ ok, status, text(), json() }`），够本文件用。 */
+function xhrSender(url, init = {}) {
+    return new Promise((resolve, reject) => {
+        const signal = init.signal;
+        let settled = false;
+        let xhr = null;
+        // 被中止时**照真 fetch 的语义**抛（reason 不参与）——理由见 leg93d 那段与上方注释
+        const abortErr = () => (typeof DOMException === 'function'
+            ? new DOMException('signal is aborted without reason', 'AbortError')
+            : Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' }));
+        const finish = (fn) => {
+            if (settled) return;
+            settled = true;
+            try { signal?.removeEventListener?.('abort', onAbort); } catch (_) {}
+            fn();
+        };
+        const onAbort = () => { try { xhr?.abort?.(); } catch (_) {} finish(() => reject(abortErr())); };
+        try { xhr = new XMLHttpRequest(); } catch (err) { finish(() => reject(err)); return; }
+        try {
+            xhr.open(String(init.method || 'GET'), url, true);
+            for (const [k, v] of Object.entries(init.headers || {})) {
+                try { xhr.setRequestHeader(k, String(v)); } catch (_) {}
+            }
+        } catch (err) { finish(() => reject(err)); return; }
+        xhr.onload = () => finish(() => {
+            const text = String(xhr.responseText ?? '');
+            resolve({
+                ok: xhr.status >= 200 && xhr.status < 300,
+                status: xhr.status,
+                text: async () => text,
+                json: async () => JSON.parse(text),
+            });
+        });
+        // 网络层失败（连不上 / 被 CORS 挡下）：给**人话**，并带 `network` 字样——
+        //   `isTransientCallError`（`abstract.js:1576`）认这一类，与"链路断要重试"那条既有口径一致。
+        xhr.onerror = () => finish(() => reject(new Error('连不上模型服务（network error）')));
+        xhr.ontimeout = () => finish(() => reject(new Error('连不上模型服务（network error）')));
+        xhr.onabort = () => finish(() => reject(abortErr()));
+        if (signal) {
+            if (signal.aborted) { onAbort(); return; }
+            signal.addEventListener('abort', onAbort, { once: true });
+        }
+        try { xhr.send(init.body ?? null); } catch (err) { finish(() => reject(err)); }
+    });
+}
+
+/** 缺省发送器：浏览器走 XHR（躲开别人对 fetch 的补丁），Node 走原生 fetch。 */
+function pickSender() {
+    if (typeof globalThis.XMLHttpRequest === 'function') return xhrSender;
+    return globalThis.fetch;
+}
+
+// 通道自证（只出一声，且**只在真被换过时**出声）：让"我们的调用走在哪条路上"在控制台里看得见。
+let sw2ChannelLogged = false;
+function logChannelOnce(usedXhr) {
+    if (sw2ChannelLogged) return;
+    sw2ChannelLogged = true;
+    try {
+        if (typeof console === 'undefined') return;
+        if (pageFetchLooksPatched() !== true) return;      // 没被换过 ⇒ 什么都不说（不留噪声）
+        console.info(`[story-world-v2] 模型调用通道：${usedXhr ? '不走页面的 fetch（改走 XMLHttpRequest）' : '走页面的 fetch'}`
+            + '——★检测到页面的 fetch 已被别的扩展替换过；我们的请求不经它'
+            + '（实测：那条路上有别的扩展会往请求体里塞它自己的记忆）');
+    } catch (_) {}
+}
+
+export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = null, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
+    // ★发送器在**建传输那一刻**定下来（显式注入的优先，判据走这条；缺省 = pickSender）
+    const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
+    logChannelOnce(send === xhrSender);
     return async (prompt) => {
+        if (typeof send !== 'function') throw new Error('没有可用的发送通道（这个环境里 fetch 与 XMLHttpRequest 都没有）');
         const controller = new AbortController();
         // ★`abort(reason)` 里的 reason 在真浏览器里**到不了我们手上**（见上面 leg93d 那段），
         //   它留着只为两件事：① 本仓既有判据的假 fetch 会读它；② 调试时能在 devtools 里看见。
         //   **不要指望靠它给用户一句人话**——那句在下面的 catch 里显式组。
         const timer = setTimeout(() => controller.abort(new Error(`模型超时（${timeoutMs}ms）`)), timeoutMs);
         try {
-            const res = await fetchImpl(endpoint, {
+            const res = await send(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -143,4 +254,132 @@ export function createEnvTransport(env) {
     const model = e.ST_WORLD_MODEL || e.OPENAI_MODEL;
     if (!base || !key || !model) return null;
     return createHttpTransport({ baseUrl: base, apiKey: key, model });
+}
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★用户令（2026-09-27）：「**把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下**」。
+//
+// 为什么这两件事住**这个文件**（而不是另开一个模块）：它们与对话调用**必须是同一个地址规则、同一条发送通道**。
+//   · 地址规则：同一个 `normalizeBase`（末尾去斜杠、缺 `/v1` 自动补）——所以 `/models` 就是
+//     `/chat/completions` 的**兄弟路径**，不新立第二条地址口径（本仓最贵的病是"同一件事两处口径"）。
+//   · 发送通道：同一个 `pickSender()`（浏览器走 `XMLHttpRequest`、Node 走原生 `fetch`）——
+//     页面的 `fetch` 可能已被别的扩展换掉（见文件头 leg139 那段），列表与探测**不能另走一条路**。
+//
+// ★两者的分工（别混成一件事）：
+//   · `listModels` ＝ `GET /v1/models`（**不花钱**）。它成功本身就证明**地址与密钥是通的**。
+//   · `probeModel` ＝ 发一次**最小真实请求**（几个 token）。它多验一样：**模型号认不认**。
+//   ⇒ 所以页面上是两枚按钮、两句读数，不是一个按钮两个名字。
+
+/** 模型列表的地址（与对话同一个 base；`normalizeBase` 已负责补 `/v1`）。 */
+export function modelsEndpoint(baseUrl) {
+    return `${normalizeBase(baseUrl)}/models`;
+}
+
+/**
+ * 把一次失败的 HTTP 应答翻成**人话**（页面上要印给玩家看，零引擎术语）。
+ * ★口径与状态条一致：说清"哪一步不对、你能改什么"，不印 `HTTP 4xx` 就完事。
+ * @returns {string} 一句中文；拿不准的一律带上原始状态码（不猜原因）
+ */
+export function humanHttpError(status, bodySnippet = '') {
+    const s = Number(status);
+    const tail = String(bodySnippet || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const withTail = (line) => (tail ? `${line}（服务端说：${tail}）` : line);
+    if (s === 401 || s === 403) return withTail('密钥无效或已过期');
+    if (s === 404) return withTail('这个地址下没有这个接口——多半是「服务地址」填错了');
+    if (s === 429) return withTail('请求太频繁，被服务端限流了，过一会儿再试');
+    if (s === 400 || s === 422) return withTail('请求被拒——多半是「世界模型」这个名字服务端不认识');
+    if (s >= 500) return withTail(`服务端出错（HTTP ${s}）`);
+    return withTail(`没成功（HTTP ${Number.isFinite(s) ? s : '?'}）`);
+}
+
+/** 取一次响应体里的文字（`xhrSender` 与真 fetch 都提供 `text()`）。 */
+async function readText(res) {
+    try { return String(await res.text()); } catch (_) { return ''; }
+}
+
+/**
+ * 拉模型列表（OpenAI 兼容 `GET /v1/models`）。
+ * ★**不改任何配置**：它只读回来一张清单，填不填由玩家点。
+ * @returns {Promise<{ok:boolean, models:string[], status:number|null, error:string|null}>}
+ */
+export async function listModels({ baseUrl, apiKey, fetchImpl = null, timeoutMs = 20000 } = {}) {
+    const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
+    const out = { ok: false, models: [], status: null, error: null };
+    if (typeof send !== 'function') { out.error = '没有可用的发送通道'; return out; }
+    if (!String(baseUrl || '').trim()) { out.error = '还没填「服务地址」'; return out; }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`取模型列表超时（${timeoutMs}ms）`)), timeoutMs);
+    try {
+        const res = await send(modelsEndpoint(baseUrl), {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: controller.signal,
+        });
+        out.status = res?.status ?? null;
+        if (!res?.ok) { out.error = humanHttpError(out.status, await readText(res)); return out; }
+        const rawText = await readText(res);
+        let data = null;
+        try { data = JSON.parse(rawText); } catch (_) {
+            out.error = '应答不是 JSON——这个地址多半不是 OpenAI 兼容接口';
+            return out;
+        }
+        // OpenAI 兼容形状是 `{data:[{id}]}`；也认裸数组（有些网关就这么给）。
+        const arr = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+        out.models = arr.map((m) => String(m?.id ?? m ?? '').trim()).filter(Boolean);
+        if (!out.models.length) { out.error = '取到了应答，但里面一个模型名都没有'; return out; }
+        out.ok = true;
+        return out;
+    } catch (err) {
+        out.error = controller.signal.aborted
+            ? `取模型列表超时（${timeoutMs}ms）——服务地址可能填错了`
+            : (/network error/i.test(String(err?.message || '')) ? '连不上这个地址（网络不通或被浏览器挡下）' : String(err?.message || err));
+        return out;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * 测一次连通：发**最小真实请求**，一次验三样——地址通不通 · 密钥对不对 · 模型号认不认。
+ * ★**故意不带 `response_format`**：那个字段不是所有模型都支持，探测不该因为"不支持 JSON 模式"而判失败
+ *   （正式调用那一侧才带，见 `createHttpTransport`）。
+ * @returns {Promise<{ok:boolean, ms:number, status:number|null, reply:string, error:string|null}>}
+ */
+export async function probeModel({ baseUrl, apiKey, model, fetchImpl = null, timeoutMs = 30000, maxTokens = 16 } = {}) {
+    const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
+    const out = { ok: false, ms: 0, status: null, reply: '', error: null };
+    if (typeof send !== 'function') { out.error = '没有可用的发送通道'; return out; }
+    if (!String(baseUrl || '').trim()) { out.error = '还没填「服务地址」'; return out; }
+    if (!String(model || '').trim()) { out.error = '还没填「世界模型」'; return out; }
+    const t0 = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`测试超时（${timeoutMs}ms）`)), timeoutMs);
+    try {
+        const res = await send(`${normalizeBase(baseUrl)}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: maxTokens }),
+            signal: controller.signal,
+        });
+        out.ms = Date.now() - t0;
+        out.status = res?.status ?? null;
+        if (!res?.ok) { out.error = humanHttpError(out.status, await readText(res)); return out; }
+        const rawText = await readText(res);
+        let data = null;
+        try { data = JSON.parse(rawText); } catch (_) {
+            out.error = '应答不是 JSON——这个地址多半不是 OpenAI 兼容接口';
+            return out;
+        }
+        out.reply = String(data?.choices?.[0]?.message?.content ?? '');
+        out.ok = true;
+        return out;
+    } catch (err) {
+        out.ms = Date.now() - t0;
+        out.error = controller.signal.aborted
+            ? `等超时了（${timeoutMs}ms）——地址通但模型没回话`
+            : (/network error/i.test(String(err?.message || '')) ? '连不上这个地址（网络不通或被浏览器挡下）' : String(err?.message || err));
+        return out;
+    } finally {
+        clearTimeout(timer);
+    }
 }

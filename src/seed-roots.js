@@ -20,11 +20,52 @@
 //   · **失败零阻塞**：调用方拿到 `{ ok:false }` 就照常跑世界（与检索注入同一条规矩）。
 //   · **不碰世界进度**：只往 `events` 追加事件 + 写 `meta.seedRoots`；不写 tick/盘算/编年/权重。
 import { normalizePosition } from './position.js';
+// ★★★leg144：起根这一遍也**并发发出去、按块号收回来**（同一个机制、同一把尺子：
+//   `src/abstract.js` 的 `EXTRACT_CONCURRENCY` 头注写了为什么是 3、以及"失败即退回串行"）。
+//   ★它读的是**同一本书**、打的是**同一条网关**——所以并发度由调用方传**同一个数**，不另立一个。
+import { runParallel } from './parallel-run.js';
 
 export const SEED_ROOTS_TOP = 6;        // 提案态（铁律 2）：一次种几条。真账缺的就是"几条各自有轴的线"
 export const SEED_ROOTS_MAX = 8;        // 硬上限（模型多给也丢）
 export const SEED_CHUNK_CHAR = 30000;   // 书文取样上限（与设定五件套的 CANON_SRC_CHAR 同量级；防超长书拖垮一次调用）
 export const SEED_CANDIDATES_TOP = 60;  // 改进版：候选池上限（"还没上过台的人"名字；60 个名字 ≈ 300 token）
+// ★★★本笔新立（用户令「这个通道绝对不能有」）：**"书里原话"必须真的在书文里**——这条闸以前不存在。
+//   病（真账实测）：起根 6 条里 **2 条**的"原话"其实是**别处来的句子**（模型那次调用被塞进了别的东西），
+//   在真书《大荒-姬元真》里**一个字都对不上**——而旧 `sanitizeSeedRoots` 只判"quote 非空"
+//   ⇒ 模型写什么句子都算"指得回书里"，照落账。**"引擎不发明事实"这条承重墙，在起根这条路上
+//   此前只靠提示词自觉**（提示词里那句"每条都要能指回书里的原话"没有任何代码在核）。
+//   判据（机械 · 零词表 · 与任何一本书的方言无关）：把 quote 与书文都**去掉空白与省略号**之后，
+//   取 quote 里**最长的一段连续字符**，看它在书文里出不出得现——要求它 ≥ `min(quote 长度, 本常量)`。
+//   ★为什么是"最长连续段"而不是"整句必须逐字出现"：模型抄书时常**用省略号跳字**
+//     （`…` / `...`），整句比对会把**合法的**那几条一起误杀；而"连续段"对跳字免疫。
+//   ★数字（**提案态**，铁律 2）为什么取 10 —— 真账 6 条实测的**最长连续段**：
+//     · 合法的 4 条：**14 / 31 / 21 / 23**（都等于它们自己的全长 ⇒ 逐字来自书里）；
+//     · 那 2 条外来句：**3 / 3**（在书里只碰得上三个字）。
+//     两档之间差着一个数量级（3 vs 14）⇒ 10 落在中间，两边都不擦边。
+export const SEED_QUOTE_MIN_RUN = 10;
+
+/** 比对用归一：去掉空白与省略号（`.`/`…`）——只动"排版噪声"，不动一个字的内容。 */
+function normalizeForQuoteMatch(s) {
+    return String(s ?? '').replace(/[\s\u2026.]+/g, '');
+}
+
+/**
+ * quote 在书文里**最长能连续对上多少字**（0 = 一个字都对不上）。
+ * ★二分查找：判据"存在长度为 L 的连续段"对 L 是**单调**的（L 成立 ⇒ L−1 必成立）⇒ 不必逐长度扫。
+ *   （真书 26 万字 × 每次起根几十条 quote，逐长度扫会是几十万次 indexOf。）
+ */
+export function longestBookRun(quote, bookText) {
+    const q = normalizeForQuoteMatch(quote);
+    const b = normalizeForQuoteMatch(bookText);
+    if (!q || !b) return 0;
+    const has = (L) => { for (let i = 0; i + L <= q.length; i += 1) if (b.includes(q.slice(i, i + L))) return true; return false; };
+    let lo = 1; let hi = q.length; let best = 0;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (has(mid)) { best = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best;
+}
 
 /**
  * 起根提示词（面向模型）——只问一件事：书里**正在发生的事**有哪些。
@@ -93,11 +134,17 @@ export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = S
  * 净化（**机械判据，零语义判断**）：条数上限、字段类型、长度上限、去重、去掉指不回书里的项。
  * ★它**不判**"这条够不够好"（那是提示词的事，也是抽取者的事）——只判"形状是否可用"，
  *   与 `sanitizeCanon`/`sanitizeBookFields` 同一治法（净化坏项、如实上报，不静默）。
+ * @param {object} raw 模型给的 `{roots:[…]}`（或直接一个数组）
+ * @param {object} [opts] `{ max, sourceText }`——★`sourceText` = **这一块的书文**：
+ *   给了就核"书里原话真的在书里"（见 `SEED_QUOTE_MIN_RUN`）；不给 ⇒ 这一条**核不了**，
+ *   如实记一条警告（**不许静默降级**：旧调用方零扰动，但"没核"这件事必须看得见）。
  */
-export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX } = {}) {
+export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '' } = {}) {
     const warnings = [];
     const list = Array.isArray(raw?.roots) ? raw.roots : (Array.isArray(raw) ? raw : []);
     if (!list.length) return { roots: [], warnings: ['起根结果为空（无 roots 数组或数组为空）'] };
+    const bookText = normalizeForQuoteMatch(sourceText);
+    if (!bookText) warnings.push('没有书文可比 ⇒ 本次**没有核对**"原话是否真在书里"（调用方要传 sourceText）');
     const seen = new Set();
     const roots = [];
     for (const [i, r] of list.entries()) {
@@ -112,6 +159,15 @@ export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX } = {}) {
             .slice(0, 3);
         const quote = String(r.quote ?? '').trim().slice(0, 120);
         if (!quote) { warnings.push(`roots[${i}]: 没有书里原话（quote 空）⇒ 指不回书里，丢`); continue; }
+        // ★★★本笔新立：**"指回书里"必须真的核**（此前只判"非空" ⇒ 模型写什么句子都算数）
+        if (bookText) {
+            const run = longestBookRun(quote, sourceText);
+            const need = Math.min(normalizeForQuoteMatch(quote).length, SEED_QUOTE_MIN_RUN);
+            if (run < need) {
+                warnings.push(`roots[${i}]: "书里原话"在书文里最长只对得上 ${run} 个字（要 ≥ ${need}）⇒ 指不回书里，丢`);
+                continue;
+            }
+        }
         if (!parties.length) { warnings.push(`roots[${i}]: 没有当事人（parties 空）⇒ 没人办的事起不了根，丢`); continue; }
         seen.add(title);
         roots.push({ title, position, parties, quote, why: String(r.why ?? '').trim().slice(0, 80) });
@@ -199,7 +255,7 @@ export async function seedRoots({ ssot, sourceText, extract, fingerprint = '', a
     }
     const parsed = typeof raw === 'string' ? safeJson(raw) : raw;
     if (!parsed) return { ok: false, errors: ['起根调用返回的不是合法 JSON'] };
-    const clean = sanitizeSeedRoots(parsed);
+    const clean = sanitizeSeedRoots(parsed, { sourceText: src });
     if (!clean.roots.length) return { ok: false, errors: ['起根结果净化后为空', ...clean.warnings] };
     const applied = applySeedRoots(ssot, clean.roots, { fingerprint, at, tick: ssot.meta?.tick });
     ssot.meta.seedRoots = {
@@ -236,7 +292,7 @@ export function chunkBookText(text, maxChar = SEED_CHUNK_CHAR) {
  */
 export async function seedRootsChunked({
     ssot, chunks = [], extract, fingerprint = '', at = '', candidates = [], seedChunkChar = SEED_CHUNK_CHAR,
-    maxPerChunk = Math.ceil(SEED_ROOTS_MAX / 2), onProgress = null, mergeExisting = true,
+    maxPerChunk = Math.ceil(SEED_ROOTS_MAX / 2), onProgress = null, mergeExisting = true, concurrency = 1,
 } = {}) {
     if (!ssot?.meta) return { ok: false, errors: ['无世界账（ssot.meta 缺失）'] };
     if (typeof extract !== 'function') return { ok: false, errors: ['未提供抽取调用（extract 注入缺失）'] };
@@ -256,28 +312,57 @@ export async function seedRootsChunked({
     const seenTitles = new Set((ssot.events || []).map((e) => String(e.title || '')));
     const collected = [];
     const chunkLog = [];
-    for (const [i, src] of list.entries()) {
-        // ★**分块起根时不再二次截断**：块的大小由调用方（`seed-roots-migrate.js` 的 `--chunk-chars`）决定；
-        //   `SEED_CHUNK_CHAR` 那道截断只属于**单发**路径（`buildSeedRootsPrompt` 的缺省保护）。
-        //   （本装置第一版在这里把 60k 的块又截回 30k，等于白分了块。）
+    // ★★★leg144：**并发发出去**（旧法 `for … await`：一块一块排队，真账 9~11 块 ⇒ 170–490 秒里大半是干等）。
+    //   ★★两条纪律（缺一条就会悄悄改行为）：
+    //     ① **进度必须当场出声**——不能挪到收口那一步报。收口在 `await` 之后，
+    //        9 块会在**最后一瞬间一起报完**，那正是 leg27 要治的"看不见在动"（用户原话「我也看不到日志」）。
+    //     ② **跨块去重仍在收口按块序做**——`seenTitles` 的语义是"**先见到的那块算数**"，
+    //        它是**有次序**的判据；放进并发里跑就是看谁先回来（同一本书两次跑可能种出不同的根）。
+    //   ★`got` 的口径（如实说清，免得两处读数打架）：= **这一块**净化后起出几条（**跨块去重之前**）。
+    //     跨块去重之后的净落账数是 `seeded`（调用方另有那句"已从世界源起 N 条根"）。
+    // ★★★leg144 **补**（用户真机控制台抓出来的**我自己那一处漏**，逐字留档）：
+    //   `[story-world-v2] 抽取调用失败（输入 31631 字符 · 已花 0.8s） HTTP 429`
+    //   栈 = `seed-roots.js:331 ← runLane @ parallel-run.js:78` ⇒ **429 落在起根这一遍**。
+    //   病：本笔第一版**只给 `extractWorldSetting` 装了降级**，起根这里是**定死的并发度**——
+    //   网关一限流，连着几块一起 429、**每块 0.8 秒就丢一个**，既不降速也不重试
+    //   （实测：他那一跑丢了 **4 块**，即 4 块的线头候选整块没进账）。
+    //   ⇒ 与抽取那两遍**同一条口径、同一个开关**：任何一块失败 ⇒ 剩下的活儿当场退回 1 路。
+    //   ★它**不**做什么（别误读）：**不重试**（起根这一遍本来就没有重试，本笔没加）、
+    //     也不改变"失败那一块怎么办"（照旧整块放弃、照旧进 `chunkLog.error` 与 `warnings`）。
+    //     那两条属"改失败分诊"，用户 2026-09-27 明说「**先只做设置**」⇒ 留作活儿单。
+    let degraded = false;
+    const concurrencyNow = () => (degraded ? 1 : concurrency);
+    const results = await runParallel(list, concurrencyNow, async (src, i) => {
         const sliced = String(src);
+        const chars = Array.from(sliced).length;
         let roots = [];
+        let warnings = [];
         let err = null;
         try {
             // ★leg60：**传 Infinity**——块已经由 `chunkBookText` 切好，这里不许再切（见 buildSeedRootsPrompt 头注）
             const raw = await extract(buildSeedRootsPrompt(sliced, { candidates, maxChars: Number.POSITIVE_INFINITY }));
             const parsed = typeof raw === 'string' ? safeJson(raw) : raw;
             if (!parsed) throw new Error('返回的不是合法 JSON');
-            const clean = sanitizeSeedRoots(parsed, { max: maxPerChunk });
-            roots = clean.roots.filter((r) => !seenTitles.has(r.title));
-            allWarnings.push(...clean.warnings.map((w) => `块${i + 1}: ${w}`));
-            for (const r of roots) seenTitles.add(r.title);
+            const clean = sanitizeSeedRoots(parsed, { max: maxPerChunk, sourceText: sliced });
+            roots = clean.roots;
+            warnings = clean.warnings;
         } catch (e) {
             err = String(e?.message || e);
+            degraded = true;   // ★失败即退回串行（与抽取那两遍同一把尺子——见上）
         }
-        chunkLog.push({ index: i + 1, chars: Array.from(sliced).length, ok: !err, got: roots.length, error: err });
-        if (typeof onProgress === 'function') onProgress({ step: 'seedRoots', index: i + 1, count: list.length, chars: sliced.length, ok: !err, got: roots.length, error: err });
-        collected.push(...roots);
+        if (typeof onProgress === 'function') {
+            onProgress({ step: 'seedRoots', index: i + 1, count: list.length, chars, ok: !err, got: roots.length, error: err });
+        }
+        return { chars, roots, warnings, err };
+    });
+    // 按块序收口（★次序的唯一出处：跨块去重 + 留痕 + 收集，三件都在这里按块号做）
+    for (const [i, res] of results.entries()) {
+        if (!res) continue;
+        const kept = res.roots.filter((r) => !seenTitles.has(r.title));
+        for (const r of kept) seenTitles.add(r.title);
+        allWarnings.push(...res.warnings.map((w) => `块${i + 1}: ${w}`));
+        chunkLog.push({ index: i + 1, chars: res.chars, ok: !res.err, got: res.roots.length, error: res.err });
+        collected.push(...kept);
     }
     if (!collected.length) {
         return { ok: false, errors: ['全部块都没能起出可用的根', ...chunkLog.filter((c) => c.error).map((c) => `块${c.index}: ${c.error}`)], chunks: chunkLog };

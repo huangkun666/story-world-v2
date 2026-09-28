@@ -99,9 +99,26 @@ test('★★leg80 丙-web②：新模块只许 import `../src/init-source.js`，
     const bs = read('web/book-source.js');
     const code = stripComments(bs);
     const imports = [...code.matchAll(/^\s*import\s.+$/gm)].map((m) => m[0].trim());
-    assert.equal(imports.length, 1, `★\`web/book-source.js\` 只许有一条 import；实际 ${imports.length} 条：${imports.join(' | ')}`);
-    assert.match(imports[0], /^import \{ normalizeEntryKey \} from '\.\.\/src\/init-source\.js';/,
-        '★唯一那条 import 必须是"条目指纹的键归一"（与起根同一份契约）');
+    // ★★★leg112 三次勘正（C1 换书检测）：原来这一条锁的是"**只许有一条** import，且必须是
+    //   `{ normalizeEntryKey } from '../src/init-source.js'`"——本笔合法地多了两条
+    //   （`bookFingerprint` 与 `checkBookSource`）⇒ 照本仓纪律把**口径改成"清单 + 边界"**，不是把锁删掉：
+    //     ① 逐条登记（谁加的、为什么），多一条就得在这里写清；
+    //     ② **边界一条没放宽**：仍不许 import `./index.js`（成环）、不许 import `./idb-backend.js`
+    //        （要在浏览器里才活）、不许出现 `window` / `document`（Node 里要能直接导入）。
+    //   ★为什么这三条必须在本模块（不能挪去接线层）：本模块是"书怎么取"的唯一主人，
+    //     换书检测要的正是"照抽取口径重算一遍书文"⇒ 挪走就得多写一份取书口径（第二把尺子）。
+    const WANT = [
+        "import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';",
+        "import { bookFingerprint } from '../src/fingerprint.js';",
+        "import { checkBookSource } from '../src/book-check.js';",
+    ];
+    assert.equal(imports.length, WANT.length,
+        `★\`web/book-source.js\` 的 import 面共 ${WANT.length} 条（逐条登记在案）；实际 ${imports.length} 条：${imports.join(' | ')}`);
+    for (const w of WANT) {
+        assert.ok(imports.includes(w), `★登记在案的 import 必须逐字在位：${w}`);
+    }
+    assert.match(imports[0], /^import \{ normalizeEntryKey, composeInitSource \} from '\.\.\/src\/init-source\.js';/,
+        '★第一条仍是"条目指纹的键归一"（与起根同一份契约）＋ 合订（换书检测要与抽取同一条口径）');
     assert.ok(!/from\s*'\.\/index\.js'/.test(code), '★不许反向 import 接线层（那就是循环依赖）');
     assert.ok(!/from\s*'\.\/idb-backend\.js'/.test(code), '★不许 import 浏览器侧适配层（本模块要能在 Node 里直接导入）');
     // ★★★本族特有的形态：不吃 `window`，ctx 一律当形参收（唯一例外见下一条）

@@ -32,6 +32,28 @@ const RE_ELAPSED = /【时长】\s*([^\n【]+)/g;
 // ★冒号全角半角都收（`：`/`:`）——模型两个都会写；场景是行内闭合的（`【场景：X】`）。
 const RE_SCENE = /【场景\s*[:：]?\s*([^】\n]*)】/g;
 const RE_ACTION = /【行动】\s*([^\n【]+)/g;
+// ★★★leg123（细案 `docs/spec-tag-granularity.md`）：**三族新标签**。★**块口径与老族一条不改**
+//   （仍然只认 ` ```tags ` 块里的；块不在 ⇒ 退回逐行扫——见 `shellRange` 与 leg93 那条降级铁律）。
+//   · `【此刻】`＝**现在是什么时候**（一个**时间点**）——不是"过了多久"（那是 `【时长】`）。
+//     ⇒ 两格**分开记**：本族 → `at`（落事件/编年的 `timeMark`）、`【时长】` → `elapsed`（leg115 老通路）。
+//   · `【变化】`＝谁｜哪一格｜变成什么——**格名对齐实体账**（见下面 `CHANGE_FIELDS`），值照抄不换算。
+//   · `【承诺】`＝谁｜许了什么｜对谁——不是动手，但确实发生了（"让世界记住我的事"那一格）。
+const RE_AT = /【此刻】\s*([^\n【]+)/g;
+const RE_CHANGE = /【变化】\s*([^\n【]+)/g;
+const RE_PROMISE = /【承诺】\s*([^\n【]+)/g;
+
+/** ★★格名表（**真源**）：`【变化】`第二格只许用这些名。
+ *  ★为什么是这几个：它们是**实体账上真有的文本格**（`src/schemas/ssot.schema.js:350-369`），
+ *    并按类别分（`sanitizeBookFields` 的白名单：**角色收前四项、势力收后三项**）。
+ *  ⇒ 聊天模型看到的就是这一份名单（规范 v2 里那两行），**抄的是同一把尺子**，不另立第二份。 */
+export const CHANGE_FIELDS = ['所属', '身份', '定位', '实力', '性质', '倾向', '规模'];
+/** 格 → 归属类别（角色的格写到势力身上 = 形状不合 ⇒ 丢 + 留痕）。 */
+export const CHANGE_FIELD_KIND = {
+    所属: 'character', 身份: 'character', 定位: 'character', 实力: 'character',
+    性质: 'faction', 倾向: 'faction', 规模: 'faction',
+};
+/** ★驻点也允许由戏来改（细案 §5 第 6 条），但它要**过地名归一**——不在地名表里就丢 + 留痕。 */
+export const CHANGE_PLACE_FIELD = 'location';
 
 /** 形近字归一：去空白 + 全角/半角不敏感（NFKC）+ 小写。别名对齐靠它（实测"小娥 ≠ 白小娥"那类坑）。*/
 function normName(v) {
@@ -120,6 +142,29 @@ export function shellRange(text) {
     return { start: open + 1, end: lines.length, closed: false };
 }
 
+/** 字面的两个字符 `\` `n`——模型把标签块塞进 JSON 字符串时，真换行会变成它（见 `extractTags` 顶注）。 */
+const LITERAL_NL = '\\n';
+/** 还原尝试的门槛②：**标签块的开围栏本身也是被转义的**（`\`\`\`tags` 前面紧跟一个**字面** `\n`）。
+ *  ★为什么是这一条（**本笔实测纠正过两次，两次都留档**）：
+ *    第一版门槛②写成"标签名出现在行首（字面 `\n` 之后也算）"⇒ **当场咬到正常正文**：
+ *    `'正文解说：…\n【行动】谁｜做了什么\n就长这样。'`（正文在解说格式、句尾又提到字面 `\n`
+ *    这个写法）被还原后读出一条**假行动**（实测 parsed=1，本应是 0）。
+ *    根因：**字面 `\n` 在"正文提到它"时是内容，在"JSON 转义"时是结构**，光看标签名分不开。
+ *    第二版想用"还原之后真能找出围栏块"（`shellRange`）——**也不成立**：真模型那种写法里，
+ *    开围栏那一行是 `{"tags":"```tags`（**围栏不是整行只有它**），闭围栏那行尾巴还挂着 `"}`，
+ *    ⇒ `shellRange` 在还原后照样返回 null（它那条"整行只有它"的判据是 leg93 定的，不许为这里放宽）。
+ *    ★**定稿这一条分得开**：**闭围栏自己也是被转义的**——它在字面 `\n` 之后（`…\n```"}` 那种）。
+ *    而正文里提到 `\n` 时，后面跟的是散文或标签名，**不会正好跟一个闭围栏**。
+ *    ⚠本笔在这个门槛上**连错三版**（全留档，别重踩）：①只看"标签名在行首"⇒ 咬到正常正文（假行动）；
+ *    ②看"还原后 `shellRange` 找得到围栏"⇒ **永不成立**（真模型那种写法里开围栏跟 `{"tags":"` 同处
+ *    一行、闭围栏尾巴挂着 `"}`，`shellRange` 那条"整行只有它"的判据在还原后照样不满足）；
+ *    ③锚**开**围栏⇒ **也永不成立**（JSON 那种形状里开围栏前面是 `"`、不是 `\n`，而"`\n` ＋ 开围栏"
+ *    这个组合在转义文本里根本不存在）⇒ 必须锚**闭**围栏。★三次都是**先跑再看**才发现的。
+ *  ★**只认有围栏的那种**：围栏不在 ⇒ 就算还原了也没有边界，认出来的东西会落在块外
+ *    （leg93 甲案那条"块外一律当正文"）⇒ 那种情况**不救**，照旧零收获（＝今天的行为）。
+ *    ★这条是**有意的取舍**：宁可少救一类（漏写围栏的 JSON 转义），不可改动读得出来的轮次。 */
+const RE_ESCAPED_FENCE_CLOSE = /\\n[ \t]*(?:```|~~~)/;
+
 /**
  * ★标签提取（纯函数）。
  *
@@ -136,6 +181,7 @@ export function shellRange(text) {
  *   unresolved: Array, player: object|null, playerDropped: number, malformed: string[],
  *   locations: string[],
  *   shell: {found: boolean, mode: 'shell'|'all', closed: boolean|null},
+ *   restored: boolean,   ★leg137：这一遍是不是"把字面 `\n` 还原成真换行之后"的结果
  * }}
  */
 export function extractTags(text, ctx = {}) {
@@ -154,6 +200,22 @@ export function extractTags(text, ctx = {}) {
         return null;
     };
 
+    // ★★★leg137：**两级尝试**（治"标签块被包进 JSON 字符串 ⇒ 一个字都读不到"那条静默失效）。
+    //   病（leg136 §4.2 真模型实测）：模型把整块标签塞进一个 JSON 字符串 ⇒ 换行成了**字面的
+    //   两个字符 `\` `n`**，而本模块是**按真换行切行**的 ⇒ 围栏与每一行标签都不在行首，
+    //   **一条都读不出来，而且一个字都不出声**（`malformed`/`unresolved` 全空，界面上看不出
+    //   "这一轮其实有标签"）。真账实测：原样 **0 条** / 把字面 `\n` 还原成真换行 **3 条**。
+    //   治法：**先按原样跑一遍**（今天的行为逐字节不变）；**只在"一条都没读到"时**才把字面
+    //   `\n` 还原成真换行再跑一遍；**两级都读不到 ⇒ 才算这一轮没有标签**。
+    //   ★**为什么不能无条件还原**：正常正文里也可能出现字面 `\n`（比如正文在讲代码）⇒
+    //   无条件还原会**改掉今天正常的解析**（本仓"改判据 = 改承重墙"）。
+    //   ★**两道门槛都必须有**（缺一个就会咬到正常正文）：
+    //     ① 文本里**真出现**字面 `\n`；② ★★**字面 `\n` 紧跟一个标签块开围栏**（` ```tags `）。
+    //     门槛②为什么是这一条、以及它前面两版为什么都不成立（**本笔实测纠正过两次**）⇒
+    //     逐条写在下面 `RE_LITERAL_NL_FENCE` 那个常量的注释里，**同一件事只许有一处**，这里不重抄。
+    //   ★**门只开给"零收获"**：`hasTagFacts(pass1) === false` 是**最严的一档**——
+    //     连一条"归不上名字""形状不合"都没有才试。宁可少救，不可改动读得出来的轮次。
+    const parse = (text0) => {
     const elapsedParts = [];
     const malformed = [];
     const unresolved = new Map();          // 名字 → 条数（同一名字只报一次）
@@ -161,6 +223,13 @@ export function extractTags(text, ctx = {}) {
     const playerPids = normName(playerId);
     const actions = [];                    // 主语已归一、地点已继承的中间结果（未封顶）
     const playerSeen = [];                 // 主角那几条（按出现序）
+    // ★★★leg123（细案 `docs/spec-tag-granularity.md`）：三族新标签的收料槽。
+    const changes = [];                    // 【变化】主语已归一的结果（谁｜哪一格｜变成什么）
+    const changesBad = [];                 // 【变化】**丢掉**的行 + 为什么丢（丢了什么必须能被看见）
+    const promises = [];                   // 【承诺】谁｜许了什么｜对谁
+    const promisesBad = [];                // 【承诺】**丢掉**的行 + 为什么丢
+    const entById = new Map((entities || []).filter((e) => e?.id).map((e) => [e.id, e]));   // 类别校验用（角色的格 ≠ 势力的格）
+    let at = null;                         // 【此刻】的时间点原文（★**先到先得**：点不是一个可以累加的量）
 
     let sceneText = null;                  // 当前场景原文（最近的 `【场景：…】`）
     let sceneId = null;                    // 归一到地点表的结果；null = 表里没有（或不在地点表口径里）
@@ -169,9 +238,9 @@ export function extractTags(text, ctx = {}) {
     //   逐行扫的下限是"只丢那一行"，与"丢了什么要能被看见"这条口径一致。
     // ★★★leg93：**先定扫描范围**——标签块在 ⇒ **只扫块里**（块外的 `【】` 落在范围外，
     //   正文怎么引用标签格式都不会被当成行动）；块不在 ⇒ 退回逐行扫全篇（老行为逐字节不变）。
-    const shell = shellRange(src);
+    const shell = shellRange(text0);
     const mode = shell ? 'shell' : 'all';
-    const lines = src.split(/\r?\n/);
+    const lines = text0.split(/\r?\n/);
     for (let i = 0; i < lines.length; i += 1) {
         if (mode === 'shell' && (i < shell.start || i >= shell.end)) continue;
         const raw = lines[i].trim();
@@ -255,8 +324,90 @@ export function extractTags(text, ctx = {}) {
             else actions.push(row);
             continue;
         }
-        // ④ 其它一律不看（正文归模型自由写；只有 `【…` 开头却不像上面三族的行才当"形状不合"留痕）
-        if (/^【(时长|场景|行动)/.test(raw)) malformed.push(raw.slice(0, 40));
+        // ④ 【此刻】——**现在是什么时候**（时间点；逐字照抄，不做算术、不带源）
+        if (/^【此刻】/.test(raw)) {
+            const m = RE_AT.exec(raw);
+            RE_AT.lastIndex = 0;
+            const v = normPlace(m?.[1]);
+            if (!v) { malformed.push(raw.slice(0, 40)); continue; }
+            if (at === null) at = v;           // ★先到先得（不取最后、不拼接：点不是一个可累加的量）
+            continue;
+        }
+        // ⑤ 【变化】——谁｜哪一格｜变成什么（格名对齐实体账；值**照抄不换算**）
+        if (/^【变化】/.test(raw)) {
+            const m = RE_CHANGE.exec(raw);
+            RE_CHANGE.lastIndex = 0;
+            const body = normPlace(m?.[1]);
+            if (!body) { malformed.push(raw.slice(0, 40)); continue; }
+            const cells = body.split(TAG_FIELD_SEP).map((s) => s.trim());
+            const who = cells[0] || '';
+            const field = cells[1] || '';
+            const value = cells.slice(2).join(TAG_FIELD_SEP).trim();   // ★值里若含「｜」，整段照收（不切碎）
+            if (!who || !field || !value) { malformed.push(raw.slice(0, 40)); continue; }
+            const id = resolveEntity(who);
+            if (!id) {
+                // ★宁缺勿造：账上没有这个人 ⇒ **不写格**（写格等于凭空造人），但丢了什么必须能被看见。
+                unresolved.set(who, (unresolved.get(who) || 0) + 1);
+                changesBad.push({ raw: raw.slice(0, 40), why: 'who' });
+                continue;
+            }
+            const isPlace = field === CHANGE_PLACE_FIELD;
+            if (!isPlace && !CHANGE_FIELDS.includes(field)) {
+                changesBad.push({ raw: raw.slice(0, 40), why: 'field' });   // 格名不在册
+                continue;
+            }
+            const kind = entById.get(id)?.kind || null;
+            if (!isPlace && kind && CHANGE_FIELD_KIND[field] && CHANGE_FIELD_KIND[field] !== kind) {
+                changesBad.push({ raw: raw.slice(0, 40), why: 'kind' });    // 角色的格写到势力身上（反之亦然）
+                continue;
+            }
+            // ★驻点必须过地名归一（与事件 `position` 同一把尺子）；不在地名表里 ⇒ 丢 + 留痕。
+            const place = isPlace ? resolvePlace(value) : null;
+            if (isPlace && !place) { changesBad.push({ raw: raw.slice(0, 40), why: 'place' }); continue; }
+            changes.push({
+                entityId: id,
+                field,
+                value: isPlace ? place : value,
+                raw: raw.trim(),                            // ★原话（落账时当 `proseQuote` 用：逐字回执）
+                location: sceneId ?? sceneText ?? null,     // 地点继承最近场景（与行动同一条）
+                source: 'tag',
+            });
+            continue;
+        }
+        // ⑥ 【承诺】——谁｜许了什么｜对谁（不是动手，但确实发生了；"让世界记住我的事"那一格）
+        if (/^【承诺】/.test(raw)) {
+            const m = RE_PROMISE.exec(raw);
+            RE_PROMISE.lastIndex = 0;
+            const body = normPlace(m?.[1]);
+            if (!body) { malformed.push(raw.slice(0, 40)); continue; }
+            const cells = body.split(TAG_FIELD_SEP).map((s) => s.trim());
+            const who = cells[0] || '';
+            const what = cells[1] || '';
+            const toText = cells[2] || '';
+            if (!who || !what) { malformed.push(raw.slice(0, 40)); continue; }
+            const id = resolveEntity(who);
+            if (!id) {
+                // ★没有主的承诺挂不到任何人身上 ⇒ 丢 + 留痕（与【变化】同一条口径）。
+                unresolved.set(who, (unresolved.get(who) || 0) + 1);
+                promisesBad.push({ raw: raw.slice(0, 40), why: 'who' });
+                continue;
+            }
+            // ★对象那一格**知道就写、不知道就不写**：写了个认不出的名字 ⇒ **不丢承诺**
+            //   （玩家许下的事是"唯一真相源"），只把 id 留空、名字照抄进标题
+            //   ⇒ 与行动那条"不造人但不丢料"同一条口径。
+            promises.push({
+                entityId: id,
+                what,
+                toId: toText ? resolveEntity(toText) : null,
+                toText: toText || null,
+                raw: raw.trim(),                            // ★原话（落账时当 `proseQuote` 用：逐字回执）
+                location: sceneId ?? sceneText ?? null,
+                source: 'tag',
+            });
+            continue;
+        }
+        // ⑦ 其它一律不看（正文归模型自由写；只有 `【…` 开头却不像上面各族的行才当"形状不合"留痕）
+        if (/^【(时长|场景|行动|此刻|变化|承诺)/.test(raw)) malformed.push(raw.slice(0, 40));
     }
 
     // ★`parsed` 的语义（leg89 实测校正，写死防将来改歪）：**正文里解析出的行动条数**
@@ -272,6 +423,13 @@ export function extractTags(text, ctx = {}) {
         // ★散文并列，不是时长合计（合计就要做算术 = 编数）
         elapsed: elapsedParts.join('；'),
         elapsedParts,
+        // ★★★leg123：`【此刻】`——本轮"现在是什么时候"（点，逐字照抄；没写 ⇒ null ⇒ 那一格不出现）
+        at,
+        // ★★★leg123：三族新料的收料面（★**只增键**：老聊天没有这三族 ⇒ 既有断言逐字节不变）
+        changes,
+        changesBad,
+        promises,
+        promisesBad,
         count: kept.length,
         parsed,                                              // ★截断必须可见：parsed > count 就是真丢了
         unresolved: [...unresolved.entries()].map(([name, n]) => ({ name, n })),
@@ -284,7 +442,19 @@ export function extractTags(text, ctx = {}) {
         locations: [...new Set(kept.map((a) => a.location).filter(Boolean))],
         // ★leg93：**这一次是按哪个口径扫的**——如实交出去（面板读数要用它把"没包块"说出来）。
         shell: { found: Boolean(shell), mode, closed: shell ? shell.closed : null },
+        // ★★★leg137：这一遍是不是"还原过字面 `\n` 之后"的结果（见本函数顶注那段两级尝试）。
+        restored: false,
     };
+    };
+
+    const first = parse(src);
+    // ★门只开给"零收获"（最严的一档，见顶注）。★`hasTagFacts` 就是本模块自己那条"有没有料"的口径，
+    //   直接复用它 ⇒ 不会出现"这里算没读到、别处算读到了"两把尺子。
+    if (hasTagFacts(first) || src.indexOf(LITERAL_NL) < 0 || !RE_ESCAPED_FENCE_CLOSE.test(src)) return first;
+    // ★`split().join()` 而不是正则替换：要替换的就是**字面反斜杠＋n 这两个字符**，不是转义序列。
+    const second = parse(src.split(LITERAL_NL).join('\n'));
+    second.restored = true;
+    return second;
 }
 
 /**
@@ -295,7 +465,10 @@ export function hasTagFacts(f) {
     if (!f) return false;
     return Boolean(
         f.actions?.length || f.notNoted?.length || f.player || f.elapsed || f.unresolved?.length
-        || f.malformed?.length || f.playerDropped,
+        || f.malformed?.length || f.playerDropped
+        // ★★★leg123：三族新料也算"有料"——只有【此刻】/【变化】/【承诺】时也要进包、要出声
+        //   （★`*Bad` 也算：丢了什么**必须能被看见**，这正是"不许静默"那条口径的落点）。
+        || f.at || f.changes?.length || f.promises?.length || f.changesBad?.length || f.promisesBad?.length,
     );
 }
 
@@ -320,6 +493,12 @@ export function tagReadoutLine(f) {
         bits.push(`不在名册 ${f.unresolved.length} 个名字（${who}）——他们这轮的事没入账，但已递给世界模型`);
     }
     if (f.elapsed) bits.push(`时长 ${f.elapsed}`);
+    // ★★★leg123：三族新料如实报——**含"丢掉的"**（丢了什么必须能被看见，这条与既有 `形状不合` 同一口径）。
+    if (f.at) bits.push(`此刻 ${f.at}`);
+    if (f.changes?.length) bits.push(`变化 ${f.changes.length}`);
+    if (f.promises?.length) bits.push(`承诺 ${f.promises.length}`);
+    if (f.changesBad?.length) bits.push(`变化丢掉 ${f.changesBad.length} 行`);
+    if (f.promisesBad?.length) bits.push(`承诺丢掉 ${f.promisesBad.length} 行`);
     if (f.malformed?.length) bits.push(`形状不合 ${f.malformed.length} 行`);
     return `标签: 行动 ${bits.join(' · ')}`;
 }

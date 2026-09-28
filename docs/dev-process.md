@@ -219,16 +219,23 @@
 | 契约层 | `schema.js` + `schemas/*`（SSOT 形状、世界步形状）、`prompts.js`（模板）、`pack.js`（打包序） |
 | 引擎层 | `check-step.js`、`worldstep.js`、`settle.js`（+ 分量引擎起 `weight.js`、`gate.js`） |
 | 渲染层 | `streams.js`、`render.js`（K33+） |
-| 编排层 | `tick.js`、`transport-http.js`、`st-preset.js`、`smoke.js`、`transport-config.js`、`abstract.js`、`player-setup.js`、`storage.js`（K35+）、`async-tick.js`（K36+）、`web/index.js`（浏览器侧，K30+）、`web/idb-backend.js`（浏览器侧卷库，K35+） |
+| 编排层 | `tick.js`、`transport-http.js`、`st-preset.js`、`smoke.js`、`transport-config.js`、`abstract.js`、`storage.js`（K35+）、`async-tick.js`（K36+）、`web/index.js`（浏览器侧，K30+）、`web/idb-backend.js`（浏览器侧卷库，K35+） |
+
+> 🪦 **已删除的两个（2026-09-25 复查 · 别再当现状读）**：`player-inject.js` 与 `player-setup.js`
+> 由 **leg25c**（"四维浮点属性整条删除"那一棒）**两个模块整个删除**（`docs/handoffs/session-handoff-2026-09-11-leg25c.md` §4）。
+> ⇒ 本表上方与下面模块地图里那两行是**留档**，不是现行分层。
 
 **模块地图**（职责 / 契约 / 状态；状态：稳定=切片验收，计划=已拍板细案内；测试列 = 静态测试契约文件，用例数以 `node demo/status.js` 动态聚合为准；最近台账列 = 该模块最近一次变更步骤名）：
 
 > 🪦 **2026-09-21 · leg106 复查：本表的覆盖已明显落后，别当完整清单用。**
 > 实测：`src/` 现有 **44** 个 `.js` 模块，本表 + §9 分层表提到的只是其中一部分；
-> **以下 20 个模块在本手册里根本没有条目**（按字母序）：
-> `abstract-shape` · `abstract-tier` · `entity-lookup` · `init-source` · `limits` · `memory-bridge` · `panorama` ·
-> `param-hub` · `params` · `param-store` · `position` · `recall` · `ref-rules` · `render-base` · `sanitize-step` ·
+> **以下 18 个模块在本手册里根本没有条目**（按字母序）：
+> `abstract-shape` · `abstract-tier` · `entity-lookup` · `init-source` · `limits` · `panorama` ·
+> `param-hub` · `params` · `param-store` · `position` · `ref-rules` · `render-base` · `sanitize-step` ·
 > `seed-roots` · `snapshot` · `tag-extract` · `undo-stack` · `unrest`；
+> ★**又少了两个**：`memory-bridge` 与 `recall` 由 **leg125**（那条通道整条拆除）**从盘上删除**
+> ⇒ 已从上面那串里移出（`docs/done-archive.md`：leg125 已办结；`test/module-layout.test.js` 那条棘轮也锁着）；
+> ★本段那个"现有 44 个 `.js` 模块"是 **leg106 的化石**——现行模块数以 `test/module-layout.test.js` 为准，别引用它。
 > 同理 `web/` 的 13 个模块里，本手册只列了 `index.js` 与 `idb-backend.js`。
 > **可靠的三条替代路径**：① `STATE.md`（现状）② `docs/index.json`（按主题反查是哪一棒做的）
 > ③ 直接读模块头部注释——本仓的模块注释写得比这张表详细（每族都带 leg 号与踩坑留档）。
@@ -240,7 +247,7 @@
 | `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt；K24 扩 context.setting；K39 扩编年行 kind 章） | schema + golden/live/bystander/player 世界测试 + setting | S2 · K3 · K5 · K9 · K18 · K24 · K39 |
 | `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
 | `fingerprint.js` | 书指纹缓存：FNV-1a（v1 算法原样搬）+ LRU 有界 + 版本戳 | `bookFingerprint(text)` → 指纹串；`createCache(seed?)` → {get,set,size,keys}（命中=深拷贝返回） | — | 稳定（K26） | fingerprint.test.js | K26 |
-| `player-inject.js` | 玩家 attrs 自动注入（P-B 触发闭合；v1.1=LLM 解析版，T7 拍板；K32 增溯源账 v1.2）：玩家开档描述 → 一次小调用解析 | `injectPlayerAttrs(ssot,{playerDesc,parse,overwrite})` → 新 SSOT（有依据=解析值 [0,1] 钳制 / 无依据·失败=定案默认 #6-9 / 手填优先 / 幂等；overwrite 只覆盖 meta.playerParse 溯源账内键） | — | 稳定（K28 → v1.1 → K32 v1.2） | player-inject + player-setup | K28 · 第十棒 · K32 |
+| `player-inject.js` | 玩家 attrs 自动注入（P-B 触发闭合；v1.1=LLM 解析版，T7 拍板；K32 增溯源账 v1.2）：玩家开档描述 → 一次小调用解析 | `injectPlayerAttrs(ssot,{playerDesc,parse,overwrite})` → 新 SSOT（有依据=解析值 [0,1] 钳制 / 无依据·失败=定案默认 #6-9 / 手填优先 / 幂等；overwrite 只覆盖 meta.playerParse 溯源账内键） | — | ★**已删除（leg25c）**（原标"稳定（K28 → v1.1 → K32 v1.2）"——★**文件已不在盘上**，此行是留档） | player-inject + player-setup | K28 · 第十棒 · K32 |
 | `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2；K29 大势块——有 setting 取演化层强度 + 张力三件/环境量，无则回退数字） | worldstep + smoke + birth + backdrop-smoke | K2（P3） · K29 |
 | `prompts.js` | 主调用 prompt（八铁律 + 内嵌 JSON 模板） | pack → prompt 字符串 | OUTPUT_TEMPLATE（与 schema 逐字一致） | 稳定（v2-ripples-1：ripples=实体 id 显式化，第十三棒） | worldstep + streams 间接 + prompts（契约锁，第十三棒起） | S4 · K5 · K18 · 第十三棒 |
 | `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |
@@ -257,7 +264,7 @@
 | `st-preset.js` | 酒馆预设直读（Node-only：node:fs 读 settings.json，浏览器侧不触达） | (settingsPath?) → 传输配置 | transport-http | 稳定 | —（diag-transport 工具覆盖） | 活演示·真跑 |
 | `transport-config.js` | 传输配置解析（K30，浏览器适配套）：设置对象 → 传输配置 | `resolveBrowserTransport(settings)` → {transport, source:'settings', baseUrl, model} 或 null（未配置） | transport-http | 稳定（K30） | transport-config + browser-compat | K30 |
 | `abstract.js` | 抽象管线执行器（K31）：书源→指纹→抽取小调用→净化→落 context.setting（frozen 五件套 + dynamic 初值）；命中零调用/书变失效/force 覆盖 | `extractWorldSetting({sourceText, extract, cache, force, extractedAt, legacyTension})` → {ok, setting, cached, fingerprint, errors}；`applySettingToSsot(ssot, setting)` → 新 SSOT（不可变） | fingerprint（缓存 1→2 形状）、entropy（ENV_KEYS 键表） | 稳定（K31） | abstract.test.js + browser-compat | K31 |
-| `player-setup.js` | 玩家开档解析接线（K32）：playerDesc → 小调用 prompt → transport → 解析 → injectPlayerAttrs；OVERWRITE force 语义 | `runPlayerSetup({ssot, playerDesc, transport, overwrite})` → {ok, ssot, skipped?, parsed?}；`buildPlayerParsePrompt(desc)` → prompt | player-inject、transport 注入式 | 稳定（K32） | player-setup.test.js | K32 |
+| `player-setup.js` | 玩家开档解析接线（K32）：playerDesc → 小调用 prompt → transport → 解析 → injectPlayerAttrs；OVERWRITE force 语义 | `runPlayerSetup({ssot, playerDesc, transport, overwrite})` → {ok, ssot, skipped?, parsed?}；`buildPlayerParsePrompt(desc)` → prompt | player-inject、transport 注入式 | ★**已删除（leg25c）**（原标"稳定（K32）"——★**文件已不在盘上**，此行是留档） | player-setup.test.js | K32 |
 | `storage.js` | 存储层核心（K35）：热账形状 / 冷档轮转（编年超阈值→前置段入卷，断链防线=里程碑/因果留热态）/ 阅卷还原 / 导出导入验签（SHA-256） | `rotateChronicle(world,{limits,volumeSeq,now})` → {hot, volume\|null}（纯函数）；`hotAccountShape/loadHotAccount`；`volumeToChronicleRows(volume)` → 编年行；`buildExportBundle/verifyImportBundle`（async，双端 webcrypto） | —（store 注入面：浏览器=web/idb-backend，测试=内存 mock） | 稳定（K35） | storage.test.js | K35 |
 | `async-tick.js` | 异步可靠性编排（K36 → 第十三棒）：回合推进串行队列（防重入锁）/ 失败世界不动 / 异常兜底 / 手动补推语义（save 允许异步，await 后 refresh；save 抛错=落账失败回执可重试） | `createTickQueue({tick,load,save,refresh,onStatus})` → {advance, busy}（advance → {ok, tick?}/ {ok:false, skipped?, error?, save?}） | —（注入面：tick/load/save/refresh 全由调用方接；save 可 async） | 稳定（K36 → 第十三棒） | async-tick.test.js | K36 · 第十三棒 |
 | `web/idb-backend.js` | IndexedDB 卷库适配（K35，浏览器专属）：chatId+卷号键，接口与 store 注入面同构 | `createIdbVolumeStore(chatId)` → {list, put, get} | —（顶层零 indexedDB，Node 冒烟安全） | 稳定（K35） | —（storage.test 内存 mock 同接口覆盖） | K35 |
@@ -269,4 +276,27 @@
 
 ---
 
+## 10. 发布流程（leg103 跑通两遍，leg106 首次收进仓；★leg140 从 `STATE.md` §5.1 搬来）
+
+> ★**为什么搬到这里**：这一格是**流程**（怎么做一次发布），不是"当前值"。
+>   而 `STATE.md` 有 **20 KB 硬顶**、只装当前值，leg139 收尾时余量只剩 **254 字节**（守门已黄）
+>   ⇒ leg140 把它整段搬进本手册，`STATE.md` §5.1 只留一句指路。
+>   ★与 leg106 立的那条纪律同源：**当前值只许有一个家；流程归流程文档。**
+
+**「导出独立根树 → 仓外独立跑判据与冒烟 → 推发布仓 → 远端逐字节核验」**，**全程不碰工作区**
+（那个目录同时是用户的真机安装位）。
+
+- 工具：`node scripts/publish-release.mjs`（导出 + 仓外跑 + 推）· `node scripts/verify-release.mjs`（远端只读终检）
+- ★**绝不重写工作区**；推送用 `git` 底层（`read-tree` / `write-tree` / `commit-tree` + 临时 index）。
+- ★**每一步先核对现状、条件不成立就停下报因**，不硬来；**幂等守卫要比"本笔真正改掉的那一处"**。
+- **★上线（第 4 步）**：`node scripts/verify-release.mjs`——**远端只读终检**（版本三处一致 · 构建号 ·
+  README 读数逐字 · 新基建在位 · 发布树里没有 `snapshots/` 与 `package.json` ·
+  **8 个文件逐字节同 blob 哈希** · tag/release 现状）。
+- ★**远端核验必做**：main 指向 · 构建号 · README 读数 · 关键改动真在远端 ·
+  ★**逐字节同 blob 哈希** · tag/release 是否动过。
+- ★**别把本地 `main` 直接推上去**（它与 `origin/main` 不是同一条线——见 `STATE.md` §3 那条残留纪律）。
+
+---
+
 *开发流程文档 · 2026-09-07 · 第三棒落盘（交接 §8 任务书）；2026-09-07 补铁律 9 + §9 模块地图 + §6 钻层盘点。下一动作：分量引擎细案已拍板，实施 K1-K7 待用户指令。*
+*★2026-09-27 leg140：新增 §10「发布流程」（从 `STATE.md` §5.1 整段搬来，理由见该节头注）。*

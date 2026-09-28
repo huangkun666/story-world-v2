@@ -26,7 +26,9 @@
 //   ★★★纪律同 leg79 §2「视图对象按值取、不许抓死」：**ctx 不许在本模块里被缓存**——
 //     它每轮都可能换（换聊天/换卡），抓死一份就是"面板读着上一本书"（静默、不报错）。
 
-import { normalizeEntryKey } from '../src/init-source.js';   // 条目指纹的键归一（与起根同一份契约）
+import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';   // 条目指纹的键归一（与起根同一份契约）
+import { bookFingerprint } from '../src/fingerprint.js';                        // ★leg112：书指纹（与抽取同一条算法）
+import { checkBookSource } from '../src/book-check.js';                          // ★leg112：换书检测（纯函数，只判断不说谎）
 
 export function characterWorldNames(character) {
     const out = [];
@@ -102,6 +104,37 @@ export async function collectWorldInfoEntries(ctx, character) {
         }
     }
     return { entries, worldSources, readable: loadedAny || entries.length > 0, dupEntries };
+}
+
+// ★★★leg112（C1 换书检测）：**把"现在挂的是哪本书"按抽取那条路重算一遍指纹**，与账上那份比对。
+//   ★必须复用 `composeInitSource`：账上那个指纹就是 `bookFingerprint(合订文本)`（`src/abstract.js:2050`，
+//     两条抽取路同一行）⇒ 只有用**同一个合订算法**重算，两个指纹才可比（另拼一份 = 造第二把尺子）。
+//   ★失败语义（照本文件既有三态）：**读不到书 / 没合订出文本 ⇒ `fresh: ''`** ⇒ 调用方一句话都不说。
+//     **绝不拿"读不到"当"书变了"**（红线 2）。
+export async function currentBookFingerprint(ctx) {
+    try {
+        const character = pickCharacter(ctx);
+        const { entries } = await collectWorldInfoEntries(ctx, character);
+        const res = composeInitSource({ character, worldInfoEntries: entries || [] });
+        if (!res?.ok || !res.text) return { fresh: '', usedChars: 0, entries: (entries || []).length };
+        return { fresh: bookFingerprint(res.text), usedChars: res.usedChars ?? res.text.length, entries: (entries || []).length };
+    } catch (err) {
+        console.warn('[story-world-v2] 换书检测：取书失败（这次不判断，世界照常载入）', String(err?.message || err));
+        return { fresh: '', usedChars: 0, entries: 0 };
+    }
+}
+
+/**
+ * 载入期那一问：**账上那份设定，是从现在这本书抽的吗？**
+ * @param {object} world 账上的世界（读 `context.setting.frozen.fingerprint`）
+ * @param {object} [opts] `{ ctx }` 缺省自己现取当前 ST 上下文（与 `bookEntriesForInherit` 同一形状）
+ * @returns {Promise<{changed:boolean, stored:string, fresh:string}|null>} null = 无从判断（不说任何话）
+ */
+export async function checkCurrentBook(world, { ctx = null } = {}) {
+    const stored = String(world?.context?.setting?.frozen?.fingerprint ?? '');
+    if (!stored) return null;                                   // 老账没有指纹 ⇒ 无从比对（空着就是空着）
+    const got = await currentBookFingerprint(ctx || getCtx());
+    return checkBookSource({ stored, fresh: got.fresh, sourceOk: Boolean(got.fresh) });
 }
 
 export function pickCharacter(ctx) {

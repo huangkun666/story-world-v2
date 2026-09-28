@@ -7,10 +7,20 @@
 
 export const FNV1A_OFFSET = 0x811c9dc5;
 export const FNV1A_PRIME = 0x01000193;
-export const CACHE_VERSION = 2;        // 缓存形状版本戳（形状演进时 +1，旧条目自动失效）
+export const CACHE_VERSION = 3;        // 缓存形状版本戳（形状演进时 +1，旧条目自动失效）
                                      // v1→v2（K31）：缓存值由 canon 五件套扩展为 {canon, tension, env}
                                      //   ——同指纹命中需还原 dynamic 初值（张力/环境量），只存五件套会在
                                      //   命中路径丢初值；v2 无持久化缓存，版本抬升零迁移成本。
+                                     // v2→v3（leg141）：**canon 多了 `relations` 这一格**（书里的关系网，
+                                     //   用户令「把抽象阶段的关系网抽象做出来」）⇒ 旧缓存条目里**没有这一项**。
+                                     //   ★★为什么非抬不可（这是本笔最容易漏掉的一环，如实留档）：
+                                     //     **缓存键只有"书文本指纹"**（`bookFingerprint` 只吃书文），
+                                     //     **提示词改了它不知道** ⇒ 不抬这一格，老世界再点「初始化」会**命中旧缓存**、
+                                     //     拿着"没有关系网"的那份 canon 直接返回，**新提示词一次都不会被行使**
+                                     //     （而那看起来完全正常：ok=true、cached=true、账照建）。
+                                     //   ★代价如实说：抬了之后**所有世界的旧缓存全部失效** ⇒ 下一次抽取
+                                     //     是一次**真调用**（大书 20–30 分钟真钱）。这钱本来就得花——
+                                     //     不花就永远拿不到关系网。
 export const CACHE_MAX = 5;            // LRU 上限（v1 原值；多书共存有界）
 
 export function bookFingerprint(text) {

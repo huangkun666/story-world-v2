@@ -81,12 +81,16 @@ export function createViewStateHub() {
         // ---- 编年页动作（★词表与"回第一页"两条规矩跟状态**同住一处**）----
         //   ① 换"只看/了结/轮次" ⇒ **回第一页**（命中集合变了，停在第 3 页会落在另一批行上）；
         //   ② 换"计数口径" ⇒ **不回第一页**（一个行都不动，只是几枚钮换了把尺子；回首页 = 无理由的位移）。
-        setLayer: (v) => { if (['all', 'event', 'book'].includes(v)) sw2ChronicleView.layer = v; sw2ChronicleView.page = 1; sw2ChronicleView.pageBook = 1; },
-        setClosed: (v) => { if (['any', 'done', 'open'].includes(v)) sw2ChronicleView.closed = v; sw2ChronicleView.page = 1; sw2ChronicleView.pageBook = 1; },
-        setRange: (v) => { if (['5', '10', 'all'].includes(v)) sw2ChronicleView.range = v; sw2ChronicleView.page = 1; sw2ChronicleView.pageBook = 1; },
+        setLayer: (v) => { if (['all', 'event', 'book'].includes(v)) sw2ChronicleView.layer = v; sw2ChronicleView.page = 1; },
+        setClosed: (v) => { if (['any', 'done', 'open'].includes(v)) sw2ChronicleView.closed = v; sw2ChronicleView.page = 1; },
+        setRange: (v) => { if (['5', '10', 'all'].includes(v)) sw2ChronicleView.range = v; sw2ChronicleView.page = 1; },
         setChronicleScope: (v) => { if (v === 'all' || v === 'hit') sw2ChronicleView.scope = v; },
-        //   ★两层的页是两枚分页器、两个游标（细案 §3.4：一枚共享分页器会在"收起的名单"上翻页 ⇒ 死控件）
-        turnChroniclePage: (layer, delta) => { if (layer === 'book') sw2ChronicleView.pageBook += delta; else sw2ChronicleView.page += delta; },
+        //   ★本次（清死码）：**只剩一个游标**——账目层那枚分页器 leg105 已撤，它的游标 `pageBook`
+        //     （以及 `CHRONICLE_DEFAULT_VIEW` 里那一格）本次一并删掉：实测 `pageBook` 取 1/3/99
+        //     渲染产物逐字节相同，而 `page` 1 vs 2 产物不同 ⇒ 那个台子确实是空的、没有任何消费者。
+        //     ⇒ `layer` 这个形参也随之去掉（产物里 `ch-page` 钮都带 `data-layer="event"`，
+        //       那个 `'book'` 分支永远进不去）。
+        turnChroniclePage: (delta) => { sw2ChronicleView.page += delta; },
         // ---- 实体页动作（★`SW2_ENTS_KINDS`/`SW2_ENTS_FILTERS` 那两张词表**只住本文件**）----
         //   返回 false = "这个词不在两张词表里"（接线层据此**一个字都不动**，与原先的 else-if 同义）。
         //   ★`page = 1` 与三个兄弟动作一致：换了分组口径 ⇒ 命中集合的**切法与顺序都变**。

@@ -30,11 +30,11 @@ export function isSettingRef(s) {
 //     · 乱象档位：把种子整个剔掉再问 `unrestGearOf`，**档位照旧**「大乱」⇒ 不变。
 //   ★这是**回到本仓早已写定的口径**、不是新口径：`src/panorama.js:22` 的注释与
 //     `test/panorama.test.js:148`（`bornTick('ev_seed_3') === 0`）一直这么写，两把尺子此前不一致。
-//   ★已知残余（如实登记，**本笔不治**）：`src/memory-bridge.js:282,289` 与 `src/pack.js:220,801`
-//     各自 **copy 了一份同族逻辑**（前者明写"与 settle/setting 同源"、后者连注释都停在 `split('_')[1]`），
-//     ⇒ 它们仍把种子读成第 N 轮。影响面实测很小（`pack.js:220` 只是已闭环根排序的次序、
-//     `:801` 只对 `source.type==='state'` 生效 ⇒ **种子走不到那一支**），故本笔不动它们，
-//     只在此处登记；把四处**收敛成一处实现**是模块图改动，另案。
+//   ★已知残余（如实登记，**本笔不治**）：`src/pack.js:220,801` 仍 **copy 了一份同族逻辑**
+//     （连注释都停在 `split('_')[1]`）⇒ 它仍把种子读成第 N 轮。影响面实测很小
+//     （`:220` 只是已闭环根排序的次序、`:801` 只对 `source.type==='state'` 生效 ⇒ **种子走不到那一支**），
+//     故本笔不动它，只在此处登记；把两处**收敛成一处实现**是模块图改动，另案。
+//   ★★★leg125：原来登记的第二处复本 `src/memory-bridge.js` **已随那条通道整条删除**（用户令「直接删了」）。
 export function eventBornTick(id) {
     // 种子先判：它的数字段是枚举号、不是轮次（判据在 test/setting.test.js）
     if (/^ev_seed_\d+$/.test(String(id || ''))) return 0;

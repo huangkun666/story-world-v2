@@ -267,6 +267,30 @@ export const ssotSchema = {
                                                 },
                                             },
                                         },
+                                        // ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
+                                        //   **书里的关系网** —— 抽取阶段的产出，两端用**名号**写（那时还没有实体 id）。
+                                        //   ★它是**抽取产物**，不是账上的网：落账时 `seedBookRelations` 把名号解析成实体 id，
+                                        //     写进 `ssot.relations`（顶层第 10 张表）——**那张表才是"关系网"唯一的家**，
+                                        //     玩家与模型都只看它。本键与 `bookEntities` 同性质（`canon` 是"书抽出来的那份"，
+                                        //     冻结、可重入重种），**不是**按出处劈出来的第二个家。
+                                        //   ★**每条都必须带 `quote`**（书里那句原话）：抽取那一刻由引擎逐字核过
+                                        //     "这句真在书文里"（`sanitizeBookRelations`，与名册/设定面**同一把尺子**），
+                                        //     **核完即弃**——落账时只留边本身，不留那句原话（账上不记出处，见顶层 `relations` 那一段）。
+                                        //   ★可选键 ⇒ 旧世界零扰动（老账没有这个键照样过校验）。
+                                        relations: {
+                                            kind: 'array',
+                                            items: {
+                                                kind: 'object',
+                                                additional: false,
+                                                required: ['from', 'to', 'type', 'quote'],
+                                                props: {
+                                                    from: { kind: 'string', minLength: 1 },   // 谁（**名号**，落账时才解析成 id）
+                                                    to: { kind: 'string', minLength: 1 },     // 对谁（名号）
+                                                    type: { kind: 'string', minLength: 1 },   // ★书里的原话措辞（自由文本，不预设词表）
+                                                    quote: { kind: 'string', minLength: 1 },  // ★书里那句原话（出处闸核它；核完不落账）
+                                                },
+                                            },
+                                        },
                                     },
                                 },
                             },
@@ -423,6 +447,16 @@ export const ssotSchema = {
                 props: {
                     id: { kind: 'string', minLength: 1 },
                     title: { kind: 'string', minLength: 1 },
+                    // ★★★leg123：**正文里那句原话**（`dialogue` 型事件专用；引擎从标签行**逐字**抄进来）。
+                    //   ★它是"**值必须在正文里找得到**"这条闸的凭据：一个值要是连正文里都找不到，
+                    //     那它就是模型换算/编出来的 ⇒ 不收（细案 §2.7 第 ③ 条；★词表判语义是红线禁的，
+                    //     所以"照抄"只能靠这条**机械**的核对来做）。
+                    //   ★老事件没有这一格 ⇒ 空着（零迁移）。★归档副本只拷五格 ⇒ 它不入档（已知边界，见编年行那处注）。
+                    proseQuote: { kind: 'string', minLength: 1 },
+                    // ★★★leg123：`dialogue` 型事件的**族**（引擎从标签那一族写上，模型写不出——它不在 world-step 契约里）。
+                    //   用处：① 门控"谁被正文点到"用 `ripples`；② 净化器"谁本轮已经出过手"只看 `action`/`promise`
+                    //   （**改过格的人不算出过手**——他可能只是被写了一句"他受伤了"）；③ "已改定的格"靠 `meta` 留痕。
+                    dialogueKind: { kind: 'string', enum: ['action', 'change', 'promise'] },
                     source: {                                                      // 无源事件引擎拒绝（§4.2）
                         kind: 'object',
                         additional: false,
@@ -432,7 +466,12 @@ export const ssotSchema = {
                             //   而这里只登记了 plot/state/ripple ⇒ **每一条起根事件都违约**。
                             //   （`seedRoots.js` 头部明写"★与 state/plot/ripple 并列的第四型：世界源起的根"，
                             //     契约层漏跟。为什么以前没显形：真账三国旧账只种出 **1 条**根，本棒起出 **7 条**。）
-                            type: { kind: 'string', enum: ['plot', 'state', 'ripple', 'seed'] },
+                            // ★★★leg123（细案 `docs/spec-tag-granularity.md`）：**枚举增一型 `dialogue`**——
+                            //   正文那一侧给的行动/变化/承诺，由**引擎**注册成这一类事件（落账权仍在引擎手里）。
+                            //   ★★关键形状：**它只登记在账本契约里，不登记在 `world-step.schema.js`** ⇒
+                            //     世界模型**结构上写不出**这一类事件（它那七组里没有这一型，校验层也会拒）——
+                            //     这就是"聊天侧的既成事实"与"世界的提议"分得开的保证。
+                            type: { kind: 'string', enum: ['plot', 'state', 'ripple', 'seed', 'dialogue'] },
                             ref: { kind: 'string' },    // ripple→上游事件 id；plot/state→出处（可选）；seed 无 ref
                         },
                     },
@@ -450,6 +489,18 @@ export const ssotSchema = {
                         },
                     },
                     position: { kind: 'string', minLength: 1 },
+                    // ★★★leg123：**这一件事发生在"戏里的什么时候"**——由 `【此刻】` **逐字照抄**进来。
+                    //   ★它**不带源**（用户 2026-09-24 裁定：「这东西本来就没权威」）：引擎不校验、不解析、
+                    //     不比较、不推算；老账没有这一格 ⇒ 空着（零迁移，红线 2）。
+                    //   ★★★leg137：**两个来源都写这一格**，而且**都不许由引擎替它猜**：
+                    //     · **聊天侧**（`dialogue` 型）＝ 正文 `【此刻】`（leg123 起就是这么做的）；
+                    //     · **世界侧**（`plot`/`state`/`ripple`）＝ 世界步的 `newEvents[].at`
+                    //       （用户令：「**只要告诉时间流逝的长度和起始，事件的时间字段就由 llm 自己写**，
+                    //        要不然所有事件都是同一时刻发生的了」）。
+                    //   ⚠**本笔第一版写的是"顺延"**（引擎拿账上最后一个时刻盖满本轮所有事件）——
+                    //     被用户当场打回：一轮能起十几件事（真账设 `每轮事件=12`），那样就是**把时间抹平**。
+                    //     ⇒ **引擎不再顺延**：模型没写 `at` ⇒ 那一件事就是没有时间（红线 2：空着就是空着）。
+                    timeMark: { kind: 'string', minLength: 1 },
                     ripples: { kind: 'array', items: { kind: 'string' } },
                     links: {
                         kind: 'object',
@@ -473,6 +524,60 @@ export const ssotSchema = {
                 },
             },
         },
+        // ★★★leg120（A3 关系网，细案 `docs/spec-relationship-network.md`）：**账上第 10 张表**——
+        //   "谁跟谁是什么关系"（谁跟谁结了仇、谁欠了谁、谁叛了谁）。
+        //   为什么它必须进账：**书里没有、账上也没有 ⇒ 没有任何地方可查**（`leg109b` §1.2）。
+        //   ★**可选表**（不在 `required` 里，照 `milestones` 先例）：缺省 = 旧世界合法形态
+        //     ⇒ **旧账一个字节不用迁**（本仓的零迁移纪律）。
+        //   ★**一行 = 一条有向边**。
+        //   ★**类型 `type` 是自由文本**：不许把它换算成数、不许排序、不许进任何公式
+        //     （红线 §2.2 第 1 条；四维浮点就是这么被整体删掉的，别让"关系强度"把它请回来）。
+        //   ★`endedTick`/`endedWhy` 由引擎在"了结"时**往后盖**——**只增不改**：边的来路
+        //     （from/to/type/cause/tick）一个字都不许被改写，只许因果地长向未来。
+        //   ★★★leg141（用户当场推翻 leg120 那半句，**他是对的**）：「**肯定会有矛盾那他妈是因为模拟啊？？
+        //     书里关系的权威肯定能推翻要不然你模拟什么啊**」＋「**回滚都有快照了还要多此一举？？**」
+        //     ⇒ **`cause` 从 `required` 里拿掉**。旧口径（"必带因"当整张表的脊梁）错在哪，逐条留档：
+        //       · **它把"矛盾"当故障防** —— 而矛盾是模拟的**产物**：账本从书出发，然后必须走远。
+        //         拿"书里原来写的是什么"去保护书的权威，等于把模拟的目的（推翻它）掐掉。
+        //       · **回滚不靠这张表** —— 回滚归**快照**管（`web/snapshot-store.js`），
+        //         让账本再背一份"书里原来是什么"是第二个家。
+        //       · **它把同一张网按出处劈成两半** —— 玩家要的是"现在谁跟谁是什么关系"，
+        //         不是"这条是谁给的"。**一条信息只许住在它该住的那一格。**
+        //     ⇒ **初始化种下的边（书里就是这么写的）没有账上的因，这是合法形态**：
+        //       它的来路就是"书里写着"，而书随时可查（本仓那条老规矩）。
+        //     ★★**"必带因"这条闸没有消失，它搬到了它真正该在的地方**：
+        //       **玩的过程里模型提议新边时**，仍然必须带一个指得到账上真事的因
+        //       —— `src/schemas/world-step.schema.js`（`required: [... 'cause']`，**未动**）
+        //       ＋ `src/check-step.js` 那句逐字的「必须带因（无因之变＝随口编的关系，不是玩出来的）」（**未动**）。
+        //       那才是编造风险真正所在的地方：**开局的书是给定的，玩到一半冒出来的边才要交代来路。**
+        //     ★判据 `test/relations.test.js` 的 R1/R2 咬的**正是 world-step 那一侧** ⇒ 本笔**一条承重判据都不用改**。
+        relations: {
+            kind: 'array',
+            items: {
+                kind: 'object',
+                additional: false,
+                required: ['id', 'from', 'to', 'type', 'tick'],
+                props: {
+                    id: { kind: 'string', minLength: 1 },     // 引擎发号：rel_<轮次>_<第几条>（开局那批恒 rel_0_*）
+                    from: { kind: 'string', minLength: 1 },   // 谁（实体 id，不是名字）
+                    to: { kind: 'string', minLength: 1 },     // 对谁（实体 id）
+                    type: { kind: 'string', minLength: 1 },   // ★模型/书里的原话（自由文本，不预设封闭词表）
+                    cause: {                                  // ★可选（leg141）：开局种下的边没有这一格
+                        kind: 'object',
+                        additional: false,
+                        required: ['type', 'ref'],
+                        props: {
+                            type: { kind: 'string', enum: ['event', 'agenda'] },
+                            ref: { kind: 'string', minLength: 1 },
+                        },
+                    },
+                    tick: { kind: 'number', int: true, min: 0 },        // 落账那一轮（引擎盖；开局那批恒 0）
+                    note: { kind: 'string' },
+                    endedTick: { kind: 'number', int: true, min: 0 },   // 可选：从哪一轮起不再算数
+                    endedWhy: { kind: 'string', minLength: 1 },         // 可选：为什么了结
+                },
+            },
+        },
         milestones: {   // K18/因果链 T3：温层里程碑（可选——缺省=旧世界合法形态；引擎结构摘要，链上节点，ids 保回溯）
             kind: 'array',
             items: {
@@ -493,6 +598,55 @@ export const ssotSchema = {
                     counts: { kind: 'numRecord' },
                     titles: { kind: 'array', items: { kind: 'string' } },
                     ids: { kind: 'array', items: { kind: 'string' } },
+                    // ★★★leg111（用户令「你就把进大事纪的事件来路保留就好了，和其他没进的事件一样」）：
+                    //   **纪内逐事件的来路**——归档时随事件对象一起丢掉的那部分，现在原样留档。
+                    //   病（用户实机看着链视图问「进了大事纪的事件的链条好像只会保存开头还有事纪，不再是具体的事件了」）：
+                    //     归档只 `push(ev.title)` + `push(ev.id)` ⇒ 事件对象的 `source.ref` 随之消失 ⇒
+                    //     **段内"哪件事引发了哪件事"整段查不到**（真账 4 个纪共 63 条已归档事件全无来路）。
+                    //   口径（照用户原话"和其他没进的事件一样"）：**事件契约那五格照抄**（id/title/source/position/ripples）
+                    //     ⇒ 链视图拿到的形状与热池事件**完全同形**，不必分两套渲染。
+                    //   ★可选（旧账没有这格 = 合法形态，零扰动）；`closed` 不存（归档时链条已收口，见 `archiveClosedEvents`）。
+                    //   ★★★`links` 现在**存了**（本次修，真模型 60 轮长跑实跑抓出来的病）：此前归档只抄五格
+                    //     ⇒ 那件事的**多因**一进档就没了 ⇒ `lines.js` 的 `causeCountOf` 读不到第二条因
+                    //     ⇒ `causes` 恒为 1 ⇒ **`·合流N` 一归档就消失**（实测：热账多因点峰值 3、末段掉回 1）。
+                    //     ★口径收窄：**只挂"合流表里除主因外还有别的因"那一种**（绝大多数事件不挂）
+                    //       ⇒ 单因事件的行形状一字不动；也**不是**把 `source` 抄第二遍。
+                    //     ★`links.down` 仍不存（归档时已无下游，见 `settle.js` 归档段）。
+                    rows: {
+                        kind: 'array',
+                        items: {
+                            kind: 'object',
+                            additional: false,
+                            required: ['id', 'title'],
+                            props: {
+                                id: { kind: 'string', minLength: 1 },
+                                title: { kind: 'string' },
+                                source: {
+                                    kind: 'object',
+                                    additional: false,
+                                    required: ['type'],
+                                    props: {
+                                        // ★★★leg123：归档副本的源枚举同样要收 `dialogue`（否则一条 dialogue 事件
+                                        //   一入档就违约）。★如实登记一处**已知边界**：归档副本只拷**事件那五格**
+                                        //   （id/title/source/position/ripples，见 `settle.js` 归档口径），
+                                        //   故 `timeMark` **不入档**——时间点仍在那条事件对应的**编年行**上（行入卷时整行带走）。
+                                        //   要把 `timeMark` 也带进档 = 动归档口径与它那条判据，属另一笔。
+                                        type: { kind: 'string', enum: ['plot', 'state', 'ripple', 'seed', 'dialogue'] },
+                                        ref: { kind: 'string' },
+                                    },
+                                },
+                                position: { kind: 'string' },
+                                ripples: { kind: 'array', items: { kind: 'string' } },
+                                // ★多因（`up` ≥ 2，或"主因之外还有别的因"）——立线时算"多因点"要用它。
+                                //   可选：单因事件不挂（旧账与旧行形状零扰动）。
+                                links: {
+                                    kind: 'object',
+                                    additional: false,
+                                    props: { up: { kind: 'array', items: { kind: 'string' } } },
+                                },
+                            },
+                        },
+                    },
                     links: {
                         kind: 'object',
                         additional: false,
@@ -517,6 +671,20 @@ export const ssotSchema = {
                     kind: { kind: 'string', enum: ['scheme', 'major', 'ripple', 'shade', 'state'] },   // K39/链视图细案 §3.1：编年行类型章（五筛用；可选=旧行零扰动）
                     eventRef: { kind: 'string' },
                     chainRef: { kind: 'string' },   // 第十五棒补（K39 修正后拍板）：闭环/涟漪平息行的链目标事件 id——纯链入口数据，注入面（streams 只读 eventRef）语义分离；可选=旧行零扰动
+                    // ★★★leg115：**这一轮的"此后又过了多久"**——正文里【时长】写的原话（「三天」「一炷香」），
+                    //   逐字照抄、**不做任何累加换算**（红线：不许把词换算成数）。
+                    //   为什么非记不可（用户原话：「**聊天llm是不知道什么时候世界发生了什么事懂吗？**」）：
+                    //     账上原本 **零时间字段**（`simLog` 只有 tick/体积/计数）⇒ 往事只带「第 N 轮」这个
+                    //     **引擎轮次**，而"故事里过了多久"在账上**一个字节都不留**；
+                    //     而 `elapsed` 是**账外的料**（`pack.js:1014` 原文：「引擎一个字都不解析它」）
+                    //     ⇒ 写正文的人自己写的时长，下一轮**没地方找**。
+                    //   ⇒ 记在这里 = 往事与"什么时候"绑在同一行上，检索层一取就带出来（`ledger-recall.js`）。
+                    //   可选格：旧行没有它照样合法（零扰动）；没有就是没有，**不许填占位值**（红线 2）。
+                    elapsed: { kind: 'string', minLength: 1 },
+                    // ★★★leg123：编年行的**时间点**（`【此刻】`照抄）——与上面那格 `elapsed`（此后又过了多久）
+                    //   **两格分开**：`elapsed` 答"过了多久"、`timeMark` 答"那时是什么时候"（细案 §2.2 规则 3/4）。
+                    //   ★不带源、不推算；老账没有这一格 ⇒ 空着（零迁移）。
+                    timeMark: { kind: 'string', minLength: 1 },
                 },
             },
         },
@@ -586,6 +754,12 @@ export const ssotSchema = {
                         props: {
                             tick: { kind: 'number', int: true, min: 0 },
                             packTokens: { kind: 'number', int: true, min: 0 },
+                            // ★★★leg114：**裁之前**那一份有多大（可选格——只在"包真被裁过"的那一轮才写，
+                            //   没裁的轮次一个字不写 ⇒ 旧账与"引擎零漂移"那条硬读数都不受扰动）。
+                            //   为什么必须另立一格：`packTokens` 量的是**裁完之后**的包（`pack.js` 先裁后量）
+                            //   ⇒ 包一旦撑满，它就贴着预算顶、"看着刚好合适"，**答不出"预算该填多少"**。
+                            //   这一格才是那个依据（面板拿它跟 `packTokens` 一比就知道裁掉了多少）。
+                            packTokensBeforeTrim: { kind: 'number', int: true, min: 0 },
                             ssotBytes: { kind: 'number', int: true, min: 0 },
                             events: { kind: 'number', int: true, min: 0 },
                             chronicle: { kind: 'number', int: true, min: 0 },

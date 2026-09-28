@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参数页 ＋ 模型通道 · 展示页 · Story World v2</title>
+<style>
+  /* ============ 展示页（自包含、零依赖、离线可开） ============
+     色板逐字取 `web/style.css` 的 `--sw2-*`；页签逐字取 `settings.html`；
+     控件形态照 `src/render.js` 现有产物。★这一份不是产品代码，`src/` 一个字节都还没动。
+     数据出处：开关状态与「42」＝ 用户 2026-09-27 真机截图；出厂值 ＝ `src/limits.js`。 */
+  :root{
+    --sw2-bg:#0d1015; --sw2-panel:#1b1f28; --sw2-card:#20252f; --sw2-card-2:#262c38;
+    --sw2-line:#2c3342; --sw2-line-soft:#242a36;
+    --sw2-text:#e8eaef; --sw2-text-dim:#9aa3b5; --sw2-text-faint:#6b7590;
+    --sw2-amber:#e3ad55; --sw2-amber-dim:rgba(227,173,85,.35);
+    --sw2-red:#df6c62; --sw2-green:#8fbf8f; --sw2-blue:#79a7d6;
+    --sw2-font:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+    --sw2-mono:"Cascadia Mono",Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--sw2-bg);color:var(--sw2-text);font-family:var(--sw2-font);font-size:14px;line-height:1.6;padding:26px 20px 64px;display:flex;flex-direction:column;align-items:center;gap:20px;}
+  .col{width:1080px;max-width:100%;display:flex;flex-direction:column;gap:20px;}
+
+  .intro{background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;padding:16px 20px;}
+  .intro h1{font-size:16px;font-weight:700;letter-spacing:.5px;margin-bottom:5px;}
+  .intro h1 small{font-weight:400;font-size:11.5px;color:var(--sw2-text-faint);letter-spacing:1px;margin-left:8px;}
+  .intro p{font-size:12.5px;color:var(--sw2-text-dim);margin-top:6px;}
+  .intro p b{color:var(--sw2-text);}
+  .intro .prov{margin-top:9px;font-size:11.5px;color:var(--sw2-text-faint);line-height:1.8;}
+  .intro .prov code{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-amber);}
+
+  .sw2-window{width:100%;background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;box-shadow:0 20px 70px rgba(0,0,0,.6);overflow:hidden;}
+  .sw2-header{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--sw2-line-soft);}
+  .sw2-badge{width:32px;height:32px;border-radius:9px;flex:none;background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);color:#161006;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .sw2-title-block{flex:1;min-width:0;}
+  .sw2-title{font-size:15px;font-weight:700;letter-spacing:.5px;}
+  .sw2-subtitle{font-size:11.5px;color:var(--sw2-text-faint);}
+  .sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;background:var(--sw2-card);}
+  .sw2-tabs{display:flex;gap:4px;padding:0 14px;border-bottom:1px solid var(--sw2-line-soft);flex-wrap:wrap;}
+  .sw2-tab{font-size:12.5px;color:var(--sw2-text-dim);padding:9px 12px;border-bottom:2px solid transparent;cursor:default;}
+  .sw2-tab.sw2-active{color:var(--sw2-text);border-bottom-color:var(--sw2-amber);}
+  .sw2-view{padding:13px 15px 16px;display:flex;flex-direction:column;gap:12px;}
+
+  .card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:10px;padding:12px 14px;}
+  .card.hl{border-color:var(--sw2-amber-dim);}
+  .card h4{font-size:13px;font-weight:600;letter-spacing:.4px;margin-bottom:9px;display:flex;align-items:center;gap:8px;}
+  .card h4 .tag{font-size:10px;font-weight:400;letter-spacing:1px;border-radius:999px;padding:1px 8px;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);}
+  .card h4 .tag.new{border-color:var(--sw2-amber-dim);color:var(--sw2-amber);}
+  .card .sub{font-size:11.5px;color:var(--sw2-text-faint);margin:-3px 0 9px;line-height:1.7;}
+
+  .swrow{display:flex;align-items:center;gap:12px;background:var(--sw2-card-2);border:1px solid var(--sw2-line-soft);border-radius:8px;padding:8px 12px;margin-bottom:6px;}
+  .swrow:last-child{margin-bottom:0;}
+  .swrow .lbl{flex:1;min-width:0;font-size:13px;}
+  .swrow .lbl small{display:block;font-size:11px;color:var(--sw2-text-faint);margin-top:1px;line-height:1.6;}
+  .swrow .val{font-size:12.5px;font-weight:700;color:var(--sw2-amber);font-family:var(--sw2-mono);width:18px;text-align:center;}
+  .swrow .val.off{color:var(--sw2-text-faint);}
+  .btn{font-size:12px;border-radius:7px;padding:4px 13px;border:1px solid var(--sw2-line);background:var(--sw2-card);color:var(--sw2-text-dim);cursor:default;}
+  .btn.on{background:var(--sw2-amber);border-color:var(--sw2-amber);color:#161006;font-weight:700;}
+
+  .numgrid{display:grid;grid-template-columns:minmax(0,1fr) 100px 128px;gap:6px 14px;align-items:center;}
+  .numgrid .n-lbl{font-size:12.5px;min-width:0;}
+  .numgrid .n-lbl small{display:block;font-size:10.5px;color:var(--sw2-text-faint);margin-top:1px;line-height:1.55;}
+  .numgrid input{width:100%;background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:7px;color:var(--sw2-text);font-family:var(--sw2-mono);font-size:12.5px;padding:4px 9px;text-align:right;}
+  .numgrid .n-sug{font-size:10.5px;color:var(--sw2-text-faint);}
+  .grouphead{grid-column:1/-1;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;display:flex;align-items:center;gap:9px;margin:8px 0 2px;}
+  .grouphead:first-child{margin-top:0;}
+  .grouphead::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+  .grouphead b{color:var(--sw2-text-dim);font-weight:400;letter-spacing:0;font-size:11px;}
+
+  .field{display:grid;grid-template-columns:104px minmax(0,1fr);gap:7px 12px;align-items:center;font-size:12.5px;margin-bottom:7px;}
+  .field label{color:var(--sw2-text-dim);}
+  .field .ctl{display:flex;gap:8px;align-items:center;min-width:0;}
+  .field input{flex:1;min-width:0;background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:7px;color:var(--sw2-text);font-size:12.5px;padding:5px 9px;}
+  .field input.mono{font-family:var(--sw2-mono);}
+  .hint{font-size:11px;color:var(--sw2-text-faint);}
+  .hint.ok{color:var(--sw2-green);}
+  .hint.bad{color:var(--sw2-red);}
+
+  /* 模型列表：点一下填进去 */
+  .mlist{display:flex;flex-wrap:wrap;gap:6px;margin:3px 0 4px;padding:9px 10px;border:1px dashed var(--sw2-line);border-radius:8px;background:var(--sw2-panel);}
+  .mlist .m{font-family:var(--sw2-mono);font-size:11.5px;border:1px solid var(--sw2-line);border-radius:999px;padding:2px 10px;color:var(--sw2-text-dim);cursor:pointer;}
+  .mlist .m:hover{border-color:var(--sw2-amber-dim);color:var(--sw2-text);}
+  .mlist .m.cur{border-color:var(--sw2-amber);color:var(--sw2-amber);background:rgba(227,173,85,.08);}
+  .mlist .m em{font-style:normal;color:var(--sw2-text-faint);font-size:10px;margin-left:5px;}
+
+  .kv{display:grid;grid-template-columns:92px minmax(0,1fr);gap:4px 12px;font-size:12.5px;}
+  .kv dt{color:var(--sw2-text-faint);font-size:11.5px;}
+  .kv dd b{color:var(--sw2-amber);font-family:var(--sw2-mono);}
+  .kv dd em{font-style:normal;font-size:11px;color:var(--sw2-text-faint);}
+  .actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
+  .buildline{font-size:11px;color:var(--sw2-text-faint);}
+  .buildline b{color:var(--sw2-amber);font-family:var(--sw2-mono);}
+  .foot{font-size:11.5px;color:var(--sw2-text-faint);line-height:1.75;border-top:1px solid var(--sw2-line-soft);padding-top:9px;margin-top:11px;}
+  .foot b{color:var(--sw2-text-dim);}
+</style>
+</head>
+<body>
+<div class="col">
+
+  <div class="intro">
+    <h1>参数页 ＋ 模型通道 · 展示页<small>STORY WORLD v2 · 已接线</small></h1>
+    <p>这一版看三件事：① 从设置页<b>搬过来</b>的那张卡；② 世界尺度按「<b>闸 / 尺</b>」分成两组；③ 设置页新增的<b>「获取模型列表」与「测试连通」</b>。</p>
+    <p class="prov">闸<b>一道不撤</b>（九个框全在）· 文案已精简 · 开关状态与「42」取自你 2026-09-27 的真机截图 · 出厂值取自 <code>src/limits.js</code></p>
+  </div>
+
+  <!-- ══════════════ ① 参数页 ══════════════ -->
+  <div class="sw2-window">
+    <div class="sw2-header">
+      <div class="sw2-badge">◈</div>
+      <div class="sw2-title-block">
+        <div class="sw2-title">世界引擎</div>
+        <div class="sw2-subtitle">大荒z · 第 0 轮 · 656 个实体</div>
+      </div>
+      <span class="sw2-chip">已保存</span>
+      <span class="sw2-chip">✕</span>
+    </div>
+    <div class="sw2-tabs">
+      <div class="sw2-tab">♜ 观棋 · 说书</div>
+      <div class="sw2-tab">📜 编年</div>
+      <div class="sw2-tab">🏛 大事纪·旧卷</div>
+      <div class="sw2-tab">👥 角色与势力</div>
+      <div class="sw2-tab">📖 设定</div>
+      <div class="sw2-tab sw2-active">🎏 参数</div>
+      <div class="sw2-tab">💾 快照</div>
+      <div class="sw2-tab">⚙ 设置</div>
+    </div>
+
+    <div class="sw2-view">
+
+      <div class="card">
+        <h4>插件总闸 · 自动推进 <span class="tag">总闸</span></h4>
+        <div class="swrow">
+          <div class="lbl">关掉 = 插件不再自动生效
+            <small>发消息不推进、切聊天不载入。要推请按<b>设置页</b>的「推进一轮」。</small></div>
+          <div class="val">开</div><span class="btn on">开</span><span class="btn">关</span>
+        </div>
+      </div>
+
+      <div class="card hl">
+        <h4>插件对你的对话做了什么 <span class="tag new">从设置页搬来</span></h4>
+        <div class="sub">搬过来的理由：它调的全是<b>这个世界</b>的东西——这本书的名号表、这本账的往事。</div>
+        <div class="swrow"><div class="lbl">让聊天模型按标签写行动</div><div class="val">开</div><span class="btn on">开</span><span class="btn">关</span></div>
+        <div class="swrow"><div class="lbl">把名号表递进对话</div><div class="val off">关</div><span class="btn">开</span><span class="btn on">关</span></div>
+        <div class="swrow"><div class="lbl">把上轮世界动向递进对话</div><div class="val">开</div><span class="btn on">开</span><span class="btn">关</span></div>
+        <div class="swrow"><div class="lbl">把账上往事递进对话</div><div class="val">开</div><span class="btn on">开</span><span class="btn">关</span></div>
+        <div class="numgrid" style="margin-top:8px">
+          <div class="n-lbl">一轮最多递多少条行动<small>超出只递前几条；截断会如实报出。</small></div>
+          <input value="42"><div class="n-sug">上一轮注入 1,787 字</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>世界气氛与条件</h4>
+        <div class="kv">
+          <dt>天时</dt><dd>设定为 <span class="btn">大灾 ▾</span> <em>只照抄你选的</em></dd>
+          <dt>时局</dt><dd>设定为 <span class="btn">未定 ▾</span> <em>只照抄你选的</em></dd>
+          <dt>乱象</dt><dd><b>动荡</b> <em>每轮自动算：近 10 轮「出事」铺到几个不同地点</em></dd>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>世界尺度 · 可调上限</h4>
+        <div class="sub"><b>闸</b>填小了会拦下模型想做的事；<b>尺</b>一个东西都不拦，只管「看多少 / 看多久」。九个框都能直接填数，没有上限，改完下一轮生效。</div>
+        <div class="numgrid">
+          <div class="grouphead"><b>闸</b> —— 会拦下模型想做的事</div>
+
+          <div class="n-lbl">每轮递几条线<small>真正的产量旋钮：给模型几条线，它就写几件事。</small></div>
+          <input value="3"><div class="n-sug">常用 3 / 6 / 9</div>
+
+          <div class="n-lbl">每轮最多几件事件<small>模型一轮写得出的上限。</small></div>
+          <input value="12"><div class="n-sug">常用 6 / 9 / 12</div>
+
+          <div class="n-lbl">每轮最多新起几件大计<small>三道大计闸的第一道，它先顶住，后两道才轮得到。</small></div>
+          <input value="3"><div class="n-sug">常用 3 / 6 / 9</div>
+
+          <div class="n-lbl">每轮最多入局几个新人<small>一轮里最多让几个新面孔进这个世界。</small></div>
+          <input value="1"><div class="n-sug">常用 1 / 2 / 3</div>
+
+          <div class="n-lbl">每轮给几个「冷门人」点名机会<small>名单多长，一轮里最多就有几个久未露面的人能开口。</small></div>
+          <input value="12"><div class="n-sug">常用 12 / 20 / 30</div>
+
+          <div class="n-lbl">同时最多几件大计<small>只数没有上级的。</small></div>
+          <input value="15"><div class="n-sug">常用 15 / 20 / 30</div>
+
+          <div class="n-lbl">同时在办总数上限<small>含支脉。</small></div>
+          <input value="20"><div class="n-sug">常用 20 / 30 / 40</div>
+
+          <div class="grouphead"><b>尺</b> —— 一个东西都不拦</div>
+
+          <div class="n-lbl">每轮给世界模型看多少料<small>填小了只是看不到一些旧事与细节，不拦任何事。</small></div>
+          <input value="50000"><div class="n-sug">常用 30000 / 50000 / 60000</div>
+
+          <div class="n-lbl">最近多少轮的往事一定给看<small>管的是时间不是容量：这一段料再紧也先保住。</small></div>
+          <input value="50"><div class="n-sug">常用 30 / 50</div>
+        </div>
+        <div class="foot"><b>体检读数</b>（59 轮真账）：这九格里只有「每轮最多入局几个新人」真拦下过东西（1 次）；包预算峰值 19,511，占上限 39%，<b>从未裁过</b>。</div>
+      </div>
+
+      <div class="card">
+        <h4>撤销</h4>
+        <div class="actions">
+          <span class="btn">↶ 撤销上一次改动（可退 2 步）</span>
+          <span class="buildline" style="margin-left:auto">构建 <b>leg143-params-regroup</b> · 不是最新那串请 Ctrl+F5</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════ ② 设置页 · 模型通道 ══════════════ -->
+  <div class="sw2-window">
+    <div class="sw2-header">
+      <div class="sw2-badge">⚙</div>
+      <div class="sw2-title-block">
+        <div class="sw2-title">设置页 · 只画改动的那一张卡</div>
+        <div class="sw2-subtitle">其余四张卡（世界设定 / 操作 / 旧卷与存储）不动</div>
+      </div>
+      <span class="sw2-chip">✕</span>
+    </div>
+    <div class="sw2-tabs">
+      <div class="sw2-tab">♜ 观棋 · 说书</div>
+      <div class="sw2-tab">📜 编年</div>
+      <div class="sw2-tab">🏛 大事纪·旧卷</div>
+      <div class="sw2-tab">👥 角色与势力</div>
+      <div class="sw2-tab">📖 设定</div>
+      <div class="sw2-tab">🎏 参数</div>
+      <div class="sw2-tab">💾 快照</div>
+      <div class="sw2-tab sw2-active">⚙ 设置</div>
+    </div>
+
+    <div class="sw2-view">
+      <div class="card hl">
+        <h4>模型通道 <span class="tag new">本页新增两枚按钮</span></h4>
+
+        <div class="field"><label>服务地址</label>
+          <div class="ctl"><input class="mono" value="https://gcli.ggchan.dev"></div></div>
+        <div class="field"><label>密钥</label>
+          <div class="ctl"><input class="mono" value="••••••••••••••••••••"><span class="hint">本机读取 · 不落库 · 不打印</span></div></div>
+
+        <div class="field"><label>世界模型</label>
+          <div class="ctl"><input class="mono" value="gemini-3.1-pro-preview">
+            <span class="btn on">获取模型列表</span>
+            <span class="btn">测试连通</span></div></div>
+
+        <div class="mlist">
+          <span class="m cur">gemini-3.1-pro-preview <em>当前</em></span>
+          <span class="m">gemini-2.5-pro</span>
+          <span class="m">claude-sonnet-4</span>
+          <span class="m">gpt-4.1</span>
+          <span class="m">deepseek-chat</span>
+          <span class="m">qwen3-max</span>
+          <span class="m">…共 37 个</span>
+        </div>
+        <div class="hint ok">✓ 已取到 37 个模型（点一下即填进上面那一格）</div>
+
+        <div class="field" style="margin-top:9px"><label>连通</label>
+          <div class="ctl"><span class="hint ok">✓ 通 · gemini-3.1-pro-preview · 1.2 秒</span></div></div>
+        <div class="field"><label></label>
+          <div class="ctl"><span class="hint bad">（失败时）✗ HTTP 401 —— 密钥无效或已过期</span></div></div>
+
+        <div class="field" style="margin-top:4px"><label>单轮超时（秒）</label>
+          <div class="ctl"><input class="mono" style="max-width:110px" value="120"><span class="hint">模型一次回复的等待上限</span></div></div>
+        <div class="field"><label>单轮输出上限</label>
+          <div class="ctl"><input class="mono" style="max-width:110px" value="16384"><span class="hint">token · 推理与正文共享这一份</span></div></div>
+
+        <div class="foot">
+          <b>「获取模型列表」</b>：走 <code>GET &lt;地址&gt;/v1/models</code>，与对话同一个地址、同一把密钥；点列表里任意一项即填进「世界模型」。<br>
+          <b>「测试连通」</b>：发一次最小请求，一次验三样——地址通不通、密钥对不对、模型号认不认；报出耗时与回话内容。<br>
+          <b>两件事都不改任何配置</b>：只有你点了列表里那一项，模型号才会被写进去。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ ③ 接线状态 ══════════════ -->
+  <div class="intro">
+    <h1>接线状态<small>2026-09-27 · 两页都已接线</small></h1>
+    <p><b>① 设置页那两个新功能：已接线</b>——「获取模型列表」「测试连通」两枚按钮 ＋ 模型清单（点一下填进「世界模型」）都真的能用，
+       构建号 <code>leg142-model-picker</code>。<br>
+       ★<b>连通那行只报「通 · 模型号 · 几秒」</b>——你当场裁的"不写回了几个字"已照办。</p>
+    <p><b>② 参数页那一半（搬卡 ＋ 分组 ＋ 文案精简）：已接线</b>——上面画的那一页<b>就是现在真机上那一页</b>了，
+       构建号 <code>leg143-params-regroup</code>；判据 1364/1364、冒烟 PASS（终态 8351 字节逐字节未变）。<br>
+       ★<b>九道闸一道都没撤</b>——分组只是版面，九个框一个不少、写通道一个字没动。<br>
+       ★★<b>有一处与样板不同，必须说清</b>：那四个注入开关的<b>存储位置我一个字没动</b>——
+       它们仍走 <code>data-inject-switch</code>（只写插件配置区），<b>没有</b>变成"随世界走"。
+       理由：改存储会让<b>你现在的开/关状态被重置</b>（你那张截图是「开 / 关 / 开 / 开」，
+       而默认值不是这个）⇒ <b>绝不静默重置玩家的设置</b>。要改成随世界走，你说一声，另做一笔。</p>
+  </div>
+
+</div>
+</body>
+</html>

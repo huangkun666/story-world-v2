@@ -105,7 +105,7 @@ test('★★★leg103·WR③：初始化那句"先拍一份快照"的承诺，**
     // ① 文案这一侧：承诺必须在（它是玩家读到的"退路说明"）
     assert.match(wrCode, /换掉前自保/, '★初始化那份文案必须写明"会先拍一份（换掉前自保）"——玩家据此知道退路在哪');
     // ② 行为这一侧：接线层必须**真拍**，而且拍在**确认之后、writeHotMeta 之前**
-    const body = bodyOfIn(indexCode, "bus['init-world'] = async () => {", ["\n    bus['", '\n    // ----------']);
+    const body = bodyOfIn(indexCode, "bus['init-world'] = longTask.wrap('init-world', LONG_TASK_LABELS['init-world'], async () => {", ["\n    bus['", '\n    // ----------']);
     assert.ok(body.length > 800, '前置：切到了 init-world 的真函数体');
     assert.match(body, /(?:^|[^\w$.])snapHub\.requestSnapshot\s*\(/, '★★★必须**真的调** `snapHub.requestSnapshot(`——否则那句承诺就是空的');
     assert.match(body, /'换掉前自保'/, "★理由串必须是「换掉前自保」（快照页上玩家认得出它是哪一份）");

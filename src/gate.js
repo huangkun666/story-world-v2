@@ -50,6 +50,21 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         return typeof e?.lastActiveTick === 'number' && (tick - e.lastActiveTick) < QUIET_TICKS;
     };
 
+    // ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.6 ①）：**正文里被点到的人，也算"被点名"**。
+    //   病（本笔查出来的**提示词与门控打架**）：`prompts.js` 第 8 条写着「被它们**当成对象**的人是另一回事：
+    //     那是'有人动到他头上'，他完全可以因之而起反应——这一轮**正是你该写他的时候**」；
+    //   而这里原先只算"未决事件波及 ∪ **世界步自己的**动作目标 ∪ 玩家落子对象"——
+    //     **正文里 NPC 行动的目标没算** ⇒ 一个久未出手、手上无事的被点名者会被判静默、提议被丢掉
+    //     （模型照提示词写了、门把它扔了，**而且不报错**）。
+    //   ★取数**从账上取**（不多传形参）：本轮注册的 `dialogue` 型事件的 `ripples` 就是"正文点到的人"。
+    //   ★只认**本轮**的（按号段前缀，与发号同源）。
+    const dlgPrefix = `ev_${tick}_`;
+    for (const ev of world.events || []) {
+        if (ev?.source?.type !== 'dialogue') continue;
+        if (!String(ev.id || '').startsWith(dlgPrefix)) continue;
+        for (const r of ev.ripples || []) if (gated({ id: r })) named.add(r);
+    }
+
     // top-1 保送（原"永不静默"防全静默；判据由分量改为实体序首个 active 实体——确定性、无分数）
     let topId = null;
     for (const e of world.entities) {
@@ -132,11 +147,30 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         //   而症状与上面那句一字不差——"模型判定的收场**永远不落账**"，`event-close.test.js` 新判据当场红。
         //   同一条理由透传：收场提议是**对已落账事情**的判断（`check-step` 已核号在册且未收场），
         //   不是"谁出的手"⇒ 不进静默门（静默的说的是"这个人这轮不许主动作"，与他能不能判旧事收场无关）。
+        // ★★★leg120（A3 关系网）：**第三次**——细案 §2.4 把这一格单独标成"最阴的一格"（漏了它，
+        //   通道整段哑掉而**判据可能还是绿的**），实施时照 §2.4 逐项核对，这次没漏。
+        //   同一条理由透传：关系变更由**一件已落账的事**驱动（`cause` 必填且须未闭环，`check-step` 已核），
+        //   两端也已在册 ⇒ 与 `entityUpdates`/`entityFates` 同性质，**不进静默门**
+        //   （"静默方不许主动作"说的是出手，与"他能不能跟谁结成仇"是两件事）。
+        // ★★★本次修（真模型 60 轮长跑实跑抓出来的病 · **同一个坑第四次**）：
+        //   上面 leg34／leg95／leg120 三段注释警告的都是同一件事——**这是白名单式重建，漏一个键那条通道就哑**。
+        //   而 `lookupScales`（按需查表，leg64）与 `lookupLines`（点名取回，leg128）**从来就不在这一行里**。
+        //   ★它此前是**潜伏**的：老代码只在"模型写了这一格"时才动，而这一格早在上游 `runMainCall` 那次校验
+        //     就记过账了 ⇒ 这里丢了也看不出来。
+        //   ★本次修把"没写这一格"变成**有意义**的（= 这一轮不要，要清空）之后，它当场变成真病：
+        //     `adjudicate` 拿到的是**这个被削过的 gstep** ⇒ 看不见 `lookupLines` ⇒ 误判成"模型没点名"
+        //     ⇒ **刚点过的名当轮就被清掉**（`context-chain.test.js` 那条端到端判据当场红，正是它逮住的）。
+        //   ⇒ 照同一条理由透传：这两个格子是"模型要什么料"的请求，与"谁出不出手"无关，**不进静默门**。
         step: {
             actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities,
             entityFates: step.entityFates || [],
             entityUpdates: step.entityUpdates || [],
             eventClosures: step.eventClosures || [],
+            relationUpdates: step.relationUpdates || [],
+            relationClosures: step.relationClosures || [],
+            // ★请求型两格：**有就照原样带走**（模型没写时**不补键**——"缺席"本身是有意义的信号）
+            ...(typeof step.lookupScales === 'undefined' ? {} : { lookupScales: step.lookupScales }),
+            ...(typeof step.lookupLines === 'undefined' ? {} : { lookupLines: step.lookupLines }),
         },
         silent: [...silentSet],
         lifted,

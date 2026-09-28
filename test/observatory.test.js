@@ -117,13 +117,18 @@ test('远期引用探针：近事不记远、旧事记远（FAR_WINDOW=20 提案
     assert.equal(FAR_WINDOW, 20, '远期判据 20 tick（提案）');
 });
 
-test('pack 依据册段（敲定稿 C 条）：按计数降序截 TOP；无依据册为空数组', () => {
+// ★★★leg136（用户令「不要搞那么多闸了」）：**这一则随 `DIALOGUE_BOOK_TOP` 作废而重造**。
+//   旧前提「截 TOP 条」已不成立（上限撤了）⇒ 照 leg135 §2.4 那条纪律，夹具必须一起改，
+//   否则这一则会**静默失去意义**（它仍然会绿，但不再量任何东西）。
+//   新前提（仍然咬得住东西）：**一条都不许少，且排序口径逐字不变**。
+test('pack 依据册段（敲定稿 C 条）：按计数降序**全给**（原 TOP 已作废）；无依据册为空数组', () => {
     const w = world({
         meta: { tick: 10, dialogueBook: { 己: { count: 9, lastTick: 10 }, 丙: { count: 4, lastTick: 5 }, 甲: { count: 3, lastTick: 9 }, 丁: { count: 2, lastTick: 8 }, 戌: { count: 2, lastTick: 1 }, 乙: { count: 1, lastTick: 2 } } },
     });
     const p = buildEvolutionPack(w, null);
-    assert.equal(p.pack.dialogueBook.length, DIALOGUE_BOOK_TOP);
-    assert.deepEqual(p.pack.dialogueBook.map((x) => x.name), ['己', '丙', '甲', '丁', '戌'], '计数降序；同计数按最近提及降序');
+    assert.equal(DIALOGUE_BOOK_TOP, Infinity, '常量本身如实标着"已作废"');
+    assert.equal(p.pack.dialogueBook.length, 6, '账上 6 个人名 ⇒ 一个不落');
+    assert.deepEqual(p.pack.dialogueBook.map((x) => x.name), ['己', '丙', '甲', '丁', '戌', '乙'], '计数降序；同计数按最近提及降序');
     assert.equal(p.pack.dialogueBook[0].count, 9);
     const p0 = buildEvolutionPack(world(), null);
     assert.deepEqual(p0.pack.dialogueBook, [], '无依据册 → 空段');

@@ -29,12 +29,14 @@ import { RULE_PACK_TOP } from '../src/abstract-tier.js';
 const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
 
 // ───────── 夹具（全自造） ─────────
-/** 一条**真顶到块级预算**的 canon：30 张表 × 每张 3 档 3 维 ⇒ 表/档/维三道闸都会被咬。 */
+// ★★★leg135：夹具规模**跟着上限走**（旧值"30 张 × 3 档 3 维"是照旧上限 16/24/8 配的；
+//   新上限 64/300/16 下它**一条闸都咬不到** ⇒ A1-② 会退化成空转，实测当场红）。
+//   口径：**表数比 `SCALE_TABLE_TOP_PACK` 多**（表闸咬住）＋每张给足档位 ⇒ 三条闸一起咬。
 const fatCanon = () => ({
     powerScale: [], dims: [], rules: [],
-    刻度: Array.from({ length: 30 }, (_, i) => ({
+    刻度: Array.from({ length: SCALE_TABLE_TOP_PACK + 6 }, (_, i) => ({
         名: `表${i}`, 源: '甲',
-        档位: [{ 档: `X${i}a`, 注: '一' }, { 档: `X${i}b`, 注: '二' }, { 档: `X${i}c`, 注: '三' }],
+        档位: Array.from({ length: 6 }, (_, j) => ({ 档: `X${i}_${j}`, 注: '标' })),
         维度: [{ 名: `维${i}a`, 范围: '甲境' }, { 名: `维${i}b`, 范围: '乙境' }, { 名: `维${i}c`, 范围: '丙境' }],
     })),
 });
@@ -121,9 +123,10 @@ test('A1-②：真顶到预算时 进包 < 共，且读数与实物逐个相等�
     assert.equal(fit.表.进包, anchor.length, '表.进包 必须等于 anchor 的条数');
     assert.equal(fit.档.进包, real('档位'), '档.进包 必须等于 anchor 里档位的实际条数');
     assert.equal(fit.维.进包, real('维度'), '维.进包 必须等于 anchor 里维度的实际条数');
-    // `共` 必须 ≥ 进包，且不超出 canon 里的真实总量（自造夹具 30×3）
-    assert.equal(fit.档.共, 90, '共 必须等于账上档位总量（30 张 × 3 档）');
-    assert.equal(fit.维.共, 90, '共 必须等于账上维度总量（30 张 × 3 维）');
+    // `共` 必须 ≥ 进包，且不超出 canon 里的真实总量（自造夹具：(上限+6) 张 × 6 档 / 3 维）
+    const N_TABLES = SCALE_TABLE_TOP_PACK + 6;
+    assert.equal(fit.档.共, N_TABLES * 6, `共 必须等于账上档位总量（${N_TABLES} 张 × 6 档）`);
+    assert.equal(fit.维.共, N_TABLES * 3, `共 必须等于账上维度总量（${N_TABLES} 张 × 3 维）`);
     // 三道闸的常量本身也是判据的一部分（改预算必须连带改这条）
     assert.ok(fit.档.进包 <= TIER_TOP && fit.维.进包 <= DIM_TOP, '进包数必须落在预算之内');
 });

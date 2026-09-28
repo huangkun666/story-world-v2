@@ -13,20 +13,18 @@
 //   · W4 约束 5：value 是文本，引擎不换算
 //   · W5 复活三把钥匙：dead + **本 tick 被提到他的事点名** + value=active（缺一不可）
 //   · W6 ★离场名册：死者进包（否则"复活"在生产上是死代码——本棒实测踩到的那个坑）
-//   · W7 上限：字段变更 ≤FIELD_UPDATE_PER_TICK
+//   · W7 ★★★leg112 反向：**上限已撤**（用户 2026-09-22 拍板）⇒ 一轮提多条**必须全部落账**
 //   · W8 ★可选组：只带七组的老步照常合法（**缺席 = 本轮没有这件事**，不是形状错误）
 //   · W9 ★检索注入**当轮可见** + 失败零阻塞 + 只用账上真有的字
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { settleTick } from '../src/settle.js';
-import { checkWorldStep, FIELD_UPDATE_PER_TICK, ENTITY_IMMUTABLE_FIELDS } from '../src/check-step.js';
+import { checkWorldStep, ENTITY_IMMUTABLE_FIELDS } from '../src/check-step.js';
 import { buildEvolutionPack, DEPARTED_TAIL } from '../src/pack.js';
 import { validate } from '../src/schema.js';
 import { worldStepSchema } from '../src/schemas/world-step.schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
-
-assert.equal(FIELD_UPDATE_PER_TICK, 3, '每轮字段变更上限（提案态，铁律 2）');
 // ★丙′ 案（用户拍板）：禁写名单只留"纯引擎簿记"与"身份锚"两类——逐个锁住，防以后被顺手放宽
 assert.deepEqual(ENTITY_IMMUTABLE_FIELDS,
     ['id', 'kind', 'name', 'lastActiveTick', 'fieldSource', 'parentSource', 'parentSourceFrom'],
@@ -326,12 +324,18 @@ test('W6b：没有离场者 ⇒ 名册为空（恒为数组，与 idleFaces/pend
     assert.deepEqual(p.pack.departed, [], '没有离场者 ⇒ 空数组（不塞占位、不编内容）');
 });
 
-test('W6c：名册有上限（DEPARTED_TAIL），且确定性（同输入两次出包逐字节一致）', () => {
-    const many = Array.from({ length: DEPARTED_TAIL + 5 }, (_, i) => ({ id: `e_d${i}`, kind: 'character', name: `亡${i}`, status: 'dead', lastActiveTick: i }));
+// ★★★leg136（用户令「不要搞那么多闸了」）：**这一则随 `DEPARTED_TAIL` 作废而重造**。
+//   旧前提「名册有上限」**已不成立**（上限撤了，改成"有多少给多少"）——
+//   照本仓那条纪律（leg135 §2.4）：**上限改了而夹具不改 ⇒ 用例会静默失去意义**。
+//   新前提（仍然咬得住东西）：**一个都不许少，且同输入两次出包逐字节一致**。
+test('W6c：离场名册**不封顶**（有多少给多少；原 DEPARTED_TAIL 已作废），且确定性', () => {
+    const N = 25;   // ★故意比旧上限（20）多 5 个：旧口径下这一则量的是"截断"，新口径下量的是"一个不落"
+    const many = Array.from({ length: N }, (_, i) => ({ id: `e_d${i}`, kind: 'character', name: `亡${i}`, status: 'dead', lastActiveTick: i }));
     const w = baseWorld({ entities: many });
     const a = buildEvolutionPack(w, null).pack.departed;
     const b = buildEvolutionPack(w, null).pack.departed;
-    assert.equal(a.length, DEPARTED_TAIL, `最多 ${DEPARTED_TAIL} 个`);
+    assert.equal(a.length, N, `离场者 ${N} 个 ⇒ 名册里就是 ${N} 个（不封顶）`);
+    assert.equal(DEPARTED_TAIL, Infinity, '常量本身如实标着"已作废"');
     assert.deepEqual(a, b, '同输入两次出包一致（无随机）');
 });
 
@@ -343,21 +347,38 @@ test('W6d：复活之后，他重新出现在演化上下文里（复活不是"�
     assert.equal((p.pack.departed || []).some((d) => d.id === 'e_dead'), false, '名册里不再有他');
 });
 
-// ============ W7 上限 ============
+// ============ W7 ★★★leg112：上限已撤（反向对照） ============
+// ★这一格**原来是它的反面**（"超上限 ⇒ 拒，世界的连续性靠变得慢"）。用户 2026-09-22 拍板
+//   「我认为直接取消上限」⇒ 两条用例**反过来**：现在**多条必须全部落账**。
+// ★为什么这条值得留（而不是删掉）：它现在守的是"**有人把上限加回来**"——那正是本仓的老病
+//   （一个没量过的提案数字在生产里当家、而且是静默拦的）。撤前实测读数见 `check-step.js` 那一格留档。
 
-test('W7：字段变更超上限 ⇒ 拒（世界的连续性靠"变得慢"）', () => {
+test('W7 ★leg112：一轮提 8 条字段变更 ⇒ 全部放行、全部落账（上限已撤）', () => {
     const w = baseWorld({ events: [{ id: 'ev_1', title: 'x', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
-    const many = Array.from({ length: FIELD_UPDATE_PER_TICK + 1 }, (_, i) => upd({ field: `f${i}` }));
+    const many = Array.from({ length: 8 }, (_, i) => upd({ field: `f${i}`, value: `v${i}` }));
     const c = checkWorldStep(step7({ entityUpdates: many }), w);
-    assert.equal(c.ok, false);
-    assert.ok(c.errors.some((e) => e.includes('至多')), c.errors.join('; '));
+    assert.equal(c.ok, true, `★上限已撤 ⇒ 8 条不许被拒：${c.errors.join('; ')}`);
+    // ★"放行"还不够——必须真的**落进账**（本仓最忌"校验放行了、落账那一步悄悄丢"）
+    const r = settleTick({ ssot: w, step: step7({ entityUpdates: many }) });
+    const e = r.ssot.entities.find((x) => x.id === 'e_a');
+    for (let i = 0; i < 8; i += 1) assert.equal(e[`f${i}`], `v${i}`, `第 ${i} 条必须真的写进账`);
+    const rec = r.ssot.meta.entityFields.e_a.fields;
+    assert.equal(Object.keys(rec).length, 8, '★八条变更必须各留一条痕（原值+现值同时在场）');
 });
 
-test('W7b：字段变更超上限 ⇒ 拒（世界的连续性靠"变得慢"）——上限读真源', () => {
+test('W7b ★leg112：同一实体**同一字段**一轮内仍不许重复提议（撤的只是条数，不是"一条变更一个因"）', () => {
     const w = baseWorld({ events: [{ id: 'ev_1', title: 'x', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
-    const many = Array.from({ length: FIELD_UPDATE_PER_TICK + 1 }, (_, i) => upd({ field: `f${i}` }));
-    assert.equal(checkWorldStep(step7({ entityUpdates: many }), w).ok, false);
-    assert.equal(checkWorldStep(step7({ entityUpdates: many.slice(0, FIELD_UPDATE_PER_TICK) }), w).ok, true, '恰好等于上限要过');
+    const dup = [upd({ field: '实力', value: '金丹' }), upd({ field: '实力', value: '元婴' })];
+    const c = checkWorldStep(step7({ entityUpdates: dup }), w);
+    assert.equal(c.ok, false, '★同一人同一栏一轮改两次仍要拒（否则"一条变更一个因"就破了）');
+    assert.ok(c.errors.some((e) => e.includes('重复提议')), c.errors.join('; '));
+});
+
+test('W7c ★leg112：非数组仍然拒（撤的是条数上限，形状判据一条没动）', () => {
+    const w = baseWorld();
+    assert.equal(checkWorldStep(step7({ entityUpdates: 'nope' }), w).ok, false, '★不是数组必须拒');
+    assert.equal(checkWorldStep(step7({ entityUpdates: [] }), w).ok, true, '★空数组合法（= 本轮没有变更）');
+    assert.equal(checkWorldStep(step7(), w).ok, true, '★整组缺席也合法（可选组）');
 });
 
 // ============ W8 ★可选组（本棒踩过的那个坑，锁死防复发） ============
@@ -433,18 +454,34 @@ test('W11b：同一栏被改两次 ⇒ 现值是最后那次，且每次都能�
     assert.equal(rec.prev, '金丹', '★原值 = 上一次的现值（链条没断）');
     assert.equal(rec.cause, 'ev_2', '这次变更是"第二次"那件事引起的');
 });
-// ============ W9 ★世界书检索注入（**当轮可见**——撤掉"模型主动查"之后的那条正路） ============
-//   为什么撤（本棒留档）：我曾做成 `fieldQueries` = 模型点名、结算后检索、**下一轮**回灌。
+// ============ W9 ★★★「世界书检索注入」**已拆**（leg122 · 用户令「所以才需要拆」） ============
+//   ★这一族的定位变了：原来量的是"那条接线活着"，现在量的是"**它没回来**"。
+//   ★机制当年长什么样（留档，别再请回来）：我曾做成 `fieldQueries` = 模型点名、结算后检索、**下一轮**回灌，
 //   用户 2026-09-13 当场问穿：「为什么聊天 llm 能够直接获取想要的世界书内容呢还能通过向量化搜索直接在插件里搜到呢
-//   都是一轮解决的啊」⇒ ST 的关键词世界书与 `yuzuki-Memory` 的向量召回**都不是模型去搜**，是**系统在模型开口之前**
-//   把书塞进提示词 ⇒ 一轮可见、零额外调用、零跨轮状态。⇒ 改成 `recall.js`：**出包前检索、当轮随包递**。
+//   都是一轮解决的啊」⇒ 改成 `recall.js`：**出包前检索、命中原文随包当轮递**（＋ `pack.recalled` 键）。
+//
+//   ★★**拆它的两条实测理由**（leg122 在真账上量的，全文在 `src/tick.js` 的 `runTick` 前那一大段）：
+//     ① **它从来没检索到世界书**：召回那 1783 字与世界书 `大荒-姬元真.json`（30.5 万字）的
+//        6/8/10-gram 覆盖率 **0.00%**（4-gram 1.18% ≈ 噪声，与 leg35 2026-09-13 的读数逐字相同）；
+//        名字上更直白：黄坤/万子明/薛铁衣在世界书里 **0 次**、在召回段里 **22/10/11 次**。
+//     ② 它命中的全是**这份聊天自己的自动总结**（来源 `大荒z - 2026-09-01… #12/#9/#10`）——
+//        而"存聊天总结"**本来就是记忆插件（yuzuki-Memory）的活儿** ⇒ 我们把别人的活干重了，
+//        还把台头写成「**世界书**·…**逐字摘自世界书**」（`src/recall.js:127`）——**那句话是假的**。
+//
+//   ★★★leg125：那时"留着没撤"的 `src/recall.js` **模块本身也撤了**（用户令「我说了解耦就解耦，直接删了」
+//     ＋「一个插件偏要给一个特定的插件留个通道干嘛」）——它是**借柚月の记忆的向量库**那条腿。
+//     ⇒ 它那几条**纯函数判据**（W9c/W9d/W9e/W12/W12b/W12c）随模块一起删除；
+//     ★而"**它没回来**"这组反向锁（W9/W9b/W9f/W9g/W9i/W9j/W12d）**一条没动**——它们只经 `runTick`，
+//      断言的正是"注进活的检索器也不许被调、更不许进提示词"，比删模块以前更该留着。
 
-test('W9：检索注入**当轮可见**——检索结果直接进这一次的包文本（不是下一轮）', () => {
+test('W9：★已拆——账上留着的旧注入文本**不许**再漏进包（拆了就别回来）', () => {
     const w = baseWorld();
+    // ★诱饵：真账上就留着旧机制写下的那份（1783 字）——引擎不再读它，**也不顺手删**（留档）
     w.meta.recalledText = '【世界书·按本回合上下文检索到的原文片段】\n〔1〕出自 大荒-姬元真.json #7\n昆仑道宫：西极昆仑山上的道门，主修太清一脉。';
     const p = buildEvolutionPack(w, null);
-    assert.ok(p.text.includes('昆仑道宫：西极昆仑山上的道门'), '★检索到的原文必须出现在**本次**发出去的文本里');
-    assert.ok(p.text.includes('大荒-姬元真.json #7'), '★带出处（让模型知道这是书里拿的、从哪拿的）');
+    assert.equal(p.text.includes('昆仑道宫：西极昆仑山上的道门'), false, '★旧注入文本不许出现在**发出去**的文本里');
+    assert.equal('recalled' in p.pack, false, '★包里不许再有 `recalled` 键');
+    assert.equal(w.meta.recalledText.includes('昆仑道宫'), true, '★账上那份**原样不动**（引擎不读它、也不替玩家删账）');
 });
 
 test('W9b：没检索到 ⇒ 包里不留这一段（空着就是空着，不写空壳）', () => {
@@ -452,64 +489,26 @@ test('W9b：没检索到 ⇒ 包里不留这一段（空着就是空着，不写
     assert.equal('recalled' in p.pack, false, '没检索到就不留键');
 });
 
-test('W9c：collectRecallQuery 只用**账上真有的字**（实体名 + 未决事件标题；零编造）', async () => {
-    const { collectRecallQuery } = await import('../src/recall.js');
-    // 注意：ripples 里要填**账上真有的 id**（`e_player` 是 baseWorld 里的人）——填账上没有的 id，
-    //   映射不到名字（本棒第一版填了 `e_du`，那条世界没有 ⇒ 用例红。映射口径是"查不到就不写"，不是编一个）
-    const w = baseWorld({
-        events: [{ id: 'ev_1', title: '大营起事', source: { type: 'state' }, position: '大营', ripples: ['e_player'], closed: false }],
-    });
-    const q = collectRecallQuery(w, { picks: ['e_a'] });
-    assert.ok(q.includes('甲'), '本轮镜头选中的人在场');
-    assert.ok(q.includes('棋子'), '未决事件点到的人在（ripples→名字）');
-    assert.ok(q.includes('大营起事'), '正在发生的事在场');
-    assert.equal(collectRecallQuery({ entities: [], events: [] }), '', '空世界 ⇒ 空 query（拿空串去检索没有意义）');
-});
+// ★★★leg125：W9c / W9d / W9e 三条（`collectRecallQuery` · `recallWorldBook` · `recallTextOf` 的纯函数判据）
+//   已随 `src/recall.js` 整块删除——那条腿借的是柚月の记忆的向量库，全仓已无消费者。
 
-test('W9d：检索失败/不可用**永不抛**、零阻塞（与查书那条路同一纪律）', async () => {
-    const { recallWorldBook } = await import('../src/recall.js');
-    const w = baseWorld({ events: [{ id: 'ev_1', title: '事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
-    const none = await recallWorldBook({ ssot: w, store: null });
-    assert.equal(none.ok, false);
-    assert.ok(none.reason.includes('检索器不可用'), none.reason);
-    const boom = await recallWorldBook({ ssot: w, store: { search: async () => { throw new Error('检索器炸了'); } } });
-    assert.equal(boom.ok, false, '★抛错要折成 ok:false，不许把世界推进带崩');
-    assert.ok(boom.reason.includes('检索器炸了'), boom.reason);
-});
-
-test('W9e：检索命中后——逐字收片段、带来源、按上限截断（不半条截）', async () => {
-    const { recallWorldBook } = await import('../src/recall.js');
-    const w = baseWorld({ events: [{ id: 'ev_1', title: '事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
-    const store = { search: async () => ([
-        { text: '甲'.repeat(30), source: '书A #1', score: 0.9 },
-        { text: '乙'.repeat(30), source: '书A #2', score: 0.8 },
-        { text: '', source: '书A #3', score: 0.7 },
-    ]) };
-    const r = await recallWorldBook({ ssot: w, store, limit: 5, maxChars: 40 });
-    assert.equal(r.ok, true);
-    assert.equal(r.chunks.length, 1, '★第二段会使总长超 40 ⇒ 停手，不半条截断');
-    assert.equal(r.chunks[0].source, '书A #1', '来源带上（逐字照抄）');
-    const txt = (await import('../src/recall.js')).recallTextOf(r.chunks);
-    assert.ok(txt.includes('书A #1') && txt.includes('逐字摘自世界书'), '注入文本要说明"这是书里的原文，不是新发生的事"');
-});
-
-// ★★W9f：**接线**——`runTick` 里检索发生在**出包之前**（这是"当轮可见"能成立的唯一原因）
-//   判据要卡在"模型真正看到的那一份文本"上，不是卡在函数返回值上：拿假检索器喂进 `runTick`，
-//   然后检查**主调用收到的 pack.text** 里有没有那本书的原文 ⇒ 有 = 当轮可见（这正是用户追问的那件事）。
-test('W9f：★接线——runTick 在出包前检索，主调用**当轮**就看得见书里原文', async () => {
+// ★★W9f（**已反向**）：原来是"接线——`runTick` 在出包前检索、主调用当轮就看得见书里原文"。
+//   拆掉之后这条判据的**同一份装置**正好用来咬反面：注进一个**活的**检索器，它**一次都不该被调**。
+test('W9f：★接线已拔——注进**活的**检索器也不许被调、更不许进提示词（拆了就别回来）', async () => {
     const { runTick } = await import('../src/tick.js');
     const w = baseWorld({ events: [{ id: 'ev_1', title: '大营起事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
     let seenPackText = null;
-    const store = { search: async () => ([{ text: '昆仑道宫：西极昆仑山上的道门，主修太清一脉。', source: '大荒-姬元真.json #7', score: 0.9 }]) };
+    let called = 0;
+    const store = { search: async () => { called += 1; return [{ text: '昆仑道宫：西极昆仑山上的道门，主修太清一脉。', source: '大荒-姬元真.json #7', score: 0.9 }]; } };
     const res = await runTick({
         transport: async (prompt) => { seenPackText = String(prompt); return { text: JSON.stringify(step7()) }; },
         ssot: w, dialogue: '', extractCtx: {}, recallStore: store,
     });
     assert.equal(res.ok, true, JSON.stringify(res.error));
-    assert.ok(seenPackText.includes('昆仑道宫：西极昆仑山上的道门'), '★主调用**这一次**收到提示词里就有书里原文（不是下一轮）');
-    assert.ok(seenPackText.includes('大荒-姬元真.json #7'), '出处一并进提示词');
-    assert.equal(res.ssot.meta.recalled.ok, true, '自证面：账上记了"这一轮检索到了"');
-    assert.equal(res.ssot.meta.recalled.chunks, 1);
+    assert.equal(called, 0, '★接线拔了：检索器**一次都不该被调**');
+    assert.equal(seenPackText.includes('昆仑道宫：西极昆仑山上的道门'), false, '★书里原文不许再进主调用的提示词');
+    assert.equal(seenPackText.includes('大荒-姬元真.json #7'), false, '★出处也不许再进');
+    assert.equal('recalled' in res.pack, false, '★包里不许再有 `recalled` 键');
 });
 
 test('W9g：接线零阻塞——检索器抛错时 runTick 照常跑完一轮（世界推进优先）', async () => {
@@ -557,7 +556,7 @@ test('W9i：检索不可用 ⇒ 必须清掉上一轮的注入文本（不许过
     assert.equal(seenPackText.includes('世界书·按本回合上下文检索'), false, '整段都不该在');
 });
 
-test('W9j：检索器在但本轮没命中 ⇒ 同样清掉上一轮的（只有"本轮真命中"才注入）', async () => {
+test('W9j：★已拆——引擎不再写"这一轮检索了什么"那格读数（`meta.recalled` 不再产生）', async () => {
     const { runTick } = await import('../src/tick.js');
     const w = baseWorld({ events: [{ id: 'ev_1', title: '事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
     w.meta.recalledText = '旧内容甲';
@@ -565,16 +564,11 @@ test('W9j：检索器在但本轮没命中 ⇒ 同样清掉上一轮的（只有
     const res = await runTick({
         transport: async (prompt) => { seenPackText = String(prompt); return { text: JSON.stringify(step7()) }; },
         ssot: w, dialogue: '', extractCtx: {},
-        recallStore: { search: async () => [] },      // 检索器活着，但没命中
+        recallStore: { search: async () => [] },      // 检索器活着（但已经没人调它了）
     });
     assert.equal(res.ok, true);
-    assert.equal(seenPackText.includes('旧内容甲'), false, '★没命中就不注入（过期内容不许顶上来）');
-    // ★痕迹分两种，口径不同（本棒更正第一版断言时想清的事）：
-    //   · "这环境没检索器" = **环境事实** ⇒ 不写账（否则每轮往账里灌噪声、还让逐字节基线抖）
-    //   · "检索引擎跑了但没命中" = **关于世界的信息** ⇒ 照实记（面板要能说"检索过了、没命中"，不能谎报）
-    assert.equal(res.ssot.meta.recalled.ok, false, '如实记"这一轮检索没命中"');
-    assert.ok(String(res.ssot.meta.recalled.reason).includes('检索无命中'), res.ssot.meta.recalled.reason);
-    assert.equal(res.ssot.meta.recalledText, undefined, '正文不注入');
+    assert.equal(seenPackText.includes('旧内容甲'), false, '★旧内容不许顶上来');
+    assert.equal('recalled' in (res.ssot.meta || {}), false, '★引擎不再写检索读数（机制已拆，自证面随之取消）');
 });
 
 // ============ W12 ★「往事标记」（leg35 实机自验抓出，用户令修） ============
@@ -585,40 +579,12 @@ test('W9j：检索器在但本轮没命中 ⇒ 同样清掉上一轮的（只有
 //   ⇒ 改成**机械标记**：把片段里真读出来的时间原样列出来 + 写明位于本回合位序之前；
 //     并立一条红线：**没读出时间就不许编时间**（报位序，不报年份）。
 
-test('W12：时间标记**只从片段里真抽**（年/月/日、时分、轮次段），抽不出就是空数组——零编造', async () => {
-    const { timeMarksOf } = await import('../src/recall.js');
-    const one = timeMarksOf('支线总结 19021年05月05日,11:00-12:00 [青竹村口] 张二伯在草棚下躲雨，交给黄坤一个黑面馍馍。');
-    assert.ok(one.includes('19021年05月05日,11:00-12:00'), JSON.stringify(one));
-    const spans = timeMarksOf('第 1–10 轮 · 前史');
-    assert.deepEqual(spans, ['第 1–10 轮'], '轮次段也是时间标记（里程碑成段那支）');
-    assert.deepEqual(timeMarksOf('19021年05月05日 与 19021年05月05日'), ['19021年05月05日'], '同一标记只报一次');
-    assert.deepEqual(timeMarksOf('昆仑道宫：西极昆仑山上的道门，主修太清一脉。'), [], '★没时间就返回空——不许替它补一个年份');
-    assert.deepEqual(timeMarksOf(''), []);
-    assert.deepEqual(timeMarksOf(null), []);
-});
+// ★★★leg125：W12 / W12b / W12c（`timeMarksOf` · `recallTextOf` 的判据）已随 `src/recall.js` 删除。
+//   ★但"往事标记"这条经验**没有丢**：它现在是**编年行上的 `elapsed` 一格**（leg115 起，
+//     `src/tick.js` 盖、`src/ledger-recall.js` 取、注入与阅卷两处都看得到）——判据在
+//     `test/ledger-recall.test.js`（L6/L18/L19）与 `test/render.test.js`。
 
-test('W12b：召回原文带日期 ⇒ 注入段把**那些日期原样**列出来，并写明"早于本轮"（往事，不是新发生的事）', async () => {
-    const { recallTextOf } = await import('../src/recall.js');
-    const txt = recallTextOf([
-        { text: '主线总结（1） 19021年05月05日,08:00-08:30 [青竹村土地庙] 黄坤蜷缩在供桌底。', source: '大荒z - 2026 #1' },
-        { text: '支线总结（2） 19021年05月06日,11:00-12:00 [青竹村口] 张二伯递给黄坤黑面馍馍。', source: '大荒z - 2026 #3' },
-    ]);
-    assert.ok(txt.includes('19021年05月05日,08:00-08:30'), '★台头要报出真日期（第一条）');
-    assert.ok(txt.includes('19021年05月06日,11:00-12:00'), '★台头要报出真日期（第二条）');
-    assert.ok(txt.includes('往事'), '★口径要硬：说清这是往事');
-    assert.ok(txt.includes('不要把它们当作本回合的新事件重写一遍'), '★点明最危险的那种错法');
-    assert.ok(txt.includes('〔1〕出自 大荒z - 2026 #1'), '逐字原文与出处照旧（标记是加头，不是替换）');
-});
-
-test('W12c：片段里读不出时间 ⇒ 只报位序、**不许编时间**（红线：编数）', async () => {
-    const { recallTextOf } = await import('../src/recall.js');
-    const txt = recallTextOf([{ text: '昆仑道宫：西极昆仑山上的道门，主修太清一脉。', source: '大荒-姬元真.json #7' }]);
-    assert.ok(txt.includes('位于本回合之前'), '读不出时间也要说清位序');
-    assert.ok(!/[0-9]{3,5}\s*年/.test(txt), '★不许凭空出现年份');
-    assert.ok(txt.includes('昆仑道宫：西极昆仑山上的道门'), '原文照旧逐字');
-});
-
-test('W12d：接线——往事标记**跟着 runTick 一起进提示词**（不是只在函数里好看）', async () => {
+test('W12d：★接线已拔——"往事标记"不再进提示词（它随检索注入那条线一起拆了）', async () => {
     const { runTick } = await import('../src/tick.js');
     const w = baseWorld({ events: [{ id: 'ev_1', title: '事', source: { type: 'state' }, position: '大营', ripples: [], closed: false }] });
     let seenPackText = null;
@@ -628,7 +594,6 @@ test('W12d：接线——往事标记**跟着 runTick 一起进提示词**（不
         recallStore: { search: async () => ([{ text: '主线总结（1） 19021年05月05日,08:00-08:30 [青竹村土地庙] 黄坤蜷缩在供桌底。', source: '大荒z - 2026 #1', score: 0.9 }]) },
     });
     assert.equal(res.ok, true);
-    assert.ok(seenPackText.includes('19021年05月05日,08:00-08:30'), '★日期必须真进到主调用收到的提示词里');
-    assert.ok(seenPackText.includes('往事'), '★往事标记必须真进提示词（接线接在 runTick 上）');
-    assert.equal(res.ssot.meta.recalledText.includes('往事'), true, '账上那段也带标记（下一帧重出包时口径一致）');
+    assert.equal(seenPackText.includes('19021年05月05日,08:00-08:30'), false, '★检索回来的日期不许再进提示词');
+    assert.equal(seenPackText.includes('世界书·按本回合上下文检索'), false, '★整段都不该在');
 });

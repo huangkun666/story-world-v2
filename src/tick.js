@@ -5,20 +5,16 @@ import { extractMove } from './extract.js';
 import { extractTags, hasTagFacts, tagReadoutLine } from './tag-extract.js';
 import { buildEvolutionPack } from './pack.js';
 import { runMainCall } from './worldstep.js';
-import { settleTick } from './settle.js';
+import { settleTick, registerDialogueFacts } from './settle.js';
 import { checkWorldStep } from './check-step.js';
 import { dropInvalidProposals } from './sanitize-step.js';
 import { resolveLimits } from './limits.js';
 import { renderStreams } from './streams.js';
-import { recallWorldBook, recallTextOf, noteRecall } from './recall.js';
+// ★leg122：`import { recallWorldBook, recallTextOf, noteRecall } from './recall.js';` **已撤**
+//   （检索注入那条线拔了；`src/recall.js` 模块本身留着留档——见下面 `runTick` 前那一大段）。
+//   ★顺手清掉一处**孤儿注释**：这里原本还挂着一份 `injectWorldBookRecall` 的旧文档注释
+//     （与函数前面那份重复，函数搬走时留下的），它现在描述的是一个已经不存在的机制。
 
-/**
- * ★leg34：**世界书检索注入**——出包之前检索，命中的原文随包**当轮**递给模型。
- *   为什么必须在这个位置：与既有前置步同一条理由（细案 spec-entity-field-lookup §3 写死的："必须在
- *   buildEvolutionPack 之前跑——否则这一轮主调用看不到刚查回来的字段"）。ST 的关键词世界书与
- *   `yuzuki-Memory` 的向量召回也都是**组装提示词那一刻**把书塞进去的 ⇒ 一轮可见、零额外调用、零跨轮状态。
- *   ★失败零阻塞：检索器没装/没开/抛错 ⇒ 照常出包（`recallWorldBook` 自己折成空结果，永不抛）。
- */
 /**
  * ★★★leg90：**③段「世界动向」的人话渲染器**（纯函数，从`事件对象本体`取事实、不解析文本）。
  *
@@ -65,6 +61,43 @@ export function tideLines(ssot, chronicle) {
         const who = hit.length ? `，波及${hit.join('、')}` : '';
         return `◆ [第${c.tick}轮] ${ev.title}（${why}${where}${who}）`;
     });
+}
+
+/**
+ * ★★★leg115：给**本轮新落的**编年行盖上"此后又过了多久"。
+ *
+ * 用户原话（本笔的靶子）：「**聊天llm是不知道什么时候世界发生了什么事懂吗？**」
+ * 病：账上 `simLog` **零时间字段**，往事只带「第 N 轮」= 引擎轮次；而时长是正文里【时长】写的、
+ *   属**账外的料**（`pack.js:1014`：「引擎一个字都不解析它」）⇒ 写正文的人自己写的时长，下一轮没地方找。
+ *
+ * 口径（三条，每条都有出处）：
+ *   ① **只收集原话，不做算术**——绝不把「三天」累加成"第 N 天"。
+ *      依据 `STATE.md` §2.2 第 1 条（不许把书里的词换算成数）同源：时间也归这条管，累加就编出账上没有的数。
+ *   ② **只盖新行**（`fromIndex` 之后的），不回头改旧行——旧行没有那一格就是"当时没写"，不许补。
+ *   ③ 没有时长 ⇒ **不盖**，不许填占位值（红线 2：空着就是空着）。
+ *
+ * 纯函数、就地改 `ssot.chronicle` 的新行（与 `settle.js` 落编年同一层）；**不 import 任何东西**。
+ *
+ * @param {object} ssot 世界账（结算后的那一份）
+ * @param {number} fromIndex 结算前编年有几行（= 本轮新行的起点）
+ * @param {string} elapsed 当轮时长原话（`tagFacts.elapsed`，如「三天」「一炷香」；可空）
+ * @returns {number} 实际盖了几行
+ */
+export function stampChronicleTime(ssot, fromIndex, elapsed) {
+    const t = String(elapsed ?? '').trim();
+    if (!t) return 0;                                    // 没写时长 ⇒ 不盖（口径③）
+    const rows = Array.isArray(ssot?.chronicle) ? ssot.chronicle : null;
+    if (!rows) return 0;
+    const from = Number.isFinite(fromIndex) ? Math.max(0, fromIndex) : 0;
+    let n = 0;
+    for (let i = from; i < rows.length; i += 1) {
+        const row = rows[i];
+        if (!row || typeof row !== 'object') continue;
+        if (row.elapsed) continue;                       // 已经有印记的不覆盖（口径②）
+        row.elapsed = t;
+        n += 1;
+    }
+    return n;
 }
 
 // ★★leg40b 续·**死锁修复（丙）**：让"一步被拒"再也换不来"世界永久停摆"。
@@ -147,32 +180,23 @@ function reasonOf(d) {
     return `提议丢弃: ${who} ${d.reason}`;
 }
 
-/**
- * ★leg34：**世界书检索注入**——出包之前检索，命中的原文随包**当轮**递给模型。
- *   为什么必须在这个位置：与既有前置步同一条理由（细案 spec-entity-field-lookup §3 写死的："必须在
- *   buildEvolutionPack 之前跑——否则这一轮主调用看不到刚查回来的字段"）。ST 的关键词世界书与
- *   `yuzuki-Memory` 的向量召回也都是**组装提示词那一刻**把书塞进去的 ⇒ 一轮可见、零额外调用、零跨轮状态。
- *   ★失败零阻塞：检索器没装/没开/抛错 ⇒ 照常出包（`recallWorldBook` 自己折成空结果，永不抛）。
- */
-export async function injectWorldBookRecall({ ssot, picks = null, store = undefined } = {}) {
-    const world = ssot;
-    if (!world?.meta) return null;
-    // ★★**先清上一轮的**（本棒自查抓出的真漏洞）：原来那版在"检索器不可用"时提前 return ⇒ 跳过清空
-    //   ⇒ 上一轮的书片段一直挂在账上，往后每轮都当"本轮检索结果"注入（**过期内容冒充新检索**）。
-    //   ⇒ 口径：**注入文本每轮都从头决定**——只有"本轮真命中"才写，其余一律清空（含没检索器/没命中/抛错）。
-    //   （这正是我刚撤掉的那套"跨轮存待办"最容易犯的错；换成正路之后，同一类坑还得自己防。）
-    delete world.meta.recalledText;
-    const res = await recallWorldBook({ ssot: world, picks, store });
-    // ★没检索器（Node 侧、或没装向量书）⇒ **一个字节都不写**：
-    //   "这环境没有检索器"是**环境事实**、不是"世界这一轮检索失败了"，写进账只是噪声（而且会让逐字节基线抖动）。
-    //   真装好了但这一轮没命中 ⇒ 才记（那时 `reason` 是"检索无命中"这类**关于世界的信息**）。
-    if (!res.ok && /检索器不可用/.test(res.reason || '')) return res;
-    noteRecall(world, res);                                       // 自证面读数（不囤正文）
-    if (res.chunks.length) world.meta.recalledText = recallTextOf(res.chunks);
-    return res;
-}
+// ★★★leg122（用户令「所以才需要拆」）：**`injectWorldBookRecall` 那条线已拔**——这一格留档，别再请回来。
+//   它当年是"出包之前检索世界书、命中原文随包当轮递给模型"（leg34 立、leg35/39 自验过）。
+//   **拆它的两条实测理由**（leg122 在真账上量的）：
+//     ① **它从来没检索到世界书**：召回那 1783 字与世界书 `大荒-姬元真.json`（30.5 万字）的
+//        6/8/10-gram 覆盖率 **0.00%**（4-gram 1.18% ≈ 噪声，与 leg35 2026-09-13 的读数逐字相同）；
+//        它命中的是**这份聊天自己的自动总结**（来源 `大荒z - 2026-09-01… #12/#9/#10`）。
+//     ② 而"存聊天总结"**本来就是记忆插件（yuzuki-Memory）的活儿** ⇒ 我们再拉一遍是把别人的活干重了，
+//        还把台头写成「**世界书**·…**逐字摘自世界书**」（`src/recall.js:127`）——**那句话是假的**。
+//   ⇒ 拔掉的是**两处接线**：下面 `runTick` 里那次调用 ＋ `src/pack.js` 的 `pack.recalled` 键。
+//   ★★★leg125（2026-09-25 · 用户令「**我说了解耦就解耦，直接删了**」）：当时"没拔"的那两件——
+//     **`src/recall.js` 模块本身已删**（连同它那两个只读测量装置），模块数硬锁 **49 → 47**。
+//     ★而 `runTick` 的 `recall` / `recallStore` 两个形参**留着**（这是有意的）：它们是判据的**诱饵面**——
+//       W9f/W9g/W9i/W9j/W12d 那几条反向锁靠它们证明"注进一个**活的**检索器也不许被调、不许进提示词"。
+//   ★**代价也如实登记**：拔掉之后，**世界模型这一侧再没有任何"来自正文"的输入**
+//     （标签那条路是用户有意关的）⇒ 它此后**只按账自己的状态演**。这不是意外，是本棒量出来的后果。
 
-export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined }) {
+export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null }) {
     // ★★两条提取路并存，**互不影响**（口径不同、消费面不同）：
     //   ① `extractMove(dialogue, extractCtx)` = **老口径**：读"玩家自己打的那句话"，靠 13 条动词词表归一。
     //      ★生产上恒 null（`extractCtx: {}` 是接线占位）——**保留不动**：那是被用户否掉的方向的留档，
@@ -212,12 +236,11 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
             picks = null;   // 前置步失败 → 退回引擎镜头（旧路径零扰动）
         }
     }
-    // ★leg34：检索注入（在出包之前；失败不阻塞——见 injectWorldBookRecall 注释）。
-    //   `recall:false` 留给不需要它的调用方（如纯结构冒烟），零扰动。
-    if (recall) {
-        try { await injectWorldBookRecall({ ssot: world, picks, store: recallStore }); }
-        catch (err) { console.warn('[story-world-v2] 世界书检索注入失败（不影响世界推进）:', err?.message || err); }
-    }
+    // ★★★leg122：**检索注入那一步已拔**（原来是这里调 `injectWorldBookRecall`，见 `runTick` 前那一大段留档）。
+    //   ★`recall` / `recallStore` 两个形参**留着但没人读了**——照 `extractCtx` 的先例留档，撤它们要单独一笔；
+    //     调用方仍可以照旧传（`recall: false` 之类），只是**不再有任何效果**。
+    //   ★本步拔掉之后，出包之前**不再有"从正文/书里取料"的动作**——世界模型这一轮拿到的东西，
+    //     全部来自**账自己的状态**（包）＋ 本轮的落子提取（标签，用户有意关着）。
     // 未提取落子（OOC/无可提取动作）不拦 tick：世界以自身状态为原料，照常结算（§3②）；
     // moveFact 为空则注入无行迹行。诚实未提取由调用方/度量记录。
     // ★★leg89 更正：判据从 `move.verb ? move : null` 改成"**末条事实在 ⇒ 就在**"。
@@ -256,23 +279,66 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
         }        if (tagFacts.playerDropped) turnFacts.playerDropped = tagFacts.playerDropped;
         if (tagFacts.malformed.length) turnFacts.malformed = tagFacts.malformed;
     }
-    const pack = buildEvolutionPack(world, moveFact, { picks, lim: resolveLimits(world), turnFacts });
+    // ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.3/§2.6）：**聊天侧那一侧的落账**——
+    //   把三族标签注册成 `dialogue` 型事件、并把【变化】的格落下。
+    //   ★**必须在出包之前**，两个理由：① 世界模型这一轮要看得见这些既成事实（包读的是**账**）；
+    //     ② 它该看到**新状态**（否则照旧样子演）。
+    //   ★★同时这是"谁先谁后"那条顺序的**落点**（用户 2026-09-24：「先聊天模型给出谁行动了谁被修改了，
+    //     然后世界模型就不用再模拟这些行动过的角色了」）：行动过的人与已改定的格从此都在账上，
+    //     世界步那三条结构（`gate.js`/`sanitize-step.js`）就按它判。
+    //   ★零扰动：三族都没料（老聊天 / 开关关着）⇒ **一个字节都不碰账**。
+    const chronicleLenBefore = (world?.chronicle || []).length;   // ★leg115 的时间印记靠它认出"本轮新落的行" ⇒ **必须先于注册取**
+    //   ★★tick 取 **`meta.tick + 1`**：本轮的落账轮次是"下一个 tick"（`settle.js` 的 `gateAndSnapshot`
+    //     一进来就把 `meta.tick` 自增到它）⇒ 我这批事件/编年行必须**跟世界步那批落在同一个轮次**上，
+    //     否则同一轮的事会被记到两个轮次（差一轮 ⇒ 检索、时间印记、门控三处全部错位）。
+    const dialogueStats = registerDialogueFacts(world, { facts: tagFacts, dialogue, tick: (world?.meta?.tick ?? 0) + 1 });
+    // ★★★leg119：`ledgerVolumes` = **编年进了冷档的那些段（卷）**，由编排层取好递进来
+    //   （与 `recallStore` 同一条路：引擎不碰存储，浏览器侧的东西一律从选项进来）。
+    //   ★不传 ⇒ `null` ⇒ 与接线之前**逐字节相同**（旧调用方零扰动）。
+    const pack = buildEvolutionPack(world, moveFact, { picks, lim: resolveLimits(world), turnFacts, volumes: ledgerVolumes });
     // ★自证面（标签读数）：**随返回值交给调用方**，**不写账、不动 stage.warnings**。两条理由：
     //   ① 它是"这一轮正文长什么样"的**会话级读数**，不是世界状态——写进热账会让"这一轮"冒充"账上事实"
     //      （leg34 那次"过期检索冒充新检索"的同款坑的另一面）；
     //   ② `stage.warnings` 带**裁定语义**（`settleWithHealing` 数着它判"这一轮是不是降级路径"、
     //      `test/deadlock-heal.test.js` 锁着）⇒ 塞一行普通读数进去会让"降级路径"误报（leg89 实测过：
     //      "世界安静一步"那条用例当场红）。⇒ 只在返回值里给，编排层（`web/index.js`）自己留着报。
-    const readout = tagReadoutLine(tagFacts);
+    const readout0 = tagReadoutLine(tagFacts);
+    // ★★★leg123：把"聊天侧那批落了多少、丢了多少"接到**同一行读数**上（玩家可见文本，零引擎术语）。
+    //   ★只在**真有丢/有截**时才加这个尾巴——没丢就一个字不多说（读数行本身已经够挤）。
+    //   ★为什么必须出声：用户选了"只靠聊天模型"这条路 ⇒ 模型漏写、或值在正文里找不到，
+    //     都会让"这一轮少记了东西"，而那**不能是静默的**（本仓最忌的失效形状）。
+    const dlgNote = (dialogueStats.dropped || dialogueStats.capped)
+        ? `正文落账 ${dialogueStats.events} 件（丢 ${dialogueStats.dropped + dialogueStats.capped} 件）`
+        : null;
+    const readout = [readout0, dlgNote].filter(Boolean).join(' · ') || null;
     const main = await runMainCall({ transport, ssot: world, pack });
+    // ★★★本次修（真模型 60 轮长跑实跑抓出来的病）：**校验被拒也要能自愈，不许整轮丢**。
+    //   病（实测）：60 轮里 **21 轮报废（35%）**、**白花 43.4% 的挂钟时间**、最长**连续卡 6 轮**；
+    //     而 21 条归因里 **18 条是同一个**——模型把新线挂在一条**已经了结**的事上。
+    //     那条自愈（`settleWithHealing`）**60 轮一次都没触发**，因为它排在**校验的后面**：
+    //     校验不过 ⇒ 这里当场 `return` ⇒ 自愈一步都走不到。
+    //   ⇒ 定案：**同一个"步写歪了"，在哪儿被逮住就该在哪儿得到同一个处置**。
+    //     本仓 leg40b 立那条自愈时要治的正是"一条提议写歪 ⇒ 整步被拒 ⇒ 轮卡住 ⇒ 永久停摆"——
+    //     那一层却够不着这里，这就是病根。
+    //   ★它**不改写任何提议**（自愈只做减法：丢掉写歪的 → 重校验 → 再不行"世界安静一步"）；
+    //     校验那几条闸**一条都没放宽**（`checkWorldStep` 一个字节没动）——
+    //     变的只是"被拒之后怎么办"，不是"什么算合格"。
+    let stepForSettle = main.step;
     if (!main.ok) {
-        return { ok: false, error: main.errors.join('; '), move, pack, streams: null, tagFacts, tagReadout: readout };
+        if (!main.rawStep || typeof main.rawStep !== 'object') {
+            // 连 JSON 都没解析出来 ⇒ **没有"提议"可救**，如实失败（不许假装成功）
+            return { ok: false, error: main.errors.join('; '), move, pack, streams: null, tagFacts, tagReadout: readout, dialogueStats };
+        }
+        stepForSettle = main.rawStep;
     }
     // ★leg40b 续：结算走**带自愈的**那条（①原样 → ②降级重试 → ③世界安静一步，见 `settleWithHealing` 头注）。
     //   这次改动治的是"一条提议写歪 ⇒ 整步被拒 ⇒ tick 不动 ⇒ 下一轮又一样 ⇒ 世界永久停摆"。
-    const s = settleWithHealing({ ssot: world, step: main.step, moveFact: move, calls });
+    // ★leg115：**先记住结算前编年有几行**——结算之后要靠它认出"本轮新落的行"（时间印记只盖新行）。
+    //   ★★★leg123：这一行**已上移**到 `registerDialogueFacts` 之前（见上）——因为聊天侧那批
+    //     编年行也是**本轮新落的行**，leg115 的时间印记要一并盖到它们身上。
+    const s = settleWithHealing({ ssot: world, step: stepForSettle, moveFact: move, calls });
     if (!s.ok) {
-        return { ok: false, error: `结算拒绝: ${JSON.stringify(s.stage.warnings)}`, move, pack, streams: null, tagFacts, tagReadout: readout };
+        return { ok: false, error: `结算拒绝: ${JSON.stringify(s.stage.warnings)}`, move, pack, streams: null, tagFacts, tagReadout: readout, dialogueStats };
     }
     const streams = renderStreams(s.ssot, s.stage, move);
     // ★★★leg89 补（用户：「把这一轮世界发生了什么注入上下文啊」）：
@@ -297,5 +363,17 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     const tide = tideLines(s.ssot, s.stage?.chronicle).join('；');
     if (tide) s.ssot.meta.lastInjection = tide;
     else delete s.ssot.meta.lastInjection;   // ★没有新发生的事就清掉（不许上一轮的冒充本轮）
-    return { ok: true, ssot: s.ssot, stage: s.stage, streams, move, pack, picks, healed: s.healed, tagFacts, tagReadout: readout };
+    // ★★★leg115：**给这一轮新落的编年行盖上时间印记**（用户原话：「聊天llm是不知道什么时候世界发生了什么事懂吗？」）。
+    //   病（真账 `大荒z` tick 61 实测）：账上 **`simLog` 零时间字段**，往事只带「第 N 轮」= **引擎轮次**；
+    //     而"故事里过了多久"是正文里【时长】写的——它是**账外的料**（`pack.js:1014` 原文：
+    //     「引擎一个字都不解析它，账按轮走、故事按时间走」）⇒ 写正文的人**自己写的时长，下一轮没地方找**。
+    //   治法：把当轮时长**逐字照抄**进这一轮的编年行（`elapsed` 一格，契约层已登记）——
+    //     往事与"什么时候"从此绑在同一行上，检索层一取就带出来（`ledger-recall.js`）。
+    //   ★口径三条：
+    //     ① **只收集原话，不做算术**：绝不把「三天」累加成一个"第 N 天"（红线 §2.2 第 1 条同源：
+    //        不许把书里的词换算成数——时间也归这条管，累加就会编出账上没有的数）；
+    //     ② **只盖本轮新落的行**（靠"结算前有几行"定位），**不回头改旧行**——旧行没有就是没有；
+    //     ③ 没有时长（正文没写【时长】）⇒ **不盖**，不许填占位值（红线 2：空着就是空着）。
+    stampChronicleTime(s.ssot, chronicleLenBefore, tagFacts?.elapsed);
+    return { ok: true, ssot: s.ssot, stage: s.stage, streams, move, pack, picks, healed: s.healed, tagFacts, tagReadout: readout, dialogueStats };
 }

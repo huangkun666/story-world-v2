@@ -23,7 +23,7 @@
 //   不许自己再写一套 `find`——本仓 leg32/leg33 的教训是"两把尺子会长歪"（选择器偏心、判据各写一份）。
 import {
     findEvent, newEventIdsOf,
-    FIELD_UPDATE_PER_TICK, ENTITY_IMMUTABLE_FIELDS,
+    ENTITY_IMMUTABLE_FIELDS,
 } from './check-step.js';
 // ★★★leg67（甲案）：**判据问单一主人**——`src/ref-rules.js` 的 `judgeRef`（零 import 的叶子模块）。
 //   ★为什么必须问它而不是自己写：本文件与 `check-step.js` 原先各手写一份"这个号能不能这么用"，
@@ -83,6 +83,9 @@ function labelOf(family, item) {
     if (family === 'entityFates') return str(item.entity);
     if (family === 'entityUpdates') return `${str(item.entity)}.${str(item.field)}`;
     if (family === 'eventClosures') return str(item.event);
+    // ★leg120（A3 关系网）：两组新提议的"人话名字"（落痕用）
+    if (family === 'relationUpdates') return `${str(item.from)} → ${str(item.to)}：${str(item.type)}`;
+    if (family === 'relationClosures') return str(item.id);
     if (family === 'actions') return `${str(item.entity)} ${str(item.verb)}`;
     return '';
 }
@@ -113,6 +116,50 @@ export function dropInvalidProposals(step, ssot) {
     for (const k of STEP_KEYS) cur[k] = arr(src[k]);
     // 非七组的合法可选字段照原样带走（净化器不是契约白名单，不该顺手删模型没写歪的东西）
     for (const [k, v] of Object.entries(src)) if (!(k in cur)) cur[k] = v;
+
+    // ---- 第 0.5 步（★★★leg123 · 细案 `docs/spec-tag-granularity.md` §2.6 ②③）：**"谁先谁后"那两条结构** ----
+    //   ① 世界步**不许再让"本轮正文里已经行动过的人"出手**——
+    //      用户原话：「先是聊天llm给出谁行动了谁被修改了，然后世界模拟llm就不用再模拟这些行动过的角色了」；
+    //   ② 世界步**不许改"本轮已由【变化】落定的格"**（同一轮同一个人的同一格不许写两遍）。
+    //
+    //   ★判据全是**结构性**的（读账上真有的东西，不判语义、不用词表）：
+    //     · "已经行动过的人" = 本轮 `dialogue` 型事件里 `dialogueKind ∈ {action, promise}` 的**主语**（`ripples[0]`）；
+    //       ★**改过格的人不算出过手**——正文写"他受伤了"不等于他这一轮动过手（他仍可反应）。
+    //     · "已落定的格" = `meta.entityFields[实体].fields[格]` 上盖着**本轮 tick** 且**因是一条 dialogue 事件**
+    //       （那是 `registerDialogueFacts` 自己写的留痕 ⇒ 与它同一把尺子，不从标题里反解）。
+    //
+    //   ★★"冲突"在这里**不是"撞车了丢一条"，而是形状上就不允许被模拟两遍**——
+    //     真出了冲突，说明提示词/输入没把它讲清（那要修的是那一条），不是靠这里兜住（用户原话：
+    //     「如果有冲突那就说明本来就错了」）。本节只做"机械地不让它发生 + 如实报数"。
+    const dlgTick = world.meta?.tick ?? 0;
+    const dlgPrefix = `ev_${dlgTick}_`;
+    const dlgEvents = arr(world.events).filter((e) => e?.source?.type === 'dialogue' && String(e?.id || '').startsWith(dlgPrefix));
+    if (dlgEvents.length) {
+        const actedNow = new Set();
+        for (const ev of dlgEvents) {
+            if (ev.dialogueKind === 'change') continue;           // ★只有"出过手"（行动/承诺）才算
+            const subject = arr(ev.ripples)[0];
+            if (subject) actedNow.add(subject);
+        }
+        const dlgIds = new Set(dlgEvents.map((e) => e.id));
+        const wroteNow = new Set();
+        for (const [id, rec] of Object.entries(world.meta?.entityFields || {})) {
+            for (const [f, r] of Object.entries(rec?.fields || {})) {
+                if (r?.tick === dlgTick && dlgIds.has(r?.cause)) wroteNow.add(`${id}|${f}`);
+            }
+        }
+        cur = {
+            ...cur,
+            actions: cur.actions.filter((a, i) => {
+                if (!a || typeof a !== 'object' || !actedNow.has(a.entity)) return true;
+                return keep(dropped, 'actions', i, a, '本轮正文里他已经出过手——同一轮不许被模拟两遍（先正文、后世界）');
+            }),
+            entityUpdates: cur.entityUpdates.filter((u, i) => {
+                if (!u || typeof u !== 'object' || !wroteNow.has(`${u.entity}|${u.field}`)) return true;
+                return keep(dropped, 'entityUpdates', i, u, '这一格本轮已由正文落定——同一轮同一格只写一次（★跨轮照旧可以带因改）');
+            }),
+        };
+    }
 
     // ---- 第 1 步：组内自明非法（不需要跨组信息就能判死的）----
     cur = {
@@ -240,6 +287,44 @@ export function dropInvalidProposals(step, ssot) {
                 if (!askRef('actions.entity', { type: 'id', ref: a.entity }, { world, step: cur })) return true;
                 return keep(dropped, 'actions', i, a, `行动方「${str(a.entity)}」不在账上（引擎无法证明这步是谁走的）`);
             }),
+            // ★★★leg120（A3 关系网）：关系变更的两组也要问**同一个主人**——理由与 `eventClosures`
+            //   一字不差：净化器的存在意义是"交出去的步能过校验"，留一条过不了校验的提议 ⇒ 那一步白走。
+            //   ★**丢了就记进 `dropped`**（模型与玩家都看得见）——**绝不静默**（判据 R5 锁着；
+            //     本仓 `entityUpdates ≤3` 当年正是栽在"静默截断"上，leg112 已整条撤除）。
+            relationUpdates: arr(cur.relationUpdates).filter((ru, i) => {
+                if (!ru || typeof ru !== 'object' || Array.isArray(ru)) {
+                    return keep(dropped, 'relationUpdates', i, ru, '形状不是 {from, to, type, cause}');
+                }
+                const fromId = str(ru.from);
+                const toId = str(ru.to);
+                if (!fromId || !toId) return keep(dropped, 'relationUpdates', i, ru, '缺"谁"或"对谁"（照抄输入实体 id）');
+                if (!str(ru.type)) return keep(dropped, 'relationUpdates', i, ru, '缺关系本身（用你自己的话写这次关系怎么变了）');
+                // ★两端存在性：问单一主人（与 `check-step` 同一格 `'relationUpdates.end'`）。
+                if (askRef('relationUpdates.end', { type: 'id', ref: fromId }, { world, step: cur })) {
+                    return keep(dropped, 'relationUpdates', i, ru, `「谁」${fromId} 不在账上`);
+                }
+                if (askRef('relationUpdates.end', { type: 'id', ref: toId }, { world, step: cur })) {
+                    return keep(dropped, 'relationUpdates', i, ru, `「对谁」${toId} 不在账上`);
+                }
+                // ★红线 1：玩家不可作"持有关系"的那一方（与 `check-step` 同一口径；**反方向允许**）。
+                if (world.context?.playerId && fromId === world.context.playerId) {
+                    return keep(dropped, 'relationUpdates', i, ru, '玩家不可作"持有关系"的那一方（红线 1；玩家的承诺只有玩家能立）');
+                }
+                // ★必带因：问单一主人（`'relationUpdates.cause'` 与 `entityUpdates.cause` 共用一份实现）。
+                const t = ru.cause?.type;
+                if (t !== 'event' && t !== 'agenda') return keep(dropped, 'relationUpdates', i, ru, `未知因型「${str(t)}」`);
+                const why = dropVerdictOf('relationUpdates.cause', ru.cause, { world, step: { newEvents: cur.newEvents } });
+                if (why) return keep(dropped, 'relationUpdates', i, ru, why);
+                return true;
+            }),
+            // ★了结：只认已落账的边（判据表里已固定，见 `'relationClosures.id'`）。
+            relationClosures: arr(cur.relationClosures).filter((rc, i) => {
+                const id = str(rc && typeof rc === 'object' ? rc.id : rc);
+                if (!id) return keep(dropped, 'relationClosures', i, rc, '缺关系 id（照抄输入里那条边的号）');
+                const why = dropVerdictOf('relationClosures.id', { type: 'id', ref: id }, { world, step: cur });
+                if (why) return keep(dropped, 'relationClosures', i, rc, why);
+                return true;
+            }),
             agendaAdvances: cur.agendaAdvances.filter((ad, i) => (liveAgendas.has(str(ad.agendaId))
                 ? true
                 : keep(dropped, 'agendaAdvances', i, ad, `盘算「${str(ad.agendaId)}」不在账上/本轮也没立起来`))),
@@ -338,13 +423,9 @@ export function dropInvalidProposals(step, ssot) {
             return { ...ev, ripples: arr(ev.ripples).filter((r) => !badRef(r)) };
         });
 
-        // 额度类（不越权判对错，只裁"超过引擎自己发布的上限"那部分——与 settle.js 的裁定口径同源）
-        if (next.entityUpdates.length > FIELD_UPDATE_PER_TICK) {
-            for (let i = FIELD_UPDATE_PER_TICK; i < next.entityUpdates.length; i += 1) {
-                dropped.push({ family: 'entityUpdates', index: i, label: labelOf('entityUpdates', next.entityUpdates[i]), reason: `超过每轮上限 ${FIELD_UPDATE_PER_TICK} 条` });
-            }
-            next.entityUpdates = next.entityUpdates.slice(0, FIELD_UPDATE_PER_TICK);
-        }
+        // ★★★leg112（D1）：**这里原有一处"静默截断"**——超过每轮上限就砍掉尾巴、只往 `dropped` 记一条
+        //   理由（模型与玩家都看不见"你的变更被砍了"）。用户拍板撤上限 ⇒ 与 `check-step.js` **同批撤**
+        //   （留一处 = 半死的闸：校验面放行了、净化器照砍）。原形状见 `check-step.js` 那一格留档。
         // ★关于"单盘算一轮涉及 ≤15"（`checkAgendaInvolvement`）：**本净化器不处理它**，如实说明为什么：
         //   那条闸读的是 `(step, world)` ⇒ 只算**世界账里在飞盘算**的被涉及面，与"本轮新建的盘算"无关；
         //   而它的输入面（属主 + 本步全部 actions + 波及名单）里，能被"丢掉一条提议"削掉的只有波及名单，

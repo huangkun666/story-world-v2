@@ -251,19 +251,28 @@ test('★★leg70 锚点唯一性：本文件用来取切片的那几行，全�
     //   `web/index.js` 里**原来在 `restoreSnapshot` 内的那一处**已经不在接线层了 ⇒ 总数回到 **7**。
     //   ★★这一条是"硬编码计数**必然**随搬家失效"的**第二次实证**（第一次就是上面那段 leg72b 登记的话）：
     //     同一个数在一棒之内被搬了两次（先搬快照 +1、再补采用 −1）——**留档在此，别再当不变量用**。
-    //   ⇒ 现在这 7 处逐处点名（采用那处 = `FLUSH_TAIL` 要锚的**唯一**一个）：
+    //   ⇒ 现在这 8 处逐处点名（采用那处 = `FLUSH_TAIL` 要锚的**唯一**一个）：
     //     ① 载入（`loadWorld`）· ② 导出世界 · ③ 导入世界 · ④ 重抽设定（`reextract-setting`）·
     //     ⑤ 初始化（`init-world`）· ⑥ 清演化层（`reset-dynamic`）· ⑦ **采用草稿**（唯一带注释那处）
     //     ＋ **快照恢复**那一处已随族搬进 `web/snapshot-store.js`（在目录里，但不在 `index.js` 里）。
-    assert.equal(webAll.split('const flushed = await flushHotMeta();').length - 1, 7,
-        '★这一行（不带注释）在 `web/` 全部模块里现在共 7 处：载入 / 导出 / 导入 / 重抽设定 / 初始化 / 清演化层'
+    // ★★★leg112 三次勘正 **7 → 8**（C1 换书检测那条新通道，合法地又多一处 ⇒ 按上面那条纪律显式登记）：
+    //   ⑧ **「就按现在这本算」**（`web/book-rebaseline.js` 的 `handler`，leg112 新加的；它同样"写账 + 显式落盘"）。
+    //   ★为什么它必须落盘：这一笔改的是**账上那一格"来路"**，不落盘 ⇒ 刷新就回滚、下次载入又报"书换了"
+    //     （玩家会看到"我明明按了"）——与上面 7 处同一条理由，不是顺手加的。
+    assert.equal(webAll.split('const flushed = await flushHotMeta();').length - 1, 8,
+        '★这一行（不带注释）在 `web/` 全部模块里现在共 8 处：载入 / 导出 / 导入 / 重抽设定 / 初始化 / 清演化层'
         + ' / **采用草稿** ＋ **快照恢复**（已搬去 snapshot-store.js，仍在这个扫描面里）'
+        + ' ＋ **换书检测重新定基**（leg112，住 book-rebaseline.js）'
         + ' —— 所以只锚它必然定位不到采用通道，这正是本文件必须用 FLUSH_TAIL 那条带注释前缀的原因');
     // ★自证：这条计数**真的照得到新家**（否则"跟着目录走"只是句空话）
     const snapStore = readFileSync(new URL('../web/snapshot-store.js', import.meta.url), 'utf8');
     assert.ok(snapStore.includes('const flushed = await flushHotMeta();'),
         '★★自证：`web/snapshot-store.js`（快照恢复那条通道的新家）里必须有这一行——'
-        + '没有它，上面那个"7"就说明扫描面又漏了新模块');
+        + '没有它，上面那个"8"就说明扫描面又漏了新模块');
+    // ★leg112 自证（同一条纪律：新加的那一处也必须真的在扫描面里，别让计数变成"照不到却还绿着"）
+    const bookWire = readFileSync(new URL('../web/book-rebaseline.js', import.meta.url), 'utf8');
+    assert.ok(bookWire.includes('const flushed = await flushHotMeta();'),
+        '★★自证：`web/book-rebaseline.js`（换书检测那条通道的新家）里必须有这一行');
 });
 
 test('★★leg70 接线四条：唯一的派生路 + 唯一的换设定路 + 落盘三步 + 名册结构保命', () => {

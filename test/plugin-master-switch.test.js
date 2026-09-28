@@ -34,7 +34,7 @@ function world({ simLog = [], env = {}, noDynamic = false } = {}) {
 test('leg33d·① 总闸已登记：缺省关 + master 标记（它管"插件自己"，不是"插件对外的动作"）', () => {
     const conf = SWITCH_PARAMS[KEY];
     assert.ok(conf, 'autoAdvance 必须在 SWITCH_PARAMS 里（否则参数页没有入口、set-param 会拒）');
-    assert.equal(conf.def, '0', '★缺省关：照本仓开关惯例（memoryEnabled 也是 def=0）⇒ 装上/载入即静默');
+    assert.equal(conf.def, '0', '★缺省关：照本仓开关惯例（**缺键=关、只有显式 \'1\' 算开**，见 `switchOn`）⇒ 装上/载入即静默');
     assert.equal(conf.master, true, '标 master ⇒ 渲染时排最前、单独一张卡');
     assert.ok(isParamKey(KEY), '参数键白名单要认它（否则 set-param 报"未知参数键"）');
     assert.equal(normalizeParam(KEY, '1'), '1');
@@ -61,10 +61,11 @@ test('leg33d·② 迁移幂等：键已存在就一个字节不碰（含你手�
     const w = world({ simLog: [{ tick: 1 }], env: { [KEY]: '0' } });
     assert.equal(ensureAutoAdvanceKey(w), false, '已写过 ⇒ 不迁移');
     assert.equal(w.context.setting.dynamic.env[KEY], '0', '★"关过"是显式选择，永不被迁移覆盖');
-    // 用户的记忆开关不许被动过（迁移只碰它自己那个键）
-    const w2 = world({ simLog: [{ tick: 1 }], env: { memoryEnabled: '1' } });
+    // 别的键一律不许被动过（迁移只碰它自己那个键）
+    //   ★leg125：这里原来举的是 `memoryEnabled`（那个已删）⇒ 改举一个活着的键。
+    const w2 = world({ simLog: [{ tick: 1 }], env: { 天时: '大灾' } });
     ensureAutoAdvanceKey(w2);
-    assert.equal(w2.context.setting.dynamic.env.memoryEnabled, '1', '迁移只碰 autoAdvance，别动别人的键');
+    assert.equal(w2.context.setting.dynamic.env['天时'], '大灾', '迁移只碰 autoAdvance，别动别人的键');
     assert.equal(w2.context.setting.dynamic.env[KEY], '1');
     // 连跑两次结果相同
     assert.equal(ensureAutoAdvanceKey(w2), false);
@@ -120,13 +121,14 @@ test('leg33d·③ 手动路径不经过总闸（那是"你明确要求的动作"
     assert.equal(manualTouched, 0, '闸不许"顺手"替手动路径做决定（手动要走 dispatchAction，不经过这里）');
 });
 
-test('leg33d·④ 渲染面：总闸卡排在其余开关之前，且写出"当前后果"（不许只说"应该没问题"）', () => {
-    const off = world({ env: { [KEY]: '0', memoryEnabled: '0' } });
+test('leg33d·④ 渲染面：总闸卡排在最前，且写出"当前后果"（不许只说"应该没问题"）', () => {
+    const off = world({ env: { [KEY]: '0' } });
     const htmlOff = renderParamsHtml(off, {});
     const iMaster = htmlOff.indexOf('插件总闸');
-    const iMemory = htmlOff.indexOf('写进记忆插件');
     assert.ok(iMaster >= 0, '参数页必须有总闸卡');
-    assert.ok(iMaster < iMemory, '★总闸必须排在其余开关之前（它是入口，藏在中间就找不到）');
+    // ★★★leg125：原来这里还比过"总闸卡排在「写进记忆插件」之前"——那个开关已随那条通道整条删除
+    //   ⇒ 改成锁"**它不许回来**"（比位置更硬：不在了就不可能排在谁后面）。
+    assert.ok(!htmlOff.includes('写进记忆插件'), '★那条通道已整条删除，参数页不许再出现那个开关');
     assert.ok(htmlOff.includes('插件静默'), '★关着时要写出后果（否则"世界怎么不动了"会被当成 bug）');
     assert.ok(htmlOff.includes('推进一轮'), '关着时要指出手动出路（手动永不被闸）');
     // ★★leg52（用户令「**推进和撤销不应该放到参数页吧**」→ 拍板「推进撤」· 依据 leg51 §2.1）：
@@ -144,7 +146,7 @@ test('leg33d·④ 渲染面：总闸卡排在其余开关之前，且写出"当�
         '★★「要推请按「推进一轮」」这句提示必须真有一枚按钮兑现——它现在在**设置页**（入口一个不少）');
     assert.ok(settingsOff.includes('推进一轮'), '设置页那枚按钮的名字与状态栏/提示同一口径');
     // 开着时的后果说明
-    const on = world({ env: { [KEY]: '1', memoryEnabled: '0' } });
+    const on = world({ env: { [KEY]: '1' } });
     const htmlOn = renderParamsHtml(on, {});
     assert.ok(htmlOn.includes('发消息会自动推进世界'), '★开着时也要写出后果（每收到一条消息推进一轮）');
 });
@@ -161,11 +163,12 @@ test('★leg40b：参数开关表零"空壳"——每个开关都得有真消费
     assert.equal(SWITCH_PARAMS.recordEnabled, undefined, '★recordEnabled 已撤（它一个字节都不写）');
     assert.ok(!isParamKey('recordEnabled'), '白名单不该再认它（认了 = set-param 会写一个无人读的键）');
     // ② 渲染面：参数页不许再出现那张卡，也不许挂写通道
-    const html = renderParamsHtml(world({ env: { memoryEnabled: '0', recordEnabled: '0' } }), {});
+    const html = renderParamsHtml(world({ env: { recordEnabled: '0' } }), {});
     assert.ok(!html.includes('记进编年史书'), '★参数页不许再摆这个开关');
     assert.ok(!html.includes('data-param="recordEnabled"'), '★不许挂写通道');
     assert.ok(!html.includes('编年史'), '「编年史」这个说法在参数页零残留（别改名回潮）');
-    // ③ ★留下的两个开关**必须各有一个真消费者**（源码级判据：读它的地方不止定义那一行）
+    // ③ ★留下的开关**必须各有一个真消费者**（源码级判据：读它的地方不止定义那一行）
+    //   ★★leg125 之后这张表里只剩总闸一个（`memoryEnabled` 已随那条通道删除）——判据照旧，一个也不许是空壳。
     const src = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const renderSrc = readFileSync(path.join(ROOT, 'src', 'render.js'), 'utf8');
     for (const key of Object.keys(SWITCH_PARAMS)) {

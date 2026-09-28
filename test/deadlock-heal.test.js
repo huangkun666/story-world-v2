@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 import { checkWorldStep, newEventIdsOf } from '../src/check-step.js';
 import { dropInvalidProposals } from '../src/sanitize-step.js';
-import { settleWithHealing, emptyStep } from '../src/tick.js';
+import { settleWithHealing, emptyStep, runTick } from '../src/tick.js';
 import { settleTick } from '../src/settle.js';
 
 /** 一份"账上真有人有事"的小世界（与 check-step 的既有夹具同形：位置是自由文本、实体在册）。 */
@@ -271,4 +271,40 @@ test('死锁修复：空步是合法步（世界安静一步这条路本身必�
     const r = settleTick({ ssot: w, step: emptyStep() });
     assert.equal(r.ok, true, `空步必须合法：${(r.stage?.warnings || []).join('; ')}`);
     assert.equal(r.ssot.meta.tick, 4);
+});
+
+// ---------- ④ ★★★本次修：**校验被拒也要自愈**（真模型 60 轮长跑实跑抓出来的病）----------
+// 病灶（实测，不是推演）：上面那条自愈排在**主调用校验的后面**——
+//   `runMainCall` 校验不过 ⇒ `runTick` 当场 return ⇒ `settleWithHealing` **一步都走不到**。
+//   60 轮真跑：**21 轮报废（35%）· 白花 43.4% 的挂钟时间 · 最长连续卡 6 轮**，
+//   而 21 条归因里 **18 条是同一个**——模型把新线挂在一条**已经了结**的事上。
+// ★本组判据锁两件：①校验被拒的那一轮**救得回来**（好提议照样落账、tick 照常前进、如实留痕）；
+//   ②**闸一条都没放宽**——同一个步单跑校验仍必须被拒（否则这组用例什么都没测到）。
+test('★本次修：校验被拒不再整轮丢——自愈接管，好提议照样落账、tick 照常前进', async () => {
+    const w = world({ tick: 3 });
+    // 账上那件**已经了结**的事（长跑里模型最爱往上挂的那种源）
+    w.events = [{ id: 'ev_done', title: '旧事', source: { type: 'state' }, position: '大营', ripples: [], links: { up: [], down: [] }, closed: true }];
+    const step = stepWith({
+        newEvents: [newEvent({ title: '这条写得好，该留下' })],                        // 合法
+        newAgendas: [newAgenda({ source: { type: 'event', ref: 'ev_done' } })],      // ★挂在已了结的事上 ⇒ 校验必拒
+    });
+    // ★自证前提：这条闸**必须还在**（拿副本跑，别污染待用的那份账）
+    assert.equal(checkWorldStep(step, structuredClone(w)).ok, false, '闸必须还在（否则本用例什么都没测到）');
+
+    const r = await runTick({ transport: async () => ({ text: JSON.stringify(step) }), ssot: w, dialogue: '（继续）' });
+    assert.equal(r.ok, true, `★校验被拒也要把这一轮救回来：${r.error || ''}`);
+    assert.equal(r.ssot.meta.tick, 4, '★tick 必须前进（"卡轮"不再等于"永久停摆"）');
+    assert.ok(r.ssot.events.some((e) => e.title === '这条写得好，该留下'),
+        '★坏的只丢它自己：好提议照样落账（这是"只做减法"那条纪律的兑现）');
+    assert.equal(r.ssot.agendas.length, 0, '挂错源的那条线不许落账');
+    assert.equal(r.healed?.used, true, '★要如实留痕：这一轮是走自愈回来的（别让它悄悄发生）');
+    assert.ok((r.healed?.errors || []).length > 0, '原始拒因也要留着（可查）');
+});
+
+test('★校验被拒自愈的边界：连 JSON 都没解析出来 ⇒ 如实失败（没有"提议"可救，不许假装成功）', async () => {
+    const w = world({ tick: 3 });
+    const r = await runTick({ transport: async () => ({ text: '这不是 JSON，只是一段话' }), ssot: w, dialogue: '（继续）' });
+    assert.equal(r.ok, false, '解析不了就是解析不了');
+    assert.match(String(r.error), /非法 JSON/, '失败原因要说清是哪一种');
+    assert.equal(w.meta.tick, 3, '世界原样不动');
 });

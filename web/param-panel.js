@@ -69,9 +69,13 @@ let refreshSections = null;       // (names) => 让接线层重画那几块（�
  *   ★取值与接线层**逐字节相同**：同一个 id 两处不一致 ⇒ 一处找得到面板、另一处找不到。
  */
 const WINDOW_ID = 'story_world2_window';
-/** ★★重画那几块（`['params','board']`）：它是**接线层的组合器**，本族**不许 import 接线层**
+/** ★★重画那一块（`['params']`）：它是**接线层的组合器**，本族**不许 import 接线层**
  *  （那会成环）⇒ 只有"注入一个函数"这一条路。默认 no-op：老调用方（不注入）不会当场炸，
- *  但**接线层必须真的注入**（`createParamApi({ refreshSections })`）——判据 ⑨ 咬的就是这件事。 */
+ *  但**接线层必须真的注入**（`createParamApi({ refreshSections })`）——判据 ⑨ 咬的就是这件事。
+ *  ★本次（清死码）：这一格原先还捎带一个 `'board'`（`refreshSections(['params', 'board'])`），
+ *    而 **`board` 从来不是一个页签 id**（`settings.html` 里 8 个容器没有它；leg97 并页时
+ *    `#sw2_view_board` 已退场）⇒ 那一半在接线层被 `if (!el) continue` 静默丢掉，纯属空转。
+ *    ⇒ 去掉 `'board'`（**只删、不改成 `'panorama'`**：那会让可见面真变，是另一笔事）。 */
 refreshSections = () => {};
 
 // ---------- "本族要读、家却住在接线层"的那一格：★迟到的取值函数 ----------
@@ -283,7 +287,7 @@ export function sw2UndoParam() {
         sw2HubLastWorld = r.world;
         try { writeHotMeta(hotAccountShape(r.world)); } catch (_) {}
     }
-    try { refreshSections(['params', 'board']); } catch (_) {}
+    try { refreshSections(['params']); } catch (_) {}
     return { ok: true, label: r.label };
 }
 /**

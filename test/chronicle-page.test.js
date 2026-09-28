@@ -170,35 +170,43 @@ test('细案 §T1 · selectChroniclePage：分层/子类/时限/了结 逐项点
 
 test('细案 §T1 · range 三档 + layer 三档 + closed 三档（彼此正交）', () => {
     const w = synthWorld();
+    // ★★★本次（清死码）改口径：这一组原先读 `sel.books.hit`——而 `sel.books` 是**账目层那枚已撤
+    //   分页器**的产物（leg105 撤了控件，本次把游标 `pageBook` 与 `sel.books` 一并删掉）。
+    //   ⇒ 换成"**账目层四组的命中之和**"：它量的是同一件事（当前筛选下账目层的命中条数），
+    //     而消费者是**活着的那一个**（`bookGroups`，编年页真画的就是它，见下面 §T2 的渲染判据）。
+    const bookHitOf = (view) => selectChroniclePage(w, { ...makeChronicleView(), ...view })
+        .bookGroups.reduce((a, g) => a + g.hit, 0);
     // 近 5 轮 = tick > 12-5 = 7 ⇒ 真事件里只有轮 12 / 11 那两条在窗口内（轮 3、2 早于窗口）
     assert.equal(selectChroniclePage(w, { ...makeChronicleView(), range: '5' }).events.hit, 2);
     assert.equal(selectChroniclePage(w, { ...makeChronicleView(), range: '5' }).groups.older.hit, 2, '★"更早的事"是**全部**早于窗口的真事件（窗口只切"近"那一组，不切这一组）');
     assert.equal(selectChroniclePage(w, { ...makeChronicleView(), range: 'all' }).events.hit, 4);
     assert.equal(selectChroniclePage(w, { ...makeChronicleView(), range: 'all' }).groups.older.hit, 0, '全部轮次下不收"更早"组');
-    assert.equal(selectChroniclePage(w, { ...makeChronicleView(), layer: 'event' }).books.hit, 0);
+    assert.equal(bookHitOf({ layer: 'event' }), 0);
     assert.equal(selectChroniclePage(w, { ...makeChronicleView(), layer: 'book' }).events.hit, 0);
-    assert.equal(selectChroniclePage(w, { ...makeChronicleView(), layer: 'book' }).books.hit, 6);
-    assert.equal(selectChroniclePage(w, { ...makeChronicleView(), closed: 'done' }).books.hit, 2, '账目里的已了结 2 条');
-    assert.equal(selectChroniclePage(w, { ...makeChronicleView(), closed: 'open' }).books.hit, 4);
+    assert.equal(bookHitOf({ layer: 'book' }), 6);
+    assert.equal(bookHitOf({ closed: 'done' }), 2, '账目里的已了结 2 条');
+    assert.equal(bookHitOf({ closed: 'open' }), 4);
 });
 
 test('细案 §T1 · 搜索：命中面独立于分层（层/时限是"上桌方式"，搜索是"找得到"）', () => {
     const w = synthWorld();
     const hit = (q, patch = {}) => selectChroniclePage(w, { ...makeChronicleView(), q, ...patch });
+    // ★本次：账目层的命中数一律读**活着的那一个消费者**（`bookGroups` 四组之和），不再读已删的 `sel.books`。
+    const bookHit = (q, patch = {}) => hit(q, patch).bookGroups.reduce((a, g) => a + g.hit, 0);
     assert.equal(hit('东海浮空岛').events.hit, 1, '地点可搜');
     // ★"搜到了几条"要看**两层实际命中之和**，不能用 `counts.all`：
     //   `scope:'all'` 那几枚数按定义就是**全册**（不随搜索变）——拿它验搜索是拿错尺子（我第一版就写错了）。
     //   真账/夹具实测：搜「万法阁」= 事件层 3（c1/c2/c3）+ 账目层 2（c8/c9）= 5；
     //   c4 虽然也含它，但落在"更早的事"那一组、不进事件层主列表（它照样搜得到，见下面那条）。
-    assert.equal(hit('万法阁').events.hit + hit('万法阁').books.hit, 5, '牵动人可搜（★跨层：真事件与账目一起命中）');
-    assert.equal(hit('万法阁', { range: 'all' }).events.hit + hit('万法阁', { range: 'all' }).books.hit, 6,
+    assert.equal(hit('万法阁').events.hit + bookHit('万法阁'), 5, '牵动人可搜（★跨层：真事件与账目一起命中）');
+    assert.equal(hit('万法阁', { range: 'all' }).events.hit + bookHit('万法阁', { range: 'all' }), 6,
         '放开轮次后 c4 也进主列表（6 条）');
-    // ★占位词搜不到任何东西——★注意用**实际命中**（events+books）而不是 `counts.all`：
+    // ★占位词搜不到任何东西——★注意用**实际命中**（events+账目）而不是 `counts.all`：
     //   `scope:'all'` 那几枚数**按定义就是全册**（不随搜索变），拿它验"搜到了几条"是拿错尺子
     //   （这一格我第一版就写错了——判据也会骗人）。
-    assert.equal(hit('未明').events.hit + hit('未明').books.hit, 0, '★占位词搜不到任何东西');
+    assert.equal(hit('未明').events.hit + bookHit('未明'), 0, '★占位词搜不到任何东西');
     assert.equal(hit('未明', { scope: 'hit' }).counts.all, 0, '切到"当前结果"口径后它也是 0');
-    assert.equal(hit('查探北山').books.hit, 2, '盘算名可搜到账目行');
+    assert.equal(bookHit('查探北山'), 2, '盘算名可搜到账目行');
     // ★搜索命中面独立于 range：搜旧事，即便"近 10 轮"这一档也找得到（它落在"更早的事"组里）
     const old = hit('旧事丙');
     assert.equal(old.groups.older.hit, 1, '搜索命中面不受"近 N 轮"限制（找得到 = 搜得到）');
@@ -244,7 +252,10 @@ test('细案 §T1 · 确定性与真源唯一：同输入两次逐字节一致�
     const a = selectChroniclePage(w, makeChronicleView());
     const b = selectChroniclePage(w, makeChronicleView());
     assert.equal(JSON.stringify(a), JSON.stringify(b), '同输入两次必须逐字节一致');
-    assert.deepEqual(CHRONICLE_DEFAULT_VIEW, { q: '', layer: 'all', closed: 'any', range: '10', scope: 'all', page: 1, pageBook: 1 });
+    // ★★★本次（清死码）：默认视图里**不再有 `pageBook`**——账目层那枚分页器 leg105 已撤，
+    //   它的游标（`CHRONICLE_DEFAULT_VIEW.pageBook`）与产物 `sel.books` 本次一并删掉
+    //   （实测：`pageBook` 取 1/3/99 渲染产物逐字节相同；而 `page` 1 vs 2 产物不同）。
+    assert.deepEqual(CHRONICLE_DEFAULT_VIEW, { q: '', layer: 'all', closed: 'any', range: '10', scope: 'all', page: 1 });
     const v1 = makeChronicleView(), v2 = makeChronicleView();
     v1.q = '改了';
     assert.equal(v2.q, '', '两份视图态不许共享引用');

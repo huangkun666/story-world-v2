@@ -151,7 +151,9 @@ test('★★★leg79 丙-web⑩：八个状态**只有一个家**，接线层一
     // ③ ★★词表与"回第一页"两条规矩**跟状态同住一处**（接线层不许再自己抄一份词表）
     assert.match(vs, /SW2_ENTS_KINDS\.has\(v\)/, '★类别词表必须在新家被真的用（不是搬过去供着）');
     assert.match(vs, /SW2_ENTS_FILTERS\.has\(v\)/, '★筛选项词表必须在新家被真的用');
-    assert.match(vs, /sw2ChronicleView\.page = 1; sw2ChronicleView\.pageBook = 1; \}/,
+    // ★★★本次（清死码）改口径：账目层那枚分页器的游标 `pageBook` 已删（leg105 撤控件时留下的空台子）
+    //   ⇒ "换档 ⇒ 回第一页"这条规矩现在只写在 `page` 上；★口径没放宽：仍然咬"规矩与状态同住一处"。
+    assert.match(vs, /sw2ChronicleView\.page = 1; \}/,
         '★"换档 ⇒ 回第一页"必须与状态写在同一处（否则又是"状态一个家、规矩另一个家"）');
     assert.ok(!/\[\s*'busy',\s*'recent'/.test(index), '★接线层不许再抄一份筛选项词表');
     // ④ 组合期：新家必须有真实现，且接线层**不许留镜像**

@@ -142,7 +142,15 @@ export function countLedgerEntries(world) {
 // ---------- 阅卷还原：卷段 → 编年渲染行（复用 render 的编年行形状） ----------
 export function volumeToChronicleRows(volume) {
     if (!volume || !Array.isArray(volume.rows)) return [];
-    return volume.rows.map((r) => ({ tick: chronTick(r), text: r.text ?? '', eventRef: r.eventRef ?? '' }));
+    // ★leg115：`elapsed`（这一轮此后又过了多久）**随行带出来**——它是"什么时候"的唯一存本
+    //   （账上 simLog 没有时间字段；见 `ledger-recall.js` 文件头与 `ssot.schema.js` 那一格的头注）。
+    //   没有那一格 ⇒ **整个键不出现**（不许填占位值，红线 2）。
+    return volume.rows.map((r) => ({
+        tick: chronTick(r),
+        text: r.text ?? '',
+        eventRef: r.eventRef ?? '',
+        ...(r.elapsed ? { elapsed: r.elapsed } : {}),
+    }));
 }
 
 // ---------- 导出/导入（整聊天，SHA-256 验签） ----------

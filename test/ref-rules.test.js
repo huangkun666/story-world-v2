@@ -66,6 +66,7 @@ const ask = (point, source, w = world(), extra = {}) => judgeRef(point, source, 
 // ═══════════════ ① 判据表自检：结构完整、每个源型都有判据 ═══════════════
 test('★leg67 判据表：引用点齐备，且每个源型都有判据（表里没有"漏掉的那一格"）', () => {
     // 前五个 = 细案 §2.2 点名的五个引用点；第六个 = M2b 源码锁当场照出来的漏网（取消通道）。
+    // ★这是一把**计数棘轮**：每加一条提议通道，这里就要多一格——涨了不补就是红（照模块数那条判据的规矩）。
     assert.deepEqual([...REF_POINTS], [
         'newAgendas.source', 'newEntities.source', 'entityFates.source', 'newEvents.source',
         'entityFates.entity', 'entityUpdates.entity', 'newEntities.entity',
@@ -74,6 +75,14 @@ test('★leg67 判据表：引用点齐备，且每个源型都有判据（表�
         // ★leg95：模型收场通道（`eventClosures`）——治种子链"永远闭不了"那道结构死锁。
         //   它与 `entityUpdates.cause` **正相反**：那个要求"因必须还没了结"，这个要求"只能收还没收场的"。
         'eventClosures.event',
+        // ★★leg120（A3 关系网）：三格新判据——账上第 10 张表 `relations` 的提议通道。
+        //   · `relationUpdates.end`：一条边的两端（谁 → 对谁）在册——与 `entityUpdates.entity` 同格（**只判存在性**，
+        //     "不许把玩家写成持有方"那条留在消费口 `check-step`，与 `entityFates.entity` 的分工一模一样）。
+        //   · `relationUpdates.cause`：**"玩出来的关系"与"抄书/随口编"的唯一分界**——与 `entityUpdates.cause`
+        //     **共用同一份实现**（委托过去，不抄第二份：本仓登记过"同族逻辑被抄了四份"这个病）。
+        //   · `relationClosures.id`：了结一条边——**只认已落账的边**（照 `entityFates`"尘埃落定再言灭"的口径，
+        //     故天然不享用同轮按位次解析）。
+        'relationUpdates.end', 'relationUpdates.cause', 'relationClosures.id',
     ]);
     for (const p of REF_POINTS) {
         const types = SOURCE_TYPES[p];
@@ -109,14 +118,14 @@ test('★leg67 判据表 ⇄ 契约层：源码里写死的 enum 必须与判据
         assert.ok(m, `${propName}.source.type 的 enum 没找到`);
         return m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).sort();
     };
-    const enumsOfCause = () => {
-        const at = schema.indexOf('\n        entityUpdates: {');
-        assert.ok(at > 0, '契约里找不到 entityUpdates');
+    const enumsOfCause = (propName = 'entityUpdates') => {
+        const at = schema.indexOf(`\n        ${propName}: {`);
+        assert.ok(at > 0, `契约里找不到 ${propName}`);
         const seg = schema.slice(at, at + 6000);
         const cAt = seg.indexOf('cause: {');
-        assert.ok(cAt >= 0, 'entityUpdates 里找不到 cause 块');
+        assert.ok(cAt >= 0, `${propName} 里找不到 cause 块`);
         const m = ENUM_RE.exec(seg.slice(cAt));
-        assert.ok(m, 'entityUpdates.cause.type 的 enum 没找到');
+        assert.ok(m, `${propName}.cause.type 的 enum 没找到`);
         return m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).sort();
     };
     assert.deepEqual(enumsOfSource('newAgendas'), [...SOURCE_TYPES['newAgendas.source']].sort(), 'newAgendas 源型');
@@ -124,6 +133,9 @@ test('★leg67 判据表 ⇄ 契约层：源码里写死的 enum 必须与判据
     assert.deepEqual(enumsOfSource('entityFates'), [...SOURCE_TYPES['entityFates.source']].sort(), 'entityFates 源型');
     assert.deepEqual(enumsOfSource('newEvents'), [...SOURCE_TYPES['newEvents.source']].sort(), 'newEvents 源型');
     assert.deepEqual(enumsOfCause(), [...SOURCE_TYPES['entityUpdates.cause']].sort(), 'entityUpdates 因型');
+    // ★leg120（A3）：关系边的"因"与字段写回那一格**必须认同一套源型**——两格共用一份实现（委托），
+    //   所以 enum 也必须逐字相同；这条锁防的是"契约层给模型开了 event 而判据表不认"那类错位。
+    assert.deepEqual(enumsOfCause('relationUpdates'), [...SOURCE_TYPES['relationUpdates.cause']].sort(), 'relationUpdates 因型');
 });
 
 // ═══════════════ ② M1：四个消费口结论**逐字一致** ═══════════════

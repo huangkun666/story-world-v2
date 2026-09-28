@@ -11,24 +11,28 @@ import { join } from 'node:path';
 const OUT = join(tmpdir(), `sw2-leg37-${Date.now()}`);
 mkdirSync(OUT, { recursive: true });
 
-let pack = readFileSync(new URL('../src/pack.js', import.meta.url), 'utf8');
+// ★leg134 勘正：`IDLE_FACES_TOP` 的家从 `src/pack.js` 搬到了 `src/limits.js`
+//   （leg114 起"同一个数两个家"逐个合并——`包预算`/`往事轮数` 先行，这一格是最后一批）
+//   ⇒ 锚点与重定向目标一并改指 `limits.js`。
+let limits = readFileSync(new URL('../src/limits.js', import.meta.url), 'utf8');
 const ANCHOR = 'export const IDLE_FACES_TOP = 12;';
-if (!pack.includes(ANCHOR)) {
-    console.error('✗ 接线点没找到（pack.js 的形状变了）——拒绝生成');
+if (!limits.includes(ANCHOR)) {
+    console.error('✗ 接线点没找到（limits.js 的形状变了）——拒绝生成');
     process.exit(2);
 }
-const TOP40 = pack.replace(ANCHOR, 'export const IDLE_FACES_TOP = 40;');
-writeFileSync(join(OUT, 'pack.top12.js'), pack, 'utf8');
-writeFileSync(join(OUT, 'pack.top40.js'), TOP40, 'utf8');
+const TOP40 = limits.replace(ANCHOR, 'export const IDLE_FACES_TOP = 40;');
+writeFileSync(join(OUT, 'limits.top12.js'), limits, 'utf8');
+writeFileSync(join(OUT, 'limits.top40.js'), TOP40, 'utf8');
 
-const loader = `// leg37 loader（TEMP）——把 src/pack.js 重定向到本目录的副本
+const loader = `// leg37 loader（TEMP）——把 src/limits.js 重定向到本目录的副本
+//   ★leg134：IDLE_FACES_TOP 的家从 src/pack.js 搬到了 src/limits.js ⇒ 重定向目标同批改指 limits.js。
 // ★坑（本棒实测踩到）：副本落在 TEMP，它自己的相对导入（./gate.js 等）会被解析成 TEMP 下的文件 ⇒ 找不到。
 //   解法：凡"从本目录里的文件发出的相对导入"一律指回 src/ 原目录（副本只做了改常量这一件事，其余必须同源）。
 import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 const TOP = process.env.SW2_IDLE_TOP === '40' ? 'top40' : 'top12';
-const PACK = fileURLToPath(new URL(\`./pack.\${TOP}.js\`, import.meta.url));
+const LIMITS = fileURLToPath(new URL(\`./limits.\${TOP}.js\`, import.meta.url));
 const SELF = fileURLToPath(new URL('./', import.meta.url));
 const SRC = 'F:/deepseek/plugins/story-world-v2/src/';
 registerHooks({
@@ -40,7 +44,7 @@ registerHooks({
             s = new URL(spec, \`file://\${SRC}\`).href;
         }
         const r = next(s, ctx);
-        if (r && typeof r.url === 'string' && r.url.endsWith('/src/pack.js')) return { ...r, url: new URL(\`file://\${PACK}\`).href, shortCircuit: true };
+        if (r && typeof r.url === 'string' && r.url.endsWith('/src/limits.js')) return { ...r, url: new URL(\`file://\${LIMITS}\`).href, shortCircuit: true };
         return r;
     },
     load(url, ctx, next) {

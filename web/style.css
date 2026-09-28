@@ -200,12 +200,16 @@
   .sw2-band-block + .sw2-band-block{border-left:none;border-top:1px solid var(--sw2-line-soft);}
 }
 
-/* ★★★leg104：**第二条断点**（全表此前只有上面那条 980）——理由：实体行首列写死 `212px`
-   （`.sw2-entity-row:437`），620 以下其余两栏只剩两三个字的宽，读起来是碎行。
-   ★为什么不放进 980 那条：980 的平板放得下三栏，在那里改成单列是**无理由的退化**（本仓忌"面板抢玩家的手"）。 */
-@media (max-width:620px){
-  .sw2-entity-row{grid-template-columns:minmax(0,1fr);gap:4px;}
-}
+/* ★★★leg104 立的那条「第二条断点」（620 · 窄屏实体行单列）**已整段搬到文件末尾**（leg145 搬的）。
+   ★为什么搬：媒体查询**不加特异性**，同特异性下**后写的赢**——而它当时写在文件前半（并页那一段下面），
+     要覆盖的 `.sw2-entity-row` 基础规则却住在**实体页那一段（更靠后）** ⇒ **那条媒体查询一直是死的**
+     （leg145 用无头 Chrome 实测 390px 宽：实体行仍是 `212px …` 三列，不是单列；
+     而判据只咬了"那句话在不在样式表里"，没咬"它赢没赢"）。
+   ★规则文字一个字没改，只是换了位置；**新增的手机规则也一律写在那块里**（理由同一句话：
+     覆盖基础规则的媒体查询，必须排在它覆盖的那条规则之后）。
+   ★那条断点自己的理由（原文照搬）：实体行首列写死 `212px`，620 以下其余两栏只剩两三个字的宽，
+     读起来是碎行；而**不放进 980 那条**是因为 980 的平板放得下三栏，在那里改单列是**无理由的退化**
+     （本仓忌"面板抢玩家的手"）。 */
 
 /* ---------- 观棋：盘算总览 + 动态流 + 位置速览 ---------- */
 .sw2-agenda-strip{margin-bottom:12px;}
@@ -549,8 +553,20 @@
 .sw2-sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
 .sw2-set-card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:10px;padding:12px 14px;}
 .sw2-set-card h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:9px;display:flex;align-items:center;gap:7px;}
+/* ★★★leg143（用户令「**把参数页的样式改一下**」＋ 展示页 `docs/spec-params-page-mockup.html` 已拍板）：
+   世界尺度那九个框按「**闸 / 尺**」分成两组——组头是一行（组名 ＋ 一句它管什么），
+   靠**一条实线**与上面那批控件分开（`.sw2-row + .sw2-row` 给的是**虚线**，两者一眼分得开）。
+   ★为什么另起一条规则而不是复用 `.sw2-param-name`：那是"参数名"的行（天时/时局那种组标题，
+     它下面还跟着"设定为"那一行）；而这里是**分组头**，语义不同（它管的是下面**一串**框，
+     不是某一格的名字）。★只有三条声明，不动 `.sw2-row` 的基础规则（参数页版式是 leg27 修过的，别在这里重排）。 */
+.sw2-row.sw2-limit-group{margin-top:10px;padding-top:9px;border-top:1px solid var(--sw2-line);}
+.sw2-row.sw2-limit-group > b{color:var(--sw2-text);font-size:13px;letter-spacing:1px;}
+/* 紧跟组头的那一行**不带**虚线（否则组头会被一条线从自己的内容上切开——同 `.sw2-param-name` 那条口径） */
+.sw2-row.sw2-limit-group + .sw2-row{border-top:none;padding-top:2px;}
 /* ★leg89：注入那张卡的内层容器——开关行**自己就是一张 `.sw2-set-card.sw2-actions-inline`**
-   （它带 `display:flex`），第一版把它套进外层卡里 ⇒ 卡里套卡、布局是乱的。这里只负责竖着排。 */
+   （它带 `display:flex`），第一版把它套进外层卡里 ⇒ 卡里套卡、布局是乱的。这里只负责竖着排。
+   ★leg143：那一卡**已搬去参数页**（用户令「设置里的那些闸其实也可以归到参数页」）——规则本身没动，
+     两个类名都照旧（搬的是画在哪一页，不是长什么样）。 */
 .sw2-inject-box{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
 .sw2-inject-box .sw2-set-card{margin:0;}
 .sw2-set-card h4::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
@@ -597,6 +613,18 @@
 .sw2-input{width:100%;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:8px 11px;font-size:13px;font-family:"Cascadia Mono",Consolas,monospace;}
 .sw2-input:focus{outline:none;border-color:var(--sw2-amber-dim);}
 .sw2-key-mask{letter-spacing:3px;color:var(--sw2-text-faint);}
+/* ★★★用户令（2026-09-27）「把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下」：
+   模型那一行的**控件横排**（输入框 ＋ 两枚按钮）＋ 清单 ＋ 结论行的两种颜色。
+   ★口径：不新造控件语言——输入框仍是 `.sw2-input`、按钮仍是 `.sw2-btn`，这里只加"怎么排"与"清单长什么样"。 */
+.sw2-ctl-row{display:flex;gap:8px;align-items:center;}
+.sw2-ctl-row .sw2-input{flex:1;min-width:0;}
+.sw2-ctl-row .sw2-btn{padding:8px 14px;font-size:12.5px;white-space:nowrap;}
+.sw2-models{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;padding:9px 10px;border:1px dashed var(--sw2-line);border-radius:8px;}
+.sw2-model{padding:3px 11px;border-radius:999px;border:1px solid var(--sw2-line);background:transparent;color:var(--sw2-text-dim);font-family:"Cascadia Mono",Consolas,monospace;font-size:11.5px;cursor:pointer;}
+.sw2-model:hover{border-color:var(--sw2-amber-dim);color:var(--sw2-text);}
+.sw2-model.sw2-model-cur{border-color:var(--sw2-amber);color:var(--sw2-amber);background:rgba(227,173,85,.08);}
+.sw2-hint.sw2-ok{color:var(--sw2-green);}
+.sw2-hint.sw2-bad{color:var(--sw2-red);}
 .sw2-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 .sw2-btn{padding:9px 18px;border-radius:8px;border:1px solid var(--sw2-line);background:var(--sw2-card-2);color:var(--sw2-text);font-size:13.5px;cursor:pointer;font-family:inherit;}
 .sw2-btn:hover{border-color:var(--sw2-text-faint);}
@@ -713,6 +741,90 @@
 .sw2-cv-box > .sw2-cv{margin:0;border:none;background:transparent;border-radius:0;}
 .sw2-cv-hint{font-size:10.5px;color:var(--sw2-text-faint);text-align:right;padding:2px 2px 8px;}
 
+/* ---------- ★leg140：实体观览窗口（用户令「**点击实体就会出现，能看到这个实体的各种属性以及它的事迹**」） ----------
+   ★形态是**弹在页面上层**（用户当场改的那一条：「窗口是弹出来在页面上的，不是被显示在页面中的」）。
+   三处口径（都为了"不跟面板抢"）：
+     ① **壳复用面板那套** `.sw2-window-mask` ＋ `.sw2-window`（leg101/102 定稿）——
+        本仓最忌"同一件事两条路"，窗口系统已经有一套，**不另造第二套**；本文件只补下面这些；
+     ② `z-index` **抬到面板之上**（面板自己的遮罩是 50000）⇒ 一定浮在面板之上。
+        取 **51000**，与链浮层 `.sw2-cv-mask` **同一把尺**（同一个理由：浮层必须压得住面板）；
+     ③ 窗口体**自己滚**：`.sw2-window` 是 flex 列（`overflow:hidden`），
+        子元素不写 `flex:1 + overflow:auto` 就会被裁掉——这正是 leg101 治过的那个版面病。
+   ★★leg140b（用户当场改的第二条：「**窗口太大几乎占了整个屏幕**」）：**尺寸改小** ——
+     `.sw2-window` 那条基础规则是**面板专用**的"占满整屏"（`width:100%` ＋ `height:calc(100vh - 40px)`，
+     leg102 用户当时要的），本窗口不该继承它 ⇒ 在下面 `.sw2-ew-window` 里**只覆盖尺寸三项**
+     （宽 / 高 / 上限），取 **820px × 最高 86%**，与链浮层 `.sw2-cv-box` **同一把尺**
+     （那也是用户要的"一个小窗口"）。★不动 `.sw2-window` 基础规则本身：它管的是面板那扇窗。
+   ★★leg141（用户令「**窗口再大个百分之20差不多就可以**」）：**在 140b 那把尺上放大两成** ——
+     `820px → 984px`（**正好 ×1.2**，一字不差地照他说的数算），高度上限 `86% → 90%`。
+     ★为什么高度只让 4 个点、宽度让满两成：**高度那一路是有硬顶的**——
+     140b 之前那一版是"占满整屏"，他当场嫌"几乎占了整个屏幕"⇒ 高度**不能再逼近 100%**；
+     90% 上下各留 5% 边距，仍明显是"一扇窗"而不是"一屏"。
+     ★`max-height` 是**上限**不是定高（`height:auto`）：内容短时窗口就短，只有长内容才顶到 90%。
+     ★两个数**都是可调的**（要更高/更宽只改这一行），别在别处再写第二份尺寸。 */
+.sw2-window-mask.sw2-ew-mask{z-index:51000;}
+.sw2-ew-window{width:984px;max-width:100%;height:auto;max-height:90%;}
+/* 整行可点（`src/render.js` 给实体行挂了 `data-action="ent-open"`）：**手型只给真的能点的那一行**。
+   ★为什么不改 `.sw2-entity-row` 那条基础规则：它在本文件里**只许声明一次**（判据咬着），
+   而且"可点"是**行上有没有动作**这件事决定的，不是所有行都有的性质。 */
+.sw2-entity-row[data-action]{cursor:pointer;}
+.sw2-ew-body{flex:1 1 auto;min-height:0;overflow:auto;padding:4px 18px 20px;}
+/* 头：复用 `.sw2-header/.sw2-badge/.sw2-title-block/.sw2-close`，只把徽换成蓝色（与"棋"那枚区分开） */
+.sw2-ew-badge{background:linear-gradient(135deg,var(--sw2-blue),#4a6f96);color:#0b1219;font-size:15px;}
+.sw2-ew-name{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:16.5px;}
+.sw2-ew-you{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-size:11px;letter-spacing:0;}
+.sw2-ew-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1.5px;font-weight:400;}
+.sw2-ew-sub{display:flex;gap:14px;flex-wrap:wrap;margin-top:3px;}
+.sw2-ew-sub b{color:var(--sw2-text-dim);font-weight:400;}
+/* 每一格的标题：复用 `.sw2-list-head`（它自带那条横线），只补那一格的计数。
+   ★★leg141：`.sw2-ew-hint`（标题后那半句括号说明）**整条删掉** —— 用户令
+   「**把（账上「涟漪」头一个是他；正文给的也在这一格里）这种文字给删了**」。
+   撤了它这条规则就零消费者（本仓不留死码），而且格名已经改成自解释的
+   （「事迹 · 他做的」/「事迹 · 涉及到他的」）⇒ 那半句本来就在替名字干活。 */
+.sw2-ew-sech{margin-top:14px;}
+.sw2-ew-n{margin-left:auto;font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);}
+/* ① 来历与身份：标签 + 值 两栏 */
+.sw2-ew-kv{display:grid;grid-template-columns:78px minmax(0,1fr);gap:3px 12px;font-size:13px;padding:2px 0;margin:0;}
+.sw2-ew-kv dt{color:var(--sw2-text-faint);font-size:12px;}
+.sw2-ew-kv dd{color:var(--sw2-text);min-width:0;margin:0;}
+.sw2-ew-src{font-size:11px;color:var(--sw2-text-faint);margin-left:7px;}
+.sw2-ew-note{font-size:11.5px;color:var(--sw2-text-faint);margin-top:7px;line-height:1.7;}
+.sw2-ew-note b{color:var(--sw2-text-dim);font-weight:400;}
+/* ② 变过的格 */
+.sw2-ew-chg{padding:7px 0;border-top:1px dashed var(--sw2-line-soft);font-size:13px;}
+.sw2-ew-chg:first-of-type{border-top:none;}
+.sw2-ew-cf{color:var(--sw2-text-faint);font-size:12px;}
+.sw2-ew-arrow{font-family:var(--sw2-mono);color:var(--sw2-text-faint);margin:0 7px;}
+.sw2-ew-old{color:var(--sw2-text-faint);text-decoration:line-through;}
+.sw2-ew-new{color:var(--sw2-amber);font-weight:600;}
+.sw2-ew-cmeta{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;}
+.sw2-ew-sep{color:var(--sw2-line);}
+/* ③④ 事迹 · 他做的 / 事迹 · 涉及到他的：一件一行，复用 `.sw2-entry`（编年那张卡的语言——同一件事只许一种印法） */
+.sw2-ew-deed{padding:9px 12px 8px;}
+.sw2-ew-dtitle{font-size:13.5px;line-height:1.55;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.sw2-ew-kindchip{font-size:10.5px;letter-spacing:1px;padding:1px 8px;}
+.sw2-ew-quote{margin-top:5px;padding:5px 10px;border-left:2px solid var(--sw2-line);background:var(--sw2-panel);border-radius:0 6px 6px 0;font-size:12px;color:var(--sw2-text-dim);line-height:1.7;}
+.sw2-ew-when{font-family:var(--sw2-mono);color:var(--sw2-text-dim);}
+/* ⑤ 他手上的事 */
+.sw2-ew-ag{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:7px;}
+.sw2-ew-aggoal{color:var(--sw2-text);}
+.sw2-ew-hush{color:var(--sw2-red);border:1px solid rgba(223,108,98,.4);border-radius:999px;padding:1px 8px;font-size:10.5px;}
+/* ⑥ 关系网（leg141b：**一张网**——层级 ＋ 账上的边）。
+   ★层级行给一个淡一点的底，让"骨架"与"动态"一眼分得开（**不是分家**：同一张表、同一把尺，
+     只是层级那些行是书里给的骨架、开局就在）。 */
+.sw2-ew-rel{padding:6px 0;border-top:1px dashed var(--sw2-line-soft);font-size:13px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.sw2-ew-rel:first-of-type{border-top:none;}
+.sw2-ew-rel b{color:var(--sw2-text);}
+.sw2-ew-hier b{color:var(--sw2-text-dim);}
+/* 认得到实体的名字**可点**（点了换到那一页）；认不到的（书里写了名号但没入池）**不可点**——
+   ★手型只给真能点的那一行（leg104 那条"假可点"的教训）。 */
+.sw2-ew-rel b[data-who]{cursor:pointer;border-bottom:1px dotted var(--sw2-line);}
+.sw2-ew-rel b[data-who]:hover{color:var(--sw2-amber);border-bottom-color:var(--sw2-amber-dim);}
+.sw2-ew-netoff{color:var(--sw2-text-faint);font-weight:400;}
+/* 空态：**分两种写法**（已拍板口径）——主体格（他做的/涉及到他的/变过的格/在办）写明"为什么没有"；
+   次要格（关系）一句人话就够。★照红线 2「空着就是空着」：不填占位值，但要说清是哪一种空。 */
+.sw2-ew-empty{padding:9px 0 3px;font-size:12.5px;color:var(--sw2-text-dim);line-height:1.75;}
+
 /* K38：拒签可见（世界的重力，动态流顶部裁定条） */
 .sw2-verdict{margin:0 0 6px;padding:6px 10px;border-left:3px solid var(--sw2-amber);background:linear-gradient(120deg,rgba(227,173,85,.10),transparent);font-size:12px;color:#e7cf95;line-height:1.6;word-break:break-all;}
 .sw2-verdict-tag{font-weight:700;margin-right:8px;white-space:nowrap;}
@@ -822,3 +934,141 @@
 .sw2-pan-selfcheck b{color:var(--sw2-text-dim);}
 .sw2-pan-selfcheck.bad{color:var(--sw2-red);border-top-color:var(--sw2-red);}
 .sw2-pan-selfcheck.bad b{color:var(--sw2-red);}
+
+/* ============================================================================
+   ★★★leg145 · 手机端（用户令 2026-09-27：「我需要你做适配手机端」）
+   ＝＝ 为什么这一族住在**文件最末尾**（这一条是量出来的，不是排版偏好）＝＝
+   媒体查询**不加特异性**，同特异性下**后写的赢**。本表原来的 620 断点写在文件前半，
+   而被它覆盖的规则住在更靠后的段落里 ⇒ **它一直是死的**（详见那处留下的指路注释）。
+   ⇒ 手机这一族一律写在这里：**覆盖基础规则的媒体查询，必须排在它覆盖的那条规则之后。**
+   ＝＝ 桌面为什么一个像素不动 ＝＝
+   版面那一族只在 ≤620px 生效；手感那一族走 `(pointer:coarse)`（鼠标一律不匹配）。
+   ★复量口（无头 Chrome · 真渲染器产物 ＋ 本样式表）：1280×800 十项读数与本笔之前**逐项相同**；
+    手机三档（360/390/414）的读数对照写在当棒交接文档 §3。
+   ============================================================================ */
+
+@media (max-width:620px){
+  /* ★leg104 原文照搬（这一条**现在才真的生效**——见文件前半那处指路注释）。 */
+  .sw2-entity-row{grid-template-columns:minmax(0,1fr);gap:4px;}
+
+  /* ① 视口高与遮罩留边。
+     ★病：`100vh` 在手机上等于"**地址栏收起时**"的高度（大视口）⇒ 面板比看得见的区域高，
+       底部（页脚、最后几行）落在浏览器工具栏后面；而外壳是 `overflow:hidden` ⇒ **滚不出来**。
+       改 `100dvh`（动态视口：地址栏收了它自己变），不支持 `dvh` 的浏览器**整条声明被丢掉**、
+       自然退回上面那条 `100%`（＝今天的行为，不会更坏）。
+     ★为什么这两条要带 id：`web/index.js` 的 `modalBoost()` 往页头插了一条 `#story_world2_window{…}`
+       的内联规则（特异性＝id）且**排在样式表之后** ⇒ 普通类选择器压不过它的 `padding` 与 `height`
+       （写了也白写——这正是本笔最想避免的那种"看着改了、其实没生效"）。
+     ★`env(safe-area-inset-*)` 是刘海/home 条的兜底：宿主页没开 `viewport-fit=cover` 时它恒等于 6px。 */
+  #story_world2_window.sw2-window-mask{height:100dvh;padding:6px;}
+  #story_world2_window.sw2-window-mask{padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));}
+  .sw2-window-mask,.sw2-cv-mask{height:100dvh;padding:6px;}
+  .sw2-window{height:100%;}
+  /* 浮层（实体观览窗 / 事件链 / 旧卷）在手机上**占满整屏、四边留 6px**（用户 2026-09-27 当场选的那一档）。 */
+  .sw2-ew-window,.sw2-cv-box{width:100%;max-width:100%;height:100%;max-height:100%;}
+
+  /* ② 页签：8 个页签在手机上折 **3–4 行**（实测 390 宽 = 130.8px、360 宽 = 172.4px，等于吃掉五分之一屏）
+     ⇒ 改**一行横滑**（用户当场选的"一行横滑"）。
+     ★`.sw2-tab{flex:none}` 必须有：不写的话一行里的页签会被压扁（flex 默认许缩），"横滑"就变成"挤成一团"。
+     ★`.sw2-tabs{flex:none}` 也必须有，而且**踩过一次**：`overflow-x:auto` 会让 `overflow-y` 跟着算成
+       `auto`（规范如此）⇒ 这一条自己成了**滚动容器** ⇒ 它在外壳那个定高 flex 列里的"自动最小高度"
+       变成 0 ⇒ **可以一直被压扁**（实测：页签行 12px、单枚 16px，整行几乎看不见）。
+       写 `flex:none` 就是"这一行按内容高，谁也不许压它"。 */
+  .sw2-tabs{flex:none;flex-wrap:nowrap;overflow-x:auto;padding:8px 10px 0;scrollbar-width:none;}
+  .sw2-tabs::-webkit-scrollbar{display:none;}
+  .sw2-tab{flex:none;}
+  /* ★横滑那条**不留滚动条**：手机浏览器本来就是浮层滚动条（不占位），而桌面窄窗里它会占掉 15px、
+     还把这一行画成一条灰杠。**"还有页签"的招牌是"最后那个被切掉一半"**（截图上正是如此）。 */
+
+  /* ③ 版面：两栏硬挤 ⇒ 内容横着溢出（实测 390 宽：设置页要 **406px** 塞进 333px ⇒ 得横着拖才看得见）
+     ⇒ 窄屏一律单列。★这三条覆盖的都是文件后半的规则，所以必须住在这里（见本段抬头那句）。 */
+  .sw2-settings,.sw2-sv-grid,.sw2-arch-grid{grid-template-columns:minmax(0,1fr);}
+  .sw2-row{flex-wrap:wrap;}          /* 世界尺度那一行（标签 ＋ 数字框）：许折行，不许把框挤出屏幕 */
+  /* ★那一行末尾的说明（`<em>`，例如「常用：3 / 6 / 9」）基础规则是 `flex:1`（＝**基准 0**）
+     ⇒ 折行算法按"基准 0"算它一定放得下，于是它**永远留在本行**、被压到 14px 宽
+     （实测 360 宽：字挤成一条竖线；`flex-wrap:wrap` 因此形同虚设）。
+     ⇒ 手机上把基准改回 `auto`（按内容算）：放得下就占满本行余量，放不下就**整句折到下一行**。 */
+  .sw2-row > em{flex:1 1 auto;}
+  /* ★两块工具栏（实体页 / 编年页）在手机上**许块内折行**：实测"筛选"那一块宽 **450px**，
+     而 390 宽的手机只有 297px ⇒ leg49 那条"块是整体折行的单位、绝不把块内的钮打散"在这里走不通
+     （它没料到"**单块比屏幕还宽**"这种情形）。
+     两害相权：**折行（全看得见）** 好过 **横滑（有钮藏在屏幕外 ＝ 玩家以为它没了）**。
+     ★`flex:0 1 auto` 是把 `flex:none` 松一格：**只松"能不能缩"**——块整体折行照旧（放得下就不缩），
+       只有"单块比一行还宽"时它才缩到行宽、让块内的钮自己折到第二行。 */
+  .sw2-ents-g,.sw2-ch-g{flex-wrap:wrap;flex:0 1 auto;min-width:0;}
+
+  /* ★输入框：`width:100%` ＋ 左右各 11px 内边距 ＋ 边框，而 `box-sizing` 默认是 `content-box`
+     ⇒ 实测框比它的容器**宽 24px**（容器 307 / 框 331；桌面那一档也一样：容器 558 / 框 582）。
+     桌面那两页（设置 · 参数）因此一直挂着一条 **9px 的横向滚动条**；手机改单列之后它更显眼。
+     ★本笔**只在手机这一档**改成 `border-box`：桌面那一档是既有观感，动它要单独一笔、单独升位
+       （本笔对用户的承诺是"桌面一个像素不动"）。 */
+  .sw2-input,.sw2-ch-q,.sw2-ents-q,.sw2-param-input,.sw2-param-select,.sw2-field textarea{box-sizing:border-box;}
+
+  /* ④ 壳与页的留白收一收（手机上一行只有四十来个字，两侧各 18px 太贵）。 */
+  .sw2-header{flex-wrap:wrap;padding:10px 12px;gap:8px;}
+  /* ★标题块在手机上给一个**小的折行基准**（120px）＋ 让它缩（`min-width:0`）。
+     ★为什么不是 `flex:1 1 auto`（＝按内容算基准）：折行算法看的是**基准**，
+     而这一块的内容（"世界的眼睛 · Story World v2"）基准有 190px ⇒ 加上两枚 chip 与那枚 ✕
+     刚好超过一行（实测 390 宽：358 ＋ 32 间距 = 390 > 361）⇒ **✕ 被挤到第二行**，页头白多 38px。
+     基准给 120px 之后：34＋120＋73＋31＋30＋32 = 320 ≤ 361 ⇒ **一行放得下**（它随后自己长大占满余量）。 */
+  .sw2-title-block{flex:1 1 120px;min-width:0;}
+  /* ★关窗那枚 ✕ **永远贴右**：320 宽时页头会折行，折下去的那一行若不给 `margin-left:auto`，
+     ✕ 会落在**左边**（实测截图），跟它"关窗"的身份对不上。 */
+  .sw2-close{margin-left:auto;}
+  .sw2-statusbar{padding:6px 12px;}
+  .sw2-view{padding:12px 12px 16px;}
+  .sw2-footer{padding:9px 12px;}
+
+  /* ⑤ 拉到顶时别触发浏览器的"下拉刷新"（那会把整页刷掉、世界账跟着重载）。 */
+  .sw2-view.sw2-active{overscroll-behavior:contain;}
+
+  /* ⑥ ★字号：手机上把**本表里 <12px 的那一批**一律抬到 12px（用户 2026-09-27 点头那一档）。
+     这一份名单是**照全表逐条抄下来的**（现读 94 条），不是挑的；`test/mobile-layout.test.js`
+     有一条**棘轮**咬着它：将来谁再加一个小字类而没进名单，当场红。
+     ★为什么只能"名单 ＋ 棘轮"：CSS 没有"最小字号下限"这种写法（`font-size:max(12px,1em)` 会把
+       层级全压平：小字会跟父级一样大，信息带的"副角安静"就没了）。
+     ★唯一的连带调整：折叠问号那个圈 `13px → 15px`（不换的话 12px 的字会撑破圈）。 */
+  .sw2-subtitle,.sw2-col-head,.sw2-ref,.sw2-band-label,.sw2-readrow .sw2-readkey,
+  .sw2-env-row .sw2-env-name,.sw2-env-row .sw2-env-val,.sw2-env-row.sw2-nodata .sw2-env-val,
+  .sw2-clash-sub,.sw2-num-sub,.sw2-agenda-card .sw2-astage,.sw2-agenda-card .sw2-asteps,.sw2-visible,
+  .sw2-entry .sw2-cmeta,.sw2-now,.sw2-entity-kind,.sw2-ev-mark,.sw2-nodata-text,.sw2-nodata-tag,
+  .sw2-param-kind,.sw2-row > em,.sw2-stage .sw2-stagetext,.sw2-note,
+  .sw2-locgroup-n,.sw2-locgroup-note,.sw2-locchip,.sw2-locchip small,.sw2-map-brief,.sw2-map-note,
+  .sw2-ch-line .sw2-ch-round,.sw2-ch-badge,.sw2-ch-group > summary .sw2-ch-gc,.sw2-ch-gl,
+  .sw2-milestone-id,.sw2-mspan,.sw2-rawids,.sw2-cold h4,
+  .sw2-list-head,.sw2-ename small,.sw2-agstage,.sw2-eattr,.sw2-ents-gl,.sw2-sv-sub,.sw2-sv-chip,
+  .sw2-set-card h4,.sw2-hist-tick,.sw2-source-note,.sw2-source-alt summary,.sw2-hint,.sw2-fold > summary,
+  .sw2-fold > summary::before,.sw2-model,.sw2-cold-mgmt em,.sw2-footer,.sw2-legacy-note,.sw2-chainbtn,
+  .sw2-cv-close,.sw2-cv-col,.sw2-cv-src,.sw2-cv-meta,.sw2-cv-verdict,.sw2-cv-chip,.sw2-cv-roll summary,
+  .sw2-cv-in,.sw2-cv-hm,.sw2-cv-foot,.sw2-cv-hint,.sw2-ew-you,.sw2-ew-kind,.sw2-ew-n,.sw2-ew-src,
+  .sw2-ew-note,.sw2-ew-cmeta,.sw2-ew-kindchip,.sw2-ew-hush,
+  .sw2-baseline-hint,.sw2-pan-stat,.sw2-pan-hint,.sw2-pan-span,.sw2-pan-badge,.sw2-pan-sub,.sw2-pan-t,
+  .sw2-pan-why,.sw2-pan-at,.sw2-pan-who,.sw2-pan-done,.sw2-pan-open,.sw2-pan-foot,.sw2-rawid-note,
+  .sw2-pan-dashilab,.sw2-pan-brg,.sw2-pan-else,.sw2-pan-share,.sw2-pan-selfcheck{font-size:12px;}
+  .sw2-fold > summary::before{width:15px;height:15px;}
+}
+
+/* ★★★leg145 · 触摸设备的手感（用户 2026-09-27 点头的那一档数字）。
+   ★判据不是"屏幕多宽"而是"**是不是手指**"：手机横过来有 800+ 宽，手指还是那根手指
+     ⇒ 走 `(pointer:coarse)`；鼠标一律不匹配（桌面因此一个像素都不动）。
+   ★改前实测（390 宽 · 无头 Chrome）：按钮最小 **26px**、筛选片 **24px**、编年那枚「链」钮只有 **14px**、
+     折叠问号 **20.4px** —— 手指点不中（误触的代价是"以为插件坏了"）。
+   ★`display:inline-flex` 是给 `min-height` 用的：`.sw2-chip` 是 `<span>`（行内盒不吃 min-height）。 */
+@media (pointer:coarse){
+  /* ★`box-sizing:border-box` 是为了让下面那些 `min-height` 真的等于"**总高**"：
+     默认是 `content-box` ⇒ `min-height:44px` 加上内边距会变成 60px（实测页签就是这样）。
+     这一档要的是"手指点得中"这个**结果尺寸**，不是"内容区 44px"。 */
+  .sw2-tab,.sw2-btn,.sw2-chip,.sw2-fchip,.sw2-model,.sw2-chainbtn{box-sizing:border-box;}
+  .sw2-tab,.sw2-btn{min-height:44px;}
+  .sw2-tab{display:inline-flex;align-items:center;}
+  .sw2-close{width:44px;height:44px;}
+  .sw2-chip,.sw2-fchip,.sw2-model{display:inline-flex;align-items:center;min-height:36px;}
+  .sw2-chainbtn{min-height:32px;padding:0 10px;}
+  .sw2-fold > summary{min-height:32px;}
+  .sw2-param-select,.sw2-param-input{min-height:36px;}
+  /* ★输入类一律 16px：iOS 上碰一个 <16px 的输入框会**整页放大**，而且放大之后回不去。
+     改前实测：`.sw2-input` 与两个搜索框都是 **13px**。 */
+  .sw2-input,.sw2-ch-q,.sw2-ents-q,.sw2-param-select,.sw2-param-input,.sw2-field textarea{font-size:16px;}
+  /* 手机上点按钮常被当成"双击放大"⇒ 这一族控件上把双击缩放关掉（滚动与单击不受影响）。 */
+  .sw2-btn,.sw2-tab,.sw2-chip,.sw2-fchip,.sw2-model,.sw2-chainbtn,.sw2-close,.sw2-volact,.sw2-goto{touch-action:manipulation;}
+}

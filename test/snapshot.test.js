@@ -14,9 +14,9 @@ import {
     diffWorld, applyDelta, makeSnapshot, planStep, restoreFrom, planRetention, describeSnapshots,
     ANCHOR_EVERY, RETAIN_STEPS, SNAPSHOT_FORMAT,
 } from '../src/snapshot.js';
-// ★★★leg72（丙-web）：记忆那一族（含"投递自证面"的状态与其读法）已搬进 `web/memory-store.js`
-//   ⇒ 改从新家取。★状态 `sw2MemoryPush` 的**唯一家**也在那边（本文件只经它给的两个通道读/清）。
-import { memoryStore, markMemoryPush, memoryPushLine, pushMemoryNow, readMemoryPush, clearMemoryPush } from '../web/memory-store.js';
+// ★★★leg125：这里原来 import 记忆那一族（`web/memory-store.js`）——**整条通道已删**
+//   （用户令「我说了解耦就解耦，直接删了」；理由见 `web/index.js` 顶部留档）。
+//   ⇒ 本文件里与它相关的三条判据（leg27 g / h / i）同批删除，见下面第六节那一格。
 
 // ★★★leg72：**"这个函数住哪个文件"变了** ⇒ 下面两条**读源码的结构锁**跟着搬家（不搞 re-export 骗锁）。
 //   ★纪律：判据锚的是"**声明必须在模块顶层、块外调用得到**"这件事，不是"它必须住在 index.js 里"——
@@ -25,9 +25,9 @@ import { memoryStore, markMemoryPush, memoryPushLine, pushMemoryNow, readMemoryP
 //   `restoreSnapshot` / `clearSnapshots` / `resetSnapshots` / `refreshSnapshots` …）已整族搬进
 //   `web/snapshot-store.js` ⇒ 同一个口径继续用：**按符号的新家取源码**，判据内容一个字不改。
 const WEB_SRC = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
-// 记忆那一族（leg72 起住 memory-store.js）· 快照那一族（leg73 起住 snapshot-store.js）· 其余仍在接线层 index.js。
+// 快照那一族（leg73 起住 snapshot-store.js）· 其余仍在接线层 index.js。
+//   （★leg125：原来还登记过 `web/memory-store.js`——那条通道已整条删除。）
 const SRC_OF_FILE = {
-    'web/memory-store.js': () => WEB_SRC('../web/memory-store.js'),
     'web/snapshot-store.js': () => WEB_SRC('../web/snapshot-store.js'),
     'web/hot-ledger.js': () => WEB_SRC('../web/hot-ledger.js'),   // ★leg78：热账族的新家
     'web/index.js': () => WEB_SRC('../web/index.js'),
@@ -375,8 +375,7 @@ test('★leg27 d：自动流程调用的函数必须在**模块顶层**（缩进
     //   ★判据口径一个字没放松：仍然是"声明行的花括号深度必须 = 0"（块内声明 ⇒ 块外调用不到 ⇒ 落账失败）。
     //   ★反向锁（下面那条）也照旧，只换取值来源。
     const whereOf = {
-        memoryStore: 'web/memory-store.js',
-        pushMemoryNow: 'web/memory-store.js',
+        // ★leg125：原来这里还有 `memoryStore` / `pushMemoryNow` 两个（记忆投递那条通道）——已整条删除。
         // ★leg73：快照那三个已搬进 snapshot-store.js（判据口径不变：声明行花括号深度 = 0）
         snapshotStore: 'web/snapshot-store.js',
         requestSnapshot: 'web/snapshot-store.js',
@@ -398,16 +397,19 @@ test('★leg27 d：自动流程调用的函数必须在**模块顶层**（缩进
         }
         return null;
     };
-    for (const name of ['memoryStore', 'pushMemoryNow', 'snapshotStore', 'requestSnapshot', 'refreshSnapshots', 'advanceTick']) {
+    for (const name of ['snapshotStore', 'requestSnapshot', 'refreshSnapshots', 'advanceTick']) {
         const d = declOfIn(name);
         assert.ok(d, `前置：在 ${whereOf[name]} 里找得到 function ${name}(（L 位置与 head 见下）`);
         assert.equal(d.depth, 0, `★${name}（${d.rel} L${d.line}：${d.head}）的花括号深度 = ${d.depth} ⇒ 它在某个块内，块外调用不到（正是「落账失败：pushMemoryNow is not defined」）`);
     }
-    // 反向锁：tick 落账那条路真的会调记忆投递（开关开着时）
+    // 反向锁（★leg125 换了靶子）：**"投给柚月の记忆"那条通道不许回来**——落账这一段里不许再出现那几个名字。
     const saveSeg = src.slice(src.indexOf('save: async (ssot)'), src.indexOf('refresh:', src.indexOf('save: async (ssot)')));
-    assert.match(saveSeg, /pushMemoryNow\(rot\.hot\)/, '★tick 落账这条路必须调 pushMemoryNow（leg26 的记忆投递接线）');
+    assert.ok(!/pushMemoryNow|memoryEnabled|memoryStore/.test(stripComments(saveSeg)),
+        '★那条通道 leg125 已整条拆除（用户令「直接删了」）——不许在落账主路上回来');
+    //   ★判据跑在**剥注释后的源码**上：上面那句留档注释里就写着这几个名字，
+    //     裸正则当场会红在我自己的留档上（leg71 §4.1 记过三次的同一种假红）。
     // 自检：本判据必须能**认出块内**的声明（否则它又是一条假绿）——直接拿同一 declOf 扫一段假源
-    const fakeLines = 'if (x) {\n  function pushMemoryNow(world) {\n  }\n}\n'.split('\n');
+    const fakeLines = 'if (x) {\n  function requestSnapshot(world) {\n  }\n}\n'.split('\n');
     const depthIn = (ls, name) => {
         let depth = 0;
         for (const l of ls) {
@@ -418,193 +420,22 @@ test('★leg27 d：自动流程调用的函数必须在**模块顶层**（缩进
         }
         return null;
     };
-    assert.equal(depthIn(fakeLines, 'pushMemoryNow'), 1, '★判据自检：块内的声明必须被认成 depth=1（否则这条锁是假绿）');
-    assert.equal(depthIn(['export function memoryStore(YM = window) {'], 'memoryStore'), 0, '★判据自检：带 export 前缀的顶层声明必须被认成 depth=0（抗前缀变化）');
+    assert.equal(depthIn(fakeLines, 'requestSnapshot'), 1, '★判据自检：块内的声明必须被认成 depth=1（否则这条锁是假绿）');
+    assert.equal(depthIn(['export function snapshotStore(YM = window) {'], 'snapshotStore'), 0, '★判据自检：带 export 前缀的顶层声明必须被认成 depth=0（抗前缀变化）');
 });
 
 // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
-// ★leg27 g（用户实机「**记忆插件也没有记录事件，还把插件原来的角色档案清空了**」）：
-//   病 = `memoryStore().readState()` 原来调的是 **`Storage.loadState?.(null, null)`**——第二参**显式传 `null`**。
-//   插件签名 `loadState(fallbackState, sessionId = getCurrentSessionId())`：**ES 形参默认值只在 `undefined` 时生效**，
-//   传 null ⇒ sessionId=null ⇒ `getStorageKeys(null)` 空 ⇒ 插件开头 `if (!keys.length) return normalizeState(null, fallbackState)`
-//   拿 null 兜底返回**非对象** ⇒ 我方 `typeof s === 'object'` 不成立 ⇒ 退回 `blank()`（自带表全空）⇒
-//   `writeRecords` 再 `saveState(..., { force: true })`（**force 跳过插件全部保护闸**）把空态写回 ⇒
-//   **用户自己填的「角色档案」被逐条抹掉**（物品追踪/世界设定没填过，所以看着"还在"）。
-//   判据两层：①结构层——那一行不许出现 `loadState(...null...)`（防复发，`.?.(` → `(` 归一后判）；
-//   ②行为层——用**会话感知的 fake 插件**真跑一次投递，档案记录条数必须**逐条保住**。
-//   ★自检：同一 fake 必须能把"用 null 占位"的写法**认成坏的**（否则这条锁又是一条假绿）。
-function makeFakeYuzukiMemory() {
-    const KEY = 'yzm_memory_chat_state:char:4:chat1';
-    const stored = {
-        tables: [
-            { id: 'plot_summary', name: '剧情摘要', icon: 'timeline', columns: ['#主线', '#支线'], hidden: false },
-            { id: 'character_profile', name: '角色档案', icon: 'person', columns: ['角色名', '身份'], hidden: false },
-        ],
-        activeTableId: 'character_profile',
-        activeRecordIds: {},
-        records: {
-            plot_summary: [{ id: 'ps_1', values: { 主线: '已有主线' } }],
-            character_profile: [{ id: 'cp_1', values: { 角色名: '白小娥', 身份: '药童' } }],
-        },
-    };
-    const written = { state: null };
-    return {
-        written,
-        YM: {
-            // 插件自带的默认态（有档案那张表，但**没有记录**——正是"读不到时该用的兜底"）
-            VariableInjector: { createDefaultState: () => ({ tables: [], activeTableId: '', activeRecordIds: {}, records: {} }) },
-            Storage: {
-                loadState: (fallbackState, sessionId) => {
-                    // 插件真语义：`sessionId = getCurrentSessionId()`（只在 undefined 时生效）+ 无键早退
-                    const sid = sessionId === undefined ? 'char:4:chat1' : sessionId;
-                    if (!sid) return fallbackState ?? null;   // ← keys.length === 0 的那条早退
-                    return stored;
-                },
-                saveState: (state) => { written.state = state; return true; },
-            },
-        },
-        stored,
-    };
-}
-
-test('★leg27 g：记忆投递不许用 `null` 占位 sessionId（那会把用户档案清空）——且档案必须逐条保住', () => {
-    // ★★★leg72：`readState` 这一族已搬进 `web/memory-store.js` ⇒ **结构锁跟着读新家**。
-    //   ★判据本身一个字没放松（仍是"`loadState` 的**第 2 个位置实参**不许是 `null`"）——
-    //     变的只是"去哪读源码"。这正是本仓那条纪律：判据锚**语义**，不锚"它必须住在某个文件里"。
-    const src = SRC_OF_FILE['web/memory-store.js']();
-    // ① 结构层：**先剥注释再扫**（本仓禁止的写法会在注释里被引用＝留档，那是合法的；
-    //    锁只能盯**真代码**——第一版没剥注释，红在了我自己的留档注释上，这条自检因此写进判据）。
-    const code = stripComments(src);
-    // 判据要精确到**第 2 个位置参数**（sessionId）——不是"这行里不许出现 null"：
-    //   `loadState(fallback ?? null)` 是合法的（单个实参），`loadState(null, null)` 才是病。
-    const splitArgs = (s) => {
-        const out = []; let cur = ''; let d = 0;
-        for (const c of s) {
-            if ('([{'.includes(c)) d += 1;
-            if (')]}'.includes(c)) d -= 1;
-            if (c === ',' && d === 0) { out.push(cur); cur = ''; continue; }
-            cur += c;
-        }
-        if (cur.trim()) out.push(cur);
-        return out.map((x) => x.trim());
-    };
-    const calls = [...code.matchAll(/Storage\.loadState[\s\S]{0,6}?\(([\s\S]{0,120}?)\)/g)]
-        .map((m) => splitArgs(m[1]).filter(Boolean));
-    assert.ok(calls.length >= 1, '前置：找得到 readState 里的 loadState 调用');
-    for (const args of calls) {
-        assert.notEqual(args.length >= 2 ? args[1] : '', 'null',
-            `★Storage.loadState(${args.join(', ')}) 的 sessionId 实参是 null ⇒ 插件默认值失效 ⇒ 读回非对象 ⇒ force 覆盖写空态（清空用户档案）`);
-    }
-    // 自检：剥注释这一步必须真有效（否则注释里的旧写法会永远把这条锁顶红＝假红）
-    assert.equal([...stripComments('/* Storage.loadState(null, null) */ const x = 1;').matchAll(/Storage\.loadState/g)].length, 0,
-        '★判据自检：块注释里的写法必须被剥掉');
-    assert.equal([...stripComments('// Storage.loadState(null, null)\nconst x = 1;').matchAll(/Storage\.loadState/g)].length, 0,
-        '★判据自检：行注释里的写法必须被剥掉');
-    assert.equal([...stripComments("Storage.loadState(fallback)").matchAll(/Storage\.loadState/g)].length, 1,
-        '★判据自检：真代码不许被误剥');
-    // ② 行为层：真跑一次投递，档案与它表记录必须原样还在
-    const { YM, written, stored } = makeFakeYuzukiMemory();
-    const store = memoryStore(YM);
-    assert.ok(store, '前置：fake 插件可被 memoryStore 接受');
-    const before = stored.records.character_profile.length;
-    store.writeRecords({
-        世界状态: [{ id: 'sw2_state', hidden: false, values: { 设定名: '大荒', 类型: '第 7 轮' } }],
-        世界大事: [],
-    }, { tables: [
-        { id: 'world_setting', name: '世界状态', icon: 'world', columns: ['设定名', '类型', '详细说明', '影响范围'], hidden: false },
-        { id: 'item_tracking', name: '世界大事', icon: 'item', columns: ['物品名称', '物品描述', '物品位置', '轮次'], hidden: false },
-    ], now: 1 });
-    assert.ok(written.state, '前置：saveState 真被调到');
-    assert.equal(written.state.records.character_profile.length, before,
-        `★投递后「角色档案」条数 ${written.state.records.character_profile.length} ≠ 投递前 ${before} —— 用户档案被投递覆盖了`);
-    assert.equal(written.state.records.plot_summary.length, 1, '★自带表 plot_summary 的记录也必须原样保留');
-    assert.ok(written.state.tables.some((t) => t.id === 'character_profile'), '★档案**表定义**不许被抹掉');
-    // ★leg29（用户拍板「对齐插件内置表形状」）：我方表用**插件内置 id**（否则详情视图是空 div），name 留人话表名
-    assert.ok(written.state.tables.some((t) => t.id === 'world_setting' && t.name === '世界状态'), '我方表要并进去（插件 id + 人话名）');
-    assert.equal(written.state.records.world_setting.length, 1, '我方记录要落上（落在插件 id 那张表里）');
-    // ③ 自检：把 loadState 换成"null 占位的后果"（返回非对象 ⇒ 我方退回 blank()），同一判据必须**认得出档案丢了**
-    const bad = makeFakeYuzukiMemory();
-    bad.YM.Storage.loadState = (fallbackState, sessionId) => (void fallbackState, void sessionId, null);
-    const storeBad = memoryStore(bad.YM);
-    storeBad.writeRecords({ 世界状态: [{ id: 'sw2_state', hidden: false, values: { 设定名: '大荒', 类型: '第 7 轮' } }] }, { tables: [], now: 1 });
-    const badProfile = bad.written.state?.records?.character_profile;
-    assert.ok(!Array.isArray(badProfile) || badProfile.length === 0,
-        '★判据自检：非对象返回 ⇒ 档案必须被认成丢了（本判据要能认出坏的形状，否则它是假绿）');
-    assert.equal(badProfile, undefined,
-        '★判据自检：退回 blank() 时**连表带记录一起没**（正是用户看到的"档案被清空"的形状）');
-});
-
-// ★leg27 h：记忆投递的**自证面**（用户两次靠肉眼发现"插件里什么都没有" ⇒ 这功能此前没有任何可查的痕迹）。
-//   判据只认一件事：**报出来的必须是本次事实**；失败必须说得出口，没投过必须**不出声**（不许假绿）。
-test('★leg27 h：记忆投递自证面——没投过不出声；成功报本次轮次；失败报原因', () => {
-    // ① 未投过 ⇒ 一个字都不许报（否则界面会显示"已投"，正是最坏的那种假绿）
-    assert.equal(memoryPushLine(), '', '★没投过时**不许**报任何"已投"——宁可什么都不显示');
-    // ② 成功：轮次与条数照实报
-    const ok = markMemoryPush({ ok: true, tick: '第 9 轮', counts: { 世界大事: 5, 史卷纪要: 0 } }, 9);
-    assert.equal(ok.ok, true);
-    const line = memoryPushLine();
-    assert.ok(line.includes('第 9 轮'), `自证行要带轮次，实际：${line}`);
-    assert.ok(line.includes('大事 5 条'), `自证行要带大事条数，实际：${line}`);
-    // ③ 失败：必须把原因说出来（用户就是靠这句话才能定位）
-    markMemoryPush({ ok: false, reason: '插件未加载（柚月の记忆）' });
-    assert.ok(memoryPushLine().includes('插件未加载'), '失败要报原因，不许只说"失败"');
-    assert.ok(memoryPushLine().includes('⚠'), '失败要有可辨识的标记');
-});
-
-// ★leg27 i（用户实机第二次报真相：「**上次投递失败：MEMORY_TABLE_MILESTONES is not defined**」）：
-//   病 = `web/index.js` 的成功日志那一行用了 `MEMORY_TABLE_MILESTONES`，而 import 只写了两个常量
-//   ⇒ 投递**其实算完了、也写出去了**，只在**打日志**这一步抛 ReferenceError，
-//   而调用点写着 `.catch(() => {})` ⇒ **错误被吞得一点痕迹都没有**，插件里自然什么都没有。
-//   ★为什么上一条锁没抓到它（这一棒最该记住的一条）：那条锁**只调 `markMemoryPush`**（喂现成结果），
-//   而**没有真跑 `pushMemoryNow`** —— "只调标记函数 ≠ 真跑那条路"。判据必须走**真函数**。
-//   本判据：装上假 `window.YuzukiMemory`，真调 `pushMemoryNow`，并让**成功日志**也跑一遍
-//   （console.info 会在这条路径上被调用；若那行引用了没导入的标识符，就会在这里抛出来）。
-test('★leg27 i：pushMemoryNow 必须**真跑得通**（成功日志那一行的引用错误曾被 .catch(()=>{}) 吞掉）', async () => {
-    const world = {
-        version: 1, context: { world: '大荒', positions: ['临渊城'], setting: { dynamic: { env: {} } } },
-        entities: [{ id: 'e1', kind: 'faction', name: '大虞', location: '临渊城' }], weights: {}, agendas: [
-            { id: 'a_12_1', owner: 'e1', goal: '夺大盘谷阵眼', stage: '集兵', visibility: 'known', maxSteps: 4, progress: 1, memory: { promises: [], done: [], blocked: [], turnsAlive: 1 } },
-        ], events: [], chronicle: [], milestones: [], meta: { tick: 12, simLog: [] },
-    };
-    const written = [];
-    const fakeYM = {
-        VariableInjector: { createDefaultState: () => ({ tables: [], activeTableId: '', activeRecordIds: {}, records: {} }) },
-        Storage: {
-            loadState: () => ({ tables: [], activeTableId: '', activeRecordIds: {}, records: {} }),
-            saveState: (state) => { written.push(state); return true; },
-        },
-    };
-    const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
-    const prevWindow = globalThis.window;
-    globalThis.window = { YuzukiMemory: fakeYM };
-    // 日志也是被测路径的一部分：它必须能跑（真实事故就发生在这一行）。这里只记录，不静音。
-    const logs = [];
-    const realInfo = console.info; const realWarn = console.warn;
-    console.info = (...a) => logs.push(['info', ...a]);
-    console.warn = (...a) => logs.push(['warn', ...a]);
-    try {
-        const r = await pushMemoryNow(world);
-        assert.equal(r.ok, true, `★pushMemoryNow 必须成功（失败原因：${r.reason || '—'}）——「每轮投递没跑成」的真凶就在这里`);
-        assert.ok(written.length >= 1, '必须真的调到插件的 saveState（否则等于没投）');
-        const warned = logs.filter(([k]) => k === 'warn');
-        assert.equal(warned.length, 0, `★成功路径不许有警告（事故形态：日志行抛错被吞）——实际：${JSON.stringify(warned)}`);
-        assert.ok(logs.some(([k, ...a]) => k === 'info' && JSON.stringify(a).includes('第 12 轮')),
-            `★成功日志必须真打得出来（引用错误就藏在这里）——实际日志：${JSON.stringify(logs)}`);
-    } finally {
-        console.info = realInfo; console.warn = realWarn;
-        if (hadWindow) globalThis.window = prevWindow; else delete globalThis.window;
-    }
-    // 失败面：store 缺插件 ⇒ 如实报原因（且不许抛）
-    const before = globalThis.window;
-    globalThis.window = {};
-    try {
-        const r2 = await pushMemoryNow(world);
-        assert.equal(r2.ok, false);
-        assert.match(String(r2.reason), /插件未加载/, '插件不在时要如实说"插件未加载"');
-    } finally {
-        if (before === undefined) delete globalThis.window; else globalThis.window = before;
-    }
-});
+// ★★★leg125：这一节原来有三条判据 + 一个夹具，全是为"投给柚月の记忆"那条通道写的
+//   ——**通道整条删除，判据与夹具随之删除**（用户令「我说了解耦就解耦，直接删了」）：
+//   · ★leg27 g：投递不许用 `null` 占位 sessionId（那会把用户自己填的「角色档案」清空）——病在 `web/memory-store.js`，文件已删；
+//   · ★leg27 h：投递的**自证面**（没投过不出声 / 成功报轮次 / 失败报原因）——自证面已删（`src/render.js` 那行也删了）；
+//   · ★leg27 i：`pushMemoryNow` 必须**真跑得通**（成功日志那行的引用错误曾被 `.catch(()=>{})` 吞掉）——那个函数已删。
+//   ★夹具 `makeFakeYuzukiMemory` 同批删除（它只服务这三条）。
+//   ★为什么删而不是"降级"：它是**单向投影**——`buildMemoryPayload(world)` 只是把**自己账上现成的
+//     事实**拼成两张表念给对方插件听，而账与卷里本来就有这些事实 ⇒ 为一个特定插件专门养一条通道
+//     ＝**过剩设计**（用户原话）。要"把世界现状递给聊天模型"，走 `web/inject.js` 那几段注入，
+//     而且那里**有意只递"与书不一样的那几处"**。
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
 
 
 // ★leg27 e（用户实拍：s1 时间最新、s12 最旧，**id 与时间完全对不上**）：

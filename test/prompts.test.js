@@ -31,8 +31,68 @@ function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick 
 }
 const ent = (id, name, kind, extra = {}) => ({ id, kind, name, location: '中央', ...extra });
 
-test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-23：★leg100 第 15 条补「归档不许当候选」+ v2-agenda-t1-22：leg95 第 15 条「收场提议 eventClosures」+ v2-agenda-t1-21：leg90 第 8b 条「事件标题自带对象」+ leg40 第 14 条「线捆 + 拾遗」+ leg39 视角改写「你就是这个世界」+ 多主线并立 + 事件三源分工 + 新线三由来 + leg34 字段写回/带因复活/主动查 + leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-23');
+test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-30：★leg137 第 9 条补"纪事那一栏的 timeMark 怎么读" + v2-agenda-t1-29：★leg128 第 9 条补"故事线怎么用 ＋ 多因怎么写"（alsoCausedBy / lookupLines） + v2-agenda-t1-28：★leg123 第 8 条补"dialogue 型已是既成事实、别再提一遍"＋"本轮已改定的格不许再提 entityUpdates"＋"被改过格 ≠ 出过手" + v2-agenda-t1-27：★leg122 拆掉检索注入 ⇒ 铁律 13 里那三句"书里的细节不用你猜/recalled 里没有"同批改掉 + v2-agenda-t1-26：★leg120 第 16 条「关系变更通道 relationUpdates/relationClosures」+ v2-agenda-t1-25：★leg113 第 9 条增「纪事」指路 + 8b 改掉已不成立的旧话 + v2-agenda-t1-24：★leg112 撤"每轮最多 3 条"字段变更上限 + v2-agenda-t1-23：★leg100 第 15 条补「归档不许当候选」+ v2-agenda-t1-22：leg95 第 15 条「收场提议 eventClosures」+ v2-agenda-t1-21：leg90 第 8b 条「事件标题自带对象」+ leg40 第 14 条「线捆 + 拾遗」+ leg39 视角改写「你就是这个世界」+ 多主线并立 + 事件三源分工 + 新线三由来 + leg34 字段写回/带因复活/主动查 + leg33c 位置＝自由文本 + leg33「（推）」注解照旧剥 + leg32h 陈旧死链头过滤/并行 + 主角认领 + leg32g 待启用名单 + leg32e 新人出场权 + leg32d 七组必填/点名解锁 + leg32c 长跑接得上 + leg31 实体段行式表格 + leg29 波及上限告知面 + 分量退场 + leg25 c 七组形状）', () => {
+    // ★leg120（A3 关系网）：第 16 条入正文（关系变更通道）⇒ 版本号同步升位（旧值 v2-agenda-t1-25）。
+    // ★leg122（拆 `recalled`）：铁律 13 里那三句跟着拆（旧值 v2-agenda-t1-26）——**拆了注入却留着那三句，
+    //   就是叫模型照一栏不存在的输入办事**（leg102 §8.4 原话），所以提示词与接线必须**同批**动。
+    // ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.6）：聊天侧那一批 `dialogue` 型事件**先于世界步落账**
+    //   ⇒ 第 8 条要同批把"先正文、后世界"讲全（旧值 v2-agenda-t1-27）：
+    //     ① 本轮已落账的那些事**别再提一遍**；② 本轮已改定的格**不许再提 `entityUpdates`**；
+    //     ③ "被改过格 ≠ 出过手"（他仍可反应）——**拆了结构却不同批改提示词，就是叫模型去撞那两条结构**。
+    // ★★★leg128（用户令「把整个链路打通，包含多因点」· 设计 `docs/spec-context-master.md` §4）：
+    //   第 9 条补两条新面（旧值 v2-agenda-t1-28）：
+    //     ① **「故事线」怎么用**——它是地图（一行一条：根 → 头 → N 件 → 尾 → 轮次）；
+    //        看不出经过时**点名**（`lookupLines` 写行首那个根 id）⇒ 下一轮递那一条的原文；
+    //     ② **多因怎么写**——主因仍在 `source`（单亲＝划分的根据），其余几条写 `alsoCausedBy`
+    //        ⇒ 引擎并进 `links.up` ⇒ "好几件一起促成"成为**账上的事实**（不是读的人猜出来的）。
+    //   ★为什么必须同批改提示词：**结构上模型写不出来就永远不会出现**——契约只管"能写"，
+    //     提示词才管"知道要写"（同 leg39 那条教训：给名单不给资格＝名单空转）。
+    // ★★★leg137（用户两条令，第二版定稿）：
+    //   令①「**既然这次有了时间，就每次把提取到的时间当作事件的时间**」——★第一版做成"引擎顺延"，
+    //     被用户当场打回：「**要不然所有事件都是同一时刻发生的了**」（一轮能起十几件事，`每轮事件=12`）。
+    //   令②「**只要告诉时间流逝的长度和起始，事件的时间字段就由 llm 自己写**」⇒ 定稿：
+    //     **引擎递尺子（`时间` 那一栏）＋ 模型给每件事各自写 `newEvents[].at`**（旧值 v2-agenda-t1-29）。
+    //   ★为什么必须同批改提示词：契约只管"**能写**"（`world-step.schema.js` 那一格），
+    //     提示词才管"**知道要写**"——不给指路，那一格永远是空的（同 leg39 那条教训）。
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-30');
+    assert.ok(MAIN_PROMPT.includes('"at"'), '★必须教 `newEvents[].at` 那一格（不给指路＝白加）');
+    assert.ok(MAIN_PROMPT.includes('它们不必同时发生'),
+        '★★必须点破"一轮里好几件事不必同时发生"——这正是用户打回第一版的那个病');
+    assert.ok(MAIN_PROMPT.includes('"此刻"') && MAIN_PROMPT.includes('"此后又过了"'),
+        '★★必须把尺子那两格讲清（时间点 ＋ 相对量，分开摆）——否则模型没有基准，`at` 写不出来');
+    assert.ok(MAIN_PROMPT.includes('别把"此后又过了"当成"从此刻再往后"'),
+        '★★必须挡住那个真冲突（"三月后"的基准读反 ⇒ 会读成明年）——这是用户当场指出的那一处');
+    assert.ok(MAIN_PROMPT.includes('写不出就不写'),
+        '★必须允许"写不出就不写"（红线 2：空着就是空着，不许拿此刻或轮次号来凑）');
+    assert.ok(MAIN_PROMPT.includes('timeMark'), '★第 9 条必须点名那一格（不给指路＝白递）');
+    assert.ok(MAIN_PROMPT.includes('与它上一行同一个时间'),
+        '★★必须讲清那条读法（缺格 ＝ 与上一行同一时间，不是"账上没记"）——这是最容易被读歪的一格');
+    // ★两组新通道的形状必须在正文里教到（"形状里没有 ＝ 模型不会交"）。
+    assert.ok(MAIN_PROMPT.includes('"故事线"'), '★第 9 条必须点名「故事线」这一栏（它是地图，不指路＝白搬）');
+    assert.ok(MAIN_PROMPT.includes('"lookupLines"'), '★必须教"看不出经过就点名"那个通道（否则地图是死的）');
+    assert.ok(MAIN_PROMPT.includes('"alsoCausedBy"'), '★必须教多因怎么写（否则账上永远只有一条因）');
+    assert.ok(MAIN_PROMPT.includes('一条线只能有一个爹'), '★必须同时讲清"主因仍在 source"（单亲＝划分的根据，不许被多因带跑）');
+    // ★两组新通道的形状必须在正文里教到（"形状里没有 ＝ 模型不会交"）。
+    assert.ok(MAIN_PROMPT.includes('relationUpdates') && MAIN_PROMPT.includes('relationClosures'),
+        '★正文必须教这两组（第 16 条）');
+    // ★★**不给词表**：关系类型由模型自己说，正文只教形状与那条命门（必带因）——
+    //   给一张类型菜单就是用词表判语义（撞 ANCHOR §4.8 禁用清单），故把这条**意图本身**锁住。
+    assert.ok(MAIN_PROMPT.includes('没有词表'), '★正文必须明说"关系类型没有词表"（防它日后长成一张菜单）');
+    // ★红线 1 的告知面：玩家只能当"对谁"（别人对玩家的态度归世界；玩家自己的承诺只有玩家能立）。
+    assert.ok(MAIN_PROMPT.includes('只有玩家能立'), '★必须告诉模型：玩家自己的承诺只有玩家能立（红线 1）');
+    // ★★★leg113（B2 编年进包）：第 9 条必须给「纪事」那一栏指路。
+    //   为什么这条判据必须有：本仓 leg39 的教训——**给名单不给资格＝名单空转**；
+    //   包里多一栏而正文不提它 ⇒ 模型会把它当背景读一遍就过去（等于白搬）。
+    assert.ok(MAIN_PROMPT.includes('"纪事"'), '★第 9 条必须点名「纪事」这一栏（不给指路＝白搬）');
+    assert.ok(MAIN_PROMPT.includes('"纪事"就是你的记性'), '★要说清那一栏**是什么**（模型得知道它是往事、不是背景）');
+    assert.ok(MAIN_PROMPT.includes('先在这里找它的上游'), '★要说清**怎么用**（写之前先找来路——这才是治"接不上"的那一步）');
+    assert.ok(MAIN_PROMPT.includes('它是你写这一轮时要用的原料，不是前言'), '★要挡住"当背景通读一遍就过去"那种读法');
+    // ★分工必须写清（否则模型分不清"刚了结的几件"与"从头到尾的来路"——那是本仓治过的同类病）
+    assert.ok(MAIN_PROMPT.includes('recentClosedEvents 只有**最近了结的那几件**'), '★要与 recentClosedEvents 划清分工');
+    // ★★★同批改掉的旧话**不许回潮**：本笔落地后编年上下文**会**进包，
+    //   原来那句"编年只把它递过去，不递上下文"已经**不成立**了（留着就是两份真相）。
+    assert.ok(!MAIN_PROMPT.includes('编年只把它递过去，不递上下文'), '★那句旧话已不成立，不得回潮（正文侧只拿标题——但"纪事"这一栏确实进包）');
+    assert.ok(MAIN_PROMPT.includes('不递到正文侧'), '★改成如实的口径：正文侧只拿标题（点明"这一栏是给你自己看的"）');
     // ★★★leg95（用户令「让 llm 来决定何时结束」+「引入机械就一定要避免让代码去理解语义」）：第 15 条。
     //   为什么立它：`seed`/`state` 两种源**没有任何关闭路径**，涟漪的门①追到种子永远 false
     //   ⇒ 真账 A 局 16 条 / B 局 44 条**结构上永远闭不了**（推 40 轮只增不减）。机械判不了"这段讲完了没有"。
@@ -146,7 +206,10 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-23：★le
     // ★leg34（用户令「把字段写回和模型主动查的接口做了吧，这个功能能顺便解决死亡可以带因复活」）：
     //   铁律 13 的**语义**必须进模板（不只是版本号升位）——四条约束各锁一句，缺一句就是"模型不知道会撞闸"。
     assert.ok(MAIN_PROMPT.includes('人会长、会变'), '铁律 13 存在');
-    assert.ok(MAIN_PROMPT.includes('一轮最多 3 条'), '约束②：每轮条数上限写进提示词');
+    // ★★★leg112（D1 · 用户拍板「我认为直接取消上限」）：约束②从"每轮最多 3 条"**反过来**——
+    //   现在锁的是"**那句话不许回来**"（闸撤了、话没撤 = 模型照样自我设限 3 条，现象一模一样）。
+    assert.equal(MAIN_PROMPT.includes('一轮最多 3 条'), false, '★条数上限已撤（用户拍板）——这句话不许回潮');
+    assert.ok(MAIN_PROMPT.includes('三条硬规矩'), '★撤掉一款之后，"四条硬规矩"必须同批改成"三条"（否则自相矛盾）');
     // ★丙′ 案（用户拍板「location 可以放啊，只是给修改权而已」）：禁写面收窄到"引擎自己的账"——
     //   提示词必须跟新口径一致，否则模型要么白写（以为能改的没写）、要么不敢写（以为不能改的）
     assert.ok(MAIN_PROMPT.includes('这些栏不能改') && MAIN_PROMPT.includes('id / kind / name'),
@@ -163,14 +226,22 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-23：★le
     assert.ok(MAIN_PROMPT.includes('本回合新落账的事点到了他的名字') && MAIN_PROMPT.includes('复活只能挂在一件正在发生的事上'),
         '带因复活的口径进提示词（复活必须与"被重新点名"同轮）');
     assert.ok(MAIN_PROMPT.includes('departed'), '离场名册（departed）必须在提示词里交代——否则模型不知道可以带回谁');
-    // ★leg34 修正：⑥「使用时再查」的**实现方式**不是"模型主动问"，而是"出包前检索、当轮随包递"
-    //   （用户追问「…都是一轮解决的啊」）⇒ 提示词里要讲的是 `recalled` 这一段，且写明"书里没有的别编"。
-    assert.ok(MAIN_PROMPT.includes('recalled'), '检索注入段（recalled）必须进提示词——否则模型不知道那段是书里原文');
-    assert.ok(MAIN_PROMPT.includes('别自己编设定'), '配套口径：书里没有的细节不许编（引擎不发明事实）');
+    // ★★★leg122 反向锁：⑥「使用时再查」那条路（出包前检索、当轮随包递）**已拆**——
+    //   用户 2026-09-24 令「所以才需要拆」（它从来没检索到世界书，命中的全是记忆插件的聊天总结）。
+    //   ⇒ 提示词里**不许再提 `recalled`**：留着就是叫模型照一栏不存在的输入办事。
+    assert.equal(MAIN_PROMPT.includes('recalled'), false, '★检索注入已拆：提示词里不许再出现 recalled（拆了就别回来）');
+    assert.ok(MAIN_PROMPT.includes('别自己编设定'), '★红线留下：输入里没有的细节不许编（引擎不发明事实）');
+    assert.ok(MAIN_PROMPT.includes('引擎不发明事实，你也不发明'), '配套那句也要在（补上被拆掉的那半截指路）');
+    assert.equal(MAIN_PROMPT.includes('书里的细节不用你猜'), false, '★旧的"去看 recalled"那半截不许残留');
     assert.equal(MAIN_PROMPT.includes('fieldQueries'), false, '★"模型主动查"已撤，不许在提示词里回潮');
     // entityUpdates 是"可选的"要说清，免得模型以为七组之外还得硬凑
     assert.ok(MAIN_PROMPT.includes('这一组是**可选的**'), '可选性必须写明（缺席=本回合没有这件事）');
     assert.ok(OUTPUT_TEMPLATE.includes('"entityUpdates"'), '模板必须示范 entityUpdates 形状（模型照模板写）');
+    // ★leg120（A3 关系网）：两组新通道也必须在模板里示范——照 `lookupScales` 那条锁的口径
+    //   （"形状里没有 ＝ 模型不会交"）。★`relationClosures` 尤其要示范 `id` 这一格：
+    //   了结**只能引引擎发的号**，模型看不见形状就不会写。
+    assert.ok(OUTPUT_TEMPLATE.includes('"relationUpdates"'), '模板必须示范 relationUpdates 形状（模型照模板写）');
+    assert.ok(OUTPUT_TEMPLATE.includes('"relationClosures"'), '模板必须示范 relationClosures 形状（了结要引 id）');
     assert.equal(OUTPUT_TEMPLATE.includes('"fieldQueries"'), false, '模板里也不许再示范已撤的那一组');
     assert.ok(!OUTPUT_TEMPLATE.includes('"stateChanges"'), 'OUTPUT_TEMPLATE 不再示范 stateChanges');
     assert.ok(MAIN_PROMPT.includes('dialogueBook=对话依据册'), '依据册段说明在模板（K38 补差包 C 条）');

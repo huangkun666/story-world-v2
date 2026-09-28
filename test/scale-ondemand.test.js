@@ -17,16 +17,22 @@ import assert from 'node:assert/strict';
 import {
     buildScaleAnchor, buildScaleCatalog, buildScaleOnDemand, buildScaleTableIndex,
     sanitizeScaleRequests, buildEvolutionPack, SCALE_ONDEMAND_TOP,
+    SCALE_TABLE_TOP_PACK, TIER_TOP,
 } from '../src/pack.js';
 import { checkWorldStep } from '../src/check-step.js';
 
-// ── 夹具：自造的账（30 张表 ⇒ 必然发生"进包截断"，从而目录非空、查表有意义） ──
+// ── 夹具：自造的账 ──
+// ★★★leg135：表数 **30 → 70**（默认）。为什么（**这是前提，不是风格**）：
+//   本文件好几条用例的前提是"**夹具真的发生了进包截断**"（否则目录为空、查表没意义、
+//   键序断言也会跟着假绿）。旧值 30 是照旧上限 `SCALE_TABLE_TOP_PACK=16` 配的；
+//   上限抬到 **64**（用户令「全塞」）之后，30 张**一张都不截** ⇒ 那些前提当场失效（本笔实测当场红）。
+//   ⇒ 口径：**比上限多**（`SCALE_TABLE_TOP_PACK + 6`）⇒ 夹具永远越界，前提永远成立。
 const tableOf = (i) => ({
     名: `表${i}`, 源: `条目${i}`, 用途: '分级',
     档位: Array.from({ length: 3 }, (_, j) => ({ 档: `X${i}-${j}`, 注: `第${j}档` })),
     维度: (i % 5 === 0) ? [{ 名: `维${i}`, 范围: '0~9' }] : undefined,
 });
-const canonOf = (n = 30) => ({ powerScale: [], dims: [], rules: [], 刻度: Array.from({ length: n }, (_, i) => tableOf(i)) });
+const canonOf = (n = SCALE_TABLE_TOP_PACK + 6) => ({ powerScale: [], dims: [], rules: [], 刻度: Array.from({ length: n }, (_, i) => tableOf(i)) });
 const worldOf = (canon) => ({
     version: 1,
     context: {
@@ -69,15 +75,18 @@ test('★★leg64 查表：**账上没有的表名一律拒**，并如实列出�
 // ═══════════════ ② 取全那张表（与进包的"取前几档"相反） ═══════════════
 test('★★leg64 查表：点名要的给**整张**（进包块受预算只给前几档，补料块给全）', () => {
     // 造一张档位很多的表：进包会截，补料不会
-    const big = { 名: '长表', 源: '甲', 档位: Array.from({ length: 40 }, (_, j) => ({ 档: `X${j}`, 注: `第${j}档` })) };
+    // ★★★leg135：档数 **40 → `TIER_TOP + 50`**。旧值 40 是照旧上限 `TIER_TOP=24` 配的；
+    //   上限抬到 **300** 之后 40 档**一档都不截** ⇒ 这条用例的前提（"进包只给前几档"）当场失效。
+    const N_TIERS = TIER_TOP + 50;
+    const big = { 名: '长表', 源: '甲', 档位: Array.from({ length: N_TIERS }, (_, j) => ({ 档: `X${j}`, 注: `第${j}档` })) };
     const canon = { powerScale: [], dims: [], rules: [], 刻度: [big, ...Array.from({ length: 20 }, (_, i) => tableOf(i))] };
     const anchor = buildScaleAnchor(canon) || [];
     const inPack = (anchor.find((t) => t.表 === '长表')?.档位 || []).length;
     const got = buildScaleOnDemand(canon, ['长表']);
     assert.ok(got, '要得到');
     assert.equal(got.tables[0].表, '长表');
-    assert.ok(inPack < 40, `夹具确实发生了进包截断（进包 ${inPack} 档 / 共 40）`);
-    assert.equal(got.tables[0].档位.length, 40, '★补料给**整张**（40 档一条不少）');
+    assert.ok(inPack < N_TIERS, `夹具确实发生了进包截断（进包 ${inPack} 档 / 共 ${N_TIERS}）`);
+    assert.equal(got.tables[0].档位.length, N_TIERS, `★补料给**整张**（${N_TIERS} 档一条不少）`);
 });
 
 test('★leg64 查表：装不下就**整张不要**（不做"给半张"——半张尺比没有更坏）', () => {
@@ -98,7 +107,7 @@ test('★leg64 查表：一张都给不出 ⇒ null（键不出现，与"空着�
 
 // ═══════════════ ③ 全链路：模型点名 ⇒ 核过 ⇒ 同一轮进包 ═══════════════
 test('★★★leg64 查表全链路：`lookupScales` 点名 ⇒ 引擎核 ⇒ **同一轮**那张表的档位进包', () => {
-    const canon = canonOf(30);
+    const canon = canonOf();
     const world = worldOf(canon);
     const step = { ...emptyStep(), lookupScales: ['表7'] };
     const r = checkWorldStep(step, world);
@@ -119,20 +128,20 @@ test('★★★leg64 查表全链路：`lookupScales` 点名 ⇒ 引擎核 ⇒ *
 });
 
 test('★★leg64 查表全链路：**编的表名被拒**（整步不合法 ⇒ 不落账、不进包）', () => {
-    const world = worldOf(canonOf(30));
+    const world = worldOf(canonOf());
     const step = { ...emptyStep(), lookupScales: ['我编的表'] };
     const r = checkWorldStep(step, world);
     assert.equal(r.ok, false, '★编的表名要让整步被拒——"无源之物不入局"的表格版');
     assert.ok(r.errors.some((e) => e.includes('我编的表')), '错误里点名是哪个表名对不上');
     assert.equal(world.meta.scaleRequests, undefined, '★被拒的步**不留痕迹**（写账只在整步无错时发生）');
     // 就算硬把账写成编的名字，出包也不给（净化层最后一道）
-    const forced = worldOf(canonOf(30));
+    const forced = worldOf(canonOf());
     forced.meta.scaleRequests = ['我编的表'];
     assert.equal(buildEvolutionPack(forced, null).pack.setting.刻度补, undefined, '净化层再兜一道：编的名字给不出东西');
 });
 
 test('★leg64 查表全链路：不写 `lookupScales` ⇒ 与旧行为逐字节同（可选组）', () => {
-    const world = worldOf(canonOf(30));
+    const world = worldOf(canonOf());
     const r = checkWorldStep(emptyStep(), world);
     assert.equal(r.ok, true, '★缺席合法（可选组：本轮没要点表不是形状错误）');
     const built = buildEvolutionPack(world, null);
@@ -141,7 +150,7 @@ test('★leg64 查表全链路：不写 `lookupScales` ⇒ 与旧行为逐字节
 });
 
 test('★★leg64 查表：**一次性的**——每轮被覆盖，不跨轮囤积', () => {
-    const world = worldOf(canonOf(30));
+    const world = worldOf(canonOf());
     checkWorldStep({ ...emptyStep(), lookupScales: ['表7'] }, world);
     assert.deepEqual(world.meta.scaleRequests, ['表7']);
     // 下一轮没点名 ⇒ 覆盖成空 ⇒ 包里不再有补料（"包不是仓库"）

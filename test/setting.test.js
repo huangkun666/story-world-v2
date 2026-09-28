@@ -266,14 +266,18 @@ test('★★leg99：种子影响「乱象档位」吗——如实量一遍（本
 
 test('leg99：注释里那句"单一契约点"不许退化成谎话——同族逻辑的**住处必须被登记**', () => {
     // `src/setting.js` 的注释称本处是"单一契约点"，但仓里另有 **copy 一份**的同族解析器。
-    // 本笔**没动它们**（收敛成一处是模块图改动，另案），所以这里只钉住一件事：
-    // 那些复本**必须在注释里被登记**，免得下一任以为全仓真只有一处、于是改错了地方。
+    // 本笔**没动它**（收敛成一处是模块图改动，另案），所以这里只钉住一件事：
+    // 那处复本**必须在注释里被登记**，免得下一任以为全仓真只有一处、于是改错了地方。
     const setting = readSrc('../src/setting.js');
-    assert.match(setting, /memory-bridge\.js/, '★setting.js 必须登记 memory-bridge 那份复本（本笔未收敛，只登记）');
     assert.match(setting, /pack\.js/, '★setting.js 必须登记 pack.js 那两处复本');
-    // 反向自证：登记的那两处**确实存在**（否则那段注释就是空话）
-    const mem = readSrc('../src/memory-bridge.js');
+    // 反向自证：登记的那一处**确实存在**（否则那段注释就是空话）
     const pk = readSrc('../src/pack.js');
-    assert.match(mem, /split\('_'\)\.find\(/, '★memory-bridge 那份复本必须还在（注释指的是真事）');
     assert.match(pk, /split\('_'\)\[1\]/, '★pack.js 那两处必须还在（注释指的是真事）');
+    // ★★★leg125：原来登记的第二处复本 `src/memory-bridge.js` **已随那条通道整条删除**（用户令「直接删了」）。
+    //   ⇒ 这里**不再锁"注释里提不提它"**：留档本来就要提（本仓规矩：过去只标注、不修正），
+    //     而"登记一份**活着的**复本"这件事现在只剩 `pack.js` 一处（上一条锁着）。
+    //     真正能机械核的是**盘上还有没有那个文件**——删干净，别留死文件：
+    let gone = false;
+    try { readSrc('../src/memory-bridge.js'); } catch (_) { gone = true; }
+    assert.ok(gone, '★src/memory-bridge.js 必须真不在盘上（那条通道已整条删除）');
 });

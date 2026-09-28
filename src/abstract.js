@@ -36,6 +36,10 @@ import { bookFingerprint } from './fingerprint.js';
 import { PARAM_GEARS, PARAM_KEYS, normalizeParam } from './params.js';
 // leg24 片2：不再从 settle 借 ENTITY_ATTR_DEFAULT（该常量已删）——名册入账不预填数值
 import { computeWeight } from './weight.js';
+// ★★★leg141：**"原话必须真在书里"那把尺子只有一把**（leg139 立的，住在 `seed-roots.js`）。
+//   书里关系网要核"那句原话真在书文里"⇒ **借它，不另写一份**（本仓最贵的病是"同一件事两处口径"）。
+//   ★无环：`seed-roots.js` 只 import `./position.js`，而 `position.js` 零 import。
+import { longestBookRun, SEED_QUOTE_MIN_RUN } from './seed-roots.js';
 // ★★★leg71（丙案 · 切口 1+2）：两块**语义上不属于"抽取"**的东西切出去，本文件按新位置 import 回来。
 //   · `abstract-shape.js` = 提示词的**形状**（4 处 `...展开`，纯数据、零依赖）；
 //   · `abstract-tier.js` = **档位归一 + 法则分类**（leg61/62b/64 的成果，pack.js 与 render.js 真正的消费者）。
@@ -55,6 +59,9 @@ import {
     classifyRulesByKind, classifyRule, ruleKindsFromRaw, keyByPrefix, dedupeRules, pruneJunkRules,
     RULE_CLASSES, RULE_CLASS_NONE, RULE_CLASSES_PACK,
 } from './abstract-tier.js';
+// ★★★leg144：**并发发出去、按块号收回来**（用户令「在保证抽象质量的情况下优化抽象的时间」）。
+//   机制住 `parallel-run.js`（纯机制、不认识"块"）；**降不降并发这条策略住本文件**（下面 `degrade`）。
+import { runParallel } from './parallel-run.js';
 
 // leg26：`ENV_INIT_BASELINE`（0.5 基线）**已删除**——档位没有"基线值"，未定就是未定（空着就是空着）。
 export const TENSION_INIT_BASELINE = 0.5;  // 提案：无旧 tension 数字时的强度初值（随长跑校准批）
@@ -69,6 +76,25 @@ export const ROSTER_CHUNK_CHAR = 60000;    // 书名录分块尺寸（字符级�
 export const SETTING_CHUNK_CHAR = 30000;
 export const ROSTER_CHUNK_DEPTH = 4;       // 块失败对半拆递归深度上限（v1 同款；条目数 ≤1 时不再拆）
 // leg24 片1：ATTRS_BATCH_MAX / ROUND_BATCH_CHAR 随属性轮、关系轮一并删除（两轮已砍——书随时可查，不抄）
+
+// ★★★leg144（用户令「**在保证抽象质量的情况下优化抽象的时间**」）：**默认并发几路**。
+//   病（本文件自己记着的实测）：块是**一块一块排队**跑的 ⇒ 大荒 9 块 × 2 遍 + 起根 9 块 = **27 次调用**，
+//   每次 ≈90 秒 ⇒ **20–30 分钟**（`STATE.md` §3 登记的那条；`web/long-task.js` 文件头同款读数）。
+//   ★为什么是 3（**提案态**，照 §2.3 第 2 条"数字先报批"，本值经用户 2026-09-27 当场点头）：
+//     · 收益已经吃到大部分：27 次 ÷ 3 ≈ 9 轮 ⇒ **≈31 分钟 → ≈10 分钟**（4 路只再多省 1 分钟）；
+//     · 风险留在保守一侧：用户那条网关**串行时就会偶发 524**（本文件 leg61/leg62c 都留了现场），
+//       并发越高越可能把它惹毛——而 3 路的收益/风险比最好。
+//   ★它**不是硬闸**：调用方可以传别的值；而**遇到失败会当场退回 1 路**（见 `extractWorldSetting` 的 `degrade`）。
+//   ★起根（`seed-roots.js`）用**同一个数**（同一把尺子：它读的是同一本书、打的是同一条网关）。
+// ★★★leg144 改值 **3 → 2**（用户 2026-09-27 真机跑完之后点头定的；**这是"数字先报批"那一格**）：
+//   他那次跑通了（初始化 27 次调用 → **10 多分钟**，推算站住），但**同时丢了 4 块料**——
+//   控制台逐字：`抽取调用失败（输入 31631 字符 · 已花 0.8s）HTTP 429`，栈落在**起根**那一遍
+//   ⇒ **网关限流**（不是随机抖动）。他那道令的原话是「**在保证抽象质量的情况下**」
+//   ⇒ 默认值该站**保守**那一边：**2 路仍然约 2 倍速**（31 分钟 → 约 17 分钟），而网关压力小一档。
+//   ★★**并且它现在是个设置项**（用户原话：「**每个人使用的网关不同支持的并发度上限不同**」）——
+//     真源是 `web/model-channel.js` 的 `SETTINGS_NUM_RANGE.extractConcurrency`（住在**模型通道**那张卡里，
+//     因为并发度是**网关的属性**、不是世界的属性）；本常量只是**没填过时的出厂值**。
+export const EXTRACT_CONCURRENCY = 2;
 
 // ★leg60：**五件套 + 世情的形状：一处定义，两处用**。
 //   为什么必须共用（本仓吃过多次的洞）：两处各写一份 JSON 形状 ⇒ 改一处忘一处 ⇒
@@ -135,10 +161,22 @@ export function buildAbstractPrompt(sourceText) {
                                                                                                                           //             身份（名号+类别）是账本主键，照旧；书用标签声明的结构走照书办（零模型调用）
                 tension: TENSION_SHAPE,
                 env: ENV_SHAPE,
+                // ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来**」）：书里的关系网，小书这条路也要。
+                //   ★口径与 `buildRosterPrompt` 那份**逐字同源**（两条路只许有一把尺子）——
+                //     两处都写一遍是为了让提示词各自读得通，**判据咬的是"两条路都真有这一项"**。
+                relations: [
+                    { from: '谁（原文名，必须是上面名册里有的那个名号）', to: '对谁（原文名）', type: '书里怎么说的这种关系（原文措辞）', quote: '书里写着这层关系的那句话（照抄原文，60 字以内）' },
+                ],
             },
             null,
             2,
         ),
+        '★★**书里的关系**（`relations`）：原文里**明写着**的"谁跟谁是什么关系"，一并交出来（没有就省略这一项）。',
+        '  · 师徒 / 父子 / 结拜 / 婚配 / 主仆 / 辖属 / 上下级 / 盟友 / 仇敌 / 旧怨 …都算，**用书里自己的说法**当 `type`。',
+        '  · `from` / `to` 必须是上面名册里出现过的名号（原文名，逐字）；一条边只交一次。',
+        '  · ★**每一条都必须带 `quote`**（书里那句话，照抄原文）：**指不出那句话的，就不要交这一条**——',
+        '    引擎会把每句原话拿去书文里逐字核，**核不过的直接丢掉**。',
+        '  · ★**不许按常识推**：原文没写"他俩是师徒"，哪怕故事读起来像，也**不要交**。',
         '———— 设定原文如下 ————',
         sourceText,
     ].join('\n');
@@ -192,12 +230,25 @@ export function buildRosterPrompt(sourceText, declared = []) {
                     { name: '角色名', aliases: ['该角色的字/号/小名/别称（原文名，可省）'], kind: 'character', fields: { 所属: '所属势力名（原文）', 身份: '身份（原文）', 定位: '定位（原文）', 实力: '紧贴名号的档位标签原话（原文）' } },
                     { name: '势力名', aliases: ['同一势力的其他叫法（原文名，可省）'], kind: 'faction', fields: { 性质: '性质（原文）', 倾向: '倾向（原文）', 规模: '实力/规模原话（原文）' } },
                 ],
+                // ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
+                //   **书里的关系网**。★位置是刻意的：紧跟 `bookEntities`（两端就是上面那份名册里的名号），
+                //   又**排在 `tension`/`env` 之前**——`刻度` 必须在第一项、`判据` 必须紧跟 `rules` 这两条
+                //   位置锁（`test/abstract-chunk.test.js`）都不受影响。
+                relations: [
+                    { from: '谁（原文名，必须是上面名册里有的那个名号）', to: '对谁（原文名）', type: '书里怎么说的这种关系（原文措辞，如 辖属/统治者/义结金兰）', quote: '书里写着这层关系的那句话（照抄原文，60 字以内）' },
+                ],
                 tension: TENSION_SHAPE,
                 env: ENV_SHAPE,
             },
             null,
             2,
         ),
+        // ★★★leg141：**书里的关系网** —— 这一段的规矩（四句，全部机械可核）。
+        //   ★为什么每一条都必须带 `quote`：模型被问"谁跟谁是什么关系"时最容易**按常识编**
+        //     （"师徒""父子"在叙事里太顺了）。而**书里到底写没写**，引擎是能核的
+        //     ——`sanitizeBookRelations` 会把那句原话拿去书文里对（与起根同一把尺子），对不上就丢。
+        //   ★★为什么**只要书里明写的**：账本从书出发，然后由玩的过程推翻它（那是模拟的活）。
+        //     开局这一批只负责"把书里已经有的那张网摆上桌"，**不负责替作者补全**。
         '纪律：',
         '1. 只收原文名，不收泛指称呼；地名（洲/山/谷/城等）标 location。',
         '2. 纯种族的群体名号（如 人族、妖族、鬼族、魔族、灵族、仙族、神族等）不算势力——不要给它们标 faction；只有书中明述的组织（如某族的宗族、门派、联盟、国度）才是势力。',
@@ -230,6 +281,16 @@ export function buildRosterPrompt(sourceText, declared = []) {
         '   **一个都不许标 faction**，也不要为它们单独出一条——它们不是组织。',
         '   只有原文里**确有**一个具体组织（某族里的宗族、门派、联盟、国度、军团）才出 faction 条目，且用那个组织的名号。',
         '   违反第 2、7、8 条 = 这一轮作废，请自己检查后重新输出（宁缺勿造：多列一条假的比漏一条更糟）。',
+        // ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
+        //   **书里的关系网** —— 放在编号纪律**之后**（不动 1–8 的编号，也不挤在 JSON 形状与 `纪律：` 之间
+        //   ——`test/abstract-chunk.test.js` 拿那两处当"JSON 模板"的切片锚，插在中间会把锚打断）。
+        '★★**书里的关系**（`relations`，形状见上面 JSON 的最后一项）：这一段原文里**明写着**的"谁跟谁是什么关系"，一并交出来（没有就省略这一项）。',
+        '  · **只要原文写着的**：师徒 / 父子 / 结拜 / 婚配 / 主仆 / 辖属 / 上下级 / 盟友 / 仇敌 / 旧怨 …都算，**用书里自己的说法**当 `type`。',
+        '  · **`from` / `to` 必须是上面名册里出现过的名号**（原文名，逐字）——落账时引擎要拿它去账上认人。',
+        '  · ★**每一条都必须带 `quote`**：书里写着这层关系的**那句话，照抄原文**。**指不出那句话的，就不要交这一条。**',
+        '    引擎会把每句原话拿去书文里逐字核；**核不过的直接丢掉**（宁可少几条，也不要编）。',
+        '  · 一条边只交一次（不许正反各交一遍、也不许同一对人用两种说法各交一条）；通常**这一段里只有几条**。',
+        '  · ★**不许按常识推**：原文没写"他俩是师徒"，哪怕故事读起来像，也**不要交**——那是模拟开始以后的事。',
     ];
     // leg23 照书办①：书本段已用标签声明过的名号（如「<上界势力_蟠桃园>」）——清单给全，模型漏了也不丢。
     // 名号逐字取自原文；此处只作召回提示，类别仍按书标签在引擎侧定（不靠模型改判）。
@@ -1518,8 +1579,18 @@ export function sanitizeCanon(raw, { sourceText = '' } = {}) {
     }
     if (raw.entities !== undefined) present.push('attributes');
     if (Array.isArray(raw.bookEntities)) present.push('roster');
+    if (Array.isArray(raw.relations)) present.push('relations');
+    // ★★★leg141：**书里的关系网原样带出去**（块级只负责"别把它丢了"）。
+    //   ★为什么净化不在这里做：这道闸要两样东西——**全书书文**（核原话）与**定稿名册**（核两端在册），
+    //     而块级那一刻两样都还没有（名册要去重、要过照书办、要过全书级出处校验）。
+    //     ⇒ 与名册/设定面**同一条口径**：**块级只洗结构，出处全书级判一次**（收口在 `extractWorldSetting`）。
+    //   ★它挂在 `cleaned` 上、**不进 `canon`**：`canon` 是"五件套 + 名册 + 设定"那份定稿形状，
+    //     关系网在收口处净化完才写回 `canon.relations`（见 `canon` 装配那一行）。
+    const rawRelations = Array.isArray(raw.relations)
+        ? raw.relations.filter((x) => x && typeof x === 'object' && !Array.isArray(x))
+        : [];
     const shapeWarnings = errors.slice();
-    return { ok: true, canon, tension, env, errors, shapeWarnings, present };
+    return { ok: true, canon, tension, env, errors, shapeWarnings, present, rawRelations };
 }
 
 // ★leg60（交接第 3 件）：`compile` = **编译完整性读数**（来自 `init-source` 的声明面探测与自检）。
@@ -1650,9 +1721,15 @@ export function chunkRows(rows, maxChar) {    const chunks = [];
 //   - `ms`    = 该步真实耗时（回答"慢在哪块"，是本次改动的核心证据）
 //   - `ok=false` 必带 `error`（回答"失败的是哪块、为什么"）
 // 纪律：上报函数**抛错不许影响抽取**（观测面绝不能成为故障点）；返回串里附 `timing` 供诊断复述。
+// ★★★leg144：**计时改成"按段各记各的"**（`Map` 键 = `step#index`），不再用一个共享的 `last`。
+//   病（并发化当场会咬到）：旧法 `start` 往一个变量里写"这一刻"、`finish` 拿它算耗时——
+//   串行时天经地义，**并发时后发的那一段会把先发那一段的起点覆盖掉** ⇒ 报出来的 `ms`
+//   是别人的时间（而判据只验"`ms` 是个非负数"，**假绿**：数在、但数的是错的东西）。
+//   改成按段记账之后：并发与串行的 `ms` 语义完全一致（都是"这一段自己花了多久"）。
 function makeProgressLog(onProgress) {
     const events = [];
-    let last = null;
+    const startedAt = new Map();   // `step#index` → 该段开始的那一刻（并发下每段各记各的）
+    const keyOf = (step, index) => `${step}#${index}`;
     const report = (ev) => {
         events.push(ev);   // ★本地留档（返回值里的 timing.steps 就是它——诊断/界面都能复述"这次多少段"）
         try { if (typeof onProgress === 'function') onProgress(ev); } catch (_) {}
@@ -1661,16 +1738,18 @@ function makeProgressLog(onProgress) {
     return {
         events,
         start(step, index, count, chars) {
-            last = Date.now();
+            startedAt.set(keyOf(step, index), Date.now());
             return report({ step, phase: 'start', index, count, chars: Number(chars) || 0 });
         },
         finish(step, index, count, chars, ok, error) {
+            const k = keyOf(step, index);
+            const t0 = startedAt.has(k) ? startedAt.get(k) : null;
             const ev = {
                 step, phase: 'finish', index, count, chars: Number(chars) || 0,
-                ms: last == null ? null : Date.now() - last, ok: ok !== false,
+                ms: t0 == null ? null : Date.now() - t0, ok: ok !== false,
             };
             if (error) ev.error = String(error);
-            last = null;
+            startedAt.delete(k);
             return report(ev);
         },
     };
@@ -2041,7 +2120,94 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
 // ★leg60 `compileInfo`：**编译完整性读数**（声明面探测结果）——落进 `setting.frozen.compile`（见 assembleSetting）。
 // 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量；大书=**全条目分块多调用、一遍抽完**
 //   （leg60 起五件套与名册在同一批块里同生共死——旧法"五件套只读头 3 万"那一次已整条删除）。
-export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null, skipRoster = false }) {
+/**
+ * ★★★本笔（用户令「**这个通道绝对不能有**」）：**全书级出处校验**——一个名字要进账，必须
+ *   **真在书文里出现过**，或者**书自己把它当过名字**（题名面/声明面认过的那批）。
+ * ★为什么提成一个函数（而不是在每条路上各写一遍）：这道校验现在要落在**多处**——
+ *   大书路的 `bookEntities`（既有）与新补的 `settings`、以及**小书那条早返回的路**（另有一套装配）。
+ *   写两遍必然漂移，而"同一件事两处口径"正是本仓最贵的病。**一把尺子，几处调用。**
+ * ★它**只判名字在不在书里**（机械、零语义）：值那一侧的出处闸在 `sanitizeBookFields`，各管一段。
+ * @param {object[]} list 条目数组（形如 `{name, …}`）
+ * @param {object} opts `{ src, namedOk }`——`namedOk` = 书自己认过的名字集合（Set 或 null）
+ * @returns `{{kept: object[], dropped: string[]}}`——`dropped` 是名字数组，调用方据此**如实报数**
+ */
+function filterByBookEvidence(list, { src = '', namedOk = null } = {}) {
+    const kept = [];
+    const dropped = [];
+    for (const x of Array.isArray(list) ? list : []) {
+        const nm = String(x?.name ?? '').trim();
+        if (!nm) continue;                                   // 没名字的条目另有净化层管（这里不重复报）
+        if (src.includes(nm) || (namedOk && namedOk.has(nm))) kept.push(x); else dropped.push(nm);
+    }
+    return { kept, dropped };
+}
+
+/**
+ * ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
+ *   **书里关系网的净化闸**——把抽取那一轮给的边净化成"能落账的那几条"。
+ *
+ * ★它守的**只有一件事**：**这条边指得回书里**。四道机械判据（零语义、零词表、与任何一本书的方言无关）：
+ *   ① 形状：两端 ＋ 关系本身都要有（缺一端 = 这条边没有意义）；
+ *   ② 自己跟自己不成边（有向边的两端同名 ⇒ 无含义，与 `check-step` 那条 world-step 判据同口径）；
+ *   ③ **两端都在名册里**（书里没抽到的名号，落账时解析不出实体 id ⇒ 收了也白收，不如当场说清）；
+ *   ④ ★**那句原话必须真在书文里** —— 与起根（`seed-roots.js`）、名册/设定面（`filterByBookEvidence`）
+ *      **同一把尺子**（`longestBookRun` ＋ `SEED_QUOTE_MIN_RUN`），**不另立第二把**。
+ *
+ * ★★为什么"带原话"这道闸必须有，而且**只在抽取这一刻**：
+ *   模型被要求"列出书里谁跟谁是什么关系"时，最容易干的事就是**按常识编**
+ *   （"师徒""父子"这种关系在叙事里太顺了）。而**书里到底写没写**，引擎是**能机械核的**：
+ *   让每条边附上它依据的那句原话，核不过就丢 —— **编的边过不去**。
+ *   ★★核完之后**那句原话就丢掉、不落账**（用户 2026-09-27 当场裁的，见 `ssot.schema.js` 顶层
+ *     `relations` 那一段）：账上那张网**不按出处分家**，边上也不挂出处章。
+ *     出处闸的牙齿长在**这一刻**，不长在账本里。
+ *
+ * ★丢掉一律**留痕**（本仓那条"不许静默"）：返回 `dropped` 明细，调用方如实报数。
+ * @param {object} raw 模型给的关系数组（或 `{relations:[…]}`）
+ * @param {object} [opts] `{ sourceText, rosterNames }`——`sourceText` = **这一块的书文**（缺 ⇒ 核不了，如实记警告）
+ * @returns `{{kept: object[], dropped: {edge: string, why: string}[], warnings: string[]}}`
+ */
+export function sanitizeBookRelations(raw, { sourceText = '', rosterNames = null } = {}) {
+    const warnings = [];
+    const list = Array.isArray(raw?.relations) ? raw.relations : (Array.isArray(raw) ? raw : []);
+    if (!list.length) return { kept: [], dropped: [], warnings };
+    const bookText = String(sourceText ?? '');
+    if (!bookText) warnings.push('书里关系网：没有书文可比 ⇒ 本次**没有核对**"原话是否真在书里"（调用方要传 sourceText）');
+    const seen = new Set();
+    const kept = [];
+    const dropped = [];
+    for (const [i, it] of list.entries()) {
+        if (!it || typeof it !== 'object' || Array.isArray(it)) { dropped.push({ edge: `relations[${i}]`, why: '不是对象' }); continue; }
+        const from = String(it.from ?? '').trim();
+        const to = String(it.to ?? '').trim();
+        const type = String(it.type ?? '').trim();
+        const quote = String(it.quote ?? '').trim();
+        const edge = `${from || '?'} → ${to || '?'}（${type || '?'}）`;
+        if (!from || !to || !type) { dropped.push({ edge, why: '缺一端或缺"是什么关系"' }); continue; }
+        if (from === to) { dropped.push({ edge, why: '两端是同一个名号（自己跟自己不成边）' }); continue; }
+        if (rosterNames && (!rosterNames.has(from) || !rosterNames.has(to))) {
+            dropped.push({ edge, why: '端点不在名册里（落账时解析不出实体）' });
+            continue;
+        }
+        if (!quote) { dropped.push({ edge, why: '没带书里那句原话（指不回书里）' }); continue; }
+        // ★★出处闸：与起根**逐字同一把尺子**（跳字免疫：模型抄书时常用省略号）
+        if (bookText) {
+            const run = longestBookRun(quote, bookText);
+            const need = Math.min(quote.replace(/[\s\u2026.]+/g, '').length, SEED_QUOTE_MIN_RUN);
+            if (run < need) {
+                dropped.push({ edge, why: `那句原话在书文里对不上（最长只连续对得上 ${run} 字，要 ≥ ${need}）——疑似编造` });
+                continue;
+            }
+        }
+        const key = `${from}\u0000${to}\u0000${type}`;
+        if (seen.has(key)) continue;          // 跨块/同块重复：同一条边只收一次（不是错，静默并）
+        seen.add(key);
+        kept.push({ from, to, type, quote });
+    }
+    if (dropped.length) warnings.push(`书里关系网：${dropped.length} 条没通过出处闸（已弃，明细见 dropped）`);
+    return { kept, dropped, warnings };
+}
+
+export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null, skipRoster = false, concurrency = 1 }) {
     const titled = (Array.isArray(extraDeclared) ? extraDeclared : [])
         .map((d) => ({ name: String(d?.name ?? '').trim() }))
         .filter((d) => d.name);
@@ -2089,12 +2255,39 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
             };
         }
         errors.push(...(r.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
-        const applied = applyDeclaredToRoster(r.cleaned.canon.bookEntities, mergeDeclared(smallDeclared, titled));
+        // ★★★本笔：**小书这条路是另一次装配**（早返回，见上面那条 `srcLen <= CANON_SRC_CHAR`）
+        //   ⇒ 设定面这道校验必须**同样落在这里**，否则"同一个规矩"会因书大书小而不同
+        //   （本仓最贵的病：规矩只长在一条路上，而判据恰好测的是另一条）。
+        //   ★如实登记一处**仍然不对称**的地方（本笔没动它，留给用户拍板）：小书这条路的
+        //     `bookEntities` **至今没有**名字级出处校验（大书那条有）——它是既有口径，不属本次授权范围。
+        const smallSettingsEv = filterByBookEvidence(r.cleaned.canon.settings, { src, namedOk: titledNames });
+        if (smallSettingsEv.dropped.length) {
+            errors.push(`设定面全书级出处校验：${smallSettingsEv.dropped.length} 条名字原文未出现（疑似编造或外来内容，已弃）`);
+        }
+        const smallCanon = { ...r.cleaned.canon, settings: smallSettingsEv.kept };
+        const applied = applyDeclaredToRoster(smallCanon.bookEntities, mergeDeclared(smallDeclared, titled));
         if (smallDeclared.length || titled.length) {
             errors.push(`照书办: 声明面 ${smallDeclared.length + titled.length} 个名号（标签 ${smallDeclared.length} / 题名 ${titled.length}；补入册 ${applied.added} / 改判类别 ${applied.fixed}）`);
         }
-        const setting = assembleSetting({ canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp, compile: compileInfo });
-        if (cache) cache.set(fp, { canon: r.cleaned.canon, tension: r.cleaned.tension, env: r.cleaned.env }, stamp);
+        // ★★★leg141：**书里关系网在小书这条路上也要净化**（同一条规矩，不许因书短就换）——
+        //   与上面那条"设定面校验必须同样落在这里"是**同一条纪律**（本仓最贵的病：规矩只长在一条路上）。
+        //   ★名册用 `applyDeclaredToRoster` 之后的 `smallCanon.bookEntities`（照书办补进来的名号也算数）。
+        const smallRelEv = sanitizeBookRelations(r.cleaned.rawRelations, {
+            sourceText: src,
+            rosterNames: new Set(smallCanon.bookEntities.map((b) => b.name)),
+        });
+        if (smallRelEv.dropped.length) {
+            errors.push(`书里关系网出处闸：${smallRelEv.dropped.length} 条已弃（原话对不上书文 / 端点不在名册 / 形状不全）`
+                + `——明细：${smallRelEv.dropped.slice(0, 5).map((d) => `${d.edge}〔${d.why}〕`).join('；')}${smallRelEv.dropped.length > 5 ? ' …' : ''}`);
+        }
+        if (smallRelEv.kept.length) {
+            errors.push(`书里关系网：收下 ${smallRelEv.kept.length} 条边（两端都在名册里，且每条的原文原话都核过）`);
+            smallCanon.relations = smallRelEv.kept;
+        } else {
+            delete smallCanon.relations;      // 没边 ⇒ 不留这个键（空着就是空着）
+        }
+        const setting = assembleSetting({ canon: smallCanon, tension: r.cleaned.tension, env: r.cleaned.env, legacyTension, fingerprint: fp, extractedAt: stamp, compile: compileInfo });
+        if (cache) cache.set(fp, { canon: smallCanon, tension: r.cleaned.tension, env: r.cleaned.env }, stamp);
         return {
             ok: true, cached: false, fingerprint: fp, setting, errors,
             timing: timingOf('small', progress.events.filter((e) => e.phase === 'finish').length, srcLen),
@@ -2149,9 +2342,20 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     //   等块全部跑完再**一次性**去重——不能在循环里就去重：那时后面块的别名还没出现，
     //   先到先得会把"正名条目"当重复丢掉（块顺序只是书序，不代表哪个是正名）。
     const rawBookNames = [];
+    // ★★★leg141：**书里关系网**的原样堆（与 `rawBookNames` 同一个治法：各块先堆着，收口时一次净化）。
+    //   ★为什么与名册**同一个循环**（而不是另开一轮）：那一轮已经在读这一段书文，
+    //     关系网只是"同一段原文里另外一件事"——**多问一句，不多花一次调用**（一次调用就是几十秒与真钱）。
+    //   ⚠如实登记风险（leg61 的血）：往名册轮里塞东西**可能摊薄名册产量**（实测 504→106 那次就是这么来的）。
+    //     本笔的判断：属性是"每个实体一份"（几百条，真会抢输出），而关系网一块通常只有几条
+    //     ⇒ 摊薄量级差两个数量级。**但这一条是推理、不是实测** —— 真模型上量过才作数（见交接的"没做到"）。
+    const rawRelationsAll = [];
     const probeState = { failures: 0 };
     let okChunks = 0;
-    const failLog = [];                     // leg27：失败明细（给界面显形用，不是只报一个数字）
+    // ★★★leg144：原来这里有一个**共用的** `failLog`（"失败明细，给界面显形用"），两遍都往里推、
+    //   再取 `failLog[length - 1]` 当"这一块为什么失败"。**并发化当场把它变成错的**：
+    //   最后一条可能是**别的块**的失败原因 ⇒ 会把 A 块的病因写到 B 块头上（而界面上看不出来）。
+    //   ⇒ 删掉这个共用数组，改成**每块自己一个 `taskLog`**（见下面两个 worker）。
+    //     取"最后一条"的语义一个字没变（`tryRosterChunk` 一次失败最多推一条），只是**各归各的**。
     let settingChunks = 0;                  // leg61：设定/属性遍成功的块数
     // ★leg63：`settingEarlyStop`（"已收够就止损"跳过的块数）**已删**——它是 leg61 那条止损判据的遗留，
     //   而那条判据在 leg61 就改成了"第 2..N 块换提示词"（见 `buildAttrsOnlyPrompt` 头注），
@@ -2168,26 +2372,53 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     //     ⇒ 重抽设定时再抽一遍名册 = 把 N 次调用烧在一个**无人消费**的产物上。
     //     代价（如实说）：`bookEntities` 这次不更新 ⇒ 书里**新增**的名号不会入册；要补名册就走「初始化」。
     //     调用数：每块 2 次 → **每块 1 次**（大荒 9 块：18 次 → 9 次）。
-    for (const [ci, chunk] of (skipRoster ? [] : chunks).entries()) {
+    // ★★★leg144：**并发度是可变的**（`concurrency` 参数 ⊕ 一条"失败即退回串行"的降级）。
+    //   为什么要有降级（这是并发这一刀的安全带）：并发是**拿网关的宽容换时间**。
+    //   网关一旦推回（429 限流 / 524 / 5xx / 链路断），继续并发只会把同一件事重演一遍、
+    //   并把更多块一起赔进去。⇒ 只要有**任何一块**没成，剩下的活儿**当场退回 1 路**。
+    //   ★这样最坏情况 = **与改造前逐字一样**（退回串行把剩下的跑完），只是白试了一轮并发——不会更糟。
+    //   ★它**不**做什么（别误读）：不改变"失败那一块怎么办"（照旧跳过降级、照旧进 `errors`），
+    //     不重试、不拆半（那两条的判据在 `tryRosterChunk` 里，一个字没动），也不动合并与出处闸。
+    let degraded = false;
+    const degrade = () => { degraded = true; };
+    const concurrencyNow = () => (degraded ? 1 : concurrency);
+    // ★★★leg144：**并发发出去、按块号收回来**（机制住 `parallel-run.js`，文件头有完整理由）。
+    //   ★★为什么 worker **只交结果、不直接往 `rawCanons` / `errors` 里写**（旧串行写法是直接写的）：
+    //     并发时"谁先回来谁先写" ⇒ 累加次序变成**完成次序** ⇒ 下游两条定稿口径会**悄悄换人**——
+    //     `dedupeRoster`「每组取**最先出现**的叫法当 `name`」、`mergeCanonChunks`「**首块优先**定张力与环境」。
+    //     ⇒ 累加一律挪到下面那个**按块序重放**的 for 里做 ⇒ 产物与串行时**逐字相同**。
+    //   ★每个 worker 拿**自己的** `taskLog`（旧法共用一个 `failLog` 再取"最后一条"——
+    //     并发下那条可能是**别的块**的失败原因，会把 A 块的病因写到 B 块头上）。
+    const rosterResults = await runParallel(skipRoster ? [] : chunks, concurrencyNow, async (chunk, ci) => {
         const chunkChars = Array.from(chunk).length;
+        const taskLog = [];
         progress.start('chunk', ci + 1, chunks.length, chunkChars);   // ★"正在抽第 x/N 块"——进入即出声
-        const { cleaned } = await tryRosterChunk(extract, chunk, 0, probeState, { declared, onProgress, progressLog: failLog });
+        const { cleaned } = await tryRosterChunk(extract, chunk, 0, probeState, { declared, onProgress, progressLog: taskLog });
         if (!cleaned) {
+            degrade();   // ★失败即退回串行（见上）
+            const last = taskLog[taskLog.length - 1];
+            const why = last?.kind === 'timeout' ? '调用超时（已止损跳过，不再拆半/重试）' : (last?.error || '未知原因');
+            progress.finish('chunk', ci + 1, chunks.length, chunkChars, false, why);
+            return { cleaned: null, chunkChars, why };
+        }
+        progress.finish('chunk', ci + 1, chunks.length, chunkChars, true);
+        return { cleaned, chunkChars };
+    });
+    // 按块序重放（★这一段就是"次序"的唯一出处——上面的并发不许自己往账里写）
+    for (const [ci, res] of rosterResults.entries()) {
+        if (!res) continue;
+        if (!res.cleaned) {
             // ★leg27（F3 失败显形）：旧法只说"块抽取失败"——**丢了多少、丢的是哪块、为什么**全不说，
             //   而块级失败是**静默丢数据**（真账实测「大虞」横跨第 1/2/3/5 块，丢一块就缺一批实体）。
             //   现在：块号 + 字符数 + 原因一并上报，errors 里也带块号（界面/诊断都能指认）。
-            const last = failLog[failLog.length - 1];
-            const why = last?.kind === 'timeout' ? '调用超时（已止损跳过，不再拆半/重试）' : (last?.error || '未知原因');
-            progress.finish('chunk', ci + 1, chunks.length, chunkChars, false, why);
-            // ★leg60：文案改口——这一块丢的**不只是名号**，还有这一块的设定（档位表/体系/史略）
-            errors.push(`第 ${ci + 1}/${chunks.length} 块抽取失败（${chunkChars} 字符，已跳过降级，其余块照常）：${why}——该块的名号与设定本次缺失，网络/模型恢复后「重新抽取」可补回`);
+            errors.push(`第 ${ci + 1}/${chunks.length} 块抽取失败（${res.chunkChars} 字符，已跳过降级，其余块照常）：${res.why}——该块的名号与设定本次缺失，网络/模型恢复后「重新抽取」可补回`);
             continue;
         }
         okChunks += 1;
-        progress.finish('chunk', ci + 1, chunks.length, chunkChars, true);
-        errors.push(...(cleaned.shapeWarnings || []));   // leg24 片5：块级净化坏项上报（如 env 非法值弃键）
-        rawCanons.push(cleaned);                          // ★leg60：五件套也在块里（见上方 leg60 头注）
-        for (const b of cleaned.canon.bookEntities) rawBookNames.push(b);
+        errors.push(...(res.cleaned.shapeWarnings || []));   // leg24 片5：块级净化坏项上报（如 env 非法值弃键）
+        rawCanons.push(res.cleaned);                          // ★leg60：五件套也在块里（见上方 leg60 头注）
+        for (const b of res.cleaned.canon.bookEntities) rawBookNames.push(b);
+        for (const x of (res.cleaned.rawRelations || [])) rawRelationsAll.push(x);   // ★leg141：书里关系网（收口处净化）
     }
     // ★★★leg61 第二遍：**属性 + 设定**（不问名号）。
     //   ★定稿形态（踩过两次坑之后，见 `buildAttrsOnlyPrompt` 头注）：
@@ -2205,27 +2436,42 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const settingPass = (t, isFirst) => (skipRoster
         ? buildSettingOnlyPrompt(t, declared)
         : (isFirst ? buildSettingPrompt(t, declared) : buildAttrsOnlyPrompt(t, declared)));
-    for (const [ci, chunk] of chunks.entries()) {
+    // ★★★leg144：**这一遍也并发**（同一把尺子、同一个降级开关）。
+    //   ★为什么两遍各自成池（而不是把 2N 件活儿丢进一个池）：两遍的**提示词不同**、
+    //     且名册遍的 `declared` 召回清单只喂它自己那一遍（见上方 leg61 头注）；
+    //     分成两个池之后，两遍的边界与串行时**逐字一致** ⇒ 产物次序也逐字一致。
+    //     代价如实说：池与池之间不重叠（名册遍最后几块跑完时，这一遍还没开始）——
+    //     换来的是"次序与串行完全相同"这条保证，值。
+    const settingResults = await runParallel(chunks, concurrencyNow, async (chunk, ci) => {
         const chunkChars = Array.from(chunk).length;
         const first = ci === 0;
+        const taskLog = [];
         progress.start('canon', ci + 1, chunks.length, chunkChars);
         const r2 = await tryRosterChunk(extract, chunk, 0, probeState, {
-            declared, onProgress, progressLog: failLog,
+            declared, onProgress, progressLog: taskLog,
             buildPrompt: (t) => settingPass(t, first),
         });
         if (!r2.cleaned) {
-            const last = failLog[failLog.length - 1];
+            degrade();   // ★失败即退回串行（与名册遍同一个开关）
+            const last = taskLog[taskLog.length - 1];
             const why = last?.kind === 'timeout' ? '调用超时（已止损跳过）' : (last?.error || '未知原因');
             progress.finish('canon', ci + 1, chunks.length, chunkChars, false, why);
-            errors.push(`第 ${ci + 1}/${chunks.length} 块**属性+设定遍**失败（${chunkChars} 字符，名册遍不受影响）：${why}`);
+            return { cleaned: null, chunkChars, why };
+        }
+        progress.finish('canon', ci + 1, chunks.length, chunkChars, true);
+        return { cleaned: r2.cleaned, chunkChars };
+    });
+    for (const [ci, res] of settingResults.entries()) {
+        if (!res) continue;
+        if (!res.cleaned) {
+            errors.push(`第 ${ci + 1}/${chunks.length} 块**属性+设定遍**失败（${res.chunkChars} 字符，名册遍不受影响）：${res.why}`);
             continue;
         }
         settingChunks += 1;
-        progress.finish('canon', ci + 1, chunks.length, chunkChars, true);
-        errors.push(...(r2.cleaned.shapeWarnings || []));
+        errors.push(...(res.cleaned.shapeWarnings || []));
         // ★leg61：属性遍交的条目**并入名册**（同名归并、不新造实体）——它们的 fields 正是这一遍的产出。
-        for (const b of (r2.cleaned.canon.settings || [])) rawSettingEnts.push(b);
-        rawCanons.push(r2.cleaned);
+        for (const b of (res.cleaned.canon.settings || [])) rawSettingEnts.push(b);
+        rawCanons.push(res.cleaned);
     }
     if (settingChunks) {
         errors.push(`${skipRoster ? '设定遍' : '属性+设定遍'}：成功 ${settingChunks} 块`);
@@ -2257,16 +2503,46 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     // ★leg60：**"全书"要把题名面算进去**——书的正文明面上没提到某个名号、而**它就是一条条目的题名**时，
     //   它仍然是"书里有据"的（三国实测：`控制器_张辽`/`张辽正史` 里的 `张辽` 正是以此入册的）。
     //   这不是放宽：能进 `titledNames` 的名字，判据是"**它被作者当名字用过**（是某条条目的 key）"。
-    const before = bookNames.length;
-    const finalNames = bookNames.filter((b) => src.includes(b.name) || titledNames.has(b.name));
-    if (finalNames.length < before) {
-        errors.push(`书名录全书级出处校验：${before - finalNames.length} 个名号原文未出现（疑似编造，已弃）`);
+    const rosterEv = filterByBookEvidence(bookNames, { src, namedOk: titledNames });
+    const finalNames = rosterEv.kept;
+    if (rosterEv.dropped.length) {
+        errors.push(`书名录全书级出处校验：${rosterEv.dropped.length} 个名号原文未出现（疑似编造，已弃）`);
+    }
+
+    // ★★★本笔（用户令「这个通道绝对不能有」）：**设定面也要过同一道出处校验**——它此前是**绕过承重墙的一条缝**。
+    //   病（真账实测，逐字对过）：`canon.settings` 622 个名字里**有 1 个在书文里一个字都没有**
+    //   （`玉爪儿`，`{kind:'character', fields:{身份:'灵兽'}}`）——它是**被别的扩展塞进那次调用里的记忆**
+    //   （通道在 HTTP 层，见 `transport-http.js` 的长注）。
+    //   `bookEntities` 上一行就有这道校验，而 `settings` 从来没有 ⇒ 外来内容可以从这一格**落进账**。
+    //   真账读数（同一份账、同一把尺子）：bookEntities 723 个名字 **0 个**对不上；
+    //   settings 622 个名字 **1 个**对不上 —— 就是它。
+    //   ★口径与名册**逐字相同**（同一个 `filterByBookEvidence`），不新立第二把尺子。
+    const settingsEv = filterByBookEvidence(canonBase.canon.settings, { src, namedOk: titledNames });
+    if (settingsEv.dropped.length) {
+        errors.push(`设定面全书级出处校验：${settingsEv.dropped.length} 条名字原文未出现（疑似编造或外来内容，已弃）`);
     }
 
     // leg24 片1（停抄书）：关系轮/属性轮/出处细节校验三处调用点一并删除——名册定稿即为交付态。
     //   ★leg62c：`skipRoster` 时名册遍没跑 ⇒ `finalNames` 为空 ⇒ 这里就是**空名册**
     //     （接线层必须保住账上那份，否则一换设定就把名册抹空——见 web 的 reextract-setting）。
-    const canon = { ...canonBase.canon, bookEntities: finalNames };
+    // ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
+    //   **书里关系网的收口处** —— 到这一行，两样东西才齐：**全书书文**（`src`，核原话）
+    //   与**定稿名册**（`finalNames`，核两端在册）。⇒ 与名册/设定面同一条口径：**块级只洗结构，
+    //   出处全书级判一次**（同一个治法，不新立第二条路）。
+    //   ★`skipRoster` 时名册遍整遍没跑 ⇒ `rawRelationsAll` 恒空 ⇒ 本项**自然缺席**
+    //     （与 `bookEntities` 同命：重抽设定不重抽名册，也就不重抽关系网——要补走「初始化」）。
+    const relEv = sanitizeBookRelations(rawRelationsAll, {
+        sourceText: src,
+        rosterNames: new Set(finalNames.map((b) => b.name)),
+    });
+    if (relEv.dropped.length) {
+        errors.push(`书里关系网出处闸：${relEv.dropped.length} 条已弃（原话对不上书文 / 端点不在名册 / 形状不全）`
+            + `——明细：${relEv.dropped.slice(0, 5).map((d) => `${d.edge}〔${d.why}〕`).join('；')}${relEv.dropped.length > 5 ? ' …' : ''}`);
+    }
+    if (relEv.kept.length) errors.push(`书里关系网：收下 ${relEv.kept.length} 条边（两端都在名册里，且每条的原文原话都核过）`);
+    const canon = { ...canonBase.canon, bookEntities: finalNames, settings: settingsEv.kept };
+    // ★只在真有边时才写这个键（空着就是空着：老账与"这本书没有可抽的关系"两种情形逐字节同形）
+    if (relEv.kept.length) canon.relations = relEv.kept;
     // ★leg60：大小书合并后**没有"设定轮"这个独立失败面**了——设定与名册同一批调用同生共死，
     //   所以判据从「canonR 失败 ∧ 一块都没成 ∧ 一个名号都没有」收成「一块都没成 ∧ 一个名号都没有」。
     // ★★leg62c：`skipRoster` 时**名册遍整遍不跑** ⇒ `okChunks` 恒为 0、`finalNames` 恒为空
@@ -2981,6 +3257,73 @@ export function seedBookEntities(ssot, { entries = null } = {}) {
     if (fieldsAttached) out.fieldsAttached = fieldsAttached;
     if (parentVerified) out.parentVerified = parentVerified;
     if (parentDemoted) out.parentDemoted = parentDemoted;
+    return out;
+}
+
+/**
+ * ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
+ *   **把书里那张关系网种进账** —— `canon.relations`（名号 → 名号）⇒ `ssot.relations`（实体 id → 实体 id）。
+ *
+ * ★它是 `seedBookEntities` 的**下游**（必须后跑）：两端要拿**实体账上的 id** 去认人，
+ *   而实体是 `seedBookEntities` 建的。⇒ 名号解析走**账上现成的 `entities[].name`**
+ *   （不另建一张名册索引——那会是第二个家）。解析不出来的（书里抽到了但没入池：地名 / 被折叠 /
+ *   名册那一次没抽到）一律**丢 ＋ 留痕**（本仓"不许静默"）。
+ *
+ * ★落账形状（与玩出来的边**逐字同形**，只在 `cause` 那一格不同）：
+ *   `{ id, from, to, type, tick: 0 }` —— **没有 `cause`**。用户 2026-09-27 当场裁的口径：
+ *   书里就是这么写的，它的来路是"**书随时可查**"；账本**不记出处、也不给书里的边任何特殊权威**
+ *   （权威能被玩的过程推翻，那正是模拟本身）。详见 `src/schemas/ssot.schema.js` 顶层 `relations` 那一段。
+ *   ★`tick: 0` = **开局就在的**，不是第几轮长出来的；发号 `rel_0_<n>` 一眼看得出是开局那批。
+ *
+ * ★**幂等**（硬要求：`web/index.js` 在"建世界"与"每次载入"两处都会跑，两处同一条路径）：
+ *   按 `(from, to, type)` 去重——账上已有的边不重复种；**不删任何东西**（玩出来的边一个字不动）。
+ * ★**零扰动**：一条边都没有 ⇒ **连 `relations` 这个键都不建**（照 leg120 那条 R3 判据的口径）。
+ * @param {object} ssot 世界账（就地改）
+ * @param {object} [opts] `{ edges }`——不给就读 `context.setting.frozen.canon.relations`（与 `seedBookEntities` 同源）
+ * @returns `{{seeded: number, skipped: number, dropped: string[], warnings: string[]}}`
+ */
+export function seedBookRelations(ssot, { edges = null } = {}) {
+    const bookEdges = Array.isArray(edges) ? edges : (ssot?.context?.setting?.frozen?.canon?.relations || []);
+    const out = { seeded: 0, skipped: 0, dropped: [], warnings: [] };
+    if (!ssot || typeof ssot !== 'object') return out;
+    if (!Array.isArray(bookEdges) || !bookEdges.length) return out;
+    const byName = new Map();
+    for (const e of (Array.isArray(ssot.entities) ? ssot.entities : [])) {
+        const nm = String(e?.name ?? '').trim();
+        if (nm && !byName.has(nm)) byName.set(nm, e.id);
+    }
+    const have = new Set((Array.isArray(ssot.relations) ? ssot.relations : [])
+        .map((r) => `${r?.from}\u0000${r?.to}\u0000${r?.type}`));
+    // 开局那批的序号：从账上已有的 `rel_0_*` 往后接（幂等重跑不许撞号）
+    let seq = 0;
+    for (const r of (Array.isArray(ssot.relations) ? ssot.relations : [])) {
+        const m = /^rel_0_(\d+)$/.exec(String(r?.id ?? ''));
+        if (m) seq = Math.max(seq, Number(m[1]));
+    }
+    for (const it of bookEdges) {
+        const fromName = String(it?.from ?? '').trim();
+        const toName = String(it?.to ?? '').trim();
+        const type = String(it?.type ?? '').trim();
+        if (!fromName || !toName || !type) { out.dropped.push(`${fromName || '?'} → ${toName || '?'}（形状不全）`); continue; }
+        const from = byName.get(fromName);
+        const to = byName.get(toName);
+        if (!from || !to) {
+            out.dropped.push(`${fromName} → ${toName}（${type}）〔${!from ? `「${fromName}」不在实体账上` : `「${toName}」不在实体账上`}〕`);
+            continue;
+        }
+        if (from === to) { out.dropped.push(`${fromName} → ${toName}（两端解析成了同一个实体）`); continue; }
+        const key = `${from}\u0000${to}\u0000${type}`;
+        if (have.has(key)) { out.skipped += 1; continue; }     // 已经种过（幂等重跑走这一支）
+        have.add(key);
+        seq += 1;
+        ssot.relations = ssot.relations || [];
+        ssot.relations.push({ id: `rel_0_${seq}`, from, to, type, tick: 0 });
+        out.seeded += 1;
+    }
+    if (out.dropped.length) {
+        out.warnings.push(`书里关系网落账：${out.dropped.length} 条端点认不出（已弃）——明细：`
+            + `${out.dropped.slice(0, 5).join('；')}${out.dropped.length > 5 ? ' …' : ''}`);
+    }
     return out;
 }
 

@@ -37,6 +37,20 @@ export function newEventIdsOf(step, tick) {
     return (step?.newEvents || []).map((_, i) => `ev_${tick}_${i + 1}`);
 }
 
+/** ★★★leg123（细案 `docs/spec-tag-granularity.md`）：**本轮事件已经用到的最大的位次**（本轮一件都没有 ⇒ `0`）。
+ *  ★为什么需要它：聊天侧那批 `dialogue` 事件**先于**世界步落账（见 `settle.js` 的 `registerDialogueFacts`），
+ *    它们也占 `ev_<轮次>_<位次>` 这个号段 ⇒ 后发号的必须知道"这个号段已经用到哪儿了"，否则**撞号**。
+ *  ★只数**本轮**（同一个 tick 前缀）的号；`ev_seed_*` 这类不匹配正则 ⇒ 天然不算在内；
+ *    老路径（不传它）行为**逐字节不变**。 */
+export function maxEventOrdinal(world, tick) {
+    let max = 0;
+    for (const e of world?.events || []) {
+        const m = /^ev_(\d+)_(\d+)$/.exec(String(e?.id || ''));
+        if (m && Number(m[1]) === Number(tick) && Number(m[2]) > max) max = Number(m[2]);
+    }
+    return max;
+}
+
 /** 从"形如 `ev_<n>_<m>` 的号"里取出位次 m（不是这个形状 ⇒ null）。 */
 export function eventOrdinal(ref) {
     const m = /^ev_\d+_(\d+)$/.exec(String(ref || ''));
@@ -541,6 +555,61 @@ export const REF_RULES = {
                         + '收场是一次性的，**把这一项删掉**'
                         + '（★这个号住在输入的 **recentClosedEvents**（最近了结的事）里——那是归档，'
                         + '**不许从那一段取号**；要收场只认 **pendingEvents**（还没结束的事）里那一批）',
+                };
+            }
+            return null;
+        },
+    },
+
+    // ── relationUpdates.end（★leg120 A3 关系网：一条边的两端——谁 → 对谁） ──
+    //   只判**存在性**（与 `entityUpdates.entity` 同格）：这个号在不在账上。
+    //   ★其余口径（**不许把玩家写成"持有方"**）是**别的判据**，留在消费口 `check-step`——
+    //     与 `entityFates.entity` 那一格的分工完全一样（那里也只判存在性，"玩家不可灭"留在消费口）。
+    //   为什么两端共用一格：渲染时路径已经把 `from`/`to` 分开了（`$.relationUpdates[i].from:`），
+    //   判据本身对两端是同一件事（都在册）⇒ 不拆成两格（拆了就是同一句话写两遍）。
+    'relationUpdates.end': {
+        id: (c) => (c.world?.entities || []).some((e) => e.id === c.ref)
+            ? null
+            : { code: 'relation-end-missing', ref: c.ref, message: (r) => `未知实体 "${r.ref ?? ''}"${MISSING_SUFFIX.entity}` },
+    },
+
+    // ── relationUpdates.cause（★leg120 A3：**"玩出来的关系"与"抄书/随口编"的唯一分界**） ──
+    //   ★与 `entityUpdates.cause` **同一条口径、同一份实现**（**委托**过去，不抄第二份）：
+    //     因必须指向账上真实存在、**且未闭环**的事件或盘算。
+    //   ★★为什么这一格是关系网的脊梁（细案 §2.3）：书里的静态关系**指不出账上的事** ⇒
+    //     **结构上写不进这张表** ⇒ leg24 当年"不抄书"的决定被**形状**保住，不靠自律。
+    //   ★不在这里另写一套文案：委托回来的判词与字段写回那格**逐字相同**（M3 的"带出路"要求一并继承）。
+    'relationUpdates.cause': {
+        event: (c) => REF_RULES['entityUpdates.cause'].event(c),
+        agenda: (c) => REF_RULES['entityUpdates.cause'].agenda(c),
+    },
+
+    // ── relationClosures.id（★leg120 A3：了结一条边——人情还了 / 仇解了） ──
+    //   查两件事：① 号在账上（`ssot.relations`）② 它**还没了结**。
+    //   ★**只认已落账的边**：本轮刚提议的边不在 `ssot.relations` 里（落账在 `settle.js`，而校验在它之前）
+    //     ⇒ 天然"不享用同轮引用解析"，与 `entityFates` 那条"**尘埃落定再言灭**"同源，
+    //       且省掉整套"同轮按位次"的解析（细案 §7 那处更正）。
+    //   ★出路必须给够（M3 锁）：两句都写清"下一步该怎么做"，不许只说"你错了"。
+    'relationClosures.id': {
+        id: (c) => {
+            const rel = (c.world?.relations || []).find((r) => r.id === c.ref);
+            if (!rel) {
+                return {
+                    code: 'relation-close-missing',
+                    ref: c.ref,
+                    message: (r) => `未知关系 "${r.ref ?? ''}"——`
+                        + '要了结只认输入里**已经落账**的那条边的 id（`rel_<轮次>_<第几条>`）；'
+                        + '本轮刚提议的关系还没落账，**不能本轮就了结**',
+                };
+            }
+            if (rel.endedTick != null) {
+                return {
+                    code: 'relation-close-already',
+                    ref: c.ref,
+                    label: String(rel.type || '').slice(0, 20),
+                    message: (r) => `关系「${r.ref}」（${String(rel.type || '').slice(0, 20)}）`
+                        + `**已经了结过**（第 ${rel.endedTick} 轮）——了结是一次性的，**把这一项删掉**；`
+                        + '若这轮它又变了，那是**新的一条边**，请写进 `relationUpdates`',
                 };
             }
             return null;

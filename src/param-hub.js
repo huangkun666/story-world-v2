@@ -1024,13 +1024,19 @@ export function paramLabel(key) {
     return key;
 }
 function countWord(key, after) {
-    if (String(key) === 'autoAdvance' || String(key) === 'memoryEnabled') return after === '1' ? '开' : '关';
+    if (String(key) === 'autoAdvance') return after === '1' ? '开' : '关';
     return after ?? '未定';
 }
+// ★★★B8 定稿（2026-09-25 用户：「不就是措辞的问题？」「谁存？存什么？？存哪个地方，这些是啥？？」）：
+//   **三句收成一句**。旧版按"这一笔进了哪个抽屉"分三句印——主路「已存进本地存储」/
+//   退路「已存在插件配置里」/ 兜底「已存下来」。★那三句的差别是**维护者排障**才关心的事
+//   （哪一层存储吃得下），而"本地存储""插件配置"这些词玩家看不懂（用户问的正是"这些是啥"）
+//   ⇒ 玩家只看见一句「**已保存**」。★抽屉名**只进控制台**：`writeBucket` 里那行
+//   `[参数真源] 写成功（主路/插件配置区）` 照旧打，排障一点不丢。
+//   ★失败那一路（`store.ok === false`）本来就说人话、还带原因，本笔一个字不动。
 function storeWord(stored) {
-    if (stored === 'local') return '已存进本地存储';
-    if (stored === 'config') return '已存在插件配置里';
-    return '已存下来';
+    if (stored === 'local' || stored === 'config') return '已保存';
+    return '已存下来';   // 哪一层都没写成（正常路径到不了这里）——不许把它说成"已保存"
 }
 function LIMIT_GEARS_OF(key) {
     try { return LIMIT_GEARS[key]; } catch (_) { return null; }

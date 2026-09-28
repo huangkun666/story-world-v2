@@ -202,8 +202,11 @@ test('★leg60 一块里名册与设定同轮抽（旧"名册轮只问 name/kind
     //       `powerScale`/`dims` 两列保留在形状里（老账与 `buildAbstractPrompt` 的兼容面），
     //       但**生产提示词明确要求模型不要再交它们**（净化层以 `刻度` 为源、旧两列由它派生）。
     //    ★★★leg64 起多一项 `判据`（**法则的类别**，与 `rules` 按位对齐）：决定哪几条法则进每轮包。
-    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'rules', 'situation', 'society', 'techOrMagic', 'tension', '判据', '刻度'],
-        '★一份 JSON 里同时有设定（含维度/刻度/概念表/法则类别）与名册（leg60 的"一遍抽完"）');
+    //    ★★★leg141 起多一项 `relations`（**书里的关系网**，用户令「把抽象阶段的关系网抽象做出来」）：
+    //       一条边 = `{from, to, type, quote}`，两端是**名号**，`quote` 是书里那句话
+    //       （抽取那一刻由引擎逐字核过真在书文里，**核完即弃**——账上不记出处）。
+    assert.deepEqual(Object.keys(tpl).sort(), ['bookEntities', 'dims', 'env', 'historyNotes', 'powerScale', 'relations', 'rules', 'situation', 'society', 'techOrMagic', 'tension', '判据', '刻度'],
+        '★一份 JSON 里同时有设定（含维度/刻度/概念表/法则类别）与名册（leg60 的"一遍抽完"）与关系网（leg141）');
     // ★★leg62：概念表必须是**第一项**（模型按形状办事，先看到的那一项最容易被交出来）
     assert.equal(Object.keys(tpl)[0], '刻度', '★概念表排在最前（形状的第一项就是它）');
     // ★★★leg64：`判据` 必须**紧挨** `rules`（形状里"这一条法则是什么类"就写在法则下面，模型不易漏）

@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import {
     LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS, LIMIT_META, LIMIT_ROWS,
-    limitsOf, normalizeLimit, resolveLimits, usingDefaults, limitKey,
+    limitsOf, normalizeLimit, resolveLimits, limitKey,
 } from '../src/limits.js';
 import { AGENDA_CAPS, EVENT_CAPS, ENTITY_BIRTH_PER_TICK, settleTick } from '../src/settle.js';
 import { buildEvolutionPack, THREADS_TOP, IDLE_FACES_TOP, computeIdleFaces } from '../src/pack.js';
@@ -53,10 +53,12 @@ test('尺度上限：出厂默认 = 参数化之前的值（与既有常量逐�
     assert.equal(LIMIT_DEFAULTS.每轮新生, 3, '★leg63：每轮新生出厂仍是 3（没设旋钮 ⇒ 行为零变化）');
 });
 
-test('尺度上限：账上没设 ⇒ 生效值 = 出厂默认；`usingDefaults` 如实报', () => {
+// ★本笔删掉 `usingDefaults`（连同它的两处断言与 import）：全仓**零消费者**——它自称"落账/自证面用"，
+//   但没有任何落账面读它；而它表达的那件事（"账上一个档位都没设"）已由下面 `limitsOf(w) === {}` 与
+//   `resolveLimits(w) === LIMIT_DEFAULTS` 两条断言覆盖，删的是**第二个说法**，不是覆盖。
+test('尺度上限：账上没设 ⇒ 生效值 = 出厂默认', () => {
     for (const w of [world(), world({ env: {} }), null, undefined, { context: {} }]) {
         assert.deepEqual(resolveLimits(w), { ...LIMIT_DEFAULTS }, `未设档位时必须给全套默认（输入 ${JSON.stringify(w)}）`);
-        assert.equal(usingDefaults(w), true, '未设档位 ⇒ usingDefaults 为真');
     }
 });
 
@@ -126,7 +128,6 @@ test('尺度上限：已设档位覆盖默认；未设的键仍回默认（逐�
     assert.equal(lim.每轮递线, 6, '设了的用账上的');
     assert.equal(lim.每轮事件, LIMIT_DEFAULTS.每轮事件, '没设的仍回默认');
     assert.deepEqual(limitsOf(w), { 每轮递线: 6 }, '`limitsOf` 只报**已设**的键');
-    assert.equal(usingDefaults(w), false, '设过档位 ⇒ 不再是全默认');
     // 面板行：值与"是否默认"如实报
     const rows = LIMIT_ROWS(w);
     assert.equal(rows.length, LIMIT_KEYS.length);

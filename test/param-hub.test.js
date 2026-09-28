@@ -19,6 +19,8 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { installFakeDom, makeLocalStorage, makeSt, makeHub, makeWorld } from './fixture-param.mjs';
+// ★leg135：`包预算` 的出厂值改用常量（别写死数字——写死就是第二份真相）。
+import { PACK_BUDGET_TOKENS } from '../src/limits.js';
 
 const { status: statusEl } = installFakeDom();
 const mod = await import('../web/index.js');
@@ -39,7 +41,9 @@ test('★★leg46·①：一次 `set` ⇒ 真源与镜像**一起**写好（不�
     assert.deepEqual(st.store(), { 天时: '大灾' }, '★真源（主路）里就是玩家选的那一档');
     assert.deepEqual(r.mirror.world.context.setting.dynamic.env, { 天时: '大灾' }, '★镜像（引擎读的那一格）同步写好');
     assert.equal(r.mirror.ok, true, '镜像核对通过');
-    assert.match(r.humanLine, /已存进本地存储/, '★状态条说的是**存到哪了**');
+    // ★★★B8 定稿（2026-09-25）：状态条只说「已保存」——"进了哪个抽屉"是维护者的事（只进控制台）
+    assert.match(r.humanLine, /已保存/, '★状态条说的是真话，而且是人话');
+    assert.ok(!/已存进本地存储|已存在插件配置里/.test(r.humanLine), '★抽屉名不许上玩家看的状态条');
     assert.ok(!/已落盘/.test(r.humanLine), '★不许再说"已落盘"（那是整份聊天上盘的说法，与参数无关）');
     assert.equal(st.calls.saveChat, 0, '★参数改动不触整份聊天上盘');
     assert.ok(st.calls.saveSettings >= 1, '插件配置区那份照样写（备份/导出/迁移会带上它）');
@@ -125,7 +129,8 @@ test('★leg46·③c：完全没有本地存储（隐私模式）⇒ 退回插�
     const hub = await makeHub({ storage: () => null });
     const r = hub.set(st.world, '天时', '大灾');
     assert.equal(r.ok, true, '只剩这一处可用时以它为准');
-    assert.match(r.humanLine, /插件配置里/, '★说的是"存在插件配置里"，不是"已存进本地存储"');
+    assert.match(r.humanLine, /已保存/, '★退到插件配置区也照样只说"已保存"（抽屉名只进控制台）');
+    assert.ok(!/已存进本地存储|已存在插件配置里/.test(r.humanLine), '★抽屉名不许出现在玩家看的状态条上');
     assert.match(r.humanLine, /不保证跨启动存活/, '★这句必须说出来（它正是"刷新就没了"的那个风险）');
     assert.deepEqual(st.settingsMirror(), { 天时: '大灾' });
 });
@@ -194,8 +199,10 @@ test('★★★leg46·⑤（用户报的那一条）：改完参数 → 世界�
     assert.deepEqual(st.store(), want, '★真源不在世界账里 ⇒ 世界怎么换手动不到玩家的档位');
     const hub2 = await makeHub();                            // 新页面 = 新 hub（读同一份主路）
     const c = hub2.commit(fresh);                            // 载入期：接纳 + 镜像
-    assert.deepEqual(hub2.displayEnv(c.world), { 天时: '大灾', 每轮事件: '12', 每轮递线: '3', 每轮新生: '3', 每轮入局: '1', 待启用名单: '12', 顶层大计: '15', 在飞大计: '20' },
-        '★七个上限输入框都画对（12 而不是回到 6；★leg63 起多了「每轮新生/每轮入局/待启用名单」）');
+    // ★leg135：`包预算` 的出厂值 30000 → 50000（用户令「我预算抬到50000token」）。
+    //   ★这一格**照常量取**、不写死数字——写死就是第二份真相（本仓那条纪律）。
+    assert.deepEqual(hub2.displayEnv(c.world), { 天时: '大灾', 每轮事件: '12', 每轮递线: '3', 每轮新生: '3', 每轮入局: '1', 待启用名单: '12', 顶层大计: '15', 在飞大计: '20', 包预算: String(PACK_BUDGET_TOKENS), 往事轮数: '50' },
+        '★上限输入框都画对（12 而不是回到 6；★leg63 起多了「每轮新生/每轮入局/待启用名单」；★leg114 起多了「包预算」；★leg133 起多了「往事轮数」）');
     assert.deepEqual(c.world.context.setting.dynamic.env, { 天时: '大灾', 每轮事件: '12' },
         '★刷新之后镜像照旧同步给引擎');
 });
@@ -918,7 +925,7 @@ test('★★★leg48·A：世界对象**没到**也照样存住档位（这条�
     assert.equal(r.worldName, '大荒z', '★★桶键必须是"大荒z"（退回兜底名 = 写进另一个桶 = 玩家看到"我改的东西不见了"）');
     assert.deepEqual(st.store(), { 每轮递线: '9' }, '★★真源里必须真的存住了（这一格是他刷新之后能不能看到的关键）');
     assert.equal(r.mirror.pending, true, '★镜像这一格如实标"挂起"（不是失败、也不是成功）');
-    assert.match(r.humanLine, /已存进本地存储/);
+    assert.match(r.humanLine, /已保存/);
     assert.match(r.humanLine, /等世界载入后补/, '★状态条要说清"引擎那一步晚一点"（不许含糊成"已同步"）');
     assert.match(r.diag.世界对象, /没有/, '★自检卡必须点名"世界对象没有"（旧版这件事完全不可见）');
 
@@ -961,7 +968,7 @@ test('★★★leg48·C：载入期把"世界没到那一刻"写下的档位补�
     statusEl.textContent = '';
     await globalThis.window.__sw2Actions['set-param']({ param: '每轮递线', value: '9', worldName: nameHint });
     assert.deepEqual(st.store(), { 每轮递线: '9' }, '★世界对象不在，档位也必须真的存住');
-    assert.match(statusEl.textContent, /已存进本地存储/);
+    assert.match(statusEl.textContent, /已保存/);
     // ② 世界回来 ⇒ 载入期补镜像（与 `loadWorld` 里 commit → flushPending 同一序）
     st.chatMetadata.story_world_v2 = saved;
     const hub = await makeHub();
@@ -1022,7 +1029,7 @@ test('★★leg46·⑩：走真总线（面板点下拉）⇒ 状态条 = hub �
     assert.deepEqual(st.store(), { 天时: '大灾' }, '★真源落定');
     assert.deepEqual(st.mirror(), { 天时: '大灾' }, '★世界账镜像落定（玩家报的读数就是这一格）');
     assert.match(statusEl.textContent, /天时 → 大灾/);
-    assert.match(statusEl.textContent, /已存进本地存储/, '★状态条说的是真话');
+    assert.match(statusEl.textContent, /已保存/, '★状态条说的是真话（B8 定稿：一句人话，抽屉名只进控制台）');
     // 面板按真源渲染 ⇒ 刷新后还是这一档
     const d = sw2ParamDiag();
     assert.equal(d.世界名, '大荒z');

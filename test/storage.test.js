@@ -90,6 +90,13 @@ test('K35/A-9 阅卷还原：volumeToChronicleRows 与原行逐条一致（tick/
     assert.deepEqual(rows[0], { tick: 0, text: '第 0 轮的大事', eventRef: 'ev_0' });
     assert.deepEqual(rows[5], { tick: 5, text: '第 5 轮的大事', eventRef: '' });
     assert.equal(volumeToChronicleRows(null).length, 0);
+    // ★★★leg115：**"什么时候"要随行走出卷库**（阅卷那一侧靠它显示"此后又过了多久"）。
+    //   两条口径：①有那一格 ⇒ 逐字带出来；②**没有那一格 ⇒ 整个键不出现**（不许填占位值，红线 2——
+    //   上面那条 `deepEqual` 就是"旧账零扰动"的现场证据：没写时长的行必须逐字节还是三个键）。
+    const withTime = volumeToChronicleRows({ rows: [{ tick: 7, text: '带时长的行', elapsed: '三天' }] });
+    assert.equal(withTime[0].elapsed, '三天', '★时长要随行带出卷库');
+    assert.deepEqual(Object.keys(withTime[0]).sort(), ['elapsed', 'eventRef', 'text', 'tick'], '四个键都在');
+    assert.ok(!('elapsed' in volumeToChronicleRows({ rows: [{ tick: 8, text: '没写时长' }] })[0]), '★没写 ⇒ 那个键整个不出现');
 });
 
 test('K35/A-9 空编年：零轮转不炸', () => {

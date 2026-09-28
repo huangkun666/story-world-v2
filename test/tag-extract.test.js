@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractTags, hasTagFacts, tagReadoutLine, TAG_FIELD_SEP } from '../src/tag-extract.js';
 import { buildEvolutionPack } from '../src/pack.js';
-import { tagSpecText, rosterText, buildInjections, createInjector, INJECT_KEY_TAGS } from '../web/inject.js';
+import { tagSpecText, rosterText, buildInjections, createInjector, INJECT_KEY_TAGS, INJECT_KEY_WORLD, INJECT_KEY_LEDGER, sw2RecallQueryText, LEDGER_RECALL_DEFAULT } from '../web/inject.js';
 import { sw2LatestMessageText, sw2ShouldAdvance, sw2ToggleInject } from '../web/index.js';
 import { runTick } from '../src/tick.js';
 import { readFileSync } from 'node:fs';
@@ -444,11 +444,25 @@ test('leg89⑱：注入开关走的是**按钮那条路**（唯一 click 入口�
     assert.match(render, /data-inject-switch="\$\{escapeHtml\(key\)\}"/, '★按钮必须挂 data-inject-switch（键名就在它身上）');
     assert.ok(!/data-settings-bool"/.test(render), '★不许再出现 data-settings-bool（按钮收不到 input/change）');
     assert.ok(!/data-action="inject-toggle"/.test(render), '★也不再走动作总线（第二版那条路会延迟一拍）');
-    // 唯一点击入口里必须**直接收**它（在 `closest('[data-action]')` **之前**）
-    const clickAt = web.indexOf("win.addEventListener('click'");
-    const swAt = web.indexOf("closest?.('[data-inject-switch]')");
-    const actAt = web.indexOf("closest?.('[data-action]')", clickAt);
-    assert.ok(clickAt > 0 && swAt > clickAt && actAt > swAt, '★它必须在唯一点击入口里、且排在 data-action 判据之前');
+    // ★★★leg107：**唯一点击入口那一族搬进了 `web/action-router.js`**（接线层的端到端判据那一笔）
+    //   ⇒ 这条"顺序"判据跟着代码改指新家（与 `test/web-view-state-layout.test.js` 那条同一把尺：
+    //     搬族之后判据**改指新家**，不许删、也不许放宽）。
+    //   ★★口径**必须从"文件里的位置"改成"`route()` 里的位置"**（本判据第一版照旧量文件位置，
+    //     当场误报红，留档）：搬家之前那段是**内联在 click 回调里**的，文件位置 == 执行顺序；
+    //     搬家之后 `route()` 在文件上半、`win.addEventListener('click', …)` 在文件末尾装配
+    //     ⇒ 再量文件位置就成了**假判据**（它红的是排版，不是行为）。
+    //   ★要锁的真行为是：**`route()` 内部先收 `data-inject-switch`、再判 `data-action`** ——
+    //     反过来的话，注入开关会先被当成动作派发出去（leg89 那两次实机病之一）。
+    const router = readFileSync(path.join(root, 'web', 'action-router.js'), 'utf8');
+    const routeAt = router.indexOf('function route(');
+    const routeEnd = router.indexOf('function handleClick(', routeAt);
+    assert.ok(routeAt > 0 && routeEnd > routeAt, '★前置：`route()` 必须还在（判据不许因为函数被改名而静默失效）');
+    const routeBody = router.slice(routeAt, routeEnd);
+    const swAt = routeBody.indexOf("closest?.('[data-inject-switch]')");
+    const actAt = routeBody.indexOf("closest?.('[data-action]')");
+    assert.ok(swAt > 0 && actAt > swAt, '★它必须在 route() 里、且排在 data-action 判据之前');
+    assert.match(router, /win\.addEventListener\('click', handleClick\)/,
+        '★route() 必须真的挂在那个唯一点击入口上（否则上面那条可以靠"留个没人调的函数"骗过去）');
     assert.match(web, /sw2ToggleInject\(key, on\)/, '★收到之后必须真的调判据函数');
     // ★★★leg89（用户实机第四次仍报「点了不切、点别处才切」）⇒ 定案：**不重画整页，只原地改那一行**。
     //   为什么（这条路连着两版没走通）：整页重画要穿过本仓两道护栏（押后判据 + 重绘防重入），
@@ -654,6 +668,62 @@ test('★★★leg93㉔d：空块 vs 块外真标签——边界生效（块空�
     assert.equal(hasTagFacts(f), false, '★空块 ⇒ 键不出现（照 `recalled` 那条口径）');
 });
 
+// ── ★★★leg137：标签块被包进 JSON 字符串（换行成了**字面** `\n`）────────────────
+// 病（leg136 §4.2 真模型实测抓到的那条**静默失效**）：模型把整块标签塞进一个 JSON 字符串
+//   ⇒ 换行成了字面的两个字符 `\` `n`，而提取器是**按真换行切行**的 ⇒ **一条都读不出来，
+//   而且一个字都不出声**（`malformed`/`unresolved` 全空，界面上看不出"这一轮其实有标签"）。
+//   真账实测：原样 **0 条** / 把字面 `\n` 还原成真换行 **3 条**。
+// 治法（`extractTags` 顶注那段两级尝试）：**先按原样跑**；**只在"一条都没读到"时**才还原再跑。
+//   ★**下面这两条是一对**：①锁"该救的救回来了"；②锁"不该救的**一个都不许**多出来"。
+//     ——只有①会让这一改变成"多认东西"（本仓"改判据 = 改承重墙"）；只有②会让它变成空转。
+
+test('★★★leg137①：标签块的**两种写法**必须读出**同样的东西**（JSON 转义 vs 真换行）', () => {
+    // ★同一个块、两种写法：真机渲染后是真换行（`real`），而模型若把它塞进 JSON 字符串
+    //   （`escaped`）换行就成了字面 `\n`。两种形态**逐字段**必须一致——这正是本笔要治的病。
+    const real = `${FENCE}tags
+【此刻】复苏历一九〇二五年 十月 辰时
+【行动】薛铁衣｜迎刃｜黄坤
+【变化】薛铁衣｜实力｜踏入元婴
+${FENCE}`;
+    const escaped = JSON.stringify({ tags: real });
+    const a = extractTags(real, CTX);
+    const b = extractTags(escaped, CTX);
+    assert.equal(a.count, 1, '★真换行那一形态（真机的样子）照常读得出');
+    assert.equal(b.count, 1, '★★JSON 转义那一形态**也要读得出**（这就是本笔治的那条静默失效）');
+    assert.deepEqual(b.actions, a.actions, '★两种形态的 actions **逐字段相同**');
+    assert.equal(b.at, a.at, '★【此刻】两形态相同（不许转义形态漏掉它）');
+    assert.deepEqual(b.changes, a.changes, '★【变化】两形态相同');
+    assert.equal(a.restored, false, '★真换行那一形态**不许**走还原这一级（今天的行为逐字节不变）');
+    assert.equal(b.restored, true, '★如实标出"这一遍是还原之后的结果"');
+});
+
+test('★★★leg137②：正文里**提到**字面 `\\n` 这个写法 ⇒ 不许因为这一改多出东西', () => {
+    // ★这条防的是本笔**实测抓出来的假阳性**（第一版门槛就栽在这儿，见源码那个常量的注释）：
+    //   正文在**解说格式**、句尾又提到字面 `\n` 这个写法 ⇒ 第一版会把它还原成真换行，
+    //   于是那行「【行动】谁｜做了什么」被当成**一条真行动**读出来（实测 parsed=1，本应是 0）。
+    //   ★根因：**字面 `\n` 在"正文提到它"时是内容，在"JSON 转义"时是结构**——光看标签名分不开。
+    const prose = `正文解说：\\n【行动】谁｜做了什么
+就长这样。`;
+    const f = extractTags(prose, CTX);
+    assert.equal(f.count, 0, '★不许读出一条假行动');
+    assert.equal(f.parsed, 0, '★读数也不许被污染（parsed 是"这一轮发生了几件事"）');
+    assert.equal(f.restored, false, '★第二道门槛（开围栏自己也被转义）必须把它挡在门外');
+    // ★同一条的第二面：正常正文里出现字面 `\n`、但**一个标签都没有** ⇒ 照样什么都不许多出来。
+    const code = '孟婆走过来，看了他一眼。\n她提起了代码里的 \\n 这个写法。';
+    const g = extractTags(code, CTX);
+    assert.equal(hasTagFacts(g), false, '★无标签的正文 ⇒ 一格料都不许有（`restored` 也不进这一格）');
+    assert.equal(g.restored, false);
+});
+
+test('★★★leg137③：整段都是字面 `\\n` 但**漏写围栏** ⇒ 不救（这是有意定的边界，锁住让维护者看得见）', () => {
+    // ★为什么锁"不救"：围栏不在 ⇒ 还原之后也没有边界，认出来的东西会落在块外
+    //   （leg93 甲案那条"块外一律当正文"）⇒ 宁可少救这一类，不可改动读得出来的轮次。
+    const noFence = '\\n【行动】薛铁衣｜格挡防御｜黄坤';
+    const f = extractTags(noFence, CTX);
+    assert.equal(f.count, 0, '★漏围栏的 JSON 转义形态：今天读不出，本笔也**不救**（边界如此）');
+    assert.equal(f.restored, false, '★如实标出"没走还原这一级"');
+});
+
 // ── 接线面的两条：读正文（现取/不猜）与"一输入一推进" ────────────────────────
 
 test('leg89⑲：`sw2ToggleInject` 判据本体**真能跑**（关掉要说"已关"，打开要报注入字数）', () => {
@@ -690,4 +760,123 @@ test('leg89⑬：一输入一推进——同一段正文只推一次（自动路
     // ★没有正文 ⇒ **照常推**（老行为就是零参推进；不许因为新功能把"手动补推"堵死）
     assert.equal(sw2ShouldAdvance('', null).go, true);
     assert.equal(sw2ShouldAdvance('', '上一轮那段').go, true, '★空正文不许被当成"同一条"而卡死推进');
+});
+
+// ===========================================================================
+// ★★★leg115：**第四段注入 · 账上往事**
+//   用户原话（立这一笔的靶子）：「**聊天llm是不知道什么时候世界发生了什么事懂吗？**」
+//   用户当场指出的设计漏洞：「**用户可能发一个继续，结果就命中失效了，我认为可以带上上一轮的正文
+//   再加上用户输入的**」——下面 L115-② 就是专门锁这一条的。
+// ===========================================================================
+
+test('leg115①：检索用的那几个字 = **上一轮正文的尾巴 ＋ 玩家这一轮刚打的**（顺序：主要那句在最后）', () => {
+    const ctx = {
+        chat: [
+            { is_user: true, mes: '更早的玩家发言' },
+            { is_user: false, mes: '上一轮正文：黄坤杀回大盘谷，薛铁衣的缚灵锁阵当场崩碎。' },
+            { is_user: true, mes: '我带着黄坤去找薛铁衣算账' },
+        ],
+    };
+    const q = sw2RecallQueryText(ctx);
+    assert.ok(q.includes('缚灵锁阵当场崩碎'), `★上一轮正文要在：${q}`);
+    assert.ok(q.includes('找薛铁衣算账'), `★这一轮输入要在：${q}`);
+    assert.ok(!q.includes('更早的玩家发言'), '更早的玩家发言不进来（只要上一轮正文）');
+    assert.ok(q.endsWith('我带着黄坤去找薛铁衣算账'), '★主要那句（这一轮输入）放**最后**——靠后的权重更实');
+});
+
+test('leg115②：★★玩家只打「继续」时**不许归零**——上一轮正文扛住（用户当场指出的漏洞）', () => {
+    const ctx = {
+        chat: [
+            { is_user: false, mes: '上一轮正文：死煞核心二次暴动，万法阁血祭突围失败，残部登岸。' },
+            { is_user: true, mes: '继续' },
+        ],
+    };
+    const q = sw2RecallQueryText(ctx);
+    // ★这条就是那个漏洞的判据：只打「继续」⇒ 这一半**一个字都没有可查的**，
+    //   全靠上一轮正文那一半兜住。若只取"玩家刚打的那句"，这里会是空串 ⇒ 一条都取不到。
+    assert.ok(q.includes('死煞核心二次暴动'), `★只打「继续」时，检索字必须仍来自上一轮正文：${q}`);
+    assert.ok(q.includes('继续'));
+    assert.ok(q.length > 20, '★查询不许退化成两个字');
+});
+
+test('leg115③：拿不到就**返回空串**（空查询 = 不检索，不是"检索了个寂寞"——这两件事要分得开）', () => {
+    assert.equal(sw2RecallQueryText(null), '');
+    assert.equal(sw2RecallQueryText({}), '');
+    assert.equal(sw2RecallQueryText({ chat: [] }), '');
+    assert.equal(sw2RecallQueryText({ chat: [{ is_user: false, mes: '   ' }] }), '', '空白的正文不算正文');
+    // 只有玩家发言、没有任何正文 ⇒ 查询就是那一句（不许凭空造上一轮）
+    assert.equal(sw2RecallQueryText({ chat: [{ is_user: true, mes: '动手' }] }), '动手');
+});
+
+// ★★★leg136：**这一则随"两截口径"重造**——旧前提"上一轮正文那一半的总上限 = cap"**已不成立**
+//   （现在取**两截**：剥掉机器块的正文 ＋ 原文尾巴）。照本仓那条纪律（leg135 §2.4）：
+//   **口径改了而夹具不改 ⇒ 用例会静默失去意义**。
+//   新前提（仍然咬得住东西）：① **仍是取尾巴**（不许改成取开头）；
+//   ② **每截各 cap**（总量 ≤ 2×cap ＋ 分隔符 ＋ 这一轮输入）；
+//   ③ **没机器块时两截合一**（不许把同一份正文重复两遍）。
+test('leg115④/leg136：上一轮正文**取尾巴**（每截 cap 个字）；无机器块时两截合一不重复', () => {
+    const long = '甲'.repeat(900) + '尾锚';
+    const ctx = { chat: [{ is_user: false, mes: long }, { is_user: true, mes: '动手' }] };
+    const q = sw2RecallQueryText(ctx, 400);
+    assert.ok(q.includes('尾锚'), '★取的是**尾巴**（最近发生的那一段），不是开头');
+    // ★这一条是 leg136 新加的：这份正文**没有机器块** ⇒ 两截是同一份 ⇒ 只许出现一截
+    assert.equal(q, long.slice(-400) + ' 动手', `无机器块时不许重复：实测 ${q.length} 字`);
+    const big = sw2RecallQueryText(ctx, 2000);
+    assert.ok(big.length > 900, 'cap 放大就多带');
+    // ★有机器块时：两截都在（原文尾巴那一截带着"账上真名"，剥后那一截带着正文）
+    //   ★机器块必须放在**末尾**——真机上它就是末尾（真账实测：`<UpdateVariable><JSONPatch>…` 在正文之后），
+    //     而本函数取的是**尾巴** ⇒ 机器块不摆末尾就测不到"原文那一截救回了什么"。
+    const polluted = { chat: [{ is_user: false, mes: '乙'.repeat(500) + '尾锚' + '<X>机器块里的正文：黄坤</X>' }, { is_user: true, mes: '动手' }] };
+    const qp = sw2RecallQueryText(polluted, 400);
+    assert.ok(qp.includes('尾锚'), '★剥后那一截要带出正文尾巴');
+    assert.ok(qp.includes('黄坤'), '★原文那一截要保住"机器块里藏着的真名"（实测：只取剥后那截会掉 12 轮）');
+    assert.ok(qp.length <= 400 * 2 + 2 + 2, `每截各 cap ⇒ 总量 ≤ 2×cap＋两个分隔符＋这一轮输入：实测 ${qp.length}`);
+    // ★★★本次（清死码）：原先这里还锁着 `LEDGER_RECALL_DEFAULT.turns === 8`——而那个字段
+    //   **生产代码零读者**（leg116 撤掉它唯一消费者 `limit: turns * 6` 时把字段留在了表里；
+    //   本模块只传 `.maxChars`，而上面这条判据量的 `cap` 是**字符数**、不是轮数）
+    //   ⇒ 字段已删，空锁随之删掉；出厂的**字数上限**照旧锁着（它是真当家的那一个）。
+    assert.equal(LEDGER_RECALL_DEFAULT.maxChars, 1600, '出厂预算：1600 字上限');
+});
+
+test('leg115⑤：第四段是**独立一段**——空的不注入、有的才注入，且与另外三段互不干扰', () => {
+    const world = { entities: ENTITIES, context: { positions: LOCATIONS }, meta: { lastInjection: '◆ [第4轮] 薛铁衣夺了渡口' } };
+    const off = buildInjections(world, { spec: false, roster: false, worldTide: false, ledger: '' });
+    assert.equal(off.ledger, '', '★空的第四段 ⇒ 空串（调用方据此不注入、撤掉旧的）');
+    const on = buildInjections(world, { spec: false, roster: false, worldTide: true, ledger: '【世界已经发生的事】\n  · 往事甲' });
+    assert.ok(on.ledger.includes('往事甲'), '★第四段有自己的内容');
+    assert.ok(on.world.includes('薛铁衣夺了渡口'), '第三段照旧（两段不是一件事，别合并）');
+    assert.notEqual(on.ledger, on.world, '★两段内容不同——③是"这一轮刚出了什么事"，④是"以前的来路与收场"');
+});
+
+test('leg115⑥：注入器真跑——第四段走 `INJECT_KEY_LEDGER` 写进注入口，并如实读数', () => {
+    const written = [];
+    const fakeCtx = { setExtensionPrompt: (k, v) => written.push([k, v]), extension_prompt_types: { IN_PROMPT: 0 } };
+    const ledgerText = '【世界已经发生的事 · 按发生先后排】\n【第 3 轮 · 此后又过了：三天】\n  · 盘算「炼化死煞核心」取消：核心二次暴动，炼化彻底失败';
+    const world = {
+        entities: ENTITIES, context: { positions: LOCATIONS },
+        events: [{ id: 'ev_3_1', title: '炼化死煞核心', source: { type: 'state' }, ripples: [], closed: true }],
+        chronicle: [{ id: 'ch_3_1', tick: 3, text: '盘算「炼化死煞核心」取消：核心二次暴动，炼化彻底失败', elapsed: '三天' }],
+        meta: { tick: 3 },
+    };
+    const inj = createInjector({
+        getCtx: () => ({ ...fakeCtx, chat: [{ is_user: false, mes: '炼化死煞核心' }, { is_user: true, mes: '继续' }] }),
+        getWorld: () => world,
+        isOn: (k) => k === 'injectLedgerRecall',
+    });
+    const r = inj.apply();
+    assert.equal(r.ok, true);
+    const row = written.filter(([k]) => k === INJECT_KEY_LEDGER);
+    assert.ok(row.length >= 1, '★第四段必须真写进注入口（写了空串也算"撤掉旧的"）');
+    const last = row[row.length - 1][1];
+    assert.ok(last.includes('炼化死煞核心'), `★真取到并写进去了：${last}`);
+    assert.ok(last.includes('此后又过了：三天'), '★时间印记跟着一起进去了（这一笔的靶子）');
+    assert.ok(r.ledgerChars > 0, '★读数如实报第四段多少字');
+    assert.ok(r.line.includes('账上往事'), `★自证面要说这一段：${r.line}`);
+    // 开关关着 ⇒ 走"已关"那条早退（**不是**"注入了 0 字"——leg92 那条判据专门锁这个区分），
+    // 且一个字都不写内容（只撤旧的）。
+    const offInj = createInjector({ getCtx: () => ({ ...fakeCtx, chat: [{ is_user: true, mes: '继续' }] }), getWorld: () => world, isOn: () => false });
+    const r2 = offInj.apply();
+    assert.equal(r2.off, true, '三段+第四段全关 ⇒ 报"已关"（不许报成"注入了 0 字"）');
+    assert.equal(r2.tagsChars + r2.worldChars, 0, '关了就是零字');
+    assert.ok(!r2.line.includes('账上往事'), `★"已关"那一行不该提第四段：${r2.line}`);
 });

@@ -6,7 +6,9 @@ import { checkWorldStep, newEventIdsOf, normalizeSameStepEventRefs } from './che
 //   整段搬进 `src/ref-rules.js` 的 `'entityUpdates.cause'` 表；本文件只传 `entry` 快照并渲染裁定文案。
 //   ★为什么必须收口：这条判据原先在**三处**各写一份（校验期 `check-step`、净化期 `sanitize-step`、
 //     结算期本文件），而 leg66 那两条真账 bug 正是"三处各说各话"的直接后果。
-import { judgeRef, renderVerdict, captureOpenCauseState } from './ref-rules.js';
+import { judgeRef, renderVerdict, captureOpenCauseState, maxEventOrdinal, eventOrdinal } from './ref-rules.js';
+// ★★★leg123：聊天侧那批 `dialogue` 事件的落账要用**同一份格名表**（`tag-extract.js` 是真源，零 import 的叶子 ⇒ 不成环）。
+import { CHANGE_FIELDS, CHANGE_PLACE_FIELD } from './tag-extract.js';
 import { buildEvolutionPack, computeIdleFaces } from './pack.js';
 import { gateWorldStep } from './gate.js';
 import { computeWeightAtTick } from './weight.js';
@@ -18,7 +20,7 @@ import { updateUnrestGear } from './unrest.js';   // ★leg53：乱象档位派�
 //   口径与 `params.js` 一致（值落 `context.setting.dynamic.env` / 白名单归一 / 缺键=默认）。
 //   为什么**只在入口解析一次**再传着走：原先每个函数各自读模块常量 ⇒ 参数化时最易出的病就是
 //   "某一条路仍读旧常量"（本仓"一个数两把尺子"的老病）。
-import { resolveLimits, THREADS_TOP, EVENT_CAP_PER_TICK, AGENDA_CAP_PER_TICK, AGENDA_CAP_TOP_LEVEL, AGENDA_CAP_OPEN, ENTITY_BIRTH_PER_TICK } from './limits.js';
+import { resolveLimits, EVENT_CAP_PER_TICK, AGENDA_CAP_PER_TICK, AGENDA_CAP_TOP_LEVEL, AGENDA_CAP_OPEN, ENTITY_BIRTH_PER_TICK } from './limits.js';
 // ★leg33：位置归一的**唯一真源**在 `position.js`（叶子模块，避开 settle↔check-step 的循环依赖）。
 //   ⚠必须是 `import` + `export` 两句——`export { X } from './y.js'` **不建立本地绑定**（本棒实测：
 //   只写 re-export 时模块内 `normalizePosition is not defined`，被新用例当场抓红）。
@@ -233,17 +235,48 @@ function adjudicate(world, step, tick, warnings) {
 function hangEvents(world, step, tick) {
     const added = [];
     const ids = newEventIdsOf(step, tick);
+    const sameRound = new Set(ids);
+    // ★★★leg128（用户令「把整个链路打通，包含多因点」）：**合流表** `links.up`——可以多条。
+    //   两个指针**分工**（见 `world-step.schema.js` 的 `alsoCausedBy` 那一格头注）：
+    //     · `source`   ＝ 来路，**永远单亲** ⇒ 管"划分"（这件事属于哪条线）；
+    //     · `links.up` ＝ 合流，**可以多条** ⇒ 管"多因"。
+    //   这张表里装什么（★口径照旧、一个字节没放宽）：**ripple 型的主因**（既有行为）
+    //     ＋ 模型点名的**多因**（`alsoCausedBy`）去重。
+    //     ★`plot` 型的主因是**盘算**（不是事件）⇒ **不进这张表**——这是既有口径，本笔不动它
+    //     （`observatory` 的坏账扫描与归档的 up 指针都按"这张表里只有事件 id"在用）。
+    //   解析：① 账上真有的 id；② ★**本轮新建的那批**也认——模型写不出本轮的号（还没发），
+    //     故照 `ref-rules.js` **同一条位次规则**认（`eventOrdinal`：第 m 件 ⇒ 本轮第 m 件；
+    //     与 `resolveRefTarget` 同一条口径：**账上有则以账为准**，没有才走位次）。
+    //   ★对不上的那条因**丢掉它**：不丢整步、更不写悬空指针（账房不许留指不着的东西）。
+    const resolvesTo = (ref) => {
+        if (typeof ref !== 'string' || !ref) return null;
+        if (sameRound.has(ref)) return ref;
+        if ((world.events || []).some((e) => e.id === ref)) return ref;
+        const ord = eventOrdinal(ref);
+        return ord != null && ord >= 1 && ord <= ids.length ? ids[ord - 1] : null;
+    };
     step.newEvents.forEach((ev, i) => {
         const id = ids[i];
+        const ups = [];
+        const pushUp = (r) => { const hit = resolvesTo(r); if (hit && !ups.includes(hit)) ups.push(hit); };
+        if (ev.source.type === 'ripple') pushUp(ev.source.ref);
+        for (const r of Array.isArray(ev.alsoCausedBy) ? ev.alsoCausedBy : []) pushUp(r);
         const node = {
             id,
             title: ev.title,
             source: { ...ev.source },
             position: ev.position,
             ripples: [...(ev.ripples || [])],
-            links: { up: ev.source.type === 'ripple' ? [ev.source.ref] : [], down: [] },
+            links: { up: ups, down: [] },
             closed: false,
         };
+        // ★★★leg137：世界侧事件的时间——**由模型自己写**（`newEvents[].at`，逐字照抄）。
+        //   ★用户令：「**只要告诉时间流逝的长度和起始，事件的时间字段就由 llm 自己写**，
+        //     要不然所有事件都是同一时刻发生的了」。
+        //   ★⚠**这里不许"顺延"**（本笔第一版就是那么写的，被用户当场打回）：一轮能起十几件事，
+        //     拿一个时刻盖满全场就是把时间抹平。模型没写 ⇒ **这一件事就是没有时间**（红线 2）。
+        const at = String(ev?.at ?? '').trim();
+        if (at) node.timeMark = at;
         world.events.push(node);
         added.push(node);
     });
@@ -663,6 +696,23 @@ function archiveClosedEvents(world, tick) {
         if (!bySeg.has(seg)) bySeg.set(seg, []);
         bySeg.get(seg).push(ev);
     }
+    // ★★★leg110 修（用户实机报「点事件的链总是有『环防·至此为止』」）：**纪的因果指针归一**。
+    //   病（真账实测）：下面那两个重指循环**改完就完事、不看这个 id 是不是已经在了**——
+    //     两件不同的事各自引用同一件旧事 ⇒ 重指后变成**同一个 id 出现两次**：
+    //     `m_20.links.up = ["m_10","ev_1_1","m_10"]`、`m_30.links.up = ["m_20","m_20"]`。
+    //     而链视图（`chain.js`）把"已经走过"当成"成环" ⇒ 同一个纪第二次出现就被判成
+    //     "引用成环，链在此剪断"，面板打出「账不可信处的如实标注」——**账是可信的，是那里判错了**。
+    //   实测影响面：真账 75 个可点节点里 **14 个（19%）** 撞这条误报（`ev_25_3`…`ev_36_3` 那一整片 +
+    //     `m_20`/`m_30`），而真账里**真互指 0 处**。
+    //   口径（两条，都是"指针唯一"这条账规的落地）：
+    //     ① **去重**：`up`/`down` 各自不许有同一个 id 两遍；
+    //     ② **去冗余直指**：某个纪已经在 `up` 里 ⇒ 它**内含的**事件就不该再单独出现在 `up` 里
+    //        （那是同一段路的两种写法，留着会让面板把同一件事显示两遍）。
+    //   ★**必须跑在下面那个提前 return 之前**（本笔自己踩到并改回来的，两处）：第一版放在分段循环里 ⇒
+    //     只有"本轮真有事件归档"才跑归一；挪出循环后仍被 `if (!bySeg.size) return` 挡住 ⇒ 一样跑不到。
+    //     而旧账里已经写脏的那几个纪，**不必等到有事件归档就会被用户点到** ⇒ 点旧链照样撞误报。
+    //     放在这里 = 本函数每 tick 都跑 ⇒ **脏账自愈**（下一轮就把旧指针修好，不必另跑迁移脚本）。
+    for (const mm of world.milestones || []) normalizeMilestoneLinks(world.milestones, mm);
     if (!bySeg.size) return;
     const segMax = Math.max(...bySeg.keys());
     for (let seg = 0; seg <= segMax; seg++) {
@@ -676,15 +726,43 @@ function archiveClosedEvents(world, tick) {
             counts: { events: 0 },
             titles: [],
             ids: [],
+            rows: [],   // ★leg111：纪内逐事件的来路（见下方 push 处与 `ssot.schema.js` 该格头注）
             links: { up: [], down: [] },
         };
         for (const ev of segEvs) {
             m.counts.events += 1;
             m.titles.push(ev.title);
             m.ids.push(ev.id);
+            // ★★★leg111（用户令「你就把进大事纪的事件来路保留就好了，和其他没进的事件一样」）：
+            //   **把事件的来路随事件一起留档**。病：原来只留 title + id ⇒ 事件对象一走，`source.ref` 也没了
+            //   ⇒ 链视图走进大事纪里面就断了（只剩标题串），用户看到的正是这个。
+            //   口径：照抄**事件契约那五格**（id/title/source/position/ripples）——"和其他没进的事件一样"，
+            //     形状完全同形 ⇒ 链视图不必分两套渲染。
+            //   ★按 id 去重：纪是**逐 tick 增量长**的（同一纪会分多轮被推进事件），重复 push 会让 `rows` 涨出假条目。
+            if (!m.rows) m.rows = [];
+            if (!m.rows.some((r) => r?.id === ev.id)) {
+                // ★★★本次修（真模型 60 轮长跑实跑抓出来的病）：**多因跟着事件一起进档**。
+                //   病：归档只抄五格（id/title/source/position/ripples）⇒ 那件事的 `links.up` **一进档就没了**
+                //     ⇒ `src/lines.js` 的 `causeCountOf` 读不到第二条因 ⇒ `causes` 恒为 1
+                //     ⇒ **`·合流N` 一归档就消失**。实测：热账里的多因点峰值 3、末段掉回 1；
+                //     我播的那棵树（根 `ev_5_2`）第 1 轮还显 `·合流1`，归档之后就不见了。
+                //   ⇒ 用户令要的"多因点在长跑里可判"，此前**只在热账那一段成立**——这一格就是用来补它的。
+                //   ★只挂**"合流表里除了主因还有别的因"**那一种（绝大多数事件不挂）⇒
+                //     单因事件的行形状**一字不动**（旧账零扰动，也不制造"source 与 links 说同一件事"的冗余）。
+                const ups = Array.isArray(ev.links?.up) ? ev.links.up : [];
+                const extra = ups.filter((u) => u !== ev.source?.ref);
+                m.rows.push({
+                    id: ev.id,
+                    title: ev.title,
+                    ...(ev.source ? { source: { type: ev.source.type, ...(ev.source.ref ? { ref: ev.source.ref } : {}) } } : {}),
+                    ...(ev.position ? { position: ev.position } : {}),
+                    ...(Array.isArray(ev.ripples) && ev.ripples.length ? { ripples: [...ev.ripples] } : {}),
+                    ...(extra.length ? { links: { up: [...ups] } } : {}),
+                });
+            }
             for (const upId of ev.links?.up || []) {
                 if (bornTickOf({ id: upId }) > -Infinity && Math.floor((bornTickOf({ id: upId }) - 1) / milestoneEvery) === seg) continue;   // 段内引用不进 up
-                if (!m.links.up.includes(upId)) m.links.up.push(upId);
+                if (!m.links.up.includes(upId)) m.links.up.push(upId);   // ★leg110：这里只做"同一个 id 不重复 push"的浅守卫；真正的归一（去重 + 去冗余直指）在段末的 `normalizeMilestoneLinks` 统一做——一处定义，别在两处各写半套
             }
         }
         world.events = world.events.filter((e) => !m.ids.includes(e.id));
@@ -710,6 +788,25 @@ function archiveClosedEvents(world, tick) {
     }
 }
 
+/** 一个纪的 `links.up`/`links.down` 归一：去重 + 去掉"已被 up 里某个纪包含"的直指事件。就地改，返回是否动过。 */
+function normalizeMilestoneLinks(all, m) {
+    if (!m?.links) return false;
+    const up = Array.isArray(m.links.up) ? m.links.up : [];
+    const down = Array.isArray(m.links.down) ? m.links.down : [];
+    const uniqUp = [...new Set(up)];
+    const uniqDown = [...new Set(down)];
+    // 冗余直指：`up` 里若同时有某个纪和"那个纪内含的事件" ⇒ 只留纪（同一段路的两种写法）。
+    //   两步走（第一版写成一句链式过滤，实测踩了自反的坑：元素会被自己判成"包含它的纪"）：
+    //     ① 先认出 up 里**哪些项真的是纪**（按 id 在纪清单里查，而不是按"谁包含我"反推）；
+    //     ② 再问：某一项是否被这些纪里的某一个**包含**（`ids` 命中）⇒ 是就摘掉（纪已经代表了它）。
+    const parentMs = uniqUp.map((r) => all.find((k) => k !== m && k.id === r)).filter(Boolean);
+    const cleanUp = uniqUp.filter((r) => !parentMs.some((k) => (k.ids || []).includes(r)));
+    const changed = cleanUp.length !== up.length || cleanUp.some((x, i) => x !== up[i])
+        || uniqDown.length !== down.length || uniqDown.some((x, i) => x !== down[i]);
+    if (changed) { m.links.up = cleanUp; m.links.down = uniqDown; }
+    return changed;
+}
+
 // ⑦ 编年：事件条目（可读、带因果；实体 id 一律渲染成名——"棋好看"。
 //   第十三棒：源头措辞写名/题/目标——由盘算「目标」而生 / 由世界处境而生 / 沿「上游事件标题」而来；
 //   代号（ev_/a_/e_）绝不入玩家视线（A-3）；历史行保持原样，只作用于新落账行。）
@@ -728,20 +825,26 @@ function chronicleEvents(world, step, tick, chronicle) {
     const name = (id) => world.entities.find((e) => e.id === id)?.name || id;
     step.newEvents.forEach((ev, i) => {
         const ripples = ev.ripples?.length ? `，牵动 ${ev.ripples.map(name).join('、')}` : '';
-        chronicle.push({
+        const row = {
             id: `ch_${tick}_ev_${i + 1}`,
             tick,
             text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}，事发 ${ev.position}${ripples}`,
             kind: ev.source.type === 'plot' ? 'major' : ev.source.type === 'ripple' ? 'ripple' : 'state',
             eventRef: `ev_${tick}_${i + 1}`,
-        });
+        };
+        // ★★★leg137：编年行与事件**同一个时间点**（模型写的那一格，逐字照抄）。
+        //   ★为什么两处都要写：编年行是"往事检索"真正取的那一份（`ledger-recall.js` 读 `chronicle`），
+        //     只写事件 ⇒ 检索层仍然拿不到时间（那就等于没做）。★**不再顺延**（理由见 `hangEvents` 那处）。
+        const at = String(ev?.at ?? '').trim();
+        if (at) row.timeMark = at;
+        chronicle.push(row);
     });
 }
 
 // ⑧ GC/度量（切片版）：simLog 记账（长跑细案 §2.5 四字段；K2 起含门控审计；K9 起含 playerAffected 影响审计）。
 // K38 观测台（敲定稿 I 条）：entry 增 proposals（提议条数=拒签率分母）/ rejected（静默滤除+裁定拒=分子）——
 //   只在有值时写（旧账零扰动；观测台对缺字段走 warnings 兜底口径）。
-function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate, playerAffected = [], proposals = 0, rejected = 0) {
+function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate, playerAffected = [], proposals = 0, rejected = 0, packTokensBeforeTrim = null) {
     world.meta.simLog = world.meta.simLog || [];
     const entry = {
         tick,
@@ -760,6 +863,14 @@ function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate
     if (playerAffected.length) entry.playerAffected = [...playerAffected];
     if (proposals > 0) entry.proposals = proposals;
     if (rejected > 0) entry.rejected = rejected;
+    // ★★★leg114：**裁之前有多大**——只在"包真被裁过"的那一轮才写。
+    //   `pack.estBeforeTrim` 没裁时是 `undefined`（`pack.js` 那边刻意不带出去）⇒ 传到这里就是默认 `null`
+    //   ⇒ **一个字不写**。这条口径与上面 `proposals`/`rejected`/`gate` 那几行**完全同源**：
+    //   "只在有值时写（旧账零扰动）"——小世界冒烟因此一个字节不写，那条"终态 SSOT 逐字节不变"
+    //   的引擎零漂移硬读数才保得住。
+    //   ★为什么非要它：`packTokens` 是**裁完之后**的数（`pack.js` 先裁后量），包一旦撑满它就**贴着预算顶**、
+    //     看着"刚好合适" ⇒ 玩家从账上**答不出"预算该填多少"**。这一格与它一比，就知道裁掉了多少。
+    if (packTokensBeforeTrim != null) entry.packTokensBeforeTrim = packTokensBeforeTrim;
     world.meta.simLog.push(entry);
 }
 
@@ -966,6 +1077,209 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
     return stats;
 }
 
+// ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.3 / §2.7）：**聊天侧那一侧的落账**。
+//   把标签里的【行动】/【变化】/【承诺】注册成 **`dialogue` 型事件**（一条事实一条），并把【变化】的值**落到实体格上**。
+//
+//   ★它在 `runTick` 里的位置是**提取之后、出包之前**（`src/tick.js`）——两个理由：
+//     ① 世界模型这一轮要**看得见**这些既成事实（它们进的是**账**，而包读账）；
+//     ② 【变化】落格之后，世界模型看到的是**新状态**（否则它照旧样子演）。
+//
+//   ★★**写账权仍在引擎手里**：下面四道**机械**校验一道都不少（细案 §2.7）——
+//     ① 实体**在册**（解析器已归一，这里再核一次"账上真有这个 id"——不信上游是本仓惯例）；
+//     ② 格**在册**（`CHANGE_FIELDS` ＋ 驻点。★驻点由解析器过地名归一）；
+//     ③ 值**必须在正文里找得到**（找不到 ⇒ 不收）：这是"不许把词换算成数"唯一能做成的**机械**判据
+//        ——词表判语义是红线明禁的（`ANCHOR.md` §4.8），所以只能靠"照抄"来核；
+//     ④ **必带因**：因 = 本轮注册的那条 `dialogue` 事件；同轮同实体同格**只落一次**。
+//
+//   ★**玩家格可以走这条路**（用户 2026-09-24 裁定：「聊天肯定能落他这边所有更改过的所有角色属性」）——
+//     红线 1 禁的是**世界步替玩家写**（`check-step.js:319-321` 那条**原样不动**），
+//     不是禁"戏里已经发生的事实入账"（那条红线给的理由正是"玩家的行为与承诺是唯一真相源"）。
+//   ★**零扰动**：没有三族料 ⇒ **一个字节都不碰账**（不建键、不推空数组）。
+//   ★**发号走预留段**（`ev_<轮次>_500+`）：世界步那一批是 `ev_<轮次>_1..n`（模型按"本批第几件"引用），
+//     两段**永不撞号**；模型引用 dialogue 事件的真号时，也不会被"同批位次"改写规则改错
+//     （`normalizeSameStepEventRefs` 只认 `位次 ≤ 本批条数`）。
+export const DIALOGUE_EVENT_BASE = 500;
+// ★★★leg136（用户令「**不要搞那么多闸了**」）：**两道配额一并撤掉**（原 `EVENT_CAP=60` / `UPDATE_CAP=6`）。
+//
+//   撤它们的理由（三条，前两条是实测）：
+//     ① `UPDATE_CAP=6` **真咬过**：实测一轮 8 条【变化】⇒ 只落 6 条、**静默丢 2 条**
+//        （`capped` 只进读数行，玩家不看那一行就永远不知道）。而"一轮里改了几个格"是**戏里真发生的事**，
+//        引擎不该替它定上限 —— 本仓血证同款：`entityUpdates ≤3` 那条"没量过的提案态数字当家、还静默拦"，
+//        2026-09-22 用户已拍板**直接取消**。这里是同一个坑的第二次现身。
+//     ② 这两道闸**连自己都写着"提案态"**（原注释："数字要曲线再定档，见 §3"）——而 §3 那条曲线
+//        **到今天都没出**（leg136 穷举 117 个计数上限时核实）。⇒ 拿一个没量过的数当闸，正是要撤的那一类。
+//     ③ 真要防炸包，**该防的是"体积"不是"条数"**（本仓自己写过两遍：条数不是预算的度量）。
+//        体积那一道已经在了 —— `pack.js` 的整包预算 `trimPack`（有固定剪枝序、有痕迹），
+//        而且真账实测整包只用了 33.1%。
+//
+//   ★为什么留 `Infinity` 这个名字而**不是删掉**：判据与读数行都从这两个名字读值（删了要动调用面），
+//     而且"已作废"这件事要看得见（照 `ROSTER_CAP`/`POSITIONS_CAP` 的先例）。
+//   ★`DIALOGUE_EVENT_BASE=500` **不是闸**，是发号段基址（照旧不动）。
+export const DIALOGUE_EVENT_CAP = Infinity;    // 已作废（原 60）：一轮有多少件就落多少件
+export const DIALOGUE_UPDATE_CAP = Infinity;   // 已作废（原 6）：一轮有几个格变了就落几个格
+
+export function registerDialogueFacts(world, { facts = null, dialogue = '', tick = null } = {}) {
+    const stats = { events: 0, updates: 0, dropped: 0, capped: 0 };
+    if (!world || !facts) return stats;
+    const t = Number.isFinite(tick) ? tick : (world.meta?.tick ?? 0);
+    // ★"值必须在正文里找得到"的比对面：**去空白后的正文**（照抄的是同一段字，空白差异不算差异）。
+    const bare = String(dialogue ?? '').replace(/\s+/g, '');
+    const ents = world.entities || [];
+    const byId = new Map(ents.filter((e) => e?.id).map((e) => [e.id, e]));
+    const nameOf = (id) => byId.get(id)?.name || id;
+    const fallbackPos = world.context?.positions?.[0] || '未明';
+    world.events = world.events || [];
+    world.chronicle = world.chronicle || [];
+    const timeMark = facts.at || null;          // ★不带源、不推算：逐字照抄（用户 2026-09-24 裁定）
+    let nextId = Math.max(DIALOGUE_EVENT_BASE, maxEventOrdinal(world, t) + 1);
+    let seq = 0;
+    const wrote = new Set();                    // `实体|格` —— 同轮同格只落一次
+
+    const addFact = (title, rippleIds, quote, kind, position, family = 'action') => {
+        if (stats.events >= DIALOGUE_EVENT_CAP) { stats.capped += 1; return null; }
+        const id = `ev_${t}_${nextId}`;
+        nextId += 1;
+        seq += 1;
+        const node = {
+            id,
+            title,
+            source: { type: 'dialogue' },        // ★"无源事件引擎拒绝"：这一型的源就是**正文本身**
+            dialogueKind: family,                // ★'action' / 'change' / 'promise'（细案 §2.6：门控与净化要按它分）
+            position: position || fallbackPos,
+            ripples: [...new Set((rippleIds || []).filter(Boolean))],   // ★约定位：`ripples[0]` 恒是这件事的**主语**
+            links: { up: [], down: [] },
+            closed: false,                       // ★开着：世界模型下一轮能看见它、能拿它当因
+        };
+        if (quote) node.proseQuote = quote;
+        if (timeMark) node.timeMark = timeMark;
+        world.events.push(node);
+        const row = { id: `ch_${t}_dlg_${seq}`, tick: t, text: title, kind, eventRef: id };
+        if (timeMark) row.timeMark = timeMark;
+        world.chronicle.push(row);
+        stats.events += 1;
+        return node;
+    };
+
+    // ── 【行动】→ 事件（含主角那一条：他做了什么同样是既成事实）───────────────────
+    const acts = [...(facts.actions || [])];
+    if (facts.player) acts.push(facts.player);
+    for (const a of acts) {
+        if (!byId.has(a.actorId)) { stats.dropped += 1; continue; }        // ① 在册
+        const obj = a.targetId ? nameOf(a.targetId) : (a.targetText || '');
+        const who = nameOf(a.actorId);
+        const what = String(a.verb || '').trim();
+        const title = `${who}${what}${obj ? `（对${obj}）` : ''}`;
+        addFact(title, [a.actorId, a.targetId], null, 'state', a.location);
+    }
+    // ── 【变化】→ 事件 ＋ **落格** ────────────────────────────────────────────────
+    for (const c of facts.changes || []) {
+        const ent = byId.get(c.entityId);
+        if (!ent) { stats.dropped += 1; continue; }                        // ① 在册
+        const isPlace = c.field === CHANGE_PLACE_FIELD;
+        if (!isPlace && !CHANGE_FIELDS.includes(c.field)) { stats.dropped += 1; continue; }   // ② 格在册
+        const val = String(c.value ?? '').trim();
+        if (!val) { stats.dropped += 1; continue; }
+        // ③ **值必须在正文里找得到**（找不到 ⇒ 它是换算/编出来的，不收）
+        if (!bare.includes(val.replace(/\s+/g, ''))) { stats.dropped += 1; continue; }
+        const pair = `${c.entityId}|${c.field}`;
+        if (wrote.has(pair)) { stats.dropped += 1; continue; }             // ④ 同轮同格只一次
+        if (stats.updates >= DIALOGUE_UPDATE_CAP) { stats.capped += 1; continue; }   // 配额（★整条不进：不许"记了事实却没落格"）
+        const title = `${ent.name}的${c.field === CHANGE_PLACE_FIELD ? '所在' : c.field}变成了「${val}」`;
+        const node = addFact(title, [c.entityId], c.raw || null, 'major', c.location, 'change');
+        if (!node) continue;
+        // ── 落格（照 `applyEntityUpdates` 的**同一形状**留痕：原值与现值同时在场、能追到账）──
+        const prev = ent[c.field];
+        ent[c.field] = val;
+        world.meta.entityFields = world.meta.entityFields || {};
+        const rec = world.meta.entityFields[ent.id] ? { ...world.meta.entityFields[ent.id] } : {};
+        const fieldsRec = { ...(rec.fields || {}) };
+        fieldsRec[c.field] = {
+            value: val, prev, cause: node.id, causeType: 'event', tick: t, source: '变更',
+            prior: fieldsRec[c.field] || null,
+        };
+        rec.fields = fieldsRec;
+        world.meta.entityFields[ent.id] = rec;
+        wrote.add(pair);
+        stats.updates += 1;
+    }
+    // ── 【承诺】→ 事件（不是动手，但确实发生了；关系边仍由世界步带因提议）──────────
+    for (const p of facts.promises || []) {
+        if (!byId.has(p.entityId)) { stats.dropped += 1; continue; }       // ① 在册
+        const to = p.toId ? nameOf(p.toId) : (p.toText || '');
+        const title = `${nameOf(p.entityId)}许下「${p.what}」${to ? `（对${to}）` : ''}`;
+        addFact(title, [p.entityId, p.toId], p.raw || null, 'major', p.location, 'promise');
+    }
+    return stats;
+}
+// ★★★leg120（A3 关系网，细案 `docs/spec-relationship-network.md`）：**关系变更的落账通道**。
+//   分工（与 `applyEntityUpdates` / `applyEventClosures` 同一条）：**模型提议、引擎裁定与落账**。
+//   ★三件事**只有引擎能做**：**发号**（`rel_<轮次>_<第几条>`，与 `ev_<轮次>_<位次>` 同规）、
+//     **盖 `tick`**、**盖 `endedTick`**。契约层里 `relationUpdates` **根本没有 id 这一格**
+//     ⇒ 模型结构上无法自己发号（与 `newEvents` 不许写 id 同源）。
+//   ★★**"必带因"的复核与字段写回同一条口径**：用 `openCauseAtEntry` 快照把判定时点拉回**批次入口**
+//     （leg66 的裁定：引擎自己的收尾不许否掉刚放行的合法变更）⇒ 故本步必须排在 `closeEvents` **之后**，
+//     与 `applyEntityUpdates` 并列。
+//   ★**只增不改**：一条边的来路（`from`/`to`/`type`/`cause`/`tick`）落了账就**一个字不许再动**；
+//     "了结"是**往后盖** `endedTick`/`endedWhy`，不是改写历史
+//     （照小说家条款那条定案：「禁的不是'事实变了'，是**不许回溯地改过去，只许因果地长向未来**」）。
+//   ★★**零扰动**（本仓的零迁移纪律）：**没提议就一个字节都不碰账**——
+//     不写空数组、不建 `relations` 键 ⇒ 不传关系的世界与接线之前**逐字节相同**（判据 R3 锁着）。
+function applyRelationChanges(world, gstep, tick, warnings, chronicle, openCauseAtEntry) {
+    const stats = { born: 0, ended: 0 };
+    const updates = gstep.relationUpdates || [];
+    const closures = gstep.relationClosures || [];
+    if (!updates.length && !closures.length) return stats;   // ★零扰动：没提议 ⇒ 账一个字节不动
+    // ★**"只认已落账的边"在这一行定死**：本轮新建的边**本轮不许被了结**
+    //   （与 `entityFates` 那条"尘埃落定再言灭"同源）⇒ 快照必须在 ① 落账**之前**取。
+    const preexisting = new Set((world.relations || []).map((r) => r.id));
+    // ① 建立：复核因 → 发号 → 落账 → 编年留痕（痕要追得到那件因：`chainRef`）
+    updates.forEach((ru, i) => {
+        // 复核（check 已核，此处是"不信上游"的防御——照 `applyEntityUpdates` 的惯例）
+        const verdict = judgeRef('relationUpdates.cause', ru.cause, { world, step: gstep, entry: openCauseAtEntry });
+        if (verdict) {
+            warnings.push(`裁定: 关系复核拒绝——${renderVerdict(verdict)}`);
+            return;
+        }
+        if (!(world.entities || []).some((e) => e.id === ru.from)) return;   // 两端复核（check 已拒）
+        if (!(world.entities || []).some((e) => e.id === ru.to)) return;
+        world.relations = world.relations || [];
+        const id = `rel_${tick}_${i + 1}`;
+        world.relations.push({
+            id,
+            from: ru.from,
+            to: ru.to,
+            type: ru.type,                                     // ★模型的原话，引擎一字不改（不换算、不排序）
+            cause: { type: ru.cause.type, ref: ru.cause.ref },
+            tick,
+            ...(ru.note ? { note: ru.note } : {}),             // 空着就是空着：没写就不落这一格
+        });
+        stats.born += 1;
+        chronicle.push({
+            id: `ch_${tick}_rel_${id}`,
+            tick,
+            text: `${entityName(world, ru.from)} 对 ${entityName(world, ru.to)}：${ru.type}`,
+            kind: 'ripple',
+            chainRef: ru.cause.ref,                            // ★痕挂在因上 ⇒ 链视图里追得到"因为那件事"
+        });
+    });
+    // ② 了结：**只认已落账的边**（`preexisting` 快照）；一次性（已了结的不再了结）
+    for (const rc of closures) {
+        const rel = preexisting.has(rc.id) ? (world.relations || []).find((r) => r.id === rc.id) : null;
+        if (!rel || rel.endedTick != null) continue;
+        rel.endedTick = tick;
+        if (rc.why) rel.endedWhy = rc.why;
+        stats.ended += 1;
+        chronicle.push({
+            id: `ch_${tick}_relc_${rel.id}`,
+            tick,
+            text: `${entityName(world, rel.from)} 与 ${entityName(world, rel.to)} 之间「${rel.type}」了结${rc.why ? `：${rc.why}` : ''}`,
+            kind: 'ripple',
+            chainRef: rel.cause.ref,
+        });
+    }
+    return stats;
+}
+
 // K37 复归（细案 §3.7 → A-12）：被本 tick 落账事件点名（ripples 命中）→ retired 自动升回 active；
 // 一条确定性规则不发明状态机；dead 终局不复归；编年「复归」一笔（kind ripple——被波及点名而起的反应）
 function reactivateNamed(world, events, tick, chronicle) {
@@ -1059,6 +1373,7 @@ export const SETTLE_ORDER = Object.freeze([
     { call: 'closeEvents', args: ['world', 'closedIds', 'tick', 'chronicle'], why: '闭环四型（源结清/链尾结清/取消联闭/模型收场）：**在判定"灭"与"字段写回"之前**——尘埃落定' },
     { call: 'applyEntityFates', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle'], why: '★灭通道在**闭环后**：先结清再言灭；顺序反了会把"因刚刚了结"误判成"因从来不算"' },
     { call: 'applyEntityUpdates', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle', 'openCauseAtEntry'], why: '★★字段写回：**承重的那一格**——它排在上面那条 `closeEvents` 之后，靠 `openCauseAtEntry` 快照把口径拉回批次入口（W2f 真账）' },
+    { call: 'applyRelationChanges', args: ['world', 'gstep', 'tick', 'warnings', 'chronicle', 'openCauseAtEntry'], why: '★leg120（A3 关系网）：关系变更落账——与 `applyEntityUpdates` 并列（同一族、**同一个 `openCauseAtEntry` 判定时点**）；必须排在 `closeEvents` 之后才谈得上"尘埃落定"；★它内部对"了结"用**落账前的 id 快照** ⇒ 本轮新建的边本轮不许被了结' },
     { call: 'pulseEntropy', args: ['world', 'tick', 'chronicle'], why: 'K27 熵泵：环境推演每 ENV_TICK 一步，越阈落状态源事件（故此步之后世界里会有新事件）' },
     { call: 'reactivateNamed', args: ['world', 'events', 'tick', 'chronicle'], why: 'K37 复归：认的是 `hangEvents` **那一行**产出的 `events`，不是 `gstep.newEvents`' },
     { call: 'retireInactive', args: ['world', 'tick', 'warnings', 'chronicle'], why: 'K37 背景化 GC：资格看的是**本轮最终那份账**（在飞盘算/未决事件），故排在复归与熵泵之后' },
@@ -1066,7 +1381,7 @@ export const SETTLE_ORDER = Object.freeze([
     { call: 'chronicleEvents', args: ['world', 'gstep', 'tick', 'chronicle'], why: '编年落在所有改世界的步骤**之后**：编年必须记"这一轮最终发生了什么"' },
     { call: 'archiveClosedEvents', args: ['world', 'tick'], why: 'K20 档案摘要化：闭环满热窗 + 整链结清 ⇒ 里程碑温层（零编年零注入）' },
     { call: 'buildEvolutionPack', args: ['world', 'moveFact', 'null'], why: '递包读的是**本轮最终那份账**（含编年与归档），故排在归档之后' },
-    { call: 'recordMetrics', args: ['world', 'tick', 'pack.estTokens', 'calls', 'warnings', 'chronicle', 'gate', 'playerAffected', 'proposals', 'rejected'], why: 'K38 观测台记账最后：分子/分母由 `gate.droppedCounts` + `warnings` 现算，放在末尾才是终结账' },
+    { call: 'recordMetrics', args: ['world', 'tick', 'pack.estTokens', 'calls', 'warnings', 'chronicle', 'gate', 'playerAffected', 'proposals', 'rejected', 'pack.estBeforeTrim'], why: 'K38 观测台记账最后：分子/分母由 `gate.droppedCounts` + `warnings` 现算，放在末尾才是终结账。★leg114 末尾多一格 `pack.estBeforeTrim`（**裁之前有多大**）——它是本笔唯一新增的实参，锁跟着加一项；那一格没裁时是 `undefined` ⇒ 账上不写（旧账零扰动）' },
 ]);
 
 // ═══════════════ ★★★leg84（乙-2 · 细案 `docs/leg84-settle-stages-spec.md`）：`settleTick` 显式阶段化 ═══════════════
@@ -1277,6 +1592,10 @@ export function closeAndSettleFates(world, ctx) {
     //   复活与"被点名复归"是同一件事的两种入口（dead 要模型声明，retired 自动），先落后者就好。
     //   ★leg66：多带一个 `openCauseAtEntry`（来路快照，见上面的头注）——它是"因必须未闭环"的**判定时点**。
     applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAtEntry);
+    // ★★★leg120（A3）：**关系变更落账**——与字段写回并列（同一族：都是"提议 → 引擎裁定 → 落账"，
+    //   都靠 `openCauseAtEntry` 快照把"因"的判定时点拉回批次入口）。它排在 `closeEvents` 之后，
+    //   与上面那条同理：**先尘埃落定，再谈"这件事让谁跟谁变成了什么关系"**。
+    applyRelationChanges(world, gstep, tick, warnings, chronicle, openCauseAtEntry);
     pulseEntropy(world, tick, chronicle);
     return world;
 }
@@ -1318,20 +1637,25 @@ export function recordAndArchive(world, ctx) {
     world.chronicle = [...world.chronicle, ...chronicle];   // 编年落账（推进留痕 + 事件条目）
     archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）
 
-    const pack = buildEvolutionPack(world, moveFact || null);
+    // ★★★leg114：**这一处原来没递 `lim`**（全仓只有 `tick.js:259` 那一处递了）⇒ 它一直按**出厂
+    //   `每轮递线`** 建包，而真发出去的包按**账上设的**建 ⇒ 账上那个 `packTokens` 与真包**不一致**。
+    //   这是本仓老病"一个数两把尺子"的又一处潜伏形态。**本笔必须对齐它**（不是顺手改）：
+    //   否则玩家把预算调大之后，这一处仍按出厂 30000 裁 ⇒ 面板读数会**谎报"被裁了"**（真包根本没裁）。
+    //   ★对没设过任何上限的账：`resolveLimits` 给的就是出厂值 ⇒ **逐字节回到今天**（判据 K2）。
+    const pack = buildEvolutionPack(world, moveFact || null, { lim: resolveLimits(world) });
     // K38 观测台：拒签率分子/分母记账（铁律 8：先有数，后说话）
     // leg25 c：`stateChanges` 已从世界步契约删除 ⇒ 从分母里**移除**（留着恒为 0，会让分母少算一项——
     //   "删字段只删一半"的典型残留）。同处 `rejected` 的死过滤 `!w.includes('入局属性钳制')` 一并删除
     //   （那条警告已不可能产生）。
     //   ★leg95：`eventClosures` 一并计入（它是**提议**，与其余八组同性质）——漏了它会让"提议数"少算，
     //     拒签率读数跟着失真（同上面那条 `提议丢弃:` 的理由）。
-    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates', 'entityUpdates', 'eventClosures']
+    const proposals = ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates', 'entityUpdates', 'eventClosures', 'relationUpdates', 'relationClosures']
         .reduce((n, k) => n + (stepN[k]?.length ?? 0), 0);
     // ★leg32f：`提议丢弃:` 并入拒签分子——它在语义上与"裁定拒"同类（模型提了、世界没落账），
     //   漏掉它会让拒签率**低估**（丢掉的东西不计入分子 ⇒ 读数失真）。
     const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)
         + warnings.filter((w) => w.startsWith('裁定:') || w.startsWith('校验拒绝:') || w.startsWith('提议丢弃')).length;
-    recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected);
+    recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected, pack.estBeforeTrim);
     return world;
 }
 

@@ -36,7 +36,7 @@ test('★★★leg46·①（接线）：一次点击 ⇒ 真源落定 **且** �
     const line = await setParam('天时', '大灾');
     assert.deepEqual(st.store(), { 天时: '大灾' }, '★真源里就是玩家选的那一档');
     assert.deepEqual(st.mirror(), { 天时: '大灾' }, '★★世界账 `dynamic.env` 读得到（leg41 用户读数就是这里只有两个旧键）');
-    assert.match(line, /已存进本地存储/, '★状态条说的是真话：存进了本地存储');
+    assert.match(line, /已保存/, '★状态条说的是真话（B8 定稿：只说"已保存"，抽屉名只进控制台）');
     assert.ok(!/已落盘/.test(line), '★不许再出现"已落盘"（那是整份聊天上盘的说法，与参数无关）');
     assert.equal(st.calls.saveChat, 0, '★不触整份聊天上盘');
     assert.ok(st.calls.saveSettings >= 1, '插件配置区那份照样写（备份/导出/迁移会带上它）');
@@ -71,7 +71,7 @@ test('★★leg46·②（接线）：写失败时状态条**如实报错**（接
     const line = await setParam('天时', '大灾');
     assert.match(line, /没能存下来/, '★状态条必须说出失败');
     assert.match(line, /存储被禁用/, '★并说清哪一步失败（"不许谎报"是七轮教训换来的）');
-    assert.ok(!/已存进本地存储/.test(line), '★绝不谎报成功');
+    assert.ok(!/已存进本地存储|已保存/.test(line), '★绝不谎报成功');
     void st;
 });
 

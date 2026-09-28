@@ -5,6 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
@@ -28,7 +29,7 @@ import { PROPOSED_CALL_LIMITS } from '../src/transport-http.js';
 //     `/^leg\d+-/` 且不含禁词），与"它住在哪个文件"无关 ⇒ 换家不改判据，只换取样地址。
 import { escapeHtml, BLACKLIST, PANEL_BUILD } from '../src/render-base.js';
 import { AGENDA_CAPS } from '../src/settle.js';
-import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS } from '../src/limits.js';
+import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS, LIMIT_META, LIMIT_KIND_NOTE } from '../src/limits.js';   // ★leg143：＋后两个——「闸 / 尺」分组的**唯一真源**（判据照它验，不许抄字面量）
 // ★leg52：面板的档位白名单＝参数表那两张表本身（从**真源**取，不抄字面量——否则面板造得出引擎不认的值）
 // ★leg53：`PARAM_KEYS` 是**账本键表**、`PANEL_ENV_KEYS` 是**面板口径**——两件事分开，判据要同时看两边
 import { PARAM_GEARS, PARAM_KEYS, PANEL_ENV_KEYS } from '../src/params.js';
@@ -219,12 +220,17 @@ test('★leg27 后：改参数**不许整页重绘**（用户实拍「下拉表�
     const seg = setParamSrc(web);
     assert.ok(seg.length > 200, '前置：找得到 set-param 动作');
     assert.ok(!/refreshWorld\(/.test(seg), '★set-param 里不许出现 refreshWorld()——它会重建每个页签的 DOM，把正在展开的 <select> 一起销毁（下拉"自己关"的真因）');
-    assert.match(seg, /refreshSections\(\[/, '★必须走 refreshSections([...]) 局部重绘（只碰受影响页签）');
-    // ★★★leg48 改口径（**用户实机抓到的"第二笔把 9 覆盖回 3"**）：参数页**整块重画**就是那两个真凶之一
-    //   ——重画把玩家手底下的 `<select>` 销毁重建 ⇒ 浏览器对新节点补吐一笔带**旧值**的事件
-    //   ⇒ 同一格一次点击进两笔、第二笔把玩家的选择覆盖掉。故：**只许重画观棋页**（它没有可交互控件），
-    //   参数控件只按真源就地回写（`sw2SetParamControl`）+ 就地改格（`sw2SyncParamCells`）。
-    assert.match(seg, /refreshSections\(\['board'\]\)/, '★只许重画观棋页（参数页重画 = 控件被销毁重建 = 第二笔事件的来源）');
+    // ★★★本次（清死码）改口径：这一段原先锁着两件事——「必须走 `refreshSections([...])`」与
+    //   「只许重画观棋页 `refreshSections(['board'])`」。而**那两句锁的是一个空转**：
+    //   `board` 从来不是一个页签 id（`settings.html` 里 8 个容器是 panorama/chronicle/archive/
+    //   entities/setting/params/snapshots/settings；leg97 并页时 `#sw2_view_board` 已退场），
+    //   `refreshSections` 的 `if (!el) continue` **必然命中** ⇒ 那一句只白跑一遍 `renderAll`。
+    //   ⇒ 本次删掉那一句（**只删、不改成 `'panorama'`**：那会让可见面真变，是另一笔事），
+    //     判据跟着改成**如实的那一条**：这条路上**一次整块重绘都不该有**——
+    //     格的改动走 `sw2SetParamCell`/`sw2SyncParamCells`（就地改字），控件走 `sw2SetParamControl`。
+    assert.ok(!/refreshSections\(/.test(seg),
+        '★set-param 这条路上不许再有 `refreshSections([...])`：原先那枚 `[\'board\']` 是个不存在的页签（空转，已删），'
+        + '而参数页重画 = 控件被销毁重建 = 第二笔事件的来源');
     assert.ok(!/refreshSections\(\[[^\]]*'params'/.test(seg), '★★参数页**不许**被整块重画（这一条是"点一次写两次"的根治）');
     assert.match(seg, /sw2SetParamControl\(key\)/, '★控件按真源就地回写（不重建节点）');
     // ★★★leg82：忙闩已随参数族搬进 `web/param-panel.js`，接线层的形状从裸名 `sw2ParamBusy`
@@ -330,7 +336,7 @@ test('★★leg46（口径升级）：set-param 只做接线——三态规则�
     // ★★★leg48：一笔结束之后**控件按真源对齐**（"手滑到空"不许留在屏幕上冒充一次改动）
     assert.match(seg, /sw2SetParamControl\(key\)/, '★控件必须按真源对齐（否则控件空着、格写「未定」、刷新回默认）');
     // ② 状态条 = hub 的原话（接线层不许另写一套"说得比做的好听"的口径）
-    assert.match(seg, /setStatus\(`\$\{r\.humanLine\}/, '★状态条照抄 hub 的 humanLine（真实口径只有一处）');
+    assert.match(seg, /setStatus\(r\.humanLine\)/, '★状态条照抄 hub 的 humanLine（真实口径只有一处；★leg125：那半句"记忆已投"已随通道删除）');
     assert.match(seg, /r\.kind === 'noop-empty'/, '★"本来就是未定"那一下要如实出声（滚轮病灶）');
     assert.match(seg, /r\.kind === 'unchanged'/, '★"值没变"也要出声（"点了没反应"是原始抱怨）');
     // ③ 镜像那份要落进聊天账（引擎读的是世界账里的镜像）
@@ -345,15 +351,22 @@ test('★★leg46（口径升级）：set-param 只做接线——三态规则�
 });
 
 test('★leg27 c：滚轮不许改档位（`<select>` 滚过就改值是老坑，正是"打开就弹"的来路之一）', () => {
-    const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    // ★★★leg142（用户令「把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下」）：
+    //   **`bindSettingsForm` 这一族搬去了 `web/model-channel.js`**（理由：`web/index.js` 只剩 1 行，
+    //   而那两个新功能本来就属于这一族 ⇒ 搬出去正好落在同一个家里）。
+    //   ⇒ 判据照本仓那条"搬族的判据要改指新家、**重新想清楚锁的是哪一层**"办：
+    //     **锁的仍是这段行为**（拦轮那三行），只是它的家换了；同批**反向咬住老地方不许留第二份**。
+    const home = readFileSync(path.join(ROOT, 'web', 'model-channel.js'), 'utf8');
+    const old = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    assert.ok(!/function bindSettingsForm\(/.test(old), '★那一族必须真的搬走（web/index.js 里不许留第二份）');
     // ★★leg87 勘正：这里原先是 `先读 3000 字符`的**写死窗口**，而 leg87 在 `onField` 里加了
     //   数字设置那一格（超时/输出上限的校验与如实出声）⇒ 函数体变长、`addEventListener('wheel'`
     //   被挤出窗口 ⇒ **假红**（拦轮那三行一个字都没动，见下面那条反向自证）。
     //   ⇒ 口径改成"切到函数体真正结束"（与 `retired-controls.test.js` 那条 `lookupOneEntity`
     //     的切法同一形状：**锚在内容上，不锚字符数**——写死长度就是一种"锚在行号上"）。
-    const from = web.indexOf('function bindSettingsForm(');
-    const nextFn = web.indexOf('\nfunction ', from + 10);
-    const seg = web.slice(from, nextFn > 0 ? nextFn : undefined);
+    const from = home.indexOf('function bindSettingsForm(');
+    assert.ok(from > 0, '★前置：新家里真有这个函数（没有 ⇒ 下面几条就是空绿）');
+    const seg = home.slice(from);
     assert.ok(seg.length > 500, '★前置：切到了真的函数体（切空了下面几条就是空绿）');
     assert.match(seg, /addEventListener\('wheel'/, '★必须挂 wheel 拦截');
     assert.match(seg, /preventDefault\(\)/, '★必须真的 preventDefault（否则等于没拦）');
@@ -508,7 +521,7 @@ test('★leg32：面板分母不再写死——/15 与顶层 /N 都读引擎真�
 // ★★leg40b 续（**口径升级**·用户令「能不能直接把这些闸门参数直接放进参数页？」→ 拍板"甲+乙档全开"）：
 //   这条锁**原本锁的是"只读、无旋钮、不落 dynamic.env"**——那条口径**已被本次改动取代**，
 //   故照本仓规矩（口径变了就升级锁 + 加"旧措辞不得回潮"的守门），把判据换成**新契约四条**：
-//     ① 四个上限**都在页上**（还是与引擎真源同源，不钉死字面数）；② 每个都**真做成可调控件**；
+//     ① 全部上限**都在页上**（还是与引擎真源同源，不钉死字面数）；② 每个都**真做成可调控件**；
 //     ③ 控件上的值**逐项来自引擎真源**（面板造不出引擎不认的东西——UI 与判据同源）；
 //     ④ **`pack`/`sweep` 那两个"引擎自己的账"**（每轮新生盘算、入局新人）**仍然只读**（不许顺手全开）。
 // ★★★leg54 再升级（用户令「**把调数字的框直接变成输入框或者无上限**」→ 拍板「真无上限」）：
@@ -518,11 +531,11 @@ test('★leg32：面板分母不再写死——/15 与顶层 /N 都读引擎真�
 //      在**计数**上先红、另外两条在"只读清单"上先红，三条一起把改动面圈了出来）。
 //     ★旧口径里"面板不许造出引擎不认的值"这一条**随白名单一起作废**（引擎现在什么都认）——
 //       取而代之的新守门是"**控件是数字输入框且带 min=1**"（读不懂的值仍然进不去）。
-test('★leg40b 续 + leg54 + leg63：参数页把世界尺度做成**七个可调输入框**（旧"档位下拉"口径已升级）', () => {
+test('★leg40b 续 + leg54 + leg63 + leg114：参数页把世界尺度做成**可调输入框**（个数跟着键表走，不写死）', () => {
     const html = renderParamsHtml(world());
     const seg = html.slice(html.indexOf('sw2-cap-card'));
     assert.ok(seg, '参数页应有世界尺度块（sw2-cap-card）');
-    // ① 五个上限都在（键名 = limits.js 的真源，不是抄来的字面）
+    // ① 全部上限都在（键名 = limits.js 的真源，不是抄来的字面）
     for (const k of LIMIT_KEYS) {
         assert.ok(seg.includes(`data-param="${k}"`), `上限「${k}」应做成可写参数`);
         assert.ok(seg.includes(String(LIMIT_DEFAULTS[k])), `上限「${k}」的当前值 ${LIMIT_DEFAULTS[k]} 应上板`);
@@ -549,7 +562,7 @@ test('★leg40b 续 + leg54 + leg63：参数页把世界尺度做成**七个可�
         assert.ok(seg.includes(`data-param="${k}"`), `★leg63：「${k}」必须做成可写参数（不再是只读的固定闸）`);
     }
     // ★这一栏现在**七个框全是可调的** ⇒ 原来那折"还有两个数不给拧"整段撤掉（留着会说反话）
-    assert.ok(!seg.includes('不给拧'), '★没有任何"不给拧"的数了（七个框全可调）');
+    assert.ok(!seg.includes('不给拧'), '★没有任何"不给拧"的数了（全部可调）');
 });
 
 test('★★★leg54：**"无上限"必须写在脸上 + 后果如实说**（填大了会以什么形式表现出来）', () => {
@@ -578,8 +591,13 @@ test('★★★leg54：**"无上限"必须写在脸上 + 后果如实说**（填
     //   （leg60 一次、leg63 这一次——`**不是产量旋钮**` 与 `**依次**判的` 都是我当场写错、被这条抓住的）。
     //   全页扫一遍：`capCard` 里只有注释会出现 `**`，而**注释不进产物** ⇒ 产物里一个都不该有。
     assert.ok(!cap.includes('**'), '★世界尺度那一卡的产物不许含 markdown 星号（面板是 HTML）');
-    // 用户问过"四个框"，现在必须是七个——文案里的数要跟着键表走，不许留旧字面
-    assert.match(cap, /七个框都能/, '★"七个框"（leg63 起全部转正）');
+    // 用户问过"四个框"，leg63 起七个、leg114 起八个——★本笔把它改成**从键表现算**，不再写死中文数字。
+    //   理由：这条锁**已经因为"加一个旋钮"红过两次**（leg54 四个 → leg63 七个 → 本笔八个），
+    //   而它自己那句注释早就写着"文案里的数要跟着键表走，不许留旧字面" ⇒ 那就让它**真的跟着走**。
+    const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    const nKnobs = LIMIT_KEYS.length;
+    assert.match(cap, new RegExp(`${CN_NUM[nKnobs]}个框都能`),
+        `★文案里的数要跟着键表走（键表现在 ${nKnobs} 个）——不许留旧字面`);
     // ★"常用"那串是**建议值**（`LIMIT_GEARS` 降级后的用途），不是白名单——它得在页上
     assert.match(cap, /常用：/, '★建议值仍要给（玩家不知道该填几）');
     for (const g of LIMIT_GEARS['每轮递线']) assert.ok(cap.includes(String(g)), `建议值 ${g} 应在页上`);
@@ -1264,6 +1282,15 @@ test('K35/A-9 阅卷视图：卷段行还原（编年行形状→HTML，引擎 i
     assert.ok(!text.includes('ev_3')); // id 只在悬停，不进可见文本
     const empty = renderVolumeReadHtml('卷二', []);
     assert.match(empty, /（空卷）/);
+    // ★★★leg115：**阅卷里看得见"什么时候"**（用户：「聊天llm是不知道什么时候世界发生了什么事懂吗？」
+    //   ——同一件事在人看的这一侧同样成立：旧卷里只有第几轮这个**引擎轮次**）。
+    //   口径：①有那一格 ⇒ 印出来（复用既有 `.sw2-hint` 类，**不新增 CSS、不动定宽那一列**）；
+    //        ②没有那一格 ⇒ **整段不出现**（红线 2：空着就是空着，不许印"（未知）"）。
+    const withTime = renderVolumeReadHtml('卷三', [{ tick: 9, text: '天时骤变', eventRef: '', elapsed: '三天' }]);
+    assert.match(withTime, /此后又过了：三天/, '★时长要在阅卷里看得见');
+    assert.match(withTime, /class="sw2-hint"/, '★复用既有样式类（不许为它新增 CSS——那要升 CSS_VERSION）');
+    const noTime = renderVolumeReadHtml('卷四', [{ tick: 9, text: '天时骤变', eventRef: '' }]);
+    assert.ok(!noTime.includes('此后又过了'), '★没写时长 ⇒ 整段不出现（不许印占位话）');
     // ★★★leg104（A4）：它现在住**浮层**（`web/volume-popup.js`）⇒ 产物多一层"头"（照链浮层那套壳）：
     assert.match(html, /class="sw2-cv-head"/, '★头照链浮层那套壳（`sw2-cv-head`）：同一类东西同一种长相');
     assert.match(html, /data-action="volume-close"[^>]*>收起</, '★★必须带一枚「收起」（浮层里那唯一的关闭口）');
@@ -1636,9 +1663,12 @@ test('★★★leg93c：事件链**不再插进编年页**——改走浮层（�
         '「收起」按钮要走同一条收口');
     // ④ ★浮层自己的按钮委托（**这条最容易被漏**）：面板的动作总线 `bindActions` 挂在
     //    `#story_world2_window` 上，而浮层挂在 `document.body` ⇒ 浮层里自带的
-    //    「收起」(`chain-close`) 与「阅卷」(`.sw2-goto`) **走不到那条总线**，会点了没反应。
+    //    「收起」(`chain-close`) 与「阅卷」(`read-volume`) **走不到那条总线**，会点了没反应。
+    //    ★leg108 勘正：旧文案把「阅卷」写成 `.sw2-goto` —— 实测不成立（浮层产物里零个 `.sw2-goto`；
+    //      `.sw2-goto` 全仓只有一处生产者：`src/render.js:867` 观棋页那条归档提示条，它在面板里）。
+    //      本断言**照旧留着**：它锁的是"浮层必须自己接住 `.sw2-goto`"这条护栏（今天零生产者，不是死控件）。
     assert.ok(/const goto = t\?\.closest\?\.\('\.sw2-goto'\)/.test(body) || body.includes(".closest?.('.sw2-goto')"),
-        '★浮层必须自己接住 `.sw2-goto`（阅卷 ⇒ 先收浮层再切页签，否则浮层挡住玩家要看的东西）');
+        '★浮层必须自己接住 `.sw2-goto`（今天零生产者，留作护栏：浮层里一旦长出「去翻旧账」这类入口，先收浮层再切页签）');
     assert.ok(body.includes('closeChainPopup();') && body.includes('CHAIN_MASK_ID'),
         '★浮层内的点击与收口必须接上');
     // ⑤ ESC 用**捕获阶段 + stopPropagation**：面板自己有一条"ESC 关整个窗口"，
@@ -2294,7 +2324,114 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ⇒ 删，不修；事件层那枚照旧（「全部轮次」下 126 条真事件翻 3 页，有真用）。
     //   ★同批把 `data-layer` 补进 `web/index.js` 的 payload 白名单（事件层那枚不再靠兜底活着）。
     //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动：分页器那行是 flex 行内一块，撤掉自然补位）。
-    assert.equal(PANEL_BUILD, 'leg105-deadpager');
+    // ★★★leg109（用户令「做B4」）⇒ **`leg109-long-task`**：**长活儿"正在跑"看得见、连点第二下不发第二串**。
+    //   玩家看得见的那一笔：那三枚长活儿按钮跑起来**置灰 + 文字改成「正在跑…」**，跑完还原；
+    //   连点第二下时状态条多一句「⏳ 上一次还在跑（…）——这一下没有重复发」。
+    //   ★本笔**没动 `web/style.css`**（`:disabled` 的样式 leg104 就有了）⇒ 按口径 `CSS_VERSION` **不升**。
+    // ★★★leg112（C1 换书检测）⇒ **`leg112-book-check`**：**书换了的时候，设定页如实说一句 + 给一颗按钮**。
+    //   玩家看得见的那一笔：设定页「世界设定」那一段多一行 ⚠（账本按旧书建、现在挂的是另一本）
+    //   ＋ 一颗「就按现在这本算」。★没换书时一个字都不多（那一行返回空串）⇒ 对多数玩家是零变化。
+    //   ★本笔**没动 `web/style.css`**（用的是既有 `sw2-hint` + `sw2-btn`）⇒ 按口径 `CSS_VERSION` **不升**。
+    // ★★★leg114（包预算旋钮）⇒ **`leg114-budget-knob`**：**参数页「世界尺度」那一栏多了一格 + 一行读数**。
+    //   玩家看得见的那一笔：第八格「每轮给世界模型看多少料」（数字输入框，自己填，没有上限）
+    //   ＋ 一行「上一轮递过去的料折合多少 token／裁掉了多少」——★那一行就是"我该填多少"的依据。
+    //   ★本笔**没动 `web/style.css`**（用的是既有 `sw2-hint` / `sw2-param-input` / `sw2-limit-suggest`）
+    //     ⇒ 按口径 `CSS_VERSION` **不升**；`MAIN_PROMPT_V` 也**不升**（`src/prompts.js` 一个字节没动）。
+    //   ★起名避禁词：`budget`/`knob` 都不在下面那张禁词表里，形状合 `/^leg\d+-/`。
+    // ★★★leg115（账本检索层 + 时间印记 · 用户 2026-09-23 立的要求「做出效果最好的检索层」）
+    //   ⇒ **`leg115-ledger-recall`**：**阅卷（旧卷浮层）里，每一行往事后面多出"此后又过了多久"**。
+    //   玩家看得见的那一笔：**① 设置页「插件对你的对话做了什么」那张卡多了一个开关**
+    //     「把账上往事递进对话」（第四段注入 · **默认开**）；**② 阅卷（旧卷浮层）里每一行往事后面
+    //     多出"此后又过了多久"**——旧卷里原本只有「第 47 轮」这个**引擎轮次**，而"此后又过了三天"这句
+    //     正文里写的原话此前**在面板上没有任何出口**（用户原话：「聊天llm是不知道什么时候世界发生了什么事懂吗？」
+    //     ——同一件事在人看的这一侧同样成立）。
+    //   ★本笔**没动 `web/style.css`**：那一段复用既有 `.sw2-hint` 类插在正文行里
+    //     （★不加宽 `.sw2-ch-round` 那一列——它是定宽 44px，加宽就要动样式 ⇒ 要升 CSS 号）
+    //     ⇒ 按口径 `CSS_VERSION` **不升**；`MAIN_PROMPT_V` 也**不升**（`src/prompts.js` 一个字节没动）。
+    //   ★起名避禁词：`ledger`/`recall` 都不在下面那张禁词表里（★中文那批「账本」是另一个词，不撞），
+    //     且不含 `tick`/`chronicle`/`agenda`/`ssot`/`schema`/`kind`/`entity`；形状合 `/^leg\d+-/`。
+    // ★★★leg116（检索层补课：**旋钮与顺序一起做** · 用户 2026-09-23 拍板「连着旋钮一起做吧」）
+    //   ⇒ **`leg116-ledger-rank`**。玩家/模型看得见的那一笔：**第四段注入给聊天模型的是哪一批往事换了**——
+    //   修之前"按账上真名取"**一条排序都没有** ⇒ 1600 字预算切下去留下的是**最老的**那些行
+    //   （实测：命中 100 行、留下轮次 **1→64**），而"按词取"有排序 ⇒ 留下的是**最新的**（**38→100**）；
+    //   两条路记的事**一个陈年、一个刚刚**。修完两条路同为 **38→100**。
+    //   ★同一批撤掉两个"装饰旋钮"：`RECALL_SOURCES`（实测改它取到的行**逐个相同**）与那个估出来的
+    //     `limit = turns × 6`（条数闸由排序后的 `maxChars` 决定，本仓不许没量过的数字当家）。
+    //   ★本笔**没动 `web/style.css`** ⇒ `CSS_VERSION` **不升**；`MAIN_PROMPT_V` 也**不升**（`src/prompts.js` 一个字节没动）。
+    //   ★起名避禁词：`ledger`/`rank` 都不在下面那张禁词表里；形状合 `/^leg\d+-/`。
+    // ★★★leg117（检索层补课之二 · 用户点破「标题是怎么回溯到之前的事件的」）：⇒ **`leg117-ledger-archive`**
+    //   玩家/模型看的东西**一个字没变**（冒烟 8351 字节逐字节相同），变的是**能力**：
+    //   事件被压进大事纪之后，照因果上溯**不再断在归档边界**（`milestones[].rows` 里本来就留着 `source.ref`，
+    //   只是检索层没去看）；同批把两份"编年行是什么话"的规则表合成一份（实测已分叉）。
+    //   ★本笔没动 `web/style.css` ⇒ `CSS_VERSION` **不升**；`MAIN_PROMPT_V` **不升**（`prompts.js` 零改动）。
+    //   ★起名避禁词：`ledger`/`archive` 都不在下面那张禁词表里；形状合 `/^leg\d+-/`。
+    // ★★★leg125（"过剩设计"清理 · 用户令「我说了解耦就解耦，直接删了」）：⇒ **`leg125-plain-status`**。
+    //   玩家可见面变了**两处**：① 参数页少一个开关（「写进记忆插件」＋它背后整条通道删除：
+    //   `web/memory-store.js` · `src/memory-bridge.js` · `src/recall.js`）；② 状态条改说人话——
+    //   只说「**已保存**」（B8 定稿），"进了哪个抽屉"只进控制台。
+    //   ★本笔没动 `web/style.css` ⇒ `CSS_VERSION` **不升**；`src/prompts.js` 零改动 ⇒ `MAIN_PROMPT_V` **不升**。
+    //   ★起名避禁词：`plain`/`status` 都不在下面那张禁词表里；形状合 `/^leg\d+-/`。
+    // ★★★leg136（用户令「**不要搞那么多闸了**」）：⇒ **`leg136-fewer-gates`**。
+    //   玩家可见面变了**一处**：参数页「每轮给几个『冷门人』点名机会」那格的说明文——
+    //   原文写死「沉默了 12 轮以上」，而真正的静默门是 `gate.js` 的 `QUIET_TICKS`（3）
+    //   ⇒ 面板说 12、引擎按 3 跑；现在改成**不印那个数**（理由写在 `src/limits.js` 那一处）。
+    //   ★本笔没动 `web/style.css` ⇒ `CSS_VERSION` **不升**；`src/prompts.js` 零改动 ⇒ `MAIN_PROMPT_V` **不升**。
+    //   ★起名避禁词：`fewer`/`gates` 都不在下面那张禁词表里；形状合 `/^leg\d+-/`。
+    // ★★★leg140（用户令「点击实体就会出现，能看到这个实体的各种属性以及它的事迹」）再升一格
+    //   （`leg136-fewer-gates` → **`leg140-dossier`**）：面板上多了一个可点动作（点实体行 ⇒ 弹出
+    //   实体观览窗口）＋ 行上多了手型 ⇒ 玩家可见面真变了。★同批 `CSS_VERSION` **也升**
+    //   （`web/style.css` 真动了：新增实体观览窗口那一族规则）——上面 `CSS_PIN` 的号与指纹同批换掉。
+    //   ★起名避禁词：`dossier` 不在表里；★**`entity` 在表里**（第一版想叫 `leg140-entity-window`，
+    //     被下面那个循环当场挡住 ⇒ 改名，名字只说"点开看一个人的档案"）。
+    // ★★★leg141（**同一天、同一支活的第三次改** · 用户真机看后当场三条）：
+    //   「**把（账上「涟漪」头一个是他；正文给的也在这一格里）这种文字给删了**」＋
+    //   「**窗口再大个百分之20差不多就可以**」＋「**把事迹分为他做的和涉及到他的**」
+    //   ⇒ ① 格标题后那半句括号说明文整批撤（`sec()` 三参收两参 ＋ `.sw2-ew-hint` 那条死规则删掉）；
+    //      ② 窗口 820→984（×1.2）· 高度上限 86→90%；③ ③④ 两格改名成「事迹 · 他做的」/
+    //      「事迹 · 涉及到他的」。★玩家可见版面又变了 ⇒ 再升一格。
+    //   ★同批 `CSS_VERSION` **也升**（`web/style.css` 真动了）——`CSS_PIN` 的号与指纹同批换掉。
+    //   ★起名避禁词：`deeds`/`split` 不在表里。
+    // ★★★leg141b（**同一天、同一支活的第四次改** · 用户当场两问：「**势力的麾下怎么点击窗口不显示**」＋
+    //   「**关系网包括了势力与势力和势力与角色没？**」）：① 势力页印出**麾下**（反向看）且名字可点；
+    //   ② `parent`/`branches`/`organs` **当边读** ⇒ 关系格读整张网（开局就有东西）；
+    //   ③ 归属那三行从「来历与身份」**搬进**关系格（一个事实不许印两遍）。
+    //   ⇒ 玩家可见版面又变 ⇒ 再升一格。★同批 `CSS_VERSION` **也升**（`web/style.css` 真动了）。
+    //   ★★起名避禁词（**本笔第二次栽在这张表上**）：`network` 在 `BLACKLIST` 里
+    //     （leg25 c 删掉的四维之一「人脉」的英文名）⇒ 第一版 `leg141b-network` **五条判据当场红**
+    //     （构建号印在面板上，会被"扫玩家可见文本"咬住）⇒ 改名 `affiliation`（归属/隶属）。
+    // ★★★leg143（用户令「**之后我想做参数页的ui优化，设置里的那些闸其实也可以归到参数页，
+    //   然后把参数页的样式改一下**」）⇒ **`leg143-params-regroup`**：**参数页那一半接线**（三件一起做）——
+    //   ① **「插件对你的对话做了什么」整卡从设置页搬进参数页**（四枚注入开关 ＋「一轮最多递多少条行动」）；
+    //      ★处理器与存储**一个字没动**（开关仍走 `data-inject-switch`、仍由 `route()` 早退收下）；
+    //   ② **世界尺度那九个框按「闸 / 尺」分成两组**——★**九道闸一道都没撤**（他 2026-09-27 明令全留）；
+    //   ③ **文案精简**（照展示页：外面只留结论、长说明折起）＋ 一行「体检读数」。
+    //   ⇒ 玩家可见版面真变了（一页少一张卡、另一页多一张卡 ＋ 两个组头）⇒ 再升一格。
+    //   ★同批 `CSS_VERSION` **也升**（`web/style.css` 真动了：新增 `.sw2-limit-group` 那一族组头规则）。
+    //   ★起名避禁词：`params`/`regroup` 都不在表里。
+    // ★★★leg144（用户令「**在保证抽象质量的情况下优化抽象的时间**」；他点名"预览版很多用户反映这件事"）
+    //   ⇒ **`leg144-parallel-extract`**：抽取不再一块一块排队（大书 20–30 分钟 → 约 10 分钟）——
+    //   并发 3 路（`src/parallel-run.js`：并发发出去、**按块号收回**）＋ 失败即退回串行
+    //   ＋ 书指纹缓存接上线（leg25 登记过的"从没接线"）＋「初始化」补防连点闸。
+    //   ⇒ 玩家可见的东西真变了（初始化按钮跑起来**置灰 ＋ 写「正在跑…」**、连点被挡下并出声）⇒ 再升一格。
+    //   ★这一笔 `CSS_VERSION` **不升**（`web/style.css` 一个字节没动）——判据 `CSS_PIN` 同时咬两头。
+    // ★★★leg144b（**用户真机跑完之后的补笔**）⇒ **`leg144b-concurrency-knob`**：
+    //   他真机报「**我重新抽象了好像确实只要10多分钟了**」（推算站住）＋「**有四个连续的抽取调用失败**」
+    //   ＋ 控制台 `HTTP 429`（栈落在**起根**那一遍）＋「**能不能把并发度放在模型通道的设置那里，
+    //   每个人使用的网关不同支持的并发度上限不同**」⇒ 新增「同时问几块」那一格 ＋ 起根补上降级安全带。
+    //   ⇒ 模型通道那张卡**多了一格可填的框**（玩家可见）⇒ 再升一格（补笔写法，同 `leg141b`）。
+    //   ★`CSS_VERSION` **仍不升**（样式表零改动——那个框走既有的 `.sw2-field`/`.sw2-input`/`.sw2-hint`）。
+    // ★★★leg145（用户令「**我需要你做适配手机端**」）⇒ **`leg145-mobile`**：**面板在手机上能用**。
+    //   一行引擎代码都没动（`src/` 只动了构建号那一行）：改的是 `web/style.css` 的两条媒体查询——
+    //   `≤620px` 版面（单列 / 页签一行横滑 / 遮罩留边 20→6px / 视口高 `100vh→100dvh` / 浮层整屏）
+    //   ＋ `(pointer:coarse)` 手感（点击目标 44·36·32px、输入类 16px、关掉双击缩放），
+    //   外加把那条**一直是死的** 620 断点搬到文件末尾（规则一字未改）。
+    //   ★「原来是坏的」是**量出来的**（本机有 Chrome ⇒ 仓外只读装置按真手机宽度跑真产物）：
+    //     页签折 3–4 行、设置页要 406px 塞进 333px、实体页工具条一块 450px、点击目标最小 14px、
+    //     输入框 13px；实体行那条 620 单列**从没生效过**（媒体查询写在基础规则前面＝白写）。
+    //   ⇒ 玩家可见版面真变了（而且是他用手指立刻能感到的那种）⇒ 再升一格。
+    //   ★同批 `CSS_VERSION` **也升**（`web/style.css` 真动了）。
+    //   ★起名避禁词：`mobile` 不在表里。
+    assert.equal(PANEL_BUILD, 'leg145-mobile');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2324,28 +2461,36 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
     assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
-    assert.equal(cssVer, '20260923-leg104-cues',
-        `★CSS 号本笔（leg105）**不升**：样式表零改动（撤的是一行 flex 里的分页器，无规则可动；`
-        + `现为「${cssVer}」——若真动了样式再按纪律同批升`);
+    const CSS_PIN = { ver: '20260927-leg145-mobile', sha: 'b10baffbf726676297353d5c97cabbdb62d4c8711e09fda516216ae388d60ac6' };
+    const styleSha = createHash('sha256')
+        .update(readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+    assert.equal(cssVer, CSS_PIN.ver,
+        `★CSS 号与它记的那一棒对不上（现为「${cssVer}」）：**动了样式才改这一格**，改时把新号与新指纹一起换`);
     assert.match(cssVer, /^20\d{6}-leg\d+[a-z]?-[\w-]+$/, '形状：`2026MMDD-legNN…-名字`（升位链条要能一眼看出来）');
-    // ★★★leg99 收窄（原来这条是 `cssVer.includes(PANEL_BUILD)`）：**改管"leg 号必须同批或落后一笔"**。
-    //   ★为什么非改不可：leg99 的**第一笔**只升面板号、不升 CSS 号（文本变了、样式没变），
-    //     两个号第一次停在不同的 leg 上 ⇒ 旧写法（"CSS 号要含着构建号全串"）**当场红**。
-    //   ★口径一个字没放宽：它要守的是"**两个号同批**"，而"同批"本来就只由 **leg 号**表达；
-    //     `rowbg`/`pagecols`/`seedborn`/`pageflow` 那截名字说的是"这一笔干了什么"，两个号各说各的**才是对的**。
-    //   ★它**比旧写法更紧**：不许差两笔以上（差两笔正是"浏览器吃旧样式表"那个病的形状）。
+    // ★★★leg108（用户拍板「**改判据：把'落后≤一笔'换成'跟着最后一次动样式的那一棒'**」）：
+    //   **旧口径**（leg99 收窄的那条）是"CSS 号的 leg 号只许落后构建号一笔"——它是个**代理**：
+    //   它假设"每一棒都在动样式"，于是拿"两个号挨得近"来近似"样式改了就得升号"。
+    //   leg106/107 两棒没有玩家可见变化 ⇒ 构建号没动、CSS 号停在 leg104 ⇒ 两条明文规矩
+    //   （"没动样式就不升 CSS 号" vs "两个号不许差两笔以上"）**第一次真撞上**：leg108 想升
+    //   `PANEL_BUILD` 被它挡住（实测：升到 leg108 差 4 笔，当场红）。
+    //   **新口径直咬那个病本身**：给样式表钉**内容指纹** ⇒
+    //     · 指纹变了（真动了 `web/style.css`）⇒ **红**（"浏览器吃旧样式表"正是这么来的）；
+    //     · 指纹没变 ⇒ 号也不许变（同一条断言的两头）；
+    //     · 构建号只需**不落后于** CSS 号（不再要求"挨得近"——玩家可见变化本来就不必每棒都发生）。
+    //   ★指纹按 **LF 归一**再算（照 leg106 那条留档：换行随检出机而变，不该把"结账机怎么结账"算进判据）。
     const cssLeg = (/leg(\d+[a-z]?)-/.exec(cssVer) || [])[1];
     const buildLeg = (/leg(\d+[a-z]?)-/.exec(PANEL_BUILD) || [])[1];
-    assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面这条是空绿）');
+    assert.ok(cssLeg && buildLeg, '★两个号都要带得出 leg 号（否则下面那条是空绿）');
     assert.match(cssLeg, /\d+/, '前置：CSS 号里那个 leg 号必须是**数字开头**的（防空绿：`leg-` 也能被上面的正则吃下）');
-    assert.equal(buildLeg, '105', '前置：本笔的构建号就是 leg105（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg104 时它是 `104`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
-    // ★口径：**CSS 号的 leg 号只许是"本笔"或"上一笔"**——"同批"只允许差一笔（本笔只升面板号时它落后一格）。
-    //   ★不许写成"只要都是 leg 就行"：那样 leg40 的 CSS 号配 leg99 的构建号也会绿，锁就白设了。
+    assert.equal(styleSha, CSS_PIN.sha,
+        `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
+        + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
+    assert.equal(buildLeg, '145', '前置：本笔的构建号就是 leg145（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg145 之前它是 `144b`，再之前是 `144`，再之前是 `143`，再之前是 `142`，再之前是 `141b`，再之前是 `141`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);
-    assert.ok(buildNum - cssNum === 1 || buildNum === cssNum,
-        `★CSS 号的 leg 号（${cssLeg}）必须与构建号（${buildLeg}）**同批或恰好落后一笔**——`
-        + '差两笔以上说明某一个号忘了升（"浏览器吃旧样式表"那个病正是这么来的）');
+    assert.ok(buildNum >= cssNum,
+        `★构建号（${buildLeg}）不许落后于 CSS 号（${cssLeg}）——落后说明"面板换了、样式还是旧的"`);
     //   ★★★leg93b：形状判据**放宽一格**（同 leg50 那次放宽的理由）——原来是 `/^leg\d+-/`，
     //     它把"补笔"钉死了：`leg93b-…` **不匹配**（`\d+` 吃完 `93` 就要求 `-`，撞上 `b` 就红）。
     //     而本仓**本来就在用补笔写法**（`leg40b` 能过纯属侥幸：它 = `leg`+`40`+`b-`，`\d+` 只吃了 `40`；
@@ -2688,11 +2833,13 @@ test('★★leg52·C：几格合并成一栏 —— **能力零损失**（天时
     // ③ **乱象仍是只读行**（不许顺手给它旋钮——那是 leg26 立的红线）
     const depRow = paramRowSeg(html, '动乱度', { firstRowOnly: true });
     assert.ok(depRow.includes('因变量') && !depRow.includes('<select'), '「动乱度」必须仍是只读呈现');
-    // ④ 可写集合**不多不少**：参数页上带 `data-param` 的 = 两个自变量 + 两个开关 + 四个上限
+    // ④ 可写集合**不多不少**：参数页上带 `data-param` 的 = 两个自变量 + 那个总闸开关 + 四个上限
+    //   ★★★leg125：原来这里还点着 `memoryEnabled`（写进记忆插件）——那条通道已整条删除。
     const writable = new Set([...html.matchAll(/data-param="([^"]+)"/g)].map((m) => m[1]));
-    for (const k of ['天时', '张力推手', 'autoAdvance', 'memoryEnabled', ...LIMIT_KEYS]) {
+    for (const k of ['天时', '张力推手', 'autoAdvance', ...LIMIT_KEYS]) {
         assert.ok(writable.has(k), `可写参数「${k}」不许在改版中丢掉`);
     }
+    assert.ok(!writable.has('memoryEnabled'), '★leg125 删掉的那个开关不许回潮');
     assert.ok(!writable.has('动乱度'), '★因变量不许混进可写集合（PARAM_NATURE 红线）');
     assert.ok(!writable.has('民生度'), '★leg53：民生那一格已撤，更不许以任何形式变成可写');
 });
@@ -3193,5 +3340,105 @@ test('★★leg53·G：**乱象那一格的"依据"必须说实话**——它是
     // ★口径来源必须**一处**：那份"谁是谁算的"的名单住在生产者那边，渲染层只 import
     assert.deepEqual([...ENGINE_DERIVED_ENV], ['动乱度'],
         '★"每轮自动算的"那份名单必须来自 `unrest.js`（面板不许自己另写一份名单）');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ★★★ leg143（用户令「**之后我想做参数页的ui优化，设置里的那些闸其实也可以归到参数页，
+//   然后把参数页的样式改一下**」）：照展示页 `docs/spec-params-page-mockup.html` 接线 ——
+//   ① 搬卡（设置页 → 参数页）② 九个框按「闸 / 尺」分两组 ③ 文案精简。
+//   一律**追加在文件末尾**（照本文件既有纪律：上面的行号不因本笔漂移）。
+//   ★这三条锁的口径（本仓"搬族"的定稿）：**改指新家 ＋ 两头都咬**——
+//     老地方不许留残骸、新家必须真有；分组不许凭字面、要照真源；精简不许把结论也藏进去。
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+test('★★★leg143·A：「插件对你的对话做了什么」那一卡**搬进了参数页**（两头都咬）', () => {
+    const params = renderParamsHtml(world(), { config: CONFIG });
+    const settings = renderSettingsHtml(world(), { config: CONFIG });
+    // ① **新家必须真有**：那一卡 ＋ 四枚开关 ＋ 那个条数框
+    assert.match(params, /<h4>插件对你的对话做了什么<\/h4>/, '★那一卡必须画在参数页上（用户令：设置里那些闸归到参数页）');
+    for (const key of ['injectTagSpec', 'injectRoster', 'injectWorldTide', 'injectLedgerRecall']) {
+        assert.ok(params.includes(`data-inject-switch="${key}"`), `★开关「${key}」必须跟着搬（四枚一个都不许丢）`);
+    }
+    // ★写通道照旧：条数那一格仍走 `data-settings`（换页不改通道——`web/model-channel.js` 的委托绑在面板窗口上）
+    assert.match(params, /id="sw2_tag_max"[^>]*data-settings="tagMaxActions"/,
+        '★条数框跟着搬，且**写通道照旧**（`data-settings` 是它唯一的写口，搬家不许顺手改掉）');
+    // ★leg92 的两行读数**仍在**（它们是排查第一问："开关是 1、字典里却没有"）
+    assert.match(params, /还没注入过|注入/, '★注入读数行必须跟着搬（折起来就等于没有）');
+    assert.ok(params.includes('关掉即恢复原样'), '★"关掉即恢复原样"这句承诺必须跟着搬（它是这一卡的核心事实）');
+    // ② **老地方不许留残骸**（只改一头 = "两处各说一半"，本仓治过多次）
+    assert.ok(!settings.includes('插件对你的对话做了什么'), '★设置页不许再画那一卡（搬走 ≠ 两边都画）');
+    assert.ok(!settings.includes('data-inject-switch'), '★设置页不许残留任何注入开关');
+    assert.ok(!settings.includes('id="sw2_tag_max"'), '★设置页不许残留那个条数框');
+    // ③ **反向自证**（防上面那三条"不许有"是空绿：设置页真渲染出来了吗）
+    assert.ok(settings.includes('data-action="advance-world"'), '★前置：设置页确实渲染出来了（拿它必有的一枚按钮对照）');
+    assert.ok(settings.includes('id="sw2_model"'), '★前置：设置页那张「模型通道」卡照旧在原位（搬走的只有那一卡）');
+    assert.ok(params.includes('data-action="param-undo"'), '★前置：参数页确实渲染出来了（撤销那一卡仍在）');
+});
+
+test('★★★leg143·B：世界尺度那九个框按「**闸 / 尺**」分成两组——★一道闸都没撤', () => {
+    const html = renderParamsHtml(world(), { config: CONFIG });
+    const cap = html.slice(html.indexOf('sw2-cap-card'));
+    assert.ok(cap.length > 0, '前置：取得到世界尺度那一卡');
+    const countIn = (hay, needle) => hay.split(needle).length - 1;
+    // ① 分组口径来自**唯一真源**（`limits.js`），不是渲染层自己另写的一份名单
+    for (const k of LIMIT_KEYS) {
+        assert.ok(['闸', '尺'].includes(LIMIT_META[k]?.kind), `★「${k}」必须有一个明确的分组（闸 / 尺）`);
+    }
+    assert.deepEqual(Object.keys(LIMIT_KIND_NOTE).sort(), ['尺', '闸'], '★两个分组的说明句各一句（真源里就这两组）');
+    // ② 两个组头都在，且**闸在尺之前**（上面拦事、下面不拦）
+    //   ★★锚必须用**整行结构**，不能只找 `<b>闸</b>`——第一版就是这么写红的（**尺子错，看起来像行错**）：
+    //     上面那句结论（「**闸**填小了会拦下…；**尺**一个东西都不拦…」）里**也有**这两个字，
+    //     于是 `indexOf('<b>闸</b>')` 命中的是**结论句**、切出来的两段里一个框都没有。
+    const head = (k) => `<div class="sw2-row sw2-limit-group"><b>${k}</b>`;
+    const iGate = cap.indexOf(head('闸'));
+    const iRuler = cap.indexOf(head('尺'));
+    assert.ok(iGate > 0 && iRuler > 0, '★两个组头都要在（闸 / 尺），且必须是 `.sw2-limit-group` 那一行');
+    assert.ok(iGate < iRuler, '★「闸」那一组必须排在「尺」前面（与键表同序：闸七个在前、尺两个在后）');
+    // ★组头的说明句**照真源印**（不是渲染层另写一句）——"闸/尺"这两个字第一次出现就在这里，
+    //   所以它们各自那句人话必须上板（§2.5 第 1 条：首次出现处当场解释）。
+    //   ★★锚必须**连着组头那一行**一起咬（`<b>尺</b><em>…</em>`）：只找那句话是**假绿**——
+    //     「尺」那句说明（"一个东西都不拦"）**是上面结论句的子串**，组头整个删掉它照样命中
+    //     （本笔写这一条时当场想到的，正是 leg142 §5 那类"词面代替语义"）。
+    for (const k of ['闸', '尺']) {
+        assert.ok(cap.includes(`${head(k)}<em>${escapeHtml(LIMIT_KIND_NOTE[k])}</em>`),
+            `★「${k}」那句说明必须**长在组头那一行里**（不许另写一份，也不许只有结论句里有那几个字）`);
+    }
+    // ③ ★**框一个不少、且各在自己那一组里**（搬分组最容易犯的错就是把某一格挤到对面去）
+    const segs = { 闸: cap.slice(iGate, iRuler), 尺: cap.slice(iRuler) };
+    for (const k of LIMIT_KEYS) {
+        const kind = LIMIT_META[k].kind;
+        assert.equal(countIn(segs[kind], `data-param="${k}"`), 1,
+            `★「${k}」必须**恰好一次**出现在「${kind}」那一组里（分组不许把框挤到对面，也不许弄丢）`);
+    }
+    // ④ 反向自证：两组各自的框数 = 真源里那一类的键数（防"组头在、框全挤在一组"）
+    for (const kind of ['闸', '尺']) {
+        const want = LIMIT_KEYS.filter((k) => LIMIT_META[k].kind === kind).length;
+        assert.equal(countIn(segs[kind], 'data-action="set-param"'), want,
+            `★「${kind}」那一组里的框数应 = 真源里那一类的键数（${want}）`);
+    }
+    assert.equal(LIMIT_KEYS.filter((k) => LIMIT_META[k].kind === '尺').length, 2,
+        '★「尺」这一组就是"只管看多少/看多久"的那两格（包预算 · 往事轮数）——多一个都算改口径');
+    // ⑤ ★★★**一道闸都没撤**（用户 2026-09-27 明令「我认为可以留，你说的那个撤掉的也留」）：
+    //    分组是**版面**，不许顺手把哪一格删掉——"九个框"这个数从键表现算。
+    assert.equal(countIn(cap, 'data-action="set-param"'), LIMIT_KEYS.length,
+        `★这一卡必须仍是 ${LIMIT_KEYS.length} 个框（分组不改数量）`);
+});
+
+test('★★★leg143·C：文案精简**不许把结论也藏进折叠里**（长说明折起、结论留在外面）', () => {
+    // 病（本仓 leg52 记过）：把整段塞进 `<details>` ⇒ 玩家**看不到结论**（只剩一个"说明"标签）。
+    //   ⇒ 这条锁咬两件事：①结论句在折叠**外面**；②长说明在折叠**里面**（用户令"字太多了"）。
+    const capHtml = renderParamsHtml(world(), { config: CONFIG });
+    const cap = capHtml.slice(capHtml.indexOf('sw2-cap-card'));
+    const foldAt = cap.indexOf('<details');
+    assert.ok(foldAt > 0, '前置：这一卡有折叠说明（leg52 的形态）');
+    assert.ok(cap.indexOf('一个东西都不拦') > 0 && cap.indexOf('一个东西都不拦') < foldAt,
+        '★「闸 / 尺」那句结论必须在折叠**外面**（它就是玩家要读的第一句）');
+    assert.ok(cap.indexOf('没有上限') < foldAt, '★"没有上限"必须在折叠外面（用户点名要的就是它）');
+    assert.ok(cap.indexOf('填多少就长多少') > foldAt,
+        '★长说明（"不是填多少就长多少"那一族）必须留在**折叠里**——用户令"字太多了，简洁一下"');
+    // ★"体检读数"那一行：它正面回答用户那句「闸太多了，是不是要考虑删掉一些闸」——
+    //   必须点出**真拦下过东西的那一格**，否则这一行就只是一句空话。
+    assert.match(cap, /体检读数/, '★「体检读数」那一行要在（它就是"该不该撤闸"的依据）');
+    assert.ok(cap.includes('每轮最多入局几个新人'), '★它必须点名**真拦下过东西的那一格**（59 轮真账里只有它咬到过 1 次）');
 });
 

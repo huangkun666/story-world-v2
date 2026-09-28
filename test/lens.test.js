@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildEvolutionPack, lensList, trimPack, EVOLUTION_BUDGET_TOKENS, computeOpenRoots, computeThreads, computeClosedRoots, THREADS_TOP, CLOSED_ROOTS_TOP } from '../src/pack.js';
+import { buildEvolutionPack, lensList, trimPack, EVOLUTION_BUDGET_TOKENS, computeOpenRoots, computeThreads, computeClosedRoots, THREADS_TOP, CLOSED_ROOTS_TOP, packTextOf, TOKEN_RATIO } from '../src/pack.js';
 import { runTick } from '../src/tick.js';
 
 function mkWorld({ entities = [], weights = {}, events = [], agendas = [], tick = 0, moveFact = null } = {}) {
@@ -118,14 +118,20 @@ test('K44: P3 保持——分量数字不随行泄漏（包文本零 weight 键�
 // ---------- leg25：总预算强制（trimPack 死代码接线）----------
 
 test('leg25: 超预算输入 → 按固定剪枝序裁剪、estTokens 落回预算内、pack.trimmed 留痕（机器可读）', () => {
-    // 规模对标"名册增长吃掉余量"的真实轨迹：900 实体 + 300 未决事件 + 300 在飞盘算（带 memory）
+    // 规模对标"名册增长吃掉余量"的真实轨迹：900 实体 + 400 未决事件 + 400 在飞盘算（带 memory）
+    // ★★★leg135：事件/盘算 **300 → 400**。为什么（**读数在这，不是猜的**）：
+    //   出厂预算 30000 → 50000（用户令「我预算抬到50000token」）之后，旧夹具 est=**42,670** ⇒ **不裁** ⇒
+    //   本用例的前提（"夹具真的触发剪枝"）当场失效（实测当场红）。
+    //   实测曲线：900 实体 + 300 ⇒ 42,670 不裁 · **+400 ⇒ 49,086 裁 2 段** · +500 ⇒ 裁 4 段。
+    //   ⇒ 取 **400**：第一个真裁的档。★复量口：`node tmp/leg135-scale-hit/measure-lens-fixtures.mjs`。
+    const N_PAD = 400;
     const ents = Array.from({ length: 900 }, (_, i) => ent(`e_${i}`, `名号${i}号长名为了吃预算`, 'character'));
-    const events = Array.from({ length: 300 }, (_, i) => ({
+    const events = Array.from({ length: N_PAD }, (_, i) => ({
         id: `ev_${i}`, title: `未决事件${i}`, source: { type: 'plot', ref: 'a_0' }, position: '中央', closed: false,
     }));
     events.push({ id: 'ev_c1', title: '已闭一', source: { type: 'plot', ref: 'a_0' }, position: '中央', closed: true });
     events.push({ id: 'ev_c2', title: '已闭二', source: { type: 'plot', ref: 'a_0' }, position: '中央', closed: true });
-    const agendas = Array.from({ length: 300 }, (_, i) => ({
+    const agendas = Array.from({ length: N_PAD }, (_, i) => ({
         id: `a_${i}`, owner: `e_${i}`, goal: `谋划第${i}件事的长目标描述`, stage: '阶段', visibility: 'known',
         progress: 1, maxSteps: 4, parentId: null, closed: false,
         memory: { promises: ['旧诺言甲', '旧诺言乙'], done: [], blocked: ['受阻原因'], turnsAlive: 3 },
@@ -186,9 +192,99 @@ test('leg25: 固定剪枝序用尽仍越界 → 留 budgetOverrun 痕迹（不�
         agendas: [], pendingEvents: [], recentClosedEvents: [], playerMove: null, dialogueBook: [],
     };
     const cut = trimPack(pack, 1);
-    assert.deepEqual(cut, ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail', 'closedAgendas', 'idleFaces', 'budgetOverrun'], '固定序走完仍越界 → 追加越界痕迹');
+    assert.deepEqual(cut, ['entities.slim', 'entities.idOnly', 'recentClosedEvents', 'pendingEvents', 'agendas.detail', 'closedAgendas', '纪事', 'idleFaces', 'budgetOverrun'], '固定序走完仍越界 → 追加越界痕迹');
+    //   ★★★leg113 同步（B2 编年进包）：'纪事' 是本棒新增的剪枝段——位置在 `closedAgendas` 之后、
+    //     `idleFaces` 之前（相对要紧度：在办的事 > 已了结的线 > **往事** > 检索到的书的片段）。
+    //     ★口径没放宽：本条仍然是"固定序走完仍越界 ⇒ 必须留 `budgetOverrun` 痕迹"，
+    //     只是序里多了一段**如实登记**的段（该用例的账带编年 ⇒ 这一段会被执行）。
     assert.deepEqual(pack.trimmed, cut, '痕迹写进包里（机器可读）');
     assert.equal(pack.entities.length, 1, '越界也不清空视野（镜头人数不丢）');
+});
+
+// ★★★leg130（真跑抓出来的两个病，各锁一条）────────────────────────────────────────
+// 这两条**不是推演出来的**：它们是"把包预算拧到 800～3000、让世界真跑几十上百轮"压出来的，
+//   而小世界冒烟（预算 3 万）**永远走不到**那两条路 ⇒ 没有判据就没人挡得住它们回来。
+/** 造一份"逼得动裁剪"的包——★形状要**逼真**，否则判据会空转（第一版就栽在这，留档）：
+ *  第一版只堆了 40 个光杆实体 + 200 行往事 ⇒ 唯一能压进预算的只有 ⑦往事那一刀，
+ *  而**那一刀正好是旧代码没病的那条路**（额度守卫先挂了占位 `trimmed` 再量）⇒ 判据红不了、等于没测。
+ *  ⇒ 现在按真包的形状给：实体**带 `__relight`**（①②才真能瘦）、③④⑤⑥ 各有肥料（各能真瘦一截），
+ *    往事只给几行（于是"序走到一半就压进预算"那条路**才走得到**——那正是旧代码出病的地方）。*/
+function mkTrimPack(rows = 6) {
+    const heavy = Array.from({ length: 20 }, (_, i) => `麾下${i}`).join('、');
+    const entities = Array.from({ length: 40 }, (_, i) => ({
+        id: `e${i}`, kind: i % 5 === 0 ? 'faction' : 'character', name: `人${i}`, location: '中央',
+        parent: i % 5 === 0 ? undefined : 'e0', members: i % 5 === 0 ? heavy.split('、') : undefined,
+    }));
+    const pack = {
+        world: 'w', positions: ['中央'],
+        entities,
+        agendas: Array.from({ length: 30 }, (_, i) => ({
+            id: `a${i}`, owner: 'e1', goal: `在办的第${i}件事要有个结果`, stage: '推进中',
+            visibility: 'known', progress: `${i % 4}/4`, memory: { promises: ['答应过的事'], done: [], blocked: [], turnsAlive: 9 },
+            parentId: null, source: { type: 'state' },
+        })),
+        pendingEvents: Array.from({ length: 60 }, (_, i) => ({ id: `p${i}`, title: `未决的第${i}件事`, source: { type: 'state' }, position: '中央' })),
+        recentClosedEvents: Array.from({ length: 60 }, (_, i) => ({ id: `c${i}`, title: `已了结的第${i}件事`, source: { type: 'ripple', ref: `c${Math.max(0, i - 1)}` }, closed: true })),
+        closedAgendas: Array.from({ length: 40 }, (_, i) => ({ id: `ca${i}`, goal: `办结的第${i}件谋划`, stage: '结清' })),
+        playerMove: null, dialogueBook: [],
+        idleFaces: Array.from({ length: 12 }, (_, i) => ({ id: `f${i}`, name: `脸${i}`, kind: 'character' })),
+    };
+    // ★①② 要真能把实体行瘦下来，就得有 `__relight`（真包里它是不可枚举的，见 `buildEvolutionPack`）
+    Object.defineProperty(pack, '__relight', {
+        value: (mode) => entities.map((e) => (mode === 'idOnly' ? { id: e.id, name: e.name } : { id: e.id, kind: e.kind, name: e.name, location: e.location })),
+        enumerable: false, writable: false, configurable: false,
+    });
+    Object.defineProperty(pack, '__chronicle', {
+        value: Array.from({ length: rows }, (_, i) => ({ tick: i + 1, text: `第${i + 1}轮：某事发生，牵动了若干人` })),
+        enumerable: false, writable: false, configurable: false,
+    });
+    // ★★★leg133：真包里还有这一格（**往事窗口的下界**，见 `pack.js` 的 `windowFromTick`）——
+    //   这份手搓包原来没有它 ⇒ 窗口那段逻辑退化（全部算"窗口内"），于是"往事装回一部分"那一支
+    //   在预算紧时**再也走不到**（判据当场抓红）。⇒ 照真包的形状补齐：留最近 50 轮在窗口内、
+    //   其余算"窗口外"（`rows <= 50` 时全部落在窗口内，与补齐之前的行为一致）。
+    Object.defineProperty(pack, '__windowFloor', {
+        value: rows > 50 ? rows - 50 + 1 : -Infinity,
+        enumerable: false, writable: false, configurable: false,
+    });
+    return pack;
+}
+// ★量体**必须与引擎同一把尺**（`estTokensOf` 是模块私有的 ⇒ 照它的公式：`packTextOf(...).length / TOKEN_RATIO`）
+const estOf = (pack) => Math.ceil(packTextOf(pack).length / TOKEN_RATIO);
+
+test('leg130: 裁完之后交出去的那一份包，要么在预算内、要么留 budgetOverrun（★"静默越预算"那一条）', () => {
+    let sawTrim = false, sawOverrun = false;
+    // ★预算要**密着扫**：出病的那一段是"序走到一半就压进预算"（⑦从没触发）那个窄窗口，
+    //   而它只有**一个 trimmed 数组那么宽**（实测 ≈30 est）——第一版步长 200，**一步就跨过去了**，
+    //   于是判据在未修的代码上照样绿（等于没测）。⇒ 步长压到 5。
+    for (let budget = 600; budget <= 9000; budget += 5) {
+        const pack = mkTrimPack(6);
+        const cut = trimPack(pack, budget);
+        if (cut.length) sawTrim = true;
+        if (cut.includes('budgetOverrun')) sawOverrun = true;
+        // ★病：末道自量是在"还没挂 trimmed"的包上量的 ⇒ 挂上之后越了界却一条痕迹都没有。
+        assert.ok(estOf(pack) <= budget || cut.includes('budgetOverrun'),
+            `预算 ${budget}：最终那一份包 ${estOf(pack)} est 越了界，trimmed 却是 ${JSON.stringify(cut)}——"不许静默炸预算"被破了`);
+    }
+    assert.ok(sawTrim, '★先自证这一条**真走到了裁剪那一支**（否则上面那个断言是空转，等于没测）');
+    assert.ok(sawOverrun, '★再自证这一条**真走到了"序全走完仍越界"那一支**（兜底痕迹那条路也要被走到）');
+});
+
+test('leg130: 往事那一格被裁时，痕迹必须留在固定序原位上（不许挪到末尾）', () => {
+    // 固定剪枝序（照 `trimPack` 现读）：… ⑥ closedAgendas → ⑦ 纪事 → ⑧ idleFaces
+    const IDLE = 'idleFaces';
+    let sawPartialRestore = false;
+    for (const budget of [200, 300, 400, 500, 600, 800, 1000, 1200, 1600, 2000, 2500, 3000]) {
+        const cut = trimPack(mkTrimPack(200), budget);
+        const mark = cut.find((s) => String(s).startsWith('纪事'));
+        if (String(mark || '').startsWith('纪事.留')) sawPartialRestore = true;
+        if (mark && cut.includes(IDLE)) {
+            // ★病：额度守卫把 `纪事` 删掉、把 `纪事.留N条` **追加到末尾** ⇒ 读出来是 […, idleFaces, 纪事.留7条]，
+            //   看着像"先扔往事、后扔名单"，与固定序正好相反 ⇒ **顺序这件事再也无法机械核对**。
+            assert.ok(cut.indexOf(mark) < cut.indexOf(IDLE),
+                `预算 ${budget}：往事那一格排到了 ${IDLE} 后面 ⇒ 痕迹次序不等于固定序（实测这一形状 41/200 轮）：${JSON.stringify(cut)}`);
+        }
+    }
+    assert.ok(sawPartialRestore, '★先自证这一条**真走到了"往事装回一部分"那一支**（否则断言空转，等于没测）');
 });
 
 test('leg25: 未超预算 → pack.trimmed 缺省（不写该键）、输出与旧版逐字节一致（防回归）', () => {
@@ -307,7 +403,11 @@ test('leg25: runTick 端到端——超预算世界不炸且全程落在预算�
     const base = world.entities[0];                          // e_merchant（大荒商帮 @ 临渊城）
     // ① 成员满的势力：members 是 trimPack 第一刀（entities.slim）要逐出的字段 —— 不这样造就触发不了剪枝
     const ROSTER = Array.from({ length: 60 }, (_, i) => `成员${i}号长名字`);
-    const pad = Array.from({ length: 300 }, (_, i) => ({
+    // ★★★leg135：pad **300 → 500**（同 `pack-budget.test.js` 的 `heavyWorld`，两条是同一个配方）。
+    //   出厂预算抬到 50000 之后旧值 est=**36,515** 不裁 ⇒ 前提失效。
+    //   实测：300 ⇒ 36,515 不裁 · 400 ⇒ 48,715 不裁 · **500 ⇒ 裁 5 段**。
+    const N_PAD = 500;
+    const pad = Array.from({ length: N_PAD }, (_, i) => ({
         ...structuredClone(base), id: `e_pad_${i}`, kind: 'faction', name: `守卫${i}号长名为了吃预算`,
         branches: [`分舵甲${i}`, `分舵乙${i}`], organs: [`堂口${i}`], members: ROSTER,
     }));
@@ -315,10 +415,10 @@ test('leg25: runTick 端到端——超预算世界不炸且全程落在预算�
     // ② 未决事件（第四刀 pendingEvents）③ 在飞盘算带 memory（第五刀 agendas.detail）
     //   ⚠必须是**追加**而不是覆盖：本用例的 step 引用 golden 世界里原有的 `a_1` 盘算，
     //   覆盖掉 agendas 会让"超预算世界不炸"这条断言红成"未知盘算 a_1"（与裁剪路径无关的假红）。
-    world.events = [...(world.events || []), ...Array.from({ length: 300 }, (_, i) => ({
+    world.events = [...(world.events || []), ...Array.from({ length: N_PAD }, (_, i) => ({
         id: `ev_pad_${i}`, title: `未决事件${i}号长标题为了吃预算`, source: { type: 'plot', ref: 'a_1' }, position: '临渊城', closed: false,
     }))];
-    world.agendas = [...(world.agendas || []), ...Array.from({ length: 300 }, (_, i) => ({
+    world.agendas = [...(world.agendas || []), ...Array.from({ length: N_PAD }, (_, i) => ({
         id: `a_pad_${i}`, owner: `e_pad_${i}`, goal: `谋划第${i}件事的长目标描述为了吃预算`, stage: '阶段', visibility: 'known',
         progress: 1, maxSteps: 4, parentId: null, closed: false,
         memory: { promises: ['旧诺言甲', '旧诺言乙'], done: [], blocked: ['受阻原因'], turnsAlive: 3 },

@@ -182,13 +182,23 @@ test('★★leg71 丙案④：新模块**不许反向 import** `abstract.js`（�
         '★`abstract.js` 从两个新模块 import 的符号集合 = 上面那条契约清单（不多不少）');
 });
 
+// ★★★leg114：修法的全部理由（别只抄结论）——旧版 `importGraph` **没走本文件已有的那把尺**
+//   （第 48 行那个 `stripComments`，它自带"字符串里的 `//` 不是注释"的反向自证），
+//   于是把**注释里**写的 `from './x.js'` 也当成了一条真 import：
+//   · `limits.js:15` 是 leg40b 的留档注释，它**引用了**当年写错的那一行（原文里就带着 `from './settle.js'`）
+//     ⇒ 检测器把它算成一条 `limits.js → settle.js` 的边；
+//   · 于是 `BASELINE_CYCLES` 里那条 `settle.js → limits.js → settle.js` **是幻影**；
+//   · 去掉注释后实测：`limits.js` 的出边**零条**，整个 `src/` 的 import 图**零环**
+//     ⇒ 四条"基线环"**全是注释造成的幻影**（不只这一条）。
+//   ★所以本笔**不新造第二个剥离器**——只让 `importGraph` 用上本文件早就有的那把尺（一处口径）。
+
 /** 建全 src 的 import 图（只认相对 import；跳过"解析到自己"的假自环）。 */
 function importGraph() {
     const files = readdirSync(SRC).filter((f) => f.endsWith('.js'))
         .concat(existsSync(SRC + 'schemas') ? readdirSync(SRC + 'schemas').filter((f) => f.endsWith('.js')).map((f) => 'schemas/' + f) : []);
     const edges = new Map();
     for (const f of files) {
-        const src = readFileSync(SRC + f, 'utf8');
+        const src = stripComments(readFileSync(SRC + f, 'utf8'));   // ★leg114：注释不是 import（走本文件第 48 行那把尺）
         const out = [...src.matchAll(/from\s+'(\.[^']+)'/g)].map((m) => m[1])
             .map((p) => p.replace(/^\.\//, '').replace(/^\.\.\//, '').replace(/^\.\.\/src\//, ''))
             .map((p) => (p.endsWith('.js') ? p : p + '.js'))
@@ -213,16 +223,21 @@ function findCycles(edges) {
     return [...cycles];
 }
 
-// ★基线（leg71 切割**之前**实测，HEAD = leg69 那棵树跑同一份装置）：**4 条环，全是既有的**。
+// ★基线（leg71 切割**之前**实测，HEAD = leg69 那棵树跑同一份装置）：当时读到 **4 条环**。
 //   ★为什么要把既有环写进判据而不是"要求零环"：它们是别的模块的历史包袱，**本棒不动它们**
 //     （细案"一棒只做一格"）。把它们列出来 = "本棒**没有**引入新环"这件事可复核；
 //     而"要求零环"会让这条判据当场红在**与我无关**的地方（本仓 leg69 §4.4 那次"收紧过头会自伤"的教训）。
-const BASELINE_CYCLES = [
-    'check-step.js → position.js → check-step.js',
-    'check-step.js → position.js → settle.js → check-step.js',
-    'position.js → settle.js → position.js',
-    'settle.js → limits.js → settle.js',
-];
+//
+// ★★★leg114：**基线清空了**（从 4 条变 0 条）——因为那 4 条**全是幻影**。
+//   本笔要 `pack.js` 从 `limits.js` 取值（"一个数一个家"，用户拍板），这条判据当场红了一条
+//   `settle.js → pack.js → limits.js → settle.js`。查下去发现**病不在那个 import**：
+//   旧检测器把**注释里**写的 `from './x.js'` 也当成真 import，而 `limits.js:15` 那句 leg40b 的
+//   留档注释**引用了**当年写错的那一行 ⇒ 它被算成一条 `limits.js → settle.js` 的边。
+//   ★去掉注释后实测：`limits.js` 出边**零条**，整个 `src/` 的 import 图**零环**。
+//   ⇒ 所以本笔修检测器（`stripComments`）+ 基线清空：这条判据的**实质变强**了，
+//     从"没有新环"变成"**真的零环**"（不是放宽——旧版那 4 条从来就不存在）。
+//   ★它仍然是"能当场红"的：下面丙案⑥那条反向自证照旧在（塞一个真环进去，检测器必须报出来）。
+const BASELINE_CYCLES = [];
 
 test('★★leg71 丙案⑤：切割**没有引入新环**（与基线逐条对齐；多一条就是新病）', () => {
     const { files, edges } = importGraph();
@@ -242,7 +257,44 @@ test('★★leg71 丙案⑤：切割**没有引入新环**（与基线逐条对�
     //     ★它的 import 面**只有一条边**：`render.js → panorama.js`（同 `render.js → chain.js` 那种
     //     "渲染层调一个自渲染的纯模块"），而 `panorama.js` **不 import 任何东西**（真叶子）
     //     ⇒ 环基线照旧一条未动（见上一条断言；这里是"加模块但没加环"的第二个先例）。
-    assert.equal(files.length, 46, `★src 模块数 = 46（leg71 新增 2 个：shape 与 tier；★leg85 新增 1 个：render-base；★leg89 新增 1 个：tag-extract；★leg94 新增 1 个：panorama）；实为 ${files.length} ⇒ 有人加了/删了模块，请同步本判据`);
+    //   ★★★leg112 同步（C1 换书检测）：`src/book-check.js` 是本棒新增的第 47 个模块——
+    //     它把"账上那份设定是从哪本书抽的"与"现在挂的是哪本书"比一次（**零 import 的真叶子**，
+    //     连 `fingerprint.js` 都不 import：算指纹那一步在 `web/book-source.js`，本模块只做比较与措辞）
+    //     ⇒ 环基线照旧一条未动（这里是"加模块但没加环"的第三个先例）。
+    //   ★★★leg113 同步（B2 编年进包 · 用户 2026-09-22 拍板）：`src/chronicle-brief.js` 是本棒新增的
+    //     第 48 个模块——把账上的**编年**过滤成给世界模型看的"往事"（治"模型每轮失忆"：
+    //     归档把 20 轮前的**事件**搬走了，而**编年行不归档** ⇒ 编年是唯一存本）。
+    //     ★它**不 import 任何东西**（真叶子：实测编年落账时**已经是名字**，不必搬 `panorama.js` 的清洗）
+    //     ⇒ 环基线照旧一条未动（这里是"加模块但没加环"的**第四个**先例）。
+    //   ★★★leg115 同步（账本检索层 · 用户 2026-09-23 立的要求「做出效果最好的检索层」）：
+    //     `src/ledger-recall.js` 是本棒新增的第 49 个模块——把"取账上往事"收成**一条接口 + 六种可取的方式**
+    //     （最近 / 按人 / 照指针 / 按词 / 按轮次 / 照因果上溯），供**三个消费者**共用
+    //     （世界模型那一侧的包 · 聊天模型那一侧的包 · 面板的阅卷）。
+    //     ★它**不 import 任何东西**（真叶子：账由调用方递进来，它不自己去取世界、不碰 DOM、不碰存储）
+    //     ⇒ 环基线照旧一条未动（这里是"加模块但没加环"的**第五个**先例）。
+    //   ★★★leg134 勘正（死码清理 · 用户令「没用的设计全给我摒弃」）：上面两句**都已过期**，按现读代码订正——
+    //     ① 取法**只剩三种**（最近优先 / 按词取 / 按真名取）。原先那"按人取 / 照指针 / 按轮次 / 照因果上溯"
+    //        四种，**生产路径从来没调用过**（全仓 `modes:[…]` 字面量只有三处：包那一侧两处、聊天注入一处），
+    //        已作为死码整批删除（连带"归档索引"那一族——生产那两种取法在空索引下**逐字节相同**，实测过）。
+    //     ② 它**不再是真叶子**：leg117 起它 import `chronicle-brief.js`（"编年行是什么话"那张**唯一**规则表，
+    //        两份规则表分叉那个病就是本仓为它付过的账）。
+    //     ★模块数与环基线**本笔一字未动**（只删函数/分支，没删模块）⇒ 上面那条棘轮照旧。
+    //   ★★★leg125 反向同步（**删模块 ×2** · 用户令「我说了解耦就解耦，直接删了」）：
+    //     `src/memory-bridge.js`（投给柚月の记忆那条通道）与 `src/recall.js`（借它向量库那条腿）
+    //     一起删除 ⇒ 模块数 **49 → 47**。
+    //     ★口径没放宽：本条仍然是"**模块数只许在明确记账的前提下变**"——删一个也要在这里写清是谁删的。
+    //     ★两者当年只被同批删除的 `web/memory-store.js` / `demo/*` 与判据 import ⇒ 删后**环基线一条未动**。
+    //   ★★★leg128 同步（**新增 1 个** · 用户令「把整个链路打通，包含多因点」）：
+    //     `src/lines.js`＝**故事线**（切树 ＋ 立线：把账切成互不相交的一条条因果线，多因点住在 `links.up`）。
+    //     ★它只 import `setting.js`（要 `eventBornTick` 那把**唯一的**解析尺），而 `setting.js` 不 import 本族
+    //     ⇒ `pack.js → lines.js → setting.js` 这条路**不成环**（环基线一条未动；这是"加模块但没加环"的**第六个**先例）。
+    //     它与 `chain.js` 不重复：`chain.js` 是"从一个根往外看"的展开器，本模块是**全账划分器**。
+    //   ★★★leg144 同步（**新增 1 个** · 用户令「**在保证抽象质量的情况下优化抽象的时间**」）：
+    //     `src/parallel-run.js`＝**有界并发执行器**（把一串互不依赖的异步活儿并发发出去、**按原下标收回来**）。
+    //     它是本笔"20–30 分钟 → 约 10 分钟"那一刀的全部机制（抽取两遍 ＋ 起根，三处共用同一个）。
+    //     ★它**不 import 任何东西**（真叶子：不认识"块""抽取""网关"——降不降并发那条策略住调用方）
+    //     ⇒ 环基线照旧一条未动（这里是"加模块但没加环"的**第七个**先例）。
+    assert.equal(files.length, 49, `★src 模块数 = 49（leg71 新增 2 个：shape 与 tier；★leg85 新增 1 个：render-base；★leg89 新增 1 个：tag-extract；★leg94 新增 1 个：panorama；★leg112 新增 1 个：book-check；★leg113 新增 1 个：chronicle-brief；★leg115 新增 1 个：ledger-recall；★leg125 **删除** 2 个：memory-bridge · recall；★leg128 新增 1 个：lines；★leg144 新增 1 个：parallel-run）；实为 ${files.length} ⇒ 有人加了/删了模块，请同步本判据`);
 });
 
 test('★leg71 丙案⑥：环检测器**不是空绿**（反向自证：塞一个真环进去，它必须报出来）', () => {

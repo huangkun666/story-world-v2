@@ -125,7 +125,10 @@ test('★leg60 + leg62 刻度块：概念表进包（一把尺一张表）、体
     //   而"两条预算各自压到上限"这条性质，用**真实形状的夹具**在下面单独锁（现实里档位是
     //   "少数几把尺、每把许多档"，维度挂在尺上——大荒 103 档/65 维、实教 1 尺挂 5 维都是这形状）。
     const big = world();
-    big.context.setting.frozen.canon.powerScale = Array.from({ length: 90 }, (_, i) => ({ level: `档${i}`.repeat(20), note: '标'.repeat(80) }));
+    // ★★★leg135：夹具规模**必须跟着上限走**（改上限而不改这里 ⇒ 这个用例会**静默失去意义**：
+    //   `90 档`在旧上限 24 下会截断，在新上限 300 下**一条都不截** ⇒ 下面那些断言全变成空转）。
+    //   ⇒ 口径改成"**比上限多一档**"：夹具永远越界，断言永远咬得住。
+    big.context.setting.frozen.canon.powerScale = Array.from({ length: TIER_TOP + 1 }, (_, i) => ({ level: `档${i}`.repeat(20), note: '标'.repeat(80) }));
     big.context.setting.frozen.canon.dims = Array.from({ length: 40 }, (_, i) => ({ name: `维${i}`.repeat(20), range: '范'.repeat(80) }));
     const q = buildEvolutionPack(big, null);
     const qT = q.pack.setting.刻度;
@@ -139,29 +142,29 @@ test('★leg60 + leg62 刻度块：概念表进包（一把尺一张表）、体
     // ★真实形状（**一把尺，底下许多档 + 一组挂在它上面的维度** —— 实教 `S~E级` 下挂 5 个属性就是这形状）
     //   ⇒ 两条预算**各自压到上限**，且表数远小于上限（表数封顶完全不参与 ⇒ 这段只验预算本身）。
     const real = world();
+    // ★★★leg135：同样"**比上限多一档/一维**"——旧夹具写死 31 档/12 维，那是照旧上限 24/8 配的；
+    //   新上限 300/16 下它**顶不到任何一条闸** ⇒ 断言会变成"测一个不存在的截断"。
     real.context.setting.frozen.canon.powerScale = [
         { level: 'S~E级', note: '决定班级分配' },
-        ...Array.from({ length: 30 }, (_, j) => ({ level: `档${j}`, note: '标' })),   // 31 档 ⇒ 逼 TIER_TOP
+        ...Array.from({ length: TIER_TOP }, (_, j) => ({ level: `档${j}`, note: '标' })),   // TIER_TOP+1 档 ⇒ 逼 TIER_TOP
     ];
     real.context.setting.frozen.canon.dims = [
-        ...Array.from({ length: 12 }, (_, i) => ({ name: `维${i}`, range: 'S~E级' })),  // 12 维 ⇒ 逼 DIM_TOP
-        // ★对照：一个**回指不到任何档位名**的维度 ⇒ 它自成一表（`scalesFromFlat` 的兜底分支）
-        { name: '独立维', range: '0~100' },
+        ...Array.from({ length: DIM_TOP + 1 }, (_, i) => ({ name: `维${i}`, range: 'S~E级' })),  // DIM_TOP+1 维 ⇒ 逼 DIM_TOP
     ];
     const rq = buildEvolutionPack(real, null).pack.setting.刻度;
     assert.equal(rq.flatMap((t) => t.档位 || []).length, TIER_TOP, '★真实形状：档位压到 TIER_TOP');
     assert.equal(rq.flatMap((t) => t.维度 || []).length, DIM_TOP, '★真实形状：维度压到 DIM_TOP');
     // ★老账推导的分组（`scalesFromFlat`）：
-    //   · `档0…档29` 有数字记号 ⇒ 同形态归一组（组名取该组第一条档位名 = `档0`）；
-    //   · `S~E级` **无数字记号** ⇒ 进《无记号档位》那张表，而那 12 个回指它的维度也跟着挂进**同一张表**。
-    //   ★为什么必须归组（实测）：不归组时"一档一表" ⇒ 31 档推出 31 张表 ⇒ 表数名额被占光，档位只剩 15/24。
+    //   · `档0…档N` 有数字记号 ⇒ 同形态归一组（组名取该组第一条档位名 = `档0`）；
+    //   · `S~E级` **无数字记号** ⇒ 进《无记号档位》那张表，而那 DIM_TOP+1 个回指它的维度也跟着挂进**同一张表**。
+    //   ★为什么必须归组（实测）：不归组时"一档一表" ⇒ 301 档推出 301 张表 ⇒ 表数名额被占光，档位只剩 15/24。
     assert.equal(rq.length, 2, `★只有两张表（实测 ${JSON.stringify(rq.map((t) => t.表))}）`);
     const unmarkedT = rq.find((t) => t.表 === '无记号档位');
     assert.ok(unmarkedT, '★无记号档位（`S~E级`）自成一张《无记号档位》表');
     assert.deepEqual((unmarkedT.档位 || []).map((x) => x.档), ['S~E级'], '★它装着 `S~E级` 这一个档位');
-    assert.equal((unmarkedT.维度 || []).length, DIM_TOP, '★回指它的 12 个维度截到 DIM_TOP，全挂在同一张表里');
+    assert.equal((unmarkedT.维度 || []).length, DIM_TOP, '★回指它的维度截到 DIM_TOP，全挂在同一张表里');
     const markedT = rq.find((t) => t.表 !== '无记号档位');
-    assert.equal((markedT.档位 || []).length, TIER_TOP - 1, '★另一张表装同形态的 30 个档（截到剩余名额）');
+    assert.equal((markedT.档位 || []).length, TIER_TOP - 1, '★另一张表装同形态的档（截到剩余名额）');
 
     // ★leg62：表数封顶只管"还能不能开新表"，**绝不能顺手把预算也停了**（实测踩过一次：
     //   表数那行原来带 `break`，维度预算当场被饿死成 0/8）。
@@ -172,7 +175,13 @@ test('★leg60 + leg62 刻度块：概念表进包（一把尺一张表）、体
     assert.equal(sp.flatMap((t) => t.维度 || []).length, DIM_TOP,
         '★散开的维度仍要填满 DIM_TOP（表数封顶不许饿死维度预算）');
     assert.ok(sp.length <= SCALE_TABLE_TOP_PACK, `散开时表数仍 ≤ ${SCALE_TABLE_TOP_PACK}（实测 ${sp.length}）`);
-    assert.ok(JSON.stringify(q.pack.setting).length < 3000, `刻度块整体有界（实测 ${JSON.stringify(q.pack.setting).length} 字符）`);
+    // ★★★leg135：这条体积上界**跟着上限走**（旧值 3000 是照"档≤24/维≤8"配的）。
+    //   现在的上界从三个上限算得出来：表名 64×20 + 档位 300×~50 + 维度 16×~50 ≈ 26.6 KB（最坏）。
+    //   ⇒ 设 30,000：既容得下新上限的最坏形状，又仍然是一条**真的会咬**的回归锁
+    //     （它治的病没变：某天有人把整本书倒进 `刻度` 块，这一条当场红）。
+    const SETTING_BLOCK_CEIL = 30000;
+    assert.ok(JSON.stringify(q.pack.setting).length < SETTING_BLOCK_CEIL,
+        `刻度块整体有界（实测 ${JSON.stringify(q.pack.setting).length} 字符 / 上限 ${SETTING_BLOCK_CEIL}）`);
     // 空则键不出现（"空着就是空着"——与 env 同一条纪律；既有世界零扰动）
     const none = world();
     const r0 = buildEvolutionPack(none, null);

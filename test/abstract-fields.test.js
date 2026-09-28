@@ -418,3 +418,37 @@ test('★leg61 势力树：并列候选不硬选 · 跨类别不连', () => {
     const r3 = linkContainedFactions(onlyLoc, new Map(onlyLoc.map((e) => [e.name, e])));
     assert.equal(r3.links.length, 0, '只有 location 同名时**不连**（不拿地名当上级）');
 });
+
+// ═══════════ ★★★本笔（用户令「这个通道绝对不能有」）：**设定面也要过"名字真在书里"这道校验** ═══════════
+//
+// 病（真账实测，逐字对过）：`canon.settings` 622 个名字里**有 1 个在书文里一个字都没有**
+//   （`玉爪儿`，`{kind:'character', fields:{身份:'灵兽'}}`）——它是**被别的扩展塞进那次调用里的记忆**
+//   （通道在 HTTP 层：别人换掉了页面的 fetch，见 `src/transport-http.js` 的长注）。
+//   `bookEntities` 早就有这道全书级出处校验，而 `settings` **从来没有** ⇒ 外来内容可以从这一格落进账。
+//   真账读数（同一份账、同一把尺子）：bookEntities 723 个名字 **0 个**对不上；settings 622 个名字 **1 个**对不上。
+test('★★★本笔·设定面出处校验：名字在书文里找不到的条目**不许留在 canon.settings**（与名册同一把尺子）', async () => {
+    const src = '【角色甲】角色甲：某职。\n【角色乙】角色乙：某职。';
+    const extract = async () => JSON.stringify({
+        bookEntities: [{ name: '角色甲', kind: 'character' }, { name: '角色乙', kind: 'character' }],
+        entities: [
+            { name: '角色甲', kind: 'character', fields: { 表外属性: '某职' } },   // 值也在原文里 ⇒ 收
+            { name: '别处来的', kind: 'character', fields: { 身份: '灵兽' } },     // ★书文里一个字都没有
+        ],
+    });
+    const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
+    assert.equal(r.ok, true, '★前置：这一轮整体是成的（不是"全失败恰好没有 settings"）');
+    const names = r.setting.frozen.canon.settings.map((s) => s.name);
+    assert.deepEqual(names, ['角色甲'],
+        `★★★书文里没有的名字**不许留在设定面**（实测留下 ${JSON.stringify(names)}）——`
+        + '它就是"外来内容从这一格绕过承重墙"的那条缝');
+    assert.ok(r.errors.some((e) => e.includes('设定面全书级出处校验')),
+        '★丢弃要留痕（不许静默：面板/控制台看得见"有几条名字原文未出现"）');
+    // ① 名册那一侧一个字不变（两把尺子必须是同一把，不许连带改动名册口径）
+    assert.deepEqual(r.setting.frozen.canon.bookEntities.map((b) => b.name).sort(), ['角色甲', '角色乙'].sort(),
+        '★名册照旧（本次只补设定面这一格，名册那条既有校验一个字没动）');
+    // ② ★反向自证：这条闸真的在咬 —— 把那个名字放进书文里，同一条就必须留下
+    const src2 = src + '\n【别处来的】别处来的：灵兽。';
+    const r2 = await extractWorldSetting({ sourceText: src2, extract, cache: null });
+    assert.deepEqual(r2.setting.frozen.canon.settings.map((s) => s.name).sort(), ['别处来的', '角色甲'].sort(),
+        '★反向自证：书文里真有这个名字 ⇒ 照样留在设定面（否则这条闸是"一律杀"）');
+});

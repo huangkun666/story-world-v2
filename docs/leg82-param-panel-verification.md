@@ -1,5 +1,11 @@
 # leg81/82 · `web/param-panel.js` 独立验证结论（★5 个真缺陷，待修）
 
+> 🪦 **2026-09-22 leg108 标注：本文件是 leg82 当时的核对结论，那 5 个缺陷早就修完了**——
+> 现行 `web/param-panel.js` 里：`WINDOW_ID` 已在本族自己定义（`:71`）· `writeHotMeta` 与 `PANEL_BUILD`
+> 已 import（`:46` / `:49`）· `getLastWorld` 与 `refreshSections` 已改成"注入进来"（`:612-622`）。
+> ⇒ **不要再照下面 §2 去改**（那会把已经对的东西改坏）。要动面板，先读仓根 **`STATE.md`**
+> （§1 当前读数 · §3 唯一的活儿清单）。★下面正文**一个字未动**（历史留档，照本仓"过去只标注、不修正"那条）。
+
 > **接手第一件事：读这份，然后照 §2 的修法改 `web/param-panel.js`。**
 > 验证方：独立 subagent（只读生产文件、不改），判据文件：**`test/web-param-panel-layout.test.js`（579 行 · 11 条）**。
 > ⚠ 含中文的文件**禁止用 PowerShell 读写**（用 read/edit/write；数字用 `node -e`）。

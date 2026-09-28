@@ -41,6 +41,20 @@
 //      摘除的唯一实现在 `pruneJunkRules`，这里调的是**它的那条既有通道**，不是第二份口径。
 //      为什么必须在**这个位置**（写回前、而不是渲染层截）：`restoreSnapshot` 的产物是**世界账**，
 //      而账本会被导出/换机/看账读到 ⇒ 脏数据一旦写回就出了门；渲染层再截就只是"看不见"，账上照旧有。
+//   ⑤ ★★★本笔修的**真 bug**（藏了九天；2026-09-18 那笔带进来的）：`requestSnapshot` 里
+//      **把"锚点世界"记成了"当前世界"**（原写 `anchorWorld: snapshot`，应是 `p.anchorWorld`）。
+//      · `planStep` 的返回值里**本来就有** `anchorWorld`（delta 时它 = **上一个锚点世界**，`src/snapshot.js:314`），
+//        它的不变量在同文件 `:284-291` 写得明明白白：**「delta 必须相对锚点世界算，不能相对上一步世界算」**。
+//      · 接线层把返回值丢掉、塞进当前世界 ⇒ 从**第 3 步**起：差值是"上一步→这一步"，却仍挂着**原来的锚**
+//        ⇒ 恢复 = 锚 ＋ **错的差**。两种症状**都复现过**：
+//          ① 那份错的差碰到了基准里没有的路径 ⇒ 报「恢复失败（快照链不自洽…）」（用户屏幕上就是这一句）；
+//          ② ★没碰到 ⇒ **恢复"成功"了、但世界少一整块**，面板照样印「已落盘」——玩家退回一个
+//             从来没存在过的世界，看不出来。**这一半更坏。**
+//      · ★为什么判据九天没咬到：`test/snapshot.test.js` 与 `demo/measure-snapshot-cost.js` 都写
+//        `anchorWorld = p.anchorWorld`（**判据用的是对的那个值**）⇒ 判据全绿，而它量的**不是生产这条接线**
+//        （本仓记过的那条病："纯函数测得动、接线另写一遍"）。
+//        ⇒ 本笔补的判据必须**打真接线**：`test/snapshot-chain-anchor.test.js` 连拍三份、再逐份恢复、
+//          逐字节比对（本笔**先证过红**：把这一行改回错的写法，第 3 份当场对不上，第 1/2 份照旧对）。
 import { describeSnapshots, planStep, planRetention, restoreFrom } from '../src/snapshot.js';   // 纯逻辑（可 Node 测）
 import { isParamStoreKey } from '../src/param-store.js';   // 判"这个键是不是参数"（参数闸用）
 import { ENGINE_DERIVED } from '../src/params.js';         // ★leg53：引擎每轮算的那几格（不许当参数剥掉）
@@ -174,17 +188,24 @@ export function requestSnapshot(world, reason) {
                 reason: String(reason || '落账'),
             });
             await snapshotStore(freshCtx).put(p.snapshot);
-            sw2SnapChain = { seq: p.nextSeq, anchorId: p.anchorId, anchorSeq: p.anchorSeq, anchorWorld: snapshot };
+            // ★本笔修的真 bug：原写 `anchorWorld: snapshot`（锚点记成了当前世界）——留档见文件头 ⑤
+            sw2SnapChain = { seq: p.nextSeq, anchorId: p.anchorId, anchorSeq: p.anchorSeq, anchorWorld: p.anchorWorld };
             // 保留窗口 15 步 · 锚点完整性由 planRetention 保证：丢锚就丢它名下的 delta
             const metas = await snapshotStore(freshCtx).list();
             const plan = planRetention({ snapshots: metas });
             if (plan.drop.length) await snapshotStore(freshCtx).drop(plan.drop);
+            // ★leg108（B6）：刚拍的这一份**就是盘上现在这份**（快照钩在唯一落账收口上 ⇒ 它是刚写下去的那份账）
+            await markCurrentSnapshot(p.snapshot.id);
             console.info(`[story-world-v2] 快照 ${p.snapshot.id}（${p.snapshot.kind}${p.mode ? `·${p.mode}` : ''} · ${p.snapshot.bytes} 字节）· ${p.snapshot.reason} · 现有 ${metas.length - plan.drop.length} 份`);
         } catch (err) {
             // 失败零阻塞：只进控制台（世界推进永远优先）
             console.warn('[story-world-v2] 快照失败（不影响世界推进）', String(err?.message || err));
         }
     });
+    // ★本笔加：**把这条写队列交出去**。拍快照仍是**零阻塞**（既有调用方不 await，行为一字不变），
+    //   但"想等它真拍完"的调用方（判据、以及"拍完再读清单"那类收尾）从此**等得到**——
+    //   此前判据只能靠"多等几个定时器"去猜，那正是本仓最忌的"判据量的不是生产那条线"。
+    return sw2SnapQueue;
 }
 
 /** 面板用：读快照清单 + 一行事实摘要（失败返回空，不抛） */
@@ -194,6 +215,36 @@ export async function snapshotList() {
         return { ok: true, list: metas, text: describeSnapshots(metas) };
     } catch (err) {
         return { ok: false, list: [], text: `快照不可读：${err?.message || err}` };
+    }
+}
+
+/**
+ * ★★leg108（B6 · 用户拍板「**记在快照库自己身上**」）：**标出"盘上现在这份是哪一份"**。
+ *   为什么必须**记**（本棒实测证伪了一个偷懒办法）：恢复快照时会**先给当前状态拍一份"恢复前自保"**
+ *   ⇒ 恢复完成后**最新那份是恢复前的旧状态**，而盘上装的是恢复回来的那一份 ⇒ 拿"最新"当"当前"，
+ *   会把玩家指到**正好相反**的一行。
+ *   ⇒ 只在两个**确知的时刻**打标：①刚拍成一份之后（那一份就是刚写进盘的那份账）②恢复某一份之后。
+ *   ★口径：标记**只住在那份快照自己的记录里**（不动世界账、不动契约——用户拍板的那条路）；
+ *     只写**真变了**的那几条（免得为一次打标把整份快照重写一遍）。
+ *   ★失败零阻塞（同本族其余路径）：打不上标不影响世界推进，只进控制台。
+ */
+export async function markCurrentSnapshot(id) {
+    try {
+        const store = snapshotStore(freshCtx);
+        const metas = await store.list();
+        let changed = 0;
+        for (const m of metas) {
+            const want = String(m.id) === String(id);
+            if (Boolean(m.current) === want) continue;        // 已经对了 ⇒ 一个字节都不写
+            const rec = await store.get(m.id);
+            if (!rec) continue;
+            await store.put({ ...rec, current: want });
+            changed += 1;
+        }
+        return { ok: true, id: String(id), changed };
+    } catch (err) {
+        console.warn('[story-world-v2] 快照"当前那份"没打上标（不影响世界）', String(err?.message || err));
+        return { ok: false, error: String(err?.message || err) };
     }
 }
 
@@ -250,6 +301,8 @@ export async function restoreSnapshot(targetId) {
             const plan = planRetention({ snapshots: metas, keepId: String(targetId) });
             if (plan.drop.length) await store.drop(plan.drop);
         } catch (_) {}
+        // ★leg108（B6）：盘上现在是**被恢复的这一份**——★不是上面那份"恢复前自保"（那是最新的、但它是旧状态）
+        await markCurrentSnapshot(String(targetId));
         const t = r.world?.meta?.tick;
         return { ok: true, tick: t, plan: r.plan, flushed };
     } catch (err) {

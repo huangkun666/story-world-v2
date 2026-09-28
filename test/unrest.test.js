@@ -110,11 +110,11 @@ test('★★leg53·D：只吃**窗口内**的事件（老账不冒充现况）',
 test('★★leg53·E：落账——写进 `dynamic.env.动乱度`，且**不动别人的键**', () => {
     const T = 30;
     const w = mkWorld(Array.from({ length: 7 }, (_, i) => [T - 1, `地${i}`, 0]), T);
-    w.context.setting.dynamic.env = { 天时: '大灾', 动乱度: '动荡', memoryEnabled: '1' };
+    w.context.setting.dynamic.env = { 天时: '大灾', 动乱度: '动荡', autoAdvance: '1' };
     const next = updateUnrestGear(w, T);
     assert.equal(next.context.setting.dynamic.env['动乱度'], '大乱', '★引擎把算出来的档位写进账');
     assert.equal(next.context.setting.dynamic.env['天时'], '大灾', '★玩家/书定的自变量一个都不许动');
-    assert.equal(next.context.setting.dynamic.env['memoryEnabled'], '1', '★开关不许动');
+    assert.equal(next.context.setting.dynamic.env['autoAdvance'], '1', '★开关不许动');
     // 纯函数（存量的写法不许改入参——`updateTensionIntensity` 同款语义）
     assert.equal(w.context.setting.dynamic.env['动乱度'], '动荡', '★不改入参（纯函数）');
 });

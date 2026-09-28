@@ -18,12 +18,14 @@ const mkWorld = (env = {}, worldName = '大荒z') => ({
     entities: [], meta: { tick: 3 },
 });
 
-test('leg41·param-store：键表完整（四个尺度上限 + 四个档位 + 三个开关都在白名单里）', () => {
+test('leg41·param-store：键表完整（四个尺度上限 + 四个档位 + 开关都在白名单里）', () => {
     assert.equal(PARAMS_SETTINGS_KEY, 'story_world_v2_params');
-    for (const k of ['每轮递线', '每轮事件', '顶层大计', '在飞大计', '民生度', '动乱度', '天时', '张力推手', 'autoAdvance', 'memoryEnabled']) {
+    // ★★★leg125：`memoryEnabled`（写进记忆插件）已随那条通道整条删除 —— 键表里不许再有它。
+    for (const k of ['每轮递线', '每轮事件', '顶层大计', '在飞大计', '民生度', '动乱度', '天时', '张力推手', 'autoAdvance']) {
         assert.ok(isParamStoreKey(k), `★${k} 必须在白名单里`);
         assert.ok(ALL_PARAM_KEYS.includes(k), `★${k} 必须进 ALL_PARAM_KEYS`);
     }
+    assert.ok(!isParamStoreKey('memoryEnabled'), '★已撤的开关不许在表里（leg125 删的那条记忆通道）');
     assert.ok(!isParamStoreKey('recordEnabled'), '已撤的开关不许在表里');
     assert.ok(!isParamStoreKey('不存在的键'));
 });
@@ -124,7 +126,7 @@ test('leg41·param-store：`isPlayerInputKey` 与 `isParamStoreKey` 是两件事
         assert.ok(isParamStoreKey(k), `${k} 形状上属于参数表`);
     }
     // 但只有"玩家能拧的"才是真源管辖
-    for (const k of ['天时', '张力推手', '每轮事件', '每轮递线', '顶层大计', '在飞大计', 'autoAdvance', 'memoryEnabled']) {
+    for (const k of ['天时', '张力推手', '每轮事件', '每轮递线', '顶层大计', '在飞大计', 'autoAdvance']) {
         assert.ok(isPlayerInputKey(k), `★${k} 是玩家输入 ⇒ 真源有权管辖`);
     }
     for (const k of ['民生度', '动乱度']) {

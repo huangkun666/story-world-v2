@@ -13,6 +13,9 @@ import { normalizePosition } from './position.js';   // leg33：剥掉引擎自�
 //   ★无环：`pack.js` 只依赖 `gate.js`/`abstract.js`，两者都不回头 import 本文件
 //     （`settle.js` 同时 import 了本文件与 pack.js，但**本文件不 import settle**——见 `position.js:3` 那条留档）。
 import { buildScaleTableIndex, sanitizeScaleRequests, SCALE_ONDEMAND_TOP } from './pack.js';
+// ★★★leg128：**点名取回一条故事线**（与刻度表那条按需通道同构）——净化要用的两把纯函数。
+//   ★只 import 叶子模块（`lines.js → setting.js`）⇒ 不成环。
+import { linesOf, lineIndexOf, sanitizeLineRequests, LINE_ONDEMAND_TOP } from './lines.js';
 // ★★★leg67（甲案 · 用户 2026-09-18 拍板）：**引用完整性收成单一主人**。
 //   判据（"这个号在此时此地能不能这么用"）与 id 解析全部住进 `src/ref-rules.js`（零 import 的叶子模块）；
 //   本文件**只留渲染**（`$.foo[i].source: <判据文案>`）与结构/身份/额度类校验。
@@ -33,9 +36,11 @@ const verdictOf = (point, source, ctx) => {
     return v ? renderVerdict(v) : null;
 };
 
-// ★leg34（小说家条款 §6）：实体字段写回的三条上限/黑名单——**本文件是唯一真源**（照 AGENDA_INVOLVED_CAP 的惯例）。
-//   ★三个数字都是**提案态**（铁律 2），细案 §6.2 明写"数字先出曲线再报批"；本棒按最小可跑取值并如实登记未出曲线。
-export const FIELD_UPDATE_PER_TICK = 3;   // 提案：每轮至多几条字段变更（防"一轮改 200 个实体 ⇒ 世界失去连续性"）
+// ★★★leg112（D1 · 用户 2026-09-22 拍板「我认为直接取消上限」）：**「每轮至多 3 条字段变更」已整条撤除。**
+//   原值 `export const FIELD_UPDATE_PER_TICK = 3;`（自认**提案态**、一条曲线都没出，却拦了十几棒）。
+//   撤前实测（真账三份约 119 轮，只读副本）：模型落账的字段变更 **1 条**、那条上限**一次没被撞到**；
+//   `meta.entityFields` **12.8 KB**＝账本 **0.2%**、每条留痕 **130 字节** ⇒ 撑不爆账（详见当棒交接 §D1）。
+//   ★撤的**只是条数**：「有因 / 有痕 / 不越界」一条没动。★两处同批撤（本处 + `sanitize-step.js` 的静默截断）。
 // ★★leg34 丙′ 案（用户拍板「可以。那就按你说的来」）：**禁写名单只留"有专用通道"与"纯引擎簿记"两类**。
 //   判据（**尺子只有一把**：这栏有没有专用通道 / 是不是引擎自己的账）：有专用通道的走它自己的门，
 //   引擎簿记的不许伪造，**其余全开**——包括剧情将来长出来的任何新栏（`性情`/`心境`/`称号`/`伤势`…）。
@@ -64,7 +69,9 @@ export const ENTITY_IMMUTABLE_FIELDS = ['id', 'kind', 'name', 'lastActiveTick', 
 //     ① ST 的关键词世界书与 `yuzuki-Memory` 的向量召回都是**系统在模型开口之前**把书塞进提示词
 //        （模型根本没有"主动搜索"这个动作）⇒ **一轮可见、零额外调用、零跨轮状态**；
 //     ② 我那套把顺序做反了（模型先问 → 结算后才检索）⇒ 值**晚一轮**才到眼前，还要跨轮存待办与清理。
-//   ⇒ 已撤：改用 `src/recall.js` 的**出包前检索注入**（与 ST 同一条思路，当轮可见）。见 `runTick` 的 `preStep`。
+//   ⇒ 已撤：曾改用 `src/recall.js` 的**出包前检索注入**（与 ST 同一条思路，当轮可见）。见 `runTick` 的 `preStep`。
+//     ★★★leg125：那条注入后来自己也被拆了（**leg122**：实测它检索到的从来不是世界书）——
+//       本笔连 `src/recall.js` 模块一起删除（用户令「直接删了」）⇒ **世界模型这一侧不再有任何"来自正文"的输入**。
 
 // ids 索引
 function indexIds(ssot) {
@@ -301,8 +308,10 @@ export function checkWorldStep(step, ssot) {
     //     ⚠本棒第一版把它写成"不是数组就报错" ⇒ 缺席（`undefined`）被当成"非数组" ⇒ **132 条既有用例全红**
     //     （它们只有七组）。这就是"可选组"与"必填组"的分界：**必填组省键 = 形状不合法；可选组省键 = 本轮没这件事**。
     if (step.entityUpdates !== undefined) {
-        if (!Array.isArray(step.entityUpdates) || step.entityUpdates.length > FIELD_UPDATE_PER_TICK) {
-        errors.push(`$.entityUpdates: 每轮至多 ${FIELD_UPDATE_PER_TICK} 条字段变更（当前 ${Array.isArray(step.entityUpdates) ? step.entityUpdates.length : '非数组'}）——世界的连续性靠"变得慢"`);
+        // ★★★leg112（D1）：原来这一行还带 `|| step.entityUpdates.length > FIELD_UPDATE_PER_TICK`
+        //   ⇒ **超一条就把整轮提议全部退回**（连同一轮里写对的东西一起陪葬）。上限已撤 ⇒ 只剩形状判据。
+        if (!Array.isArray(step.entityUpdates)) {
+        errors.push(`$.entityUpdates: 必须是数组（当前 ${typeof step.entityUpdates}）`);
     } else {
         const seenPairs = new Set();
         for (const [i, u] of step.entityUpdates.entries()) {
@@ -367,7 +376,8 @@ export function checkWorldStep(step, ssot) {
     //   分工纪律（用户原话「引入机械就一定要避免让代码去理解语义」）：
     //     · **模型判"这一段讲完了没有"**（语义）——引擎一个字都不判；
     //     · **引擎只做机械审计**：号在册 ∧ 还没收场 ∧ 同批不重复 ∧ 每轮配额。
-    //   为什么配额**不写进这里当错误**（与 `entityUpdates` 的 `FIELD_UPDATE_PER_TICK` 不同）：
+    //   为什么配额**不写进这里当错误**（`entityUpdates` 那条"每轮 ≤3"曾**正好相反**——它在这里报错、
+    //     整步被拒；★★leg112 用户拍板已把它**整条撤除**，见上方那一格留档）：
     //     "超配额"不是形状错、也不是无源之物——它是"这轮太多了，剩下的顺延"，**引擎给警告、照收前 N 件**。
     //     若在这里报错 ⇒ 整个世界步被拒 ⇒ **世界白停一轮**，代价远大于"少收几件旧事"。
     //     （这正是本仓的老教训：判据该拦的是"错的"，不是"多的"。）
@@ -393,6 +403,96 @@ export function checkWorldStep(step, ssot) {
         }
     }
 
+    // ★★★leg120（A3 关系网，细案 `docs/spec-relationship-network.md`）：**关系变更提议**（可选组）。
+    //   分工纪律（与 `eventClosures` 同一条）：**模型负责语义**（谁跟谁算"结下死仇"、用哪个词），
+    //   **引擎只做机械审计**：两端在册 ∧ 必带因 ∧ 因在账 ∧ 同批不重复 ∧ 不许替玩家持有关系。
+    //   ★**不设条数上限**（用户 2026-09-23 拍板「不限」）：本仓为"没量过的上限当家"流过血
+    //     （`entityUpdates ≤3` 是个提案态数字，在生产里拦了十几棒**而且是静默的**，leg112 已整条撤除）；
+    //     而**"必带因"本身就是结构量闸**——关系不能凭空长，产率被世界的因果产量卡住。
+    //   ★`type` 是**模型的原话**：引擎**不比对任何词表、不排序、不换算成数**（红线 §2.2 第 1 条）。
+    if (step.relationUpdates !== undefined) {
+        if (!Array.isArray(step.relationUpdates)) {
+            errors.push('$.relationUpdates: 必须是数组（每项 {from, to, type, cause, note?}；不提议就写 [] 或整组省掉）');
+        } else {
+            const seenEdges = new Set();
+            for (const [i, ru] of step.relationUpdates.entries()) {
+                if (!ru || typeof ru !== 'object' || Array.isArray(ru)) {
+                    errors.push(`$.relationUpdates[${i}]: 必须是 {from, to, type, cause} 形状的对象`);
+                    continue;
+                }
+                const fromId = typeof ru.from === 'string' ? ru.from.trim() : '';
+                const toId = typeof ru.to === 'string' ? ru.to.trim() : '';
+                const relType = typeof ru.type === 'string' ? ru.type.trim() : '';
+                if (!fromId) { errors.push(`$.relationUpdates[${i}].from: 缺"谁"（照抄输入实体 id）`); continue; }
+                if (!toId) { errors.push(`$.relationUpdates[${i}].to: 缺"对谁"（照抄输入实体 id）`); continue; }
+                if (!relType) { errors.push(`$.relationUpdates[${i}].type: 缺关系本身（用你自己的话写这次关系怎么变了）`); continue; }
+                // ★两端在册：判据在 `src/ref-rules.js` 的 `'relationUpdates.end'` 表（只判存在性）。
+                const vFrom = verdictOf('relationUpdates.end', { type: 'id', ref: fromId }, { world: ssot, step });
+                if (vFrom) { errors.push(`$.relationUpdates[${i}].from: ${vFrom}`); continue; }
+                const vTo = verdictOf('relationUpdates.end', { type: 'id', ref: toId }, { world: ssot, step });
+                if (vTo) { errors.push(`$.relationUpdates[${i}].to: ${vTo}`); continue; }
+                // ★自己跟自己不成边（有向边的两端是同一个人的话，这条边没有任何含义）。
+                if (fromId === toId) {
+                    errors.push(`$.relationUpdates[${i}]: 两端是同一个实体（"${fromId}"）——关系是"谁 → 对谁"，自己跟自己不成边`);
+                    continue;
+                }
+                // ★★红线 1（玩家是棋子）：**不许把玩家写成"持有关系"的那一方**。
+                //   口径与 `entityUpdates` 那格同源（"玩家不可改（红线 1；玩家的行为与承诺是唯一真相源）"）
+                //   ——"黄坤欠了谁一条命"是**玩家的承诺**，只有玩家能立，模型不许替他立。
+                //   ★**反方向是允许的**：别人**对玩家**的态度（"薛铁衣恨黄坤"）是**世界**的事，
+                //     那正是这世界活起来的样子 ⇒ **只拦 `from`，不拦 `to`**。
+                if (playerId && fromId === playerId) {
+                    errors.push(`$.relationUpdates[${i}].from: 玩家不可作"持有关系"的那一方（红线 1；玩家的行为与承诺是唯一真相源）——`
+                        + '要写就写**别人对玩家**的关系（把玩家放进 to），那才是世界的盘算');
+                    continue;
+                }
+                // ★同批不重复：同一条边（谁→对谁→什么关系）一轮内只提一次（照 `entityUpdates` 的 seenPairs 口径：
+                //   "一条变更一个因，别叠"）。★但**不同 type 允许并存**——"既是盟友又有旧怨"是合法的人间事，
+                //   引擎不许替它判"这两条矛盾"（那是语义，归模型）。
+                const edgeKey = `${fromId}\u0000${toId}\u0000${relType}`;
+                if (seenEdges.has(edgeKey)) {
+                    errors.push(`$.relationUpdates[${i}]: 同一条边一轮内重复提议（"${relType}"）——一条变更一个因，别叠`);
+                    continue;
+                }
+                seenEdges.add(edgeKey);
+                // ★★**必带因**（本机制的脊梁）：判据在 `'relationUpdates.cause'` 表
+                //   ——它与 `entityUpdates.cause` **共用同一份实现**（委托），故口径与判词逐字一致。
+                const cause = ru.cause;
+                const causeRef = cause && typeof cause === 'object' ? cause.ref : '';
+                if (!causeRef) {
+                    errors.push(`$.relationUpdates[${i}].cause: 必须带因（无因之变＝随口编的关系，不是玩出来的）`);
+                    continue;
+                }
+                const vCause = verdictOf('relationUpdates.cause', cause, { world: ssot, step });
+                if (vCause) errors.push(`$.relationUpdates[${i}].cause: ${vCause}`);
+            }
+        }
+    }
+
+    // ★★★leg120（A3）：**了结一条边**（可选组）——与 `eventClosures` 同构。
+    //   ★**只认引擎发的 `id`，不认 `type` 文本**：模型这轮写"死仇"、下轮写"深仇"，引擎**不许去猜**
+    //     这是不是同一条边（leg95 的分工：引擎负责"这单结没结清"、模型负责"这故事还要不要往下讲"）。
+    if (step.relationClosures !== undefined) {
+        if (!Array.isArray(step.relationClosures)) {
+            errors.push('$.relationClosures: 必须是数组（每项 {id, why?}；不了结就写 [] 或整组省掉）');
+        } else {
+            const seenRel = new Set();
+            for (const [i, rc] of step.relationClosures.entries()) {
+                if (!rc || typeof rc !== 'object' || Array.isArray(rc)) {
+                    errors.push(`$.relationClosures[${i}]: 必须是 {id, why?} 形状的对象`);
+                    continue;
+                }
+                const relId = typeof rc.id === 'string' ? rc.id.trim() : '';
+                if (!relId) { errors.push(`$.relationClosures[${i}].id: 缺关系 id（照抄输入里那条边的号 rel_<轮次>_<第几条>）`); continue; }
+                if (seenRel.has(relId)) { errors.push(`$.relationClosures[${i}]: 同一条边一轮内重复了结（"${relId}"）——一条只能了结一次`); continue; }
+                seenRel.add(relId);
+                // ★判据在 `'relationClosures.id'` 表：号在册 ∧ 还没了结 ∧ **只认已落账的边**。
+                const v = verdictOf('relationClosures.id', { type: 'id', ref: relId }, { world: ssot, step });
+                if (v) errors.push(`$.relationClosures[${i}].id: ${v}`);
+            }
+        }
+    }
+
     // ★★★leg64 第四轮：**按需查表**（`lookupScales`，可选组）——模型点名要的刻度表。
     //   三条判据（都是机械的）：
     //     ① **点名的表名必须对回账上真有的尺**（`buildScaleTableIndex`）。对不上 ⇒ 拒
@@ -406,21 +506,67 @@ export function checkWorldStep(step, ssot) {
     //     ⇒ 写在这里 = 模型只拿得到**核过**的表名（编的名字进不了账），且不新增一条跨模块线。
     //     生命周期：**每轮被新值覆盖**（没点名 ⇒ 写成空数组）⇒ 天然是"一次性"，不跨轮囤积
     //     （与 `injectWorldBookRecall` 头注那条"过期内容冒充新检索"的坑同一条纪律）。
-    if (ssot && typeof ssot === 'object' && typeof step.lookupScales !== 'undefined') {
+    if (ssot && typeof ssot === 'object') {
+        // ★★★本次修（真模型 60 轮长跑实跑抓出来的病）：**"没写这一格"必须等于"这一轮不要"**。
+        //   病：老写法把整段包在 `typeof step.lookupScales !== 'undefined'` 里 ⇒ 模型**不写**这一格时
+        //     整段不跑 ⇒ `meta.scaleRequests` **保持上一轮的旧值** ⇒ 那张表**每轮重复递下去**，
+        //     而下面那句注释写着"没点名 ⇒ 写成空数组 ⇒ 天然是一次性"——**注释与实现不符**。
+        //   修法：把"写账"这一步从"有没有写这一格"里解耦出来——**没写 ⇒ 写空数组（= 清掉）**。
+        //   ★★一条不许破的旧账纪律（K6「终态 SSOT 逐字节不变」）：**从没点过名的世界一个字节都不碰**——
+        //     所以只在"这一轮写了 或 上一轮真有值要清"时才写账。没写过就永远不写。
+        const present = typeof step.lookupScales !== 'undefined';
         const raw = Array.isArray(step.lookupScales) ? step.lookupScales : [];
-        if (!Array.isArray(step.lookupScales)) {
+        const hadPrev = Array.isArray(ssot.meta?.scaleRequests) && ssot.meta.scaleRequests.length > 0;
+        if (present && !Array.isArray(step.lookupScales)) {
             errors.push('$.lookupScales: 必须是字符串数组（表名照抄输入里的「刻度目录」）');
-        } else if (raw.length > SCALE_ONDEMAND_TOP) {
+        } else if (present && raw.length > SCALE_ONDEMAND_TOP) {
             errors.push(`$.lookupScales: 每轮至多要 ${SCALE_ONDEMAND_TOP} 张尺（当前 ${raw.length}）——一次看不完那么多，挑这一轮真要用的`);
         } else {
-            const { ok, missed } = sanitizeScaleRequests(raw, buildScaleTableIndex(ssot.context?.setting?.frozen?.canon));
+            const { ok, missed } = present
+                ? sanitizeScaleRequests(raw, buildScaleTableIndex(ssot.context?.setting?.frozen?.canon))
+                : { ok: [], missed: [] };
             for (const nm of missed) {
                 errors.push(`$.lookupScales: 账上没有《${nm}》这张尺（照抄输入「刻度目录」里的表名；编的表名不会给你造）`);
             }
             // ★**只在整步没有错误时**写账：这一步是"被拒的步不该留下任何痕迹"那条纪律
             //   （`checkWorldStep` 是纯判官，唯一被允许的副作用就是这个"同一轮生效"的交接）。
             //   写的是**核过**的表名（编的名字进不了账）。
-            if (!errors.length) ssot.meta = { ...(ssot.meta || {}), scaleRequests: ok };
+            if (!errors.length && (present || hadPrev)) ssot.meta = { ...(ssot.meta || {}), scaleRequests: ok };
+        }
+    }
+
+    // ★★★leg128：**点名要一条"故事线"的经过**（`lookupLines`，可选组）——与上面那道按需查表**逐条同构**：
+    //     ① 点名的根必须**在这一轮真递出去的那一批线里**（`linesOf` 同一个上界）——编的 ⇒ 拒
+    //        （"无源之物不入局"的通道版：模型编一条线，引擎**不许替它造出来**）；
+    //     ② 每轮 ≤ `LINE_ONDEMAND_TOP` 条（防"我全要"）；
+    //     ③ 缺席合法（可选组，见 `world-step.schema.js` 那一格注释）——本轮不点名不是形状错误。
+    //   ★写账纪律照抄上面那一条：**只在整步没有错误时写**（被拒的步不留任何痕迹），写的是**核过**的根 id；
+    //   ★★★本次修（与上面"按需查表"**同批、同一条规矩**）：老写法只在模型写了 `lookupLines` 时才跑 ⇒
+    //     不写 ⇒ `meta.lineRequests` 保持旧值 ⇒ **那条线的经过每轮重复递下去**（真跑实测：点名 2 次、递出 4 次）。
+    //     现在**没写 ⇒ 写空数组（= 清掉）**，"只递那一轮"才真的成立。
+    //     ★同一条旧账纪律：从没点过名的世界一个字节都不碰（K6）。
+    if (ssot && typeof ssot === 'object') {
+        const present = typeof step.lookupLines !== 'undefined';
+        const raw = Array.isArray(step.lookupLines) ? step.lookupLines : [];
+        const hadPrev = Array.isArray(ssot.meta?.lineRequests) && ssot.meta.lineRequests.length > 0;
+        if (present && !Array.isArray(step.lookupLines)) {
+            errors.push('$.lookupLines: 必须是字符串数组（根 id 照抄输入「故事线」那一栏的**行首**）');
+        } else if (present && raw.length > LINE_ONDEMAND_TOP) {
+            errors.push(`$.lookupLines: 每轮至多要 ${LINE_ONDEMAND_TOP} 条线的经过（当前 ${raw.length}）——挑这一轮真要用的`);
+        } else {
+            // ★★★leg132：**校验要认"账上真有的全部线"，不是"这一轮摆出来的那 40 条"**。
+            //   为什么必须改（否则会当场拒掉整步）：`故事线` 那一栏现在是**全史索引**——
+            //   出包时按"这一轮在动的事"把相关的挑到前面（`pickLinesForPack`），
+            //   而这里是**按收口轮次截前 40 条** ⇒ 模型点了它**明明看见**的一条老线，
+            //   这里却会判"没有这一条线"并把**整步**拒掉（不是丢一条提议，是这一轮白跑）。
+            //   ★口径没松：仍然**只收账上真算得出来的根 id**，编的照样不认——防的还是"不许替它造一条"。
+            const { ok, missed } = present
+                ? sanitizeLineRequests(raw, lineIndexOf(linesOf(ssot, { top: Infinity }).lines))
+                : { ok: [], missed: [] };
+            for (const id of missed) {
+                errors.push(`$.lookupLines: 输入「故事线」里没有「${id}」这一条线（照抄那一栏行首的根 id；编的不会给你造）`);
+            }
+            if (!errors.length && (present || hadPrev)) ssot.meta = { ...(ssot.meta || {}), lineRequests: ok };
         }
     }
 
