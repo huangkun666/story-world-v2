@@ -9,30 +9,30 @@
     "panelVersion": "1.0.1"
   },
   "current": {
-    "tests": "1457/1457",
+    "tests": "1459/1459",
     "smokeBytes": 8351,
-    "panelBuild": "leg152-embed-card",
-    "cssVersion": "20260927-leg145-mobile",
+    "panelBuild": "leg157-merged-scroll",
+    "cssVersion": "20260930-leg157-merged-scroll",
     "mainPromptV": "v2-agenda-t1-31",
-    "webIndexLines": 3090,
+    "webIndexLines": 3099,
     "webIndexLineLock": 3100
   },
   "docs": {
-    "stateBytes": 20220,
+    "stateBytes": 20461,
     "startHereBytes": 292796,
     "frozenIndexBytes": 326960,
     "ledgerFullBytes": 978029,
-    "docsFiles": 224,
-    "docsBytesLf": 6517201,
+    "docsFiles": 226,
+    "docsBytesLf": 6579573,
     "docsCountNote": "★不含生成物 docs/index.json 自己（自指计数会让文件永不收敛——见 §⑤ 留档）；★字节按 **LF 归一**数（读进来减掉 CRLF 的字节）：判据锁着它，而检出状态（CRLF/LF）因机而异，不该把\"结账机怎么结账\"算进文档体积（实测差异：leg105 交接 CRLF 12532B vs LF 12387B，正好差它的 145 个 CRLF）。",
-    "handoffsRoot": 102,
+    "handoffsRoot": 104,
     "handoffsArchive": 34,
     "latestLedgerLeg": 125,
-    "latestHandoffLeg": 155
+    "latestHandoffLeg": 157
   },
   "release": {
     "repo": "huangkun666/story-world-v2",
-    "sourceBuild": "leg152-embed-card",
+    "sourceBuild": "leg157-merged-scroll",
     "published": {
       "build": "leg154-hotfix",
       "tag": "v1.0.1",

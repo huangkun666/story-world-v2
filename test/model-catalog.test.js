@@ -89,6 +89,34 @@ test('`listModels`：也认裸数组（有些网关不给 `{data:…}` 那一层
     assert.deepEqual(r.models, ['only']);
 });
 
+test('★★★leg157：`listModels` 顺手留下服务端**自己声明的**容量（读不到就留空——不猜、不填默认）', async () => {
+    // 认哪两个键、为什么只认这两个 ⇒ `src/transport-http.js` 的 `declaredLimitsOf`（那里写着官方定义原话）：
+    //   `max_output_tokens` = 这个服务端**接受**的 `max_tokens` 最大值；
+    //   `context_window`    = **输入与输出共用**的总容量。
+    const send = fakeSender({
+        status: 200,
+        json: {
+            data: [
+                { id: 'm-a', max_output_tokens: 65536, context_window: 131072, name: 'A' },
+                { id: 'm-b' },                        // 标准 OpenAI 形状：这两个键根本没有（常态）
+                { id: 'm-c', max_output_tokens: 0 },  // 0 = 没报（不是"上限为零"）
+                { id: 'm-d', max_output_tokens: '65536' },   // 有些网关给字符串
+            ],
+        },
+    });
+    const r = await listModels({ baseUrl: 'https://a.example', apiKey: 'k', fetchImpl: send });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.models, ['m-a', 'm-b', 'm-c', 'm-d'], '★清单本身仍是**纯 id 数组**（不许变形成第二份真相）');
+    assert.deepEqual(r.limits['m-a'], { maxOutputTokens: 65536, contextWindow: 131072 });
+    assert.equal(r.limits['m-b'], undefined, '★没报 ⇒ 一个键都不留（"没报" ≠ "它很小"）');
+    assert.equal(r.limits['m-c'], undefined, '★0/非法 ⇒ 不算报过');
+    assert.deepEqual(r.limits['m-d'], { maxOutputTokens: 65536 }, '★字符串数字照认（键名与语义都对得上）');
+    // 反向自证：整份都没报 ⇒ `limits` 是**空对象**，不是"塞了默认值的一份"
+    const bare = await listModels({ baseUrl: 'https://a.example', apiKey: 'k', fetchImpl: fakeSender({ status: 200, json: [{ id: 'only' }] }) });
+    assert.deepEqual(bare.limits, {}, '★一个都没报 ⇒ 空对象（绝不用默认值充数）');
+    assert.equal(bare.ok, true, '★读不到容量不影响清单本身可用');
+});
+
 test('`listModels` 四类失败都**如实出声**（不是静默返回空清单）', async () => {
     const cases = [
         [{ status: 401, text: '{"error":"invalid api key"}' }, /密钥/],

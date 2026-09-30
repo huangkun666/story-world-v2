@@ -135,7 +135,43 @@ test('★★`pickModelAction`：**就地写进输入框**（不重画 ⇒ 点一
     assert.match(seen.status.at(-1), /已填入世界模型：gemini-3\.1-pro-preview/);
 });
 
+test('★★★leg157：点一个**自己报了输出上限**的模型 ⇒ 顺手把「单轮输出上限」填好；报不到 ⇒ 一个字都不写', async () => {
+    // 用户令（逐字）：「**能直接读的话那就直接读呗，没有就默认32768就这样**」。
+    //   ⇒ 两条口径一条都不许少：① 报了 → 用**它报的那个数**（不是我猜的）；② 没报 → **一个字都不写**
+    //   （那一格回出厂值），并且**如实说清是哪一种**（本仓最忌"没填"与"读了但没报"长得一样）。
+    const { hub, seen, nodes } = harness({
+        reply: { status: 200, json: { data: [{ id: 'm-a', max_output_tokens: 65536 }, { id: 'm-b' }] } },
+    });
+    nodes['#sw2_call_tokens'] = { value: '32768' };      // 那个框在生产里是在的（按 id 找）
+    await hub.listModelsAction();
+    assert.match(hub.renderState().modelCatalog.note, /其中 1 个自己报了输出上限/, '★读到了几个要在面板上说清');
+
+    // ① 报了 ⇒ 模型名与输出上限**一起**写下去，框也当场换掉
+    const r1 = hub.pickModelAction('m-a');
+    assert.deepEqual(seen.wrote.slice(-2), [['model', 'm-a'], ['callMaxTokens', 65536]],
+        '★★声明的输出上限必须**真写进设置**（不然"读了"等于没读）');
+    assert.equal(nodes['#sw2_call_tokens'].value, '65536', '★那个框要**当场**变（不许等重画）');
+    assert.match(seen.status.at(-1), /65536/, '★状态条要说清按什么填的');
+    assert.equal(r1.maxTokens, 65536);
+
+    // ② 没报 ⇒ **只写模型名**，那一格一个字都不许动
+    const before = seen.wrote.length;
+    const r2 = hub.pickModelAction('m-b');
+    assert.deepEqual(seen.wrote.slice(before), [['model', 'm-b']], '★没报 ⇒ 只写模型名（不猜、不填默认值）');
+    assert.equal(nodes['#sw2_call_tokens'].value, '65536', '★那一格保持原样（没被回写）');
+    assert.equal(r2.maxTokens, null);
+    assert.match(seen.status.at(-1), /没报输出上限/, '★要说清"它没报"，不许静默');
+
+    // ③ 声明值越界（超出那一格能填的范围）⇒ 也不写，且与"没报"分开说
+    const { hub: h2, seen: s2 } = harness({ reply: { status: 200, json: { data: [{ id: 'm-z', max_output_tokens: 999999 }] } } });
+    await h2.listModelsAction();
+    h2.pickModelAction('m-z');
+    assert.deepEqual(s2.wrote, [['model', 'm-z']], '★越界的声明值不许写进去（归一那一步拦）');
+    assert.match(s2.status.at(-1), /超出/, '★"超出范围"与"没报"是两件事，分开说');
+});
+
 // ─────────── ③ 测试连通 ───────────
+
 
 test('★★`probeModelAction`：通了 ⇒ 结论行只有「通 · 模型 · 秒」——**不写"模型回了几个字"**（用户当场裁的）', async () => {
     const { hub, seen } = harness({ reply: { status: 200, json: { choices: [{ message: { content: 'pong!!' } }] } } });

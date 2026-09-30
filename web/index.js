@@ -272,7 +272,9 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //   ★★★leg143 → **`20260927-leg143-params-regroup`**（用户令「**设置里的那些闸其实也可以归到参数页，
 //     然后把参数页的样式改一下**」）：★**真动了样式**——新增 `.sw2-limit-group` 那一族组头规则
 //     （世界尺度那九个框按「闸 / 尺」分两组，组头靠一条实线与上面分开）⇒ 按纪律同批升。
-const CSS_VERSION = '20260927-leg145-mobile';
+//   ★★★leg157 → **`20260930-leg157-merged-scroll`**（用户令「**顺便把下拉的bug解决了**」＝观棋页"滚到
+//     最底部滚轮就失效、拉不上去"）：★**真动了样式**（grid 高度改由 flex 分配 ＋ 并页改 flex 列 ＋ 一条 `contain`）⇒ 同批升。为什么非改不可（`100%` 看着没毛病、其实让页多出 249px **够不着**的滚动）⇒ `web/style.css` 的 leg157 注释。
+const CSS_VERSION = '20260930-leg157-merged-scroll';
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;

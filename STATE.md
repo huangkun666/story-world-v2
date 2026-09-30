@@ -44,25 +44,24 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **1457 / 1457 · fail 0 · skipped 0 · todo 0**（★leg156 **−80**——记忆层整族撤走、判据随之下架；leg155 **+9**、leg154 **+9**、leg153 **+14**、leg152 **+70**、leg151 **+6**；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
+| 判据 | **1459 / 1459 · fail 0 · skipped 0 · todo 0**（★leg157 **+2**：模型容量读取那两条；leg156 **−80**——记忆层整族撤走、判据随之下架；逐棒增减 ⇒ `docs/done-archive.md`） | `node --test`（**无参，必须在插件目录内**） |
 | 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0** | `node demo/smoke-demo.js` |
-| `PANEL_BUILD` | **`leg152-embed-card`** | `src/render-base.js`（★leg153 **不升**：没动版面，只动了一行动态读数的内容） |
-| ★手机端 | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ 视口高 **`100dvh`** · 浮层**整屏** · <12px 的小字**整批抬到 12px**。★**版面**走 `≤620px`、**手感**走 `(pointer:coarse)`（鼠标不匹配 ⇒ **桌面零改动**） | `web/style.css` 末尾两条媒体查询 · 判据 `test/mobile-layout.test.js`（8 条） |
-| ★抽取并发度 | **缺省 2 路**。★**它是设置项**：设置页「模型通道」→「同时问几块」（**只设下限不设上限**，用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；★遇失败**当场退回 1 路** | `web/model-channel.js`（`SETTINGS_NUM_RANGE` 唯一真源）· 名册遍＋设定遍＋起根**共用**这一个数（`src/abstract.js` · `src/seed-roots.js`）· 机制住 `src/parallel-run.js` |
+| `PANEL_BUILD` | **`leg157-merged-scroll`** | `src/render-base.js`（★leg157 升位：观棋页并页改 flex 列、**两栏可视高度真变了** 715 → 466；★leg156 **撤掉那张"记忆通道"卡不升**——撤掉自己加的东西不算"版面真变了"） |
+| ★主调用输出上限（出厂值） | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着**（缺省 64K）⇒ 16,384 上第 11 轮起「返回空」/「非法 JSON」交替。★设置页那两个框**现读**、玩家可自己填 | `src/transport-http.js` 的 `PROPOSED_CALL_LIMITS` |
+| ★模型容量怎么来的 | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写**（走出厂值）并如实说"这个网关没报" | `src/transport-http.js` 的 `declaredLimitsOf` · `web/model-channel.js` |
+| ★手机端 | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12px 的小字**整批抬到 12px**。★**版面**走 `≤620px`、**手感**走 `(pointer:coarse)` | `web/style.css` 末尾两条媒体查询 · `test/mobile-layout.test.js`（8 条） |
+| ★抽取并发度 | **缺省 2 路**。★**是设置项**：设置页「模型通道」→「同时问几块」（只设下限，用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；★遇失败**当场退回 1 路** | `web/model-channel.js`（`SETTINGS_NUM_RANGE` 唯一真源）· 名册遍＋设定遍＋起根**共用**它 · 机制住 `src/parallel-run.js` |
 | `包预算` 出厂值 | **50000**（leg135 抬的：用户令「我预算抬到50000token」） | `src/limits.js`（旋钮，面板可改；档位 30000/50000/60000） |
-| ★leg136 拆掉的闸 | 出包期**只剩整包预算一条尺**（五道条数闸 → `Infinity` · 镜头暗闸撤 · 聊天侧落账两道配额撤） | `src/pack.js` · `src/settle.js` |
-| ★leg141/141b · leg139 · leg148 · leg137 · leg153 | ★★**已搬出本表**（2026-09-29 leg150 收尾 ＋ 2026-09-30 leg154：本文件顶到 20 KB 上限，按守门那句把更早几笔搬走）⇒ 那几笔交付了什么、去哪儿量 ⇒ `docs/done-archive.md` 最上面那几段 | `docs/done-archive.md` |
-| `CSS_VERSION` | **`20260927-leg145-mobile`** | `web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
+| ★leg136 拆掉的闸 · leg141/141b · leg139 · leg137 · leg148 | ★★**已搬出本表**（本文件顶到 20 KB 上限，按守门那句把更早几笔搬走）⇒ 那几笔交付了什么、去哪儿量 ⇒ `docs/done-archive.md`。★本表只留**与当前值有关**的那一格：出包期**只剩整包预算一条尺**（五道条数闸 → `Infinity` · 镜头暗闸撤） | `docs/done-archive.md` · `src/pack.js` |
+| `CSS_VERSION` | **`20260930-leg157-merged-scroll`** | `web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-31`** | `src/prompts.js`（★leg153：第 9 条补"按意思找回的旧事"怎么读——三种找法、一种东西；★leg137 那笔是 t1-30） |
-| ★leg153：**召回那一栏进包** | ⇒ 全文在 `docs/session-handoff-2026-09-30-leg153-recall-into-pack.md`（§1 顶部那一段） | — |
-| ★leg155：**引擎写的键，尺子上没登记**（★逐族查出 **6 族**，活儿单当时只列了 2 族） | ① 名册的来源发票 `parentSource`/`parentSourceFrom` ② `canon.ruleKinds` ③ 载入期留痕 `meta.styleRulesPurged`/`At` ④ 旧版引擎残留 `meta.recalled` ⑤ ★`powerScale[].axis` 的**真相不是"漏登记"**：真账 463 条**全是空串** ⇒ 产出那侧不再写 ＋ 契约照 `ratio` 先例留登记 ⑥ ★顶层 `nextVolume`——**只在长局卷轮转时才写**，四份真账都没轮到过。★同场拍板：**事件 `position` 由必填改可选**（**世界步那侧照旧必填**）⇒ ★**四份真账逐份全过** | 判据 `test/schema.test.js` 那一族（9 条，先证过红）· `src/abstract-tier.js` 的 `mergeSameTierEntries` |
-| ★leg154（社区报的两个 bug）· leg153（召回那一栏进包） | ⇒ 那两笔交付了什么、去哪儿量 ⇒ `docs/done-archive.md` 最上面两段 | `docs/done-archive.md` |
-| `web/index.js` 行数 | **3090 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:339`；★leg156 **−8**——记忆层整族撤走；leg155/154/153 **±0**、leg152 **+9**） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
+| ★leg153 · leg154 · leg155 · leg156 | ⇒ **已收进 `docs/done-archive.md`**（召回那一栏进包 · 社区报的两个 bug · 引擎写的键尺子上没登记 · **稳定版：记忆层整族撤走**＋发布仓 `main` 变成开发目录的导出；★`DB_VERSION` **留在 3**——IndexedDB 不许降级） | `docs/done-archive.md` |
+| `web/index.js` 行数 | **3099 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:341`；★leg157 **+2**（模型容量那两句注释）、leg156 −8 → ＋7、leg155/154/153 **±0**、leg152 **+9**） | `split('\n').length`（★**别用 PowerShell 数**：本仓 LF-only） |
 | `CACHE_VERSION` | **4**（leg150 **3 → 4**：抽取的**问法**变了——不抬就会命中旧缓存、新问法一次都不会被行使） | `src/fingerprint.js` |
-| 发布仓 main | **`824abc5`** · 构建号 **`leg154-hotfix`** · 版本号 **`1.0.1`**（★leg154：**只推 main、不打 tag**——社区是在酒馆里直接填仓库地址装的，拿的是 main 尖端；★同日一次**撤正**的来龙去脉 ⇒ `docs/done-archive.md` 最上面那段） | `node scripts/verify-release.mjs` |
-| release tag | ★**`v1.0.1` → `ec5416d`（leg149 · 修错版）** · 旧的 `v1.0.0`→`778af70`、`preview.2`→`2a86cfa`、`preview.1`→`1a54424` **原样不动** | `node scripts/verify-release.mjs`（会联网） |
-| 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布）。全文 ⇒ `scripts/audit-docs.mjs` 顶部 | 守门 R8 |
-| 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处） | `test/browser-compat.test.js` |
+| 发布仓 main | **`ced167b`** · 构建号 **`leg152-embed-card`** · 版本号 **`1.0.1`**（★leg156：**发布仓现在就是开发目录那棵树的导出**、**只有 `main` 一支**（那条过时的 `leg151-prefetch` 本地与远端都已删）；★社区是在酒馆里直接填仓库地址装的，拿的是 main 尖端） | `node scripts/verify-release.mjs` |
+| release tag | **`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 | `node scripts/verify-release.mjs`（会联网） |
+| 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布） | 守门 R8 |
+| 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处）。★**leg156 未升**（新旧代码版本号相同 ⇒ 用户**看不出自己更新没更新**，这是活儿单第 ② 条） | `test/browser-compat.test.js` |
 
 **三个"真的变了才升"的号（判据锁着）**：
 - 动了 `web/style.css` ⇒ **必须同批升 `CSS_VERSION`**；没动样式 ⇒ **不升**（判据只看"动没动样式"）。
@@ -152,9 +151,8 @@
 | B | **大书首跑耗时上报**：面板**只有"第 i / N 块"、没有预估、不能取消** | 陌生人第一小时最大的劝退点。★**耗时那一半 leg144 已治**（20–30 分钟 → 约 10 分钟）；**剩下的只是"预估 ＋ 取消"** | `src/abstract.js:2136` 旧读数（22 次调用 / 1909 秒）与实测差一个量级 ⇒ **以实测为准** |
 | D | **`docs/START-HERE.md`（291 KB）与 `LEDGER.md`（326 KB）已冻结**，你要不要有一天整批迁进 `docs/handoffs/`？ | 冻结已让冷启动从 ≈545 KB 降到 ≈30 KB；迁移只是收拾门面 | leg106 文档重塑 |
 
-> ★**原 C 条已不成立**（leg119 勘正，全文在 `docs/done-archive.md`）；它残留的那条纪律照旧立着：
-> **本地 `main` 的历史里仍有 8 份私有对局快照 ⇒ 别把本地 `main` 直接推上去**（一推就是永久公开；
-> "推送"在这个仓只有一条路：`node scripts/publish-release.mjs`，推的是**发布仓**）。
+> ★**本地 `main` 别直接推**（历史里有 **8 份私有对局快照** —— 真人对话 ＋ 模型原文 ⇒ 一推就是永久公开）；
+> "推送"在这个仓只有一条路：**`node scripts/publish-release.mjs`**（推的是**发布仓**）。
 
 ### ★★下一笔：待你点头（★都是待选项、不是命令）
 
@@ -168,7 +166,7 @@
 ### ★新立的活儿（2026-09-25 用户点头"立项"；都是**量出来**的）
 
 > 来源：`docs/spec-long-memory-theory.md` **§8.6**（干净合成世界 900 轮 × 三档，坏账 0 · 警告 0）。
-> ★照 §2.3 第 1 条：**还没到实施**——要先出细案、你拍板，才动代码。
+> ★照 §2.3 第 1 条：**还没到实施**——先出细案、你拍板，才动代码。
 
 | # | 事 | 现象（实测，不是推演） |
 |---|---|---|
@@ -176,25 +174,29 @@
 
 ## 4. 上一棒
 
-- **本次**（2026-09-30 · ★★**引擎写进账的那些键，尺子上没登记**——用户令「**那你做吧**」）：照上一棒记账里那句
-  "四份真账全过不了自家 `ssotSchema`"去查，**按族分组查出 6 族**（接手的活儿单当时只列了 2 族，逐条见 §1 那一行）：
-  ① 名册的来源发票两格 ② `canon.ruleKinds` ③ 载入期清理留痕两格 ④ 旧版引擎的检索读数残留
-  ⑤ ★`powerScale[].axis`——**真相不是"漏登记"**：真账 463 条**全是空串**（引擎把内部去重键漏进了产出）
-  ⑥ ★顶层 `nextVolume`——**只在长局的卷轮转时才写**，四份真账都没轮到过（拿 400 轮长账跑验收才浮出来）。
-  ★同场用户拍板放宽一条：**事件 `position` 由必填改可选**（原话「**放宽：位置改成可选**」＋
-  「**我记得没有让事件必须带地点**」；复核属实——那是"首次纳库"就写进契约的，**不是他下的令**）
-  ⇒ **世界步那一侧照旧必填**（老账可以没有位置，新事不许不说位置）。
-  ⇒ ★**四份真账现在逐份全过**（12/94/40/344 → 0）。判据 **1528 → 1537**（+9，**全部先证过红**）·
-  冒烟 **8351 字节逐字未变** · 四个号**一个都不升**。全文 ⇒ `docs/session-handoff-2026-09-30-leg155-contract-keys.md`。
-- **上一棒**（leg154 社区那两个 bug · leg153 召回那一栏进包 · leg152 向量记忆层 · leg151 引擎预取 · leg150 三遍收成两遍）
-  ⇒ leg154 全文在 `docs/session-handoff-2026-09-30-leg154-lazy-card-and-load-graph.md`；更早 ⇒ `docs/done-archive.md`（**存档，不是待办**）。
+- **本次**（2026-09-30 · ★★★**两件**：① **观棋页"滚到最底部滚轮就失效"治好了**（用户令「**顺便把下拉的bug解决了**」）
+  ② **主调用输出上限 16,384 → 32,768 ＋ 直接读网关报的容量**（用户令「**能直接读的话那就直接读呗，没有就默认32768就这样**」））：
+  ① 真因（真机装置 `F:/deepseek/tmp/leg157-scroll/`：真 Chrome ＋ CDP **真滚轮事件**）：`height:100%` 解的是
+  **页内容盒**的高度，而 grid 上面还压着**说书页头 ＋ 信息带** ⇒ 页永远多出**恰好这么高**（实测 **249px**）
+  的一截要滚，而两栏的 `overscroll-behavior:contain` 让那一截**够不着** ⇒ 滚到底后指针在栏里往上滚**一个字都不动**。
+  ★leg156 推荐的**甲案实测"一个字的效果都没有"**（那条 `contain` 只住在手机档）⇒ 定案：并页改 **flex 列**、
+  grid 吃余高（页余 **0**）＋ 本页自己也 `contain`（滚轮不再漏给面板后面那页：**2034px → 0**）。
+  ② 真因同源（社区用户第 11 轮起「返回空」/「非法 JSON」交替）：`max_tokens` 是**生成总量**、`reasoning_tokens`
+  算在里面，而 DeepSeek **思考模式默认开着**（其缺省 **64K**）——我们钉死在 16,384 上 ⇒ 出厂抬到 **32,768**。
+  判据 **1457 → 1459**（+2，先证过红）· 冒烟 **8351 字节逐字节未变** · `web/index.js` **3097 → 3099**。
+  全文 ⇒ `docs/session-handoff-2026-09-30-leg157-merged-scroll.md`。
+- **上一棒**（leg156 稳定版 · leg155 契约登记 6 族 · leg154 社区那两个 bug · leg153 召回进包 · leg152 向量记忆层 ·
+  leg151 引擎预取 · leg150 三遍收成两遍）⇒ 逐笔摘要见 `docs/done-archive.md` 开头几段（**存档，不是待办**）。
 
 ---
 
 ## 5. 现场（本机）
 
 - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`，**不是** `F:\deepseek`；分支 **`main`**——★leg108 实测勘正：旧记 `leg62-…` 已不成立）
-- **部署位**：`F:\jiuguanai\…\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（改 `web/` 或 `src/` 后 **Ctrl+Shift+R** 即载）
+- **部署位**：★**leg156 起不再是 junction**（旧记那条已不成立）——酒馆加载的是
+  `…\SillyTavern\data\default-user\extensions\story-world-v2`（**发布仓的一个 git 克隆**，分支 `main`）；
+  `public\scripts\extensions\third-party\story-world-v2` **已删**（它只要在那儿，`express.static` 就先一步接住）。
+  ⇒ ★**开发目录改的东西不会自己进酒馆**：要看得走"提交 → 推发布仓 → 那个克隆 fetch/切分支 → **硬刷新**"。
 - **面板构建号在哪看**：**设置页**里那行 `构建 <号>`（`src/render.js:636`）。★它**不在**"面板右下角"。
 - **真模型通道**：`loadStPresetConfig()` + `createHttpTransport`（密钥仅本机读、**不打印**）
 - **用户真账**：`F:\jiuguanai\...\chats\大荒z\*.jsonl` —— **一律先 cp 副本再解析**（铁律级现场纪律）

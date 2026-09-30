@@ -579,7 +579,17 @@
 //   ★配套的号一个都不升：`CSS_VERSION`（样式没动：那张卡只用既有 `.sw2-set-card`/`.sw2-field` 等类）、
 //     `MAIN_PROMPT_V`（`src/prompts.js` 一行未碰）、`CACHE_VERSION`（问法没变）。
 //   ★起名避禁词：`embed` / `card` 不在两张表里（leg141b 栽过 `network`、leg140 栽过 `entity`）。
-export const PANEL_BUILD = 'leg152-embed-card';
+// ★★★leg157 升位理由（用户令「**顺便把下拉的bug解决了**」——"下拉"＝观棋页"滚到最底部滚轮就失效、
+//   拉不上去"）：并页那一页改成 **flex 列 + 两栏容器吃余高** ⇒ **两栏的可视高度真的变了**
+//   （真机实测 715 → 466：原先有一截藏在折线以下、只有靠 18px 留白/16px 缝去够），
+//   页级滚动也没了 ⇒ 玩家可见的版面与手感都变了 ⇒ 照本仓口径升位。
+//   ★配同批升 `CSS_VERSION`（`web/style.css` 真动了：`height:100%` → `flex:1 1 auto`、
+//     并页那一页 `display:flex;flex-direction:column` ＋ 一条 `overscroll-behavior:contain`）——
+//     本条那句"构建号不许落后于 CSS 号"由 `test/render.test.js` 的 `CSS_PIN` 机械咬住。
+//   ★`MAIN_PROMPT_V` **不升**（`src/prompts.js` 一行未碰）；`CACHE_VERSION` **不升**（抽取问法没变）；
+//     `DB_VERSION` **不动**（IndexedDB 不许降级那条不适用——本笔没碰存储）。
+//   ★起名避禁词：`merged` / `scroll` 不在两张表里。
+export const PANEL_BUILD = 'leg157-merged-scroll';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

@@ -149,7 +149,7 @@ test('★③XHR 路：连不上（网络层失败）要判成可重试的瞬时�
     });
 });
 
-test('★③XHR 路：max_tokens 规则与 fetch 路一致（默认 16384 / 可覆盖 / 0=不写）', async () => {
+test('★③XHR 路：max_tokens 规则与 fetch 路一致（默认 32768 / 可覆盖 / 0=不写）', async () => {
     const bodies = [];
     const cap = makeFakeXHR((x) => { bodies.push(JSON.parse(x.body)); return { status: 200, text: '{"choices":[{"message":{"content":"x"}}]}' }; });
     await inFakeBrowser({ xhr: cap.FakeXHR }, async () => {
@@ -157,7 +157,7 @@ test('★③XHR 路：max_tokens 规则与 fetch 路一致（默认 16384 / 可�
         await createHttpTransport({ ...base, maxTokens: 2048 })('p');
         await createHttpTransport({ ...base, maxTokens: 0 })('p');
     });
-    assert.equal(bodies[0].max_tokens, 16384);
+    assert.equal(bodies[0].max_tokens, 32768);   // ★leg157：与 `PROPOSED_CALL_LIMITS` 同源（16,384 → 32,768）
     assert.equal(bodies[1].max_tokens, 2048);
     assert.equal(bodies[2].max_tokens, undefined, '0=不写这一格');
 });

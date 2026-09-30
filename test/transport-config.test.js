@@ -37,14 +37,17 @@ test('K30 设置链：缺任一字段 → null（不建传输、不抛）', () =
 
 // ★leg62：抽取预算独立抬到 32,768（**不再与主调用同值**）——本锁原口径是"两侧统一 16384"，
 //   那个前提（两侧输出量同量级）已被 leg62 的设定面打破，详见 transport-http.test.js 那条长注释。
-test('第十八棒 + E3 + leg62：抽取预算透传——maxTokens 参数进请求体；主调用默认仍 16384', async () => {
+// ★★★leg157：**主调用也抬到 32,768**（用户令「没有就默认32768就这样」）⇒ 两侧又同值了——
+//   ★但这两次"同值"不是同一件事：E3 那次是"顺手统一"，leg157 这次是"两笔实测各自撞到同一个落点"
+//   （16,384 上思考吃光预算 ⇒ 空回复 / 非法 JSON）。本锁只咬"这个数真的进了请求体、且与常量同源"。
+test('第十八棒 + E3 + leg62 + leg157：抽取预算透传——maxTokens 参数进请求体；主调用默认 32,768', async () => {
     let captured;
     const opts = { baseUrl: 'https://gw.example', apiKey: 'k', model: 'm', fetchImpl: async (url, o) => { captured = o; return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; } };
     assert.equal(EXTRACTION_MAX_TOKENS, 32768, '★抽取预算 32,768（leg62：@16384 实测 finish_reason=length 截断）');
     await resolveBrowserTransport(opts, { maxTokens: EXTRACTION_MAX_TOKENS }).transport('p');
     assert.equal(captured.body.includes('"max_tokens":32768'), true, '抽取预算透传进请求体');
     await resolveBrowserTransport(opts).transport('p');
-    assert.equal(JSON.parse(captured.body).max_tokens, 16384, '主调用默认**不动**：仍是 16384（leg62 没牵连它）');
+    assert.equal(JSON.parse(captured.body).max_tokens, 32768, '★主调用 leg157 起同为 32,768（16,384 上真机稳定失败）');
 });
 
 test('K30 浏览器安全守卫：createEnvTransport 无参调用不抛（浏览器无 process）', () => {

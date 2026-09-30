@@ -2351,9 +2351,20 @@ export function renderModelListHtml(cfg = {}) {
     const models = Array.isArray(cfg?.modelCatalog?.models) ? cfg.modelCatalog.models : [];
     if (!models.length) return '';
     const cur = String(cfg.model || '');
+    // ★★★leg157（用户令「能直接读的话那就直接读呗」）：每个模型**把它自己报的容量挂在悬停上**——
+    //   这样"这个网关报了什么"在面板上看得见（点了会用什么数填「单轮输出上限」也就一目了然）。
+    //   ★读不到的那一格**如实说"没报"**，不许留白、也不许印一个默认值充数（红线 2）。
+    const limits = cfg?.modelCatalog?.limits || {};
     return `<div class="sw2-models">`
-        + models.map((id) => `<button class="sw2-model${id === cur ? ' sw2-model-cur' : ''}"`
-            + ` data-action="pick-model" data-model="${attrText(id)}">${escapeHtml(id)}</button>`).join('')
+        + models.map((id) => {
+            const d = limits[id] || {};
+            const tip = [
+                Number.isFinite(d.maxOutputTokens) ? `它自己报的输出上限：${d.maxOutputTokens}` : '这个网关没报输出上限',
+                Number.isFinite(d.contextWindow) ? `上下文窗口：${d.contextWindow}` : null,
+            ].filter(Boolean).join(' · ');
+            return `<button class="sw2-model${id === cur ? ' sw2-model-cur' : ''}"`
+                + ` data-action="pick-model" data-model="${attrText(id)}" title="${attrText(tip)}">${escapeHtml(id)}</button>`;
+        }).join('')
         + `</div>`;
 }
 

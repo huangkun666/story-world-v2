@@ -2453,7 +2453,12 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   设置页多了一张「**记忆通道（向量）**」卡（地址/密钥/模型号/维度/一批几行 ＋ 两颗按钮 ＋ 一行读数）
     //   —— 玩家可见面真变了。★配套三个号一个都不升：`CSS_VERSION`（样式没动：那张卡只用既有类）、
     //   `MAIN_PROMPT_V`（`src/prompts.js` 一行未碰）、`CACHE_VERSION`（问法没变）。
-    assert.equal(PANEL_BUILD, 'leg152-embed-card');
+    // ★★★leg157（用户令「**顺便把下拉的bug解决了**」）⇒ **`leg157-merged-scroll`**：
+    //   观棋页并页那一页改成 flex 列、两栏容器吃余高 ⇒ **两栏可视高度真的变了**（真机实测 715 → 466：
+    //   原先有一截藏在折线以下、只有靠 18px 留白/16px 缝去够），页级滚动也没了 ⇒ 玩家可见版面与手感都变。
+    //   ★配同批升 `CSS_VERSION`（`web/style.css` 真动了）；`MAIN_PROMPT_V`/`CACHE_VERSION` 不升。
+    //   读数与五臂对照 ⇒ `web/style.css` 那条 leg157 注释（装置 `F:/deepseek/tmp/leg157-scroll/`）。
+    assert.equal(PANEL_BUILD, 'leg157-merged-scroll');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2483,7 +2488,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
     assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
-    const CSS_PIN = { ver: '20260927-leg145-mobile', sha: 'b10baffbf726676297353d5c97cabbdb62d4c8711e09fda516216ae388d60ac6' };
+    const CSS_PIN = { ver: '20260930-leg157-merged-scroll', sha: '71951b4ba761d4a25450f737705ef7122261d35e152f385c5fe440ca80724363' };
     const styleSha = createHash('sha256')
         .update(readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     assert.equal(cssVer, CSS_PIN.ver,
@@ -2507,7 +2512,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '152', '前置：本笔的构建号就是 leg152（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg150 之前它是 `150`，再之前是 `149`，再之前是 `145b`，再之前是 `144b`，再之前是 `144`，再之前是 `143`，再之前是 `142`，再之前是 `141b`，再之前是 `141`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '157', '前置：本笔的构建号就是 leg157（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg152 之前它是 `152`，再之前是 `150`，再之前是 `149`，再之前是 `145b`，再之前是 `144b`，再之前是 `144`，再之前是 `143`，再之前是 `142`，再之前是 `141b`，再之前是 `141`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

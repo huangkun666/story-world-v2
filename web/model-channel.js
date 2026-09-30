@@ -119,10 +119,22 @@ export function createModelChannelHub(deps = {}) {
         status('正在取模型列表…');
         const r = await listModels({ baseUrl: s.baseUrl, apiKey: s.apiKey, fetchImpl });
         if (!r.ok) {
-            state.catalog = { models: [], note: `✗ 取不到模型列表：${r.error}` };
+            state.catalog = { models: [], limits: {}, note: `✗ 取不到模型列表：${r.error}` };
             status(`⚠ 取不到模型列表：${r.error}`);
         } else {
-            state.catalog = { models: r.models, note: `✓ 取到 ${r.models.length} 个模型（点一下即填进「世界模型」）` };
+            // ★★★leg157：清单里**顺手带上服务端自己报的容量**（`limits`，键 = 模型 id）——
+            //   点某一项时用它把「单轮输出上限」填好（见 `pickModelAction`）。
+            //   ★这一句要**如实说清"报了几个"**：一个都没报时玩家得知道"那一格按出厂值"，
+            //     而不是以为"插件没读"（本仓最忌"读数为空"与"功能没跑"长得一模一样）。
+            const declared = Object.keys(r.limits || {}).length;
+            state.catalog = {
+                models: r.models,
+                limits: r.limits || {},
+                note: `✓ 取到 ${r.models.length} 个模型（点一下即填进「世界模型」）`
+                    + (declared
+                        ? ` · 其中 ${declared} 个自己报了输出上限——点它时会**一并**填好「单轮输出上限」`
+                        : ' · 这个网关一个都没报输出上限（那一格就按出厂值走）'),
+            };
             status(`已取到 ${r.models.length} 个模型——点列表里任意一项即填入`);
         }
         paint();
@@ -158,9 +170,27 @@ export function createModelChannelHub(deps = {}) {
         const el = win();
         const input = el?.querySelector?.('#sw2_model');
         if (input) input.value = id;
-        status(`已填入世界模型：${id}`);
+        // ★★★leg157（用户令「**能直接读的话那就直接读呗，没有就默认32768**」）：
+        //   **服务端自己报了输出上限就照它填**（这个值就是它接受的 `max_tokens` 上限，
+        //   见 `src/transport-http.js` 的 `declaredLimitsOf`）——玩家不用再去猜一个数。
+        //   ★报不到（或报的数出了可填范围）⇒ **一个字都不写**，让那一格回出厂值（32,768），
+        //     并**如实说清是哪一种**：本仓最忌"这一格没填"与"我读了但你没报"长得一样。
+        const declared = state.catalog?.limits?.[id]?.maxOutputTokens;
+        const norm = Number.isFinite(declared) ? sw2NormalizeNumericSetting('callMaxTokens', declared) : null;
+        if (norm != null) {
+            write('callMaxTokens', norm);
+            const ti = el?.querySelector?.('#sw2_call_tokens');
+            if (ti) ti.value = String(norm);
+            status(`已填入世界模型：${id} ——「单轮输出上限」按它自己声明的 ${norm} 一并填好`);
+            paint();          // 清单那边把高亮挪到新的这一项
+            return { ok: true, line: id, maxTokens: norm };
+        }
+        status(`已填入世界模型：${id}`
+            + (Number.isFinite(declared)
+                ? '（它声明的输出上限超出了这一格能填的范围，这一格没动）'
+                : '（这个网关没报输出上限，这一格保持原样 / 按出厂值）'));
         paint();          // 清单那边把高亮挪到新的这一项
-        return { ok: true, line: id };
+        return { ok: true, line: id, maxTokens: null };
     }
 
     /**

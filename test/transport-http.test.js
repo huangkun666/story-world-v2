@@ -94,12 +94,12 @@ test('leg93d 反面：普通失败不许被误判成超时（标志位与文案�
         '★带标志的人话超时同样不重试（新文案里没有 abort 字样，靠的是标志位）');});
 
 
-test('K36/A-5 max_tokens 上限：默认带定案值 16384；显式传参可覆盖/关闭', async () => {
+test('K36/A-5 max_tokens 上限：默认带定案值 32768；显式传参可覆盖/关闭', async () => {
     let bodies = [];
     const capture = async (url, opts) => { bodies.push(JSON.parse(opts.body)); return { ok: true, text: async () => '', json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
     const t1 = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture });
     await t1('p');
-    assert.equal(bodies[0].max_tokens, 16384); // 审计修复 E3：4096 → 16384（三处定案文档：decision-index:70 / full-roster-lens-spec / ratification-batch-k38 #2）
+    assert.equal(bodies[0].max_tokens, 32768); // ★leg157：16,384 → 32,768（用户令「没有就默认32768」；理由与真机证据见 transport-http.js 常量那段）
     const t2 = createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture, maxTokens: 2048 });
     await t2('p');
     assert.equal(bodies[1].max_tokens, 2048);
@@ -109,30 +109,35 @@ test('K36/A-5 max_tokens 上限：默认带定案值 16384；显式传参可覆�
 });
 
 // ★★leg62（用户令「嗯嗯预算还是增大的好」）：本锁**换过口径**，改之前先读这段。
-//   旧口径（E3，本笔之前）=「主调用与抽取调用**同预算**，两侧统一到 16384」。
+//   旧口径（E3，leg62 之前）=「主调用与抽取调用**同预算**，两侧统一到 16384」。
 //   该前提是"两侧输出量同量级"；leg62 的设定面（概念表）输出量是名册侧的几倍，**前提不成立** ⇒ 拆开取值。
+//   ★★★leg157 再换一次（用户令「**能直接读的话那就直接读呗，没有就默认32768就这样**」）：
+//   **两侧现在同值 32,768**。依据是真机证据（社区用户用 `deepseek/deepseek-v4.1-flash-fast` 跑到第 11 轮起，
+//   主调用在 16,384 上**稳定失败**，两种报错交替：「主调用返回空」与「主调用返回非法 JSON」——
+//   DeepSeek 官方两张文档把这两句指到**同一根因**：`max_tokens` 是"生成的总量"、
+//   `reasoning_tokens` 算在里面，而它的思考模式**默认开着**、思考模式的服务端缺省是 64K）。
 //   判据落成三条**新的、可判等的**事（不是把数字改大就完）：
-//     ① 主调用默认**不动**（它没被本笔牵连，谁改它谁举证）；
-//     ② 抽取侧**必须更大**——依据是真机实测（`F:/deepseek/tmp/leg62-live-budget.js`）：
-//        同一本大荒 @16384 → `finish_reason=length`（JSON 写一半断死）；@32768 → `stop`、完整解析；
-//     ③ ★**驱动这条判据的机理必须成立**：抬预算的理由是"推理与输出共享预算"，
-//        而三次成功调用的 completion 只有 5,521 / 5,184（**远低于 16,384**）——
-//        即"截断不是因为输出装不下"。⇒ 本锁**同时断言"实测输出远低于预算"这件事**，
-//        防的下一手是：有人看到"16k 就够写了"又把预算降回去（那会让推理重新饿死）。
-test('★leg62 抽取预算独立抬到 32,768（真机 finish=length→stop）：主调用不动、抽取侧更大', async () => {
-    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, 16384, '主调用默认不动（本笔没牵连它）');
+//     ① **两侧都 ≥ 32,768**——谁也不许被降回去（降回去 = 让推理重新饿死，正是第 11 轮那个病）；
+//     ② **抽取侧不许比主调用小**——★口径从 leg62 的"必须更大"放宽成"不小于"，**不是**"随便"：
+//        32,768 是两笔实测共同的落点（leg62 的截断臂：@16,384 `finish_reason=length`、@32,768 `stop`）；
+//     ③ ★**驱动这条判据的机理仍然成立**：抬预算的理由是"推理与输出共享预算"，
+//        而实测正文只有 5,521 / 5,184（**远低于**任何一档预算）——即"截断不是因为输出装不下"。
+//        ⇒ 本锁**同时断言"实测输出远低于预算"这件事**，防的下一手是：
+//        有人看到"16k 就够写了"又把预算降回去（那会让推理重新饿死）。
+test('★leg62 + leg157 两侧预算：都抬到 32,768（真机 finish=length→stop）；抽取侧不小于主调用', async () => {
+    assert.equal(PROPOSED_CALL_LIMITS.maxTokens, 32768, '★主调用 leg157 抬到 32,768（16,384 上真机稳定失败：思考吃光预算 ⇒ 空回复 / 非法 JSON）');
     assert.equal(EXTRACTION_MAX_TOKENS, 32768, '★抽取侧 32,768：@16384 实测 finish_reason=length 截断，@32768 stop');
-    assert.ok(EXTRACTION_MAX_TOKENS > PROPOSED_CALL_LIMITS.maxTokens, '抽取侧必须比主调用大（leg62 拆档的依据）');
-    // ★真机实测的 completion 峰值（leg62 三次成功调用：5,521 / 5,184）远低于旧预算 16,384
+    assert.ok(EXTRACTION_MAX_TOKENS >= PROPOSED_CALL_LIMITS.maxTokens, '抽取侧不许比主调用小（leg157 起两侧同档）');
+    // ★真机实测的 completion 峰值（leg62 三次成功调用：5,521 / 5,184）远低于任何一档预算
     const MEASURED_PEAK_COMPLETION = 5521;
     assert.ok(MEASURED_PEAK_COMPLETION < PROPOSED_CALL_LIMITS.maxTokens,
-        '实测正文远低于旧预算 ⇒ 截断的真因是推理吃预算，不是输出装不下（别据此把预算降回 16k）');
+        '实测正文远低于预算 ⇒ 截断的真因是推理吃预算，不是输出装不下（别据此把预算降回 16k）');
 
     const seen = [];
     const capture = async (url, opts) => { seen.push(JSON.parse(opts.body).max_tokens); return { ok: true, text: async () => '', json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
     await createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture })('主调用');
     await createHttpTransport({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', fetchImpl: capture, maxTokens: EXTRACTION_MAX_TOKENS })('抽取调用');
-    assert.deepEqual(seen, [16384, 32768], '两次真实请求体各自带上自己的预算（拆档不再同值）');
+    assert.deepEqual(seen, [32768, 32768], '两次真实请求体各自带上自己的预算（leg157 起两侧同档，但仍是两个独立传参口）');
 });
 
 test('HTTP 传输：env 齐备时可用，缺配置返回 null', () => {
