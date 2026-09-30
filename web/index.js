@@ -983,18 +983,25 @@ export function sw2ShouldAdvance(mes, lastMes) {
 export function sw2AdvanceOnce({ manual = false } = {}) {
     if (!sw2TickQueue) return { ok: false, skipped: 'no-queue' };
     const mes = sw2LatestMessageText(freshCtx());
-    const verdict = sw2ShouldAdvance(mes, sw2LastAdvancedMes);
+    const messageVerdict = sw2ShouldAdvance(mes, sw2LastAdvancedMes);
+    // ★★★leg156（用户实机报「推完了还显示这条、我想再推就显示这个」）：**手动那颗按钮不受这条闸管**。
+    //   闸问的是"这段正文要不要再提一遍标签"，那颗按钮问的是"世界要不要往前走一步"——两件事；
+    //   而挡它的后果是**按钮变哑**（最后一条正文没换人，它就永远推不动）。自动路照旧挡（一轮只提一次）。
+    const verdict = manual ? { go: true } : messageVerdict;
     if (!verdict.go) {
         setStatus(manual
             ? '⏭ 这一条消息已经推过一轮了（同一段正文不重复提取）——想再推，等新的一条消息'
             : '⏭ 这一条已经推过了（跳过重复提取）');
         return { ok: false, skipped: 'same-message' };
     }
-    sw2LastAdvancedMes = mes || null;
-    return sw2TickQueue.advance(mes).catch((err) => {
-        console.warn('[story-world-v2] 推进异常：', err?.message || err);
-        return { ok: false, error: String(err?.message || err) };
-    });
+    // ★★★leg156：**只有真推成功才记账**（原来在推进之前就写 ⇒ 那一轮没成功也记成"推过了"、
+    //   从此重推不了，与 `src/async-tick.js` 自己的"失败…可立即重试"当场矛盾）。
+    const pushed = sw2TickQueue.advance(mes);
+    return pushed.then((res) => { if (res?.ok && mes) sw2LastAdvancedMes = mes; return res; })
+        .catch((err) => {
+            console.warn('[story-world-v2] 推进异常：', err?.message || err);
+            return { ok: false, error: String(err?.message || err) };
+        });
 }
 
 // ★★★leg79/leg81：**实体页视图态整族也已搬进 `web/view-state.js`**

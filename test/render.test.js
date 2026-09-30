@@ -2833,6 +2833,16 @@ test('★★leg52·B：**参数页撤「推进」卡 ≠ 删处理器**（接线
     assert.match(onceBody, /sw2LatestMessageText\(freshCtx\(\)\)/, '★正文必须**现取**（抓死会读到上一个聊天的最后一条）');
     assert.match(onceBody, /skipped: 'same-message'/, '★必须有"同一段正文只推一次"的守卫（重复提取是本笔带出来的新风险）');
     assert.match(web, /advance: \(\) => sw2AdvanceOnce\(\)/, '★自动路也必须走同一个入口（两把尺子 = 迟早分叉）');
+    // ★★★leg156（用户实机报「推完了还显示这条、我想再推就显示这个」）——两条新锁：
+    //   ① **手动那颗按钮不受这条闸管**（闸管的是"正文要不要再提一遍"，按钮管的是"世界走不走"；
+    //      挡它的后果是按钮变哑：最后一条正文没换人就永远推不动）；
+    //   ② **只有真推成功才记账**（原先把 `sw2LastAdvancedMes` 写在推进之前 ⇒ 那一轮没成功也记成
+    //      "推过了"、从此重推不了，与 `src/async-tick.js` 自己的"失败…可立即重试"当场矛盾）。
+    assert.match(onceBody, /const verdict = manual \? \{ go: true \} : messageVerdict;/, '★手动路必须豁免这条闸（否则按钮变哑）');
+    assert.ok(/\.then\(\(res\) => \{ if \(res\?\.ok && mes\) sw2LastAdvancedMes = mes; return res; \}\)/.test(onceBody),
+        '★"推过了"这只记在**成功之后**（失败必须可立即重推）');
+    // ★反证的反证：自动路那条闸**不许**被顺手撤掉（它是本职：一轮回复只提一次标签）
+    assert.ok(!/manual \? \{ go: true \} : \{ go: true \}/.test(onceBody), '★自动路照旧挡（不许把闸整条拆了）');
 });
 
 test('★★leg52·C：几格合并成一栏 —— **能力零损失**（天时/时局照旧能设、乱象照旧只读）', () => {
