@@ -1,0 +1,385 @@
+// story-world-v2/src/transport-http.js
+// 主调用 HTTP 传输（S6 接线）：OpenAI 兼容 chat/completions，零依赖。
+// base 归一化：末尾去斜杠；无 /v1 自动补（gcli.ggchan.dev 网关与 deepseek 均兼容 /v1 路径）。
+// 配置源：env（ST_OPENAI_BASE / ST_OPENAI_KEY / ST_WORLD_MODEL 或 OPENAI_*）→ 酒馆预设（st-preset.js）。
+// 测试注入假 fetchImpl。
+// ★★发送通道（本次改）：**浏览器走 `XMLHttpRequest`、Node 走原生 `fetch`**——因为页面的 `fetch`
+//   可能已被别的扩展换掉，换掉之后它会往我们的请求体里塞它自己的记忆（实测与证据见下方长注）。
+//   显式注入的 `fetchImpl` 仍然优先（判据与 demo 走这条）。
+// K36 异步可靠性（细案 §3.3 → A-5）：主调用超时（AbortController）+ max_tokens 上限，
+//   两个数字为提案态（铁律 2，标注待报批；随 K36 报批批/长跑回填定案），参数化可覆盖、测试用小值。
+
+export function normalizeBase(base) {
+    let b = String(base).trim().replace(/\/+$/, '');
+    if (!/\/v1$/.test(b)) b = `${b}/v1`;
+    return b;
+}
+
+// 提案数字（铁律 2：提案态，标注待报批；细案 §3.3/§6）
+// 审计修复 E3：maxTokens 4096 → 16384——第十九棒用户拍板「主调用 max_tokens 4096→16384 随幅改」
+// （全量棋盘镜头 30k 定案连带；docs/decision-index.md:70 / docs/full-roster-lens-spec.md §42·§98·§102 /
+//  docs/ratification-batch-k38-2026-09-09.md #2 三处定案），代码此前漏改，抽取侧早已 16384。
+export const PROPOSED_CALL_LIMITS = Object.freeze({
+    timeoutMs: 120_000, // 主调用超时（提案）
+    maxTokens: 16384,   // 单轮演算输出上限（定案 16384：主调用不动，取值见下方 leg62 注释）
+});
+
+// 第十八棒：抽取调用独立输出上限（审计修复 E3：曾与主调用同值 16384——两侧本就同模型同通道，
+// 同一份预算实证，此前主调用 4096 是漏改；抽取侧保留独立常量只为「哪一侧用了它」可读）。
+// 诊断实证（demo/diag-init-extract.js）：
+// 思考型模型（reasoning_content）推理与输出共享预算，63k 输入 @4096 → finish=length 截断（推理 4024 吃光）；
+// 同输入 @16384 → finish=stop 完整。v1「80k 段连续空回复」同源（预算饿死，非网关）——两侧统一提额。
+//
+// ★★leg62（用户令「嗯嗯预算还是增大的好」）：**抽取侧独立抬到 32,768**（主调用保持 16,384，本笔不动它）。
+//   为什么非抬不可（真机四臂对照 · 装置 `F:/deepseek/tmp/leg62-live-budget.js`，读回 finish_reason+usage）：
+//     同一本大荒（268,764 字符）同一提示词，@16,384 出**截断**（`finish_reason=length`，21,777 字符，
+//     概念表 JSON 写到第 1398 行断死）；@32,768 → `finish_reason=stop`、完整解析。
+//   ★**真因不是"输出装不下"**（这是本笔最要紧的一句）：三次成功调用的 `completion_tokens` 只有
+//     **5,521 / 5,184**，**远低于 16,384**。上面那条"推理与输出共享预算"就是答案——
+//     原臂那次模型在"51 张表怎么切"上烧掉了大半预算，正文才写到一半。
+//     ⇒ **抬预算买的是推理空间**；本仓既往那条"两侧同值"的口径，前提是"两侧输出量同量级"，
+//       而 leg62 的设定面（概念表）输出量是名册侧的几倍，前提不成立 ⇒ 拆开取值。
+//   ★数字依据（提案态）：实测峰值 completion 5,521 ⇒ 32,768 给 5.9 倍余量给推理；**不是无上限**——
+//     天花板仍是 EXTRACTION_TIMEOUT_MS（300 s/次），预算与超时互为止损。
+export const EXTRACTION_MAX_TOKENS = 32768;
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// leg27（用户令「二十多分钟很慢，你做吧」）：**抽取侧独立超时** + **超时如实标记**。
+//   病（用户实机 2026-09-11 原始症状）：初始化抽取跑了 20+ 分钟、状态栏一行不动、不知抽到哪。
+//   根因（读真码 + 实测真书，见 leg27 交接）：
+//     ①抽取每次调用的输入是**贴满上限的块**——真账**实测** 大荒-姬元真.json = 235 条 / 265,866 字符
+//       ⇒ 60,000 字符/块 ⇒ 5 块，实到块大小 [59215, 58673, 59892, 58902, 30344]（全贴 97% 上限）；
+//     ②输出预算 16,384 tokens **且 reasoning 与输出共享该预算**（上方断实证），模型是推理型
+//       （用户现场 gemini-3.1-pro-preview）⇒ 单次调用是**分钟级**，不是秒级；
+//     ③旧法把"超时"与"网关偶发空回复"**当成同一种可重试的瞬时错**：超时 → `tryRosterChunk` 对半拆
+//       （每半再各 2 分钟）→ 拆 4 层 → 保底重试 → 全失败才降级 ⇒ 单块最坏 31 次调用 × 120 秒 = **62 分钟**。
+//       ★对半拆治不了超时：拆小的是**输入**，而超时主因是**生成时间**（输出预算仍 16,384/次）。
+//   ⇒ 两处改：①抽取侧超时独立给足（不再蹭主调用的 120 s）；②超时**如实标记** `sw2Timeout`，
+//            让编排层能把它与瞬时错分开（`abstract.js` 对超时不再拆半、不再重试）。
+//   数字（**提案态**，铁律 2，随长跑曲线定案）：300,000 ms = 5 分钟/次。
+//     依据：单块 ≈ 59k 字符输入 + ≤16,384 tokens 输出（reasoning 占盘）⇒ 分钟级，给 2.5 倍余量；
+//     同时它**不是无上限**——天花板 = 300 s（旧法最坏 62 分钟/块 ⇒ 现在最坏 5 分钟/块即止损跳过）。
+export const EXTRACTION_TIMEOUT_MS = 300_000;
+
+// 超时标记：给调用方一个**可判**的形态（不是靠猜错误文案）。
+//   ⚠ leg27 澄清我此前一个**误判**（留档防复发）：我一度怀疑 `abort(reason)` 传 non-cloneable 会抛
+//   ⇒ 超时根本没生效。**实测证伪**（本机真跑）：`abort(new Error('…'))` 正常返回、
+//   `signal.aborted=true`、挂住的 fetch 在 528 ms 被中断 ⇒ **超时是生效的**，别再修这一处。
+//   ★★★leg93d 补一句（**上面那句"不是靠猜错误文案"当年只对了一半**）：`abort(reason)` 确实生效，
+//   但**真浏览器里 fetch 不会把 reason 交回来**——它抛的是自己的
+//   `DOMException('signal is aborted without reason')` ⇒ 光靠"把 reason 传进 abort"**拿不到人话**。
+//   ⇒ 定稿：**标志位（本函数）负责"可判"，人话由 catch 里我们自己组**（见那段注释与判据 leg93d）。
+function markTimeout(err) {
+    try { err.sw2Timeout = true; } catch (_) {}
+    return err;
+}
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★本次（用户令「**这个通道绝对不能有**」）：**页面的 fetch 被别的扩展换掉了，而我们的模型调用走了它**。
+//
+// 病（亲手查实；这条通道**不在我们仓里**，所以"搜代码"永远搜不到它）：
+//   · 我们的地址是 `normalizeBase(baseUrl) + '/chat/completions'`，而 `normalizeBase` 会补 `/v1`
+//     ⇒ 真实地址形如 `https://<网关>/v1/chat/completions`。
+//   · 别的扩展（本机实测：`yuzuki-Memory`）在页面里**把 `window.fetch` 换成了自己的函数**，
+//     并按"地址里有没有 `/v1/chat/completions`"决定要不要动这个请求体——它会拿**你聊天里最后两条正文**
+//     去它绑定的记忆库里检索，把命中的记忆**当成一条 system 消息塞进请求体**（它以为这是聊天请求）。
+//   · 而本文件原来的写法是 `fetchImpl = fetch`（缺省参数在**调用那一刻**求值）
+//     ⇒ 我们每一次抽取/起根/演算的提示词里，都**悄悄多了一段用户正文的记忆**。
+//   后果（真账实测，与"书"逐字对过）：
+//     ① 设定面多出一条 `玉爪儿`——书里一个字都没有；全账 1345 个名字里**只有它一个**对不上书文；
+//     ② 起根 6 条里有 2 条的"书里原话"其实是记忆库里的句子（在书里最长只对得上 **3 个字**）。
+//
+// 治法：**我们的调用不走页面那个 fetch**——浏览器改走 `XMLHttpRequest`（它没被换），
+//   Node 侧（demo / scripts / 判据）仍走原生 `fetch`（那边没有补丁这回事）。
+//   ★为什么不是"把 fetch 抄一份留着"：抄的那一份**谁先加载谁说了算**，赌不过别人的加载顺序；
+//     `XMLHttpRequest` 是**另一套 API**，别人的补丁碰不到它 ⇒ 这才是形态上的隔离。
+//   契约一个字不改：仍只发 `messages:[{role:'user',content:prompt}]`；超时/中止语义照旧——
+//   `xhrSender` 忠实照抄真 fetch 被中止时的形状（抛 DOMException、reason 不参与），
+//   与上面 leg93d 那条判据锁的形状**同形**（两条路必须表现一致，否则状态条上又是一句看不懂的英文）。
+const NATIVE_FN_RE = /\{\s*\[native code\]\s*\}/;
+
+/**
+ * 页面的 `fetch` 有没有被换过（形态判据：浏览器原生函数打印出来带 `[native code]`；被 JS 包一层就不带）。
+ * ★只回答"**页面**上这一问"：不是浏览器（Node 侧 demo/scripts/判据）⇒ 返回 `null`（不适用，不猜）——
+ *   因为 Node 的 `fetch` 本来就是 JS 实现（undici），拿它当"被换过"是**假话**。
+ * ★它只用来**如实报一句**，不参与任何取舍：**绕过页面 fetch 这件事是无条件的**（见 `pickSender`），
+ *   所以即使有人用 Proxy 包（那种包法打印出来仍带 `[native code]`）判不出来，通道也照样是干净的。
+ */
+export function pageFetchLooksPatched() {
+    try {
+        if (typeof window === 'undefined' || typeof window.fetch !== 'function') return null;
+        return !NATIVE_FN_RE.test(Function.prototype.toString.call(window.fetch));
+    } catch (_) { return null; }
+}
+
+/** XHR 版的"发送一次"：返回形状与 fetch 一致（`{ ok, status, text(), json() }`），够本文件用。 */
+function xhrSender(url, init = {}) {
+    return new Promise((resolve, reject) => {
+        const signal = init.signal;
+        let settled = false;
+        let xhr = null;
+        // 被中止时**照真 fetch 的语义**抛（reason 不参与）——理由见 leg93d 那段与上方注释
+        const abortErr = () => (typeof DOMException === 'function'
+            ? new DOMException('signal is aborted without reason', 'AbortError')
+            : Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' }));
+        const finish = (fn) => {
+            if (settled) return;
+            settled = true;
+            try { signal?.removeEventListener?.('abort', onAbort); } catch (_) {}
+            fn();
+        };
+        const onAbort = () => { try { xhr?.abort?.(); } catch (_) {} finish(() => reject(abortErr())); };
+        try { xhr = new XMLHttpRequest(); } catch (err) { finish(() => reject(err)); return; }
+        try {
+            xhr.open(String(init.method || 'GET'), url, true);
+            for (const [k, v] of Object.entries(init.headers || {})) {
+                try { xhr.setRequestHeader(k, String(v)); } catch (_) {}
+            }
+        } catch (err) { finish(() => reject(err)); return; }
+        xhr.onload = () => finish(() => {
+            const text = String(xhr.responseText ?? '');
+            resolve({
+                ok: xhr.status >= 200 && xhr.status < 300,
+                status: xhr.status,
+                text: async () => text,
+                json: async () => JSON.parse(text),
+            });
+        });
+        // 网络层失败（连不上 / 被 CORS 挡下）：给**人话**，并带 `network` 字样——
+        //   `isTransientCallError`（`abstract.js:1576`）认这一类，与"链路断要重试"那条既有口径一致。
+        xhr.onerror = () => finish(() => reject(new Error('连不上模型服务（network error）')));
+        xhr.ontimeout = () => finish(() => reject(new Error('连不上模型服务（network error）')));
+        xhr.onabort = () => finish(() => reject(abortErr()));
+        if (signal) {
+            if (signal.aborted) { onAbort(); return; }
+            signal.addEventListener('abort', onAbort, { once: true });
+        }
+        try { xhr.send(init.body ?? null); } catch (err) { finish(() => reject(err)); }
+    });
+}
+
+/** 缺省发送器：浏览器走 XHR（躲开别人对 fetch 的补丁），Node 走原生 fetch。 */
+function pickSender() {
+    if (typeof globalThis.XMLHttpRequest === 'function') return xhrSender;
+    return globalThis.fetch;
+}
+
+// 通道自证（只出一声，且**只在真被换过时**出声）：让"我们的调用走在哪条路上"在控制台里看得见。
+let sw2ChannelLogged = false;
+function logChannelOnce(usedXhr) {
+    if (sw2ChannelLogged) return;
+    sw2ChannelLogged = true;
+    try {
+        if (typeof console === 'undefined') return;
+        if (pageFetchLooksPatched() !== true) return;      // 没被换过 ⇒ 什么都不说（不留噪声）
+        console.info(`[story-world-v2] 模型调用通道：${usedXhr ? '不走页面的 fetch（改走 XMLHttpRequest）' : '走页面的 fetch'}`
+            + '——★检测到页面的 fetch 已被别的扩展替换过；我们的请求不经它'
+            + '（实测：那条路上有别的扩展会往请求体里塞它自己的记忆）');
+    } catch (_) {}
+}
+
+export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = null, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
+    const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
+    // ★发送器在**建传输那一刻**定下来（显式注入的优先，判据走这条；缺省 = pickSender）
+    const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
+    logChannelOnce(send === xhrSender);
+    return async (prompt) => {
+        if (typeof send !== 'function') throw new Error('没有可用的发送通道（这个环境里 fetch 与 XMLHttpRequest 都没有）');
+        const controller = new AbortController();
+        // ★`abort(reason)` 里的 reason 在真浏览器里**到不了我们手上**（见上面 leg93d 那段），
+        //   它留着只为两件事：① 本仓既有判据的假 fetch 会读它；② 调试时能在 devtools 里看见。
+        //   **不要指望靠它给用户一句人话**——那句在下面的 catch 里显式组。
+        const timer = setTimeout(() => controller.abort(new Error(`模型超时（${timeoutMs}ms）`)), timeoutMs);
+        try {
+            const res = await send(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature,
+                    response_format: { type: 'json_object' },
+                    ...(maxTokens ? { max_tokens: maxTokens } : {}),
+                }),
+                signal: controller.signal,
+            });
+            if (!res.ok) {
+                const snippet = (await res.text()).slice(0, 240);
+                const err = new Error(`HTTP ${res.status}`);
+                err.status = res.status;
+                err.bodySnippet = snippet;
+                throw err;
+            }
+            const data = await res.json();
+            return data?.choices?.[0]?.message?.content ?? '';
+        } catch (err) {
+            // leg27：超时**如实标识**（判据 = 本控制器自己发出过中止 ⇒ fetch 因我们超时而拒）
+            //   ⇒ 编排层据此把它与"网关偶发空回复"分开：**超时不重试、不拆半**（拆了也白拆，见文件头）。
+            // ★★★leg93d 真因修（交接 §5.1 那行 `signal is aborted without reason` 的来源）：
+            //   **不要把 fetch 那个异常原样抛出去**。真浏览器里 fetch 被中止时抛的是**它自己的**
+            //   `DOMException('signal is aborted without reason', 'AbortError')` ——
+            //   **不带**我们 `abort(new Error('主调用超时…'))` 传进去的 reason（实测三臂对照，
+            //   装置 `F:/deepseek/tmp/leg93-abort-shape.mjs`：甲臂"假 fetch 直传 reason"能拿到人话，
+            //   乙/丙臂"真 fetch 形状"拿到的一律是那句英文）。
+            //   ⇒ 那句英文一路被包成 `传输失败: …`（`worldstep.js:14`）印到状态条上：
+            //     「⚠ 演算失败：传输失败: signal is aborted without reason（世界原样未动，可重试）」
+            //     ——**看得出"失败了"，看不出"为什么"**（用户为这一句查了两棒）。
+            //   ★修法：由**我们自己**记下的 `timeoutMs` 组一句人话（**超时是我们发的信号，我们知道是多少毫秒**），
+            //     并把原异常挂在 `cause` 上（要复盘仍拿得到名与栈），同时保住 `sw2Timeout` 标志
+            //     （`abstract.js` 靠它判"超时=止损，不重试、不拆半"）。
+            if (controller.signal.aborted) {
+                //   ★措辞纪律（本仓 A-3）：这句**会印到状态条上**（`async-tick.js:43` 的「⚠ 演算失败：…」），
+                //     所以**说人话、零引擎术语**——不写"主调用/传输/transport"这类内部词。
+                //     `ms` 留着：它是维护者与用户对齐"到底等了多久"的唯一实数。
+                const e = new Error(`模型超时（${timeoutMs}ms）——这一轮没等到模型回话，已中止；可在参数页把「单轮超时」调大`);
+                e.name = 'Sw2TimeoutError';
+                e.cause = err;
+                throw markTimeout(e);
+            }
+            throw err;
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+}
+
+export function createEnvTransport(env) {
+    // 浏览器安全守卫（K30）：无参调用在浏览器（无 process）不抛 —— 缺 env 视为空配置
+    const e = env ?? (typeof process !== 'undefined' ? process.env : {});
+    const base = e.ST_OPENAI_BASE || e.OPENAI_BASE_URL;
+    const key = e.ST_OPENAI_KEY || e.OPENAI_API_KEY;
+    const model = e.ST_WORLD_MODEL || e.OPENAI_MODEL;
+    if (!base || !key || !model) return null;
+    return createHttpTransport({ baseUrl: base, apiKey: key, model });
+}
+
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★用户令（2026-09-27）：「**把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下**」。
+//
+// 为什么这两件事住**这个文件**（而不是另开一个模块）：它们与对话调用**必须是同一个地址规则、同一条发送通道**。
+//   · 地址规则：同一个 `normalizeBase`（末尾去斜杠、缺 `/v1` 自动补）——所以 `/models` 就是
+//     `/chat/completions` 的**兄弟路径**，不新立第二条地址口径（本仓最贵的病是"同一件事两处口径"）。
+//   · 发送通道：同一个 `pickSender()`（浏览器走 `XMLHttpRequest`、Node 走原生 `fetch`）——
+//     页面的 `fetch` 可能已被别的扩展换掉（见文件头 leg139 那段），列表与探测**不能另走一条路**。
+//
+// ★两者的分工（别混成一件事）：
+//   · `listModels` ＝ `GET /v1/models`（**不花钱**）。它成功本身就证明**地址与密钥是通的**。
+//   · `probeModel` ＝ 发一次**最小真实请求**（几个 token）。它多验一样：**模型号认不认**。
+//   ⇒ 所以页面上是两枚按钮、两句读数，不是一个按钮两个名字。
+
+/** 模型列表的地址（与对话同一个 base；`normalizeBase` 已负责补 `/v1`）。 */
+export function modelsEndpoint(baseUrl) {
+    return `${normalizeBase(baseUrl)}/models`;
+}
+
+/**
+ * 把一次失败的 HTTP 应答翻成**人话**（页面上要印给玩家看，零引擎术语）。
+ * ★口径与状态条一致：说清"哪一步不对、你能改什么"，不印 `HTTP 4xx` 就完事。
+ * @returns {string} 一句中文；拿不准的一律带上原始状态码（不猜原因）
+ */
+export function humanHttpError(status, bodySnippet = '') {
+    const s = Number(status);
+    const tail = String(bodySnippet || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const withTail = (line) => (tail ? `${line}（服务端说：${tail}）` : line);
+    if (s === 401 || s === 403) return withTail('密钥无效或已过期');
+    if (s === 404) return withTail('这个地址下没有这个接口——多半是「服务地址」填错了');
+    if (s === 429) return withTail('请求太频繁，被服务端限流了，过一会儿再试');
+    if (s === 400 || s === 422) return withTail('请求被拒——多半是「世界模型」这个名字服务端不认识');
+    if (s >= 500) return withTail(`服务端出错（HTTP ${s}）`);
+    return withTail(`没成功（HTTP ${Number.isFinite(s) ? s : '?'}）`);
+}
+
+/** 取一次响应体里的文字（`xhrSender` 与真 fetch 都提供 `text()`）。 */
+async function readText(res) {
+    try { return String(await res.text()); } catch (_) { return ''; }
+}
+
+/**
+ * 拉模型列表（OpenAI 兼容 `GET /v1/models`）。
+ * ★**不改任何配置**：它只读回来一张清单，填不填由玩家点。
+ * @returns {Promise<{ok:boolean, models:string[], status:number|null, error:string|null}>}
+ */
+export async function listModels({ baseUrl, apiKey, fetchImpl = null, timeoutMs = 20000 } = {}) {
+    const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
+    const out = { ok: false, models: [], status: null, error: null };
+    if (typeof send !== 'function') { out.error = '没有可用的发送通道'; return out; }
+    if (!String(baseUrl || '').trim()) { out.error = '还没填「服务地址」'; return out; }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`取模型列表超时（${timeoutMs}ms）`)), timeoutMs);
+    try {
+        const res = await send(modelsEndpoint(baseUrl), {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: controller.signal,
+        });
+        out.status = res?.status ?? null;
+        if (!res?.ok) { out.error = humanHttpError(out.status, await readText(res)); return out; }
+        const rawText = await readText(res);
+        let data = null;
+        try { data = JSON.parse(rawText); } catch (_) {
+            out.error = '应答不是 JSON——这个地址多半不是 OpenAI 兼容接口';
+            return out;
+        }
+        // OpenAI 兼容形状是 `{data:[{id}]}`；也认裸数组（有些网关就这么给）。
+        const arr = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+        out.models = arr.map((m) => String(m?.id ?? m ?? '').trim()).filter(Boolean);
+        if (!out.models.length) { out.error = '取到了应答，但里面一个模型名都没有'; return out; }
+        out.ok = true;
+        return out;
+    } catch (err) {
+        out.error = controller.signal.aborted
+            ? `取模型列表超时（${timeoutMs}ms）——服务地址可能填错了`
+            : (/network error/i.test(String(err?.message || '')) ? '连不上这个地址（网络不通或被浏览器挡下）' : String(err?.message || err));
+        return out;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * 测一次连通：发**最小真实请求**，一次验三样——地址通不通 · 密钥对不对 · 模型号认不认。
+ * ★**故意不带 `response_format`**：那个字段不是所有模型都支持，探测不该因为"不支持 JSON 模式"而判失败
+ *   （正式调用那一侧才带，见 `createHttpTransport`）。
+ * @returns {Promise<{ok:boolean, ms:number, status:number|null, reply:string, error:string|null}>}
+ */
+export async function probeModel({ baseUrl, apiKey, model, fetchImpl = null, timeoutMs = 30000, maxTokens = 16 } = {}) {
+    const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
+    const out = { ok: false, ms: 0, status: null, reply: '', error: null };
+    if (typeof send !== 'function') { out.error = '没有可用的发送通道'; return out; }
+    if (!String(baseUrl || '').trim()) { out.error = '还没填「服务地址」'; return out; }
+    if (!String(model || '').trim()) { out.error = '还没填「世界模型」'; return out; }
+    const t0 = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`测试超时（${timeoutMs}ms）`)), timeoutMs);
+    try {
+        const res = await send(`${normalizeBase(baseUrl)}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: maxTokens }),
+            signal: controller.signal,
+        });
+        out.ms = Date.now() - t0;
+        out.status = res?.status ?? null;
+        if (!res?.ok) { out.error = humanHttpError(out.status, await readText(res)); return out; }
+        const rawText = await readText(res);
+        let data = null;
+        try { data = JSON.parse(rawText); } catch (_) {
+            out.error = '应答不是 JSON——这个地址多半不是 OpenAI 兼容接口';
+            return out;
+        }
+        out.reply = String(data?.choices?.[0]?.message?.content ?? '');
+        out.ok = true;
+        return out;
+    } catch (err) {
+        out.ms = Date.now() - t0;
+        out.error = controller.signal.aborted
+            ? `等超时了（${timeoutMs}ms）——地址通但模型没回话`
+            : (/network error/i.test(String(err?.message || '')) ? '连不上这个地址（网络不通或被浏览器挡下）' : String(err?.message || err));
+        return out;
+    } finally {
+        clearTimeout(timer);
+    }
+}

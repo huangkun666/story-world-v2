@@ -1,0 +1,143 @@
+// story-world-v2/test/weight.test.js
+// K1 单测（分量引擎细案 §4 K1 验收）→ **leg25 c 改写**（用户令「删」四维浮点）→ **leg25 f 再删掩码**。
+// 改写缘由（design-core-leg23 §4 第 1 条 + §2.2 三条硬规矩）：兵力/权位/人脉/耳目这几个概念
+//   **没法精确表示**（书里没刻度、现实里也没有），压成 0–1 是拿精确外壳装模糊内容；
+//   手拍值比没有更坏——它让"编的"看起来像"算的"。故 src/weight.js 里 COEFFS/NEUTRAL_ATTR 整条删除，
+//   computeWeight 签名保留但**不吃属性**：= clamp01(layerBase × envFactor)。
+// leg25 f：`visibilityMask` / `isVisible` / `MASK` **整组删除**（用户拍板「X3 删掉掩码」）——
+//   它后期只剩"同地 1.0 / 异地 0.5"两个取值，而阈值 0.25 使**两者都过闸** ⇒ 恒真、挡不住任何事实。
+// 本文件锁的三件事（换载体不换意图）：
+//   ① 属性彻底退场——传什么都不改结果（防它借尸还魂 / 改名续用）；
+//   ② 剩下的两个真输入（层基线、张力）方向正确；
+//   ③ **已删机制不许留名**（反向锁：掩码组、死参数、中立属性表都在此钉死）。
+// 已删断言（机制没了，不是遗漏；理由见 `docs/spec-failure-verdict-and-visibility.md`）：
+//   系数单调、缺键=中立 0.5、显式全零/全满、MASK.intelBase、obsFloor 修边、掩码数值与阈值两端。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as W from '../src/weight.js';
+import {
+    computeWeight, computeWeightAtTick, activityFactor, spreadRadius,
+    DECAY, NEUTRAL_TENSION, FACTION_BASELINE, RIPPLE_TARGET_CAP,
+} from '../src/weight.js';
+
+const CHAR = 'character';
+const FACT = 'faction';
+
+test('公式（leg25 c）：不吃属性——传任何 attrs 结果逐字节一致（"编的数"不许借尸还魂）', () => {
+    const empty = computeWeight({}, CHAR);
+    // 旧四维（各种摆放）与"新概念试探"都必须一律无效：引擎不再有"属性→分量"这条换算
+    const shapes = [
+        { hardPower: 1, office: 1, network: 1, intel: 1 },
+        { hardPower: 0, office: 0, network: 0, intel: 0 },
+        { hardPower: 0.93, office: 0.4, network: 0.6, intel: 0.2 },
+        { 兵力: 0.99, 权位: 0.01, 气运: 1 },
+    ];
+    for (const attrs of shapes) {
+        assert.equal(computeWeight(attrs, CHAR), empty, `${JSON.stringify(attrs)} 不得改变分量`);
+        assert.equal(computeWeight(attrs, FACT), computeWeight({}, FACT), '势力层同理');
+    }
+    // 不给 attrs（旧调用形状 computeWeight()）与给 null 同样安全
+    assert.equal(computeWeight(), empty, '缺省入参不抛且同值');
+    assert.equal(computeWeight(null, CHAR), empty);
+});
+
+test('公式（leg25 c）：删掉的常量不许留名——COEFFS / NEUTRAL_ATTR 均已不存在（防"改名续用"）', () => {
+    // 这一条是**反向锁**：本次要治的病就是"把没法精确表示的概念压成 0–1 假装客观"。
+    //   若有人日后把 hardPower 改名成别的键再把系数表加回来，这里当场红。
+    assert.equal(W.COEFFS, undefined, '系数表已删（四维退场后没有"系数"可谈）');
+    assert.equal(W.NEUTRAL_ATTR, undefined, '中立属性表已删——它唯一的存在理由是"缺键时公式取什么默认值"，而公式已不吃属性');
+    // leg25 f：掩码整组退场（不是"只剩位置"，是**连位置那条也没了**——它挡不住任何事实）
+    assert.equal(W.MASK, undefined, '★掩码常量组已删（两个取值都过阈值 ⇒ 恒真 = 假机制）');
+    assert.equal(W.visibilityMask, undefined, '★visibilityMask 已删——不是留着不用，是不许留名');
+    assert.equal(W.isVisible, undefined, '★isVisible 已删（它的唯一消费者随掩码一起退场）');
+});
+
+test('公式：层基线 × 张力，钳回 [0,1]（势力层基线 0.85——leg25 c 无属性化后重基线）', () => {
+    assert.equal(FACTION_BASELINE, 0.85, '层基线常量=0.85（势力按人物的 85% 计；原 1.5 被 clamp01 吸平成了纸面常量）');
+    // 算式现状：envFactor = 1 + 0.2×(张力−0.5) ∈ [0.9,1.1] ⇒
+    //   人物层 1×[0.9,1.1]：≤1 那半可见，>1 那半仍被 clamp01 截平（张力 0.5 恰好 = 1）；
+    //   势力层 0.85×[0.9,1.1] = [0.765,0.935]：**全程落在界内**，张力项与层差现在都看得见。
+    //   ⇒ "人物 vs 势力"的可见差 = 1.0 vs 0.85（势力更低——层级折扣，不是"更大"）。
+    assert.ok(Math.abs(computeWeight({}, CHAR) - 1) < 1e-12, '人物：1 × envFactor(0.5)=1 → 1');
+    assert.ok(Math.abs(computeWeight({}, FACT) - 0.85) < 1e-12, `势力：0.85 × 1 = 0.85（实际 ${computeWeight({}, FACT)}）`);
+    assert.ok(Math.abs(computeWeight({}, FACT, 1) - 0.935) < 1e-12, '张力拉满：0.85 × 1.1 = 0.935');
+    assert.ok(Math.abs(computeWeight({}, FACT, 0) - 0.765) < 1e-12, '张力归零：0.85 × 0.9 = 0.765');
+    // 层差在账面上可见了（删属性前两者同为 1.0，层差全被钳制吃掉）
+    assert.ok(computeWeight({}, FACT) < computeWeight({}, CHAR), '势力基础分低于人物（层级折扣方向）');
+});
+
+test('公式：envFactor 方向（张力高 → 分量升；降的方向对人物层被钳制贴顶）', () => {
+    assert.equal(computeWeight({}, CHAR, NEUTRAL_TENSION), computeWeight({}, CHAR), '缺省张力 = 中立张力');
+    // 降的方向可见：1 + 0.2×(0.2−0.5) = 0.94
+    assert.ok(Math.abs(computeWeight({}, CHAR, 0.2) - 0.94) < 1e-12, '低张力 → 0.94');
+    assert.ok(computeWeight({}, CHAR, 0.2) < computeWeight({}, CHAR, NEUTRAL_TENSION), '张力低 → 分量降');
+    // 升的方向对人物层**不可见**：1 + 0.2×(0.8−0.5) = 1.06 → 钳回 1。
+    //   删掉属性之后人物基础分恒为 1（贴着上界），凡 >1 的张力修正都被 clamp01 截平。
+    //   势力层不贴顶（0.85 起算），故升的方向在势力层照样观察得到——见上一条的 0.935。
+    assert.equal(computeWeight({}, CHAR, 0.8), 1, '高张力 → 公式值 1.06 → 钳回 1');
+    assert.equal(computeWeight({}, CHAR, 0.8), computeWeight({}, CHAR, NEUTRAL_TENSION), '人物层升的方向当前观察不到');
+    assert.ok(computeWeight({}, FACT, 0.8) > computeWeight({}, FACT, NEUTRAL_TENSION), '势力层升的方向可见（不贴顶）');
+    // 缺省 kind 按人物（kind 是层参数，不是属性；保留旧签名的宽容度）
+    assert.equal(computeWeight({}), computeWeight({}, CHAR));
+});
+
+test('公式：确定性（重复调用序列逐字节一致）', () => {
+    const cases = [
+        [{}, CHAR, 0.6],
+        [{ hardPower: 1, office: 0 }, FACT, 0.4],
+        [null, CHAR, 0.5],
+    ];
+    const pass1 = cases.map((a) => JSON.stringify(computeWeight(...a)));
+    const pass2 = cases.map((a) => JSON.stringify(computeWeight(...a)));
+    assert.deepEqual(pass1, pass2);
+});
+
+test('衰减：宽限期内恒 1（人物 8 tick / 势力 20 tick）', () => {
+    for (let idle = 0; idle <= DECAY.character.grace; idle++) {
+        assert.equal(activityFactor(idle, CHAR), 1);
+    }
+    for (let idle = 0; idle <= DECAY.faction.grace; idle++) {
+        assert.equal(activityFactor(idle, FACT), 1);
+    }
+});
+
+test('衰减：宽限期后每 tick 固定比率、单调递减、封底 0', () => {
+    const p = DECAY.character;
+    assert.ok(Math.abs(activityFactor(p.grace + 1, CHAR) - (1 - p.rate)) < 1e-12);
+    assert.ok(Math.abs(activityFactor(p.grace + 2, CHAR) - (1 - 2 * p.rate)) < 1e-12);
+    let prev = 1;
+    for (let idle = p.grace; idle <= p.grace + 50; idle++) {
+        const f = activityFactor(idle, CHAR);
+        assert.ok(f <= prev, `t=${idle} 应单调不减增长`);
+        assert.ok(f >= 0);
+        prev = f;
+    }
+    assert.equal(activityFactor(p.grace + 51, CHAR), 0); // 1 − 0.02×51 < 0 → 封底
+});
+
+test('衰减：衰减后分量 = 公式分 × 因子（唯一还在动的那一项，是时间事实不是编的数）', () => {
+    const grace = DECAY.character.grace;
+    // 公式分现在恒为 1（人物层），衰减是唯一变量：宽限内 1，宽限后每 tick −2%
+    assert.equal(computeWeightAtTick(null, CHAR, NEUTRAL_TENSION, grace), 1);
+    assert.equal(computeWeightAtTick({}, CHAR, NEUTRAL_TENSION, grace), 1, '传 attrs 也不改（属性退场）');
+    assert.ok(Math.abs(computeWeightAtTick(null, CHAR, NEUTRAL_TENSION, grace + 1) - (1 - DECAY.character.rate)) < 1e-12);
+});
+
+// leg25 f（用户拍板「X3 删掉掩码」）：原四则掩码断言（只剩位置 / 阈值两端 / 入参缺省鲁棒 / 旧参数形状）
+//   **整组退场**——测的对象（MASK / visibilityMask / isVisible）已从 src/weight.js 删除。
+//   为什么不改成"新口径的断言"续用：那三件东西的删除理由不是"换了个公式"，而是
+//   **它恒真、一个事实都没挡住**（两取值 1.0/0.5 都 ≥ 阈值 0.25）。给一个不存在的机制编新断言，
+//   正是本项目禁的"改名续用"。反活锁写在上一则（`W.MASK === undefined` 等三条）。
+
+test('半径与波及上限（片3）：半径公式保留（死代码，无调用者）；波及上限=固定提案常量（校验侧强制）', () => {
+    assert.equal(spreadRadius(0), 1);
+    assert.equal(spreadRadius(1), 4);
+    assert.ok(spreadRadius(0.6) > spreadRadius(0.4), '半径那把尺还在（尽管已无调用者）');
+    // leg25：删掉 `maxRippleTargets()` 包装函数的三则断言——该函数生产 0 调用（唯一用处是返回本常量），
+    //   上限的强制点已改在 check-step（校验 newEvents[].ripples 条数），常量本体仍在此锁值。
+    // leg29（用户 2026-09-12 令「事件波及也改成 15 个」，leg28 令停手未实施）：3 → 15。
+    //   ★15 不是实际最先咬人的天花板——`AGENDA_INVOLVED_CAP` 也是 15，且其集合含属主 + 本步全部
+    //     动作方 + 波及名单 ⇒ 属主自行动时单事件最多波及 14（实测见 src/weight.js 常量处注释）。
+    //     本用例只锁"常量本体改了没有"，两者咬合由 worldstep 的上限用例与 prompts 的告知面锁覆盖。
+    assert.equal(RIPPLE_TARGET_CAP, 15, '波及目标数上限=固定值（leg29：3 → 15，用户令；不再随分量变：旧法 ceil(2×分量)）');
+});

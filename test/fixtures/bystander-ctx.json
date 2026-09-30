@@ -1,0 +1,11 @@
+{
+  "playerName": "黄坤",
+  "entityNames": [
+    { "name": "薛铁衣", "aliases": ["铁衣"] },
+    { "name": "大虞偏将", "aliases": ["偏将"] },
+    { "name": "万法阁", "aliases": ["阁主"] },
+    { "name": "掌柜" }
+  ],
+  "objectNames": ["阵眼", "残骨", "灵脉", "铺子"],
+  "locations": [{ "name": "云砂坊市", "aliases": ["坊市"] }, "江州", "大盘谷", "北山"]
+}

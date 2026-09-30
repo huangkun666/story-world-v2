@@ -1,0 +1,44 @@
+<!-- story-world-v2/settings.html —— K30 骨架：面板挂载模板。
+     经 ST renderExtensionTemplateAsync('third-party/story-world-v2', 'settings') 注入（v1 同款机制）。
+     命名空间 sw2_ 与 v1 sd_ 全隔离（共页共存防类冲突）。
+     本模板只负责"壳"：页签切换由 web/index.js 绑定；各页真实渲染随 K33-K34。 -->
+<div id="story_world2_window" class="sw2-window-mask">
+  <div class="sw2-window">
+    <header class="sw2-header">
+      <div class="sw2-badge">棋</div>
+      <div class="sw2-title-block">
+        <div class="sw2-title">观棋窗口</div>
+        <div class="sw2-subtitle">世界的眼睛 · Story World v2</div>
+      </div>
+      <span class="sw2-chip" id="sw2_world_chip">世界：—</span>
+      <span class="sw2-chip sw2-tick" id="sw2_tick_chip">—</span>
+      <div class="sw2-close" id="sw2_window_close" title="关闭（Esc）">&#10005;</div>
+    </header>
+    <div class="sw2-statusbar">
+      <span class="sw2-dot"></span>
+      <span class="sw2-main" id="sw2_status_text">观棋窗口就绪 · 世界随对话自动推进</span>
+    </div>
+    <nav class="sw2-tabs" id="sw2_tabs">
+      <!-- ★leg97 并页（用户令「观棋和说书其实是一个东西吧，不如就合并成一页也简洁些」）：
+           原来的「观棋」与「说书」两个页签**并成一页**——主层是四层（大势→面→线→点），
+           底下接着观棋原来的信息带/盘算总览/动态流/位置速览。⇒ 页签从九个减到八个。 -->
+      <div class="sw2-tab sw2-active" data-view="panorama">&#9820; 观棋 &#183; 说书</div>
+      <div class="sw2-tab" data-view="chronicle">&#128220; 编年</div>
+      <div class="sw2-tab" data-view="archive">&#127963; 大事纪&#183;旧卷</div>
+      <div class="sw2-tab" data-view="entities">&#128101; 角色与势力</div>
+      <div class="sw2-tab" data-view="setting">&#128214; 设定</div>
+      <div class="sw2-tab" data-view="params">&#127899; 参数</div>
+      <div class="sw2-tab" data-view="snapshots">&#128190; 快照</div>
+      <div class="sw2-tab" data-view="settings">&#9881; 设置</div>
+    </nav>
+    <section id="sw2_view_panorama" class="sw2-view sw2-active"><div class="sw2-placeholder">观棋 &#183; 说书（大势 → 面 → 线 → 点；底下接信息带 / 盘算总览 / 动态流 / 位置速览）——已接入，打开即渲染</div></section>
+    <section id="sw2_view_chronicle" class="sw2-view"><div class="sw2-placeholder">编年 · 史卷（五筛 + 因果链珠链视图）——已接入</div></section>
+    <section id="sw2_view_archive" class="sw2-view"><div class="sw2-placeholder">大事纪&#183;旧卷（里程碑 / 阅卷）——已接入</div></section>
+    <section id="sw2_view_entities" class="sw2-view"><div class="sw2-placeholder">角色与势力（影响力 / 四维 / 状态徽）——已接入 · 实体状态体系随 K37 主线</div></section>
+    <section id="sw2_view_setting" class="sw2-view"><div class="sw2-placeholder">设定档案（书指纹 / 五件套 / 浪尖）——已接入 · 重新抽取已接线</div></section>
+    <section id="sw2_view_params" class="sw2-view"><div class="sw2-placeholder">世界参数 · 档位（民生度 / 动乱度 / 天时 / 张力推手）——已接入 · 玩家定档、引擎照抄</div></section>
+    <section id="sw2_view_snapshots" class="sw2-view"><div class="sw2-placeholder">快照容错（每步可回退）——已接入 · 只回世界账</div></section>
+    <section id="sw2_view_settings" class="sw2-view"><div class="sw2-placeholder">设置（模型通道 / 开档描述 / 旧卷与存储 / 导入导出）——已接入</div></section>
+    <div class="sw2-footer">Story World v2 · 观棋窗口只读 · 每轮对话后世界自动推进</div>
+  </div>
+</div>

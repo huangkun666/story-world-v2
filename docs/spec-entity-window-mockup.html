@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实体观览窗口 · 展示页 · Story World v2</title>
+<style>
+  /* ============ 实体观览窗口 · 展示页（自包含、零依赖、离线可开） ============
+     这一份是**给用户看的样板**，不是产品代码：面板的观感照 `docs/ui-panel-mockup.html` v3
+     与 `web/style.css` 的色板逐字取（--sw2-* 十二个变量一个不改），
+     数据是**真账副本**（大荒z · 第 1 轮 · 640 实体）里逐字抄出来的，不是我编的样例。
+     要看的那一件事：点一个实体之后，那个窗口里**放哪几格、事迹怎么排、空的时候怎么写**。 */
+  :root{
+    --sw2-bg:#0d1015;
+    --sw2-panel:#1b1f28;
+    --sw2-card:#20252f;
+    --sw2-card-2:#262c38;
+    --sw2-line:#2c3342;
+    --sw2-line-soft:#242a36;
+    --sw2-text:#e8eaef;
+    --sw2-text-dim:#9aa3b5;
+    --sw2-text-faint:#6b7590;
+    --sw2-amber:#e3ad55;
+    --sw2-amber-dim:rgba(227,173,85,.35);
+    --sw2-red:#df6c62;
+    --sw2-green:#8fbf8f;
+    --sw2-blue:#79a7d6;
+    --sw2-font:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+    --sw2-mono:"Cascadia Mono",Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--sw2-bg);color:var(--sw2-text);font-family:var(--sw2-font);font-size:14px;line-height:1.6;padding:28px 20px 72px;display:flex;flex-direction:column;align-items:center;gap:22px;}
+  .col{width:1120px;max-width:100%;display:flex;flex-direction:column;gap:22px;}
+
+  /* ---------- 页头（这一份自己的说明，不属于面板） ---------- */
+  .intro{background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;padding:18px 22px;}
+  .intro h1{font-size:17px;font-weight:700;letter-spacing:.5px;margin-bottom:6px;}
+  .intro h1 small{font-weight:400;font-size:12px;color:var(--sw2-text-faint);letter-spacing:1px;margin-left:8px;}
+  .intro p{font-size:13px;color:var(--sw2-text-dim);margin-top:7px;}
+  .intro p b{color:var(--sw2-text);}
+  .intro .prov{margin-top:11px;padding:10px 12px;border-radius:8px;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);font-size:12px;color:var(--sw2-text-dim);line-height:1.85;}
+  .intro .prov code{font-family:var(--sw2-mono);font-size:11.5px;color:var(--sw2-amber);}
+
+  /* ---------- 面板外壳（照 web/style.css 的 .sw2-window） ---------- */
+  .sw2-window{width:100%;background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;box-shadow:0 20px 70px rgba(0,0,0,.6);overflow:hidden;}
+  .sw2-header{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft);}
+  .sw2-badge{width:34px;height:34px;border-radius:9px;flex:none;background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);color:#161006;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .sw2-title-block{flex:1;min-width:0;}
+  .sw2-title{font-size:15.5px;font-weight:700;letter-spacing:.5px;}
+  .sw2-subtitle{font-size:11.5px;color:var(--sw2-text-faint);}
+  .sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;background:var(--sw2-card);}
+  .sw2-chip.sw2-tick{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-family:var(--sw2-mono);}
+  .sw2-close{width:30px;height:30px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--sw2-text-faint);cursor:pointer;}
+  .sw2-close:hover{background:var(--sw2-card);color:var(--sw2-text);}
+  .sw2-tabs{display:flex;gap:4px;padding:0 14px;border-bottom:1px solid var(--sw2-line-soft);}
+  .sw2-tab{font-size:13px;color:var(--sw2-text-dim);padding:9px 13px;border-bottom:2px solid transparent;cursor:default;}
+  .sw2-tab.sw2-active{color:var(--sw2-text);border-bottom-color:var(--sw2-amber);}
+  .sw2-view{padding:14px 16px 18px;}
+
+  /* ---------- 实体页那三列行（照 web/style.css:462 起的 .sw2-entity-row 那一族） ---------- */
+  .sw2-entity-list{display:flex;flex-direction:column;}
+  .sw2-entity-row{display:grid;grid-template-columns:212px minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:baseline;padding:7px 12px;border-bottom:1px solid var(--sw2-line-soft);border-radius:6px;}
+  .sw2-entity-row.sw2-hot{background:var(--sw2-card-2);border-left:2px solid var(--sw2-amber);}
+  .sw2-entity-row.sw2-pick{outline:1px solid var(--sw2-amber);outline-offset:-1px;background:var(--sw2-card-2);}
+  .sw2-entity-row[data-open]{cursor:pointer;}
+  .sw2-entity-row[data-open]:hover{background:var(--sw2-card);}
+  .sw2-cell{min-width:0;}
+  .sw2-ename{font-weight:700;font-size:14.5px;line-height:1.35;}
+  .sw2-ename small{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;margin-top:2px;}
+  .sw2-relone{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);}
+  .sw2-relone-who{color:var(--sw2-text);}
+  .sw2-relone-pow{color:var(--sw2-amber);}
+  .sw2-relone-dim{color:var(--sw2-text-faint);}
+  .sw2-relone-sep{color:var(--sw2-line);}
+  .sw2-aggoal{font-size:12.5px;color:var(--sw2-text-dim);}
+  .sw2-agstage{display:block;font-size:11.5px;color:var(--sw2-text-faint);font-family:var(--sw2-mono);}
+  .sw2-list-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin:2px 0 8px;display:flex;align-items:center;gap:8px;}
+  .sw2-list-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
+
+  /* ---------- ★ 新窗口：实体观览（**弹在页面上层**的那个窗口） ----------
+     壳逐字取 web/style.css 的 .sw2-window-mask / .sw2-window（leg101/102 定稿：遮罩 ＋ 占满整屏）。
+     ★这一扇**不另造窗口系统** —— 本仓已经有一套，"同一件事只许长一条路"。
+     形态：面板的实体列表在下层照旧，点一行 ⇒ 这一层弹上来盖住它；✕ / 点遮罩 / Esc 关掉。 */
+  .sw2-window-mask{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;z-index:50000;display:none;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(13,16,21,.55);}
+  .sw2-window-mask.sw2-open{display:flex;}
+  .entwin{width:984px;max-width:100%;height:auto;max-height:90%;display:flex;flex-direction:column;overflow:hidden;background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;box-shadow:0 20px 70px rgba(0,0,0,.6);}
+  .ew-head{flex:none;display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft);background:var(--sw2-card);}
+  .ew-head .sw2-badge{background:linear-gradient(135deg,var(--sw2-blue),#4a6f96);color:#0b1219;font-size:15px;}
+  .ew-who{flex:1;min-width:0;}
+  .ew-name{font-size:16.5px;font-weight:700;letter-spacing:.4px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .ew-name .you{font-size:11px;color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);border-radius:999px;padding:1px 8px;font-weight:400;}
+  .ew-name .kd{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1.5px;font-weight:400;}
+  .ew-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;display:flex;gap:14px;flex-wrap:wrap;}
+  .ew-sub b{color:var(--sw2-text-dim);font-weight:400;}
+  .ew-body{flex:1 1 auto;min-height:0;overflow:auto;padding:4px 18px 20px;}
+
+  .ew-sec{border-top:1px solid var(--sw2-line-soft);padding:13px 0 4px;}
+  .ew-sec:first-child{border-top:none;}
+  .ew-sec-h{display:flex;align-items:baseline;gap:9px;margin-bottom:9px;}
+  .ew-sec-t{font-size:13px;font-weight:600;letter-spacing:.5px;}
+  /* ★leg141：`.ew-sec-t .q`（标题后那半句括号说明文）**整条删掉** —— 用户令
+     「把（账上「涟漪」头一个是他；正文给的也在这一格里）这种文字给删了」。
+     产品那一份同批删了 `.sw2-ew-hint`（见 `web/style.css`），两份不许再对不上。 */
+  .ew-sec-n{margin-left:auto;font-size:11.5px;color:var(--sw2-text-faint);font-family:var(--sw2-mono);}
+
+  /* 属性：标签 + 值 两栏 */
+  .ew-kv{display:grid;grid-template-columns:78px minmax(0,1fr);gap:3px 12px;font-size:13px;padding:2px 0;}
+  .ew-kv dt{color:var(--sw2-text-faint);font-size:12px;}
+  .ew-kv dd{color:var(--sw2-text);min-width:0;}
+  .ew-kv dd .src{font-size:11px;color:var(--sw2-text-faint);margin-left:7px;}
+  .ew-kv dd .drv{font-size:11px;color:var(--sw2-blue);margin-left:7px;}
+  .ew-note{font-size:11.5px;color:var(--sw2-text-faint);margin-top:7px;line-height:1.7;}
+
+  /* 事迹：一行一件 */
+  .ew-deed{display:flex;gap:11px;padding:8px 0;border-top:1px dashed var(--sw2-line-soft);}
+  .ew-deed:first-of-type{border-top:none;}
+  .ew-deed .mk{flex:none;width:52px;font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);padding-top:2px;}
+  .ew-deed .bd{min-width:0;flex:1;}
+  .ew-deed .tt{font-size:13.5px;color:var(--sw2-text);line-height:1.55;}
+  .ew-deed .mt{font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;}
+  .ew-deed .mt code{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-dim);}
+  .ew-tag{font-size:10.5px;letter-spacing:1px;border-radius:999px;padding:1px 8px;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);}
+  .ew-tag.t-seed{color:var(--sw2-blue);border-color:rgba(121,167,214,.4);}
+  .ew-tag.t-ripple{color:var(--sw2-green);border-color:rgba(143,191,143,.4);}
+  .ew-tag.t-dialogue{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);}
+  .ew-tag.t-in{color:var(--sw2-text-dim);}
+  .ew-quote{margin-top:5px;padding:6px 10px;border-left:2px solid var(--sw2-line);background:var(--sw2-card);border-radius:0 6px 6px 0;font-size:12px;color:var(--sw2-text-dim);line-height:1.7;}
+
+  /* ⑥ 关系网（leg141b：层级 ＋ 账上的边，一张表、不分出处）。
+     层级行淡一点，让"骨架"与"动态"一眼分得开；可点的名字带虚线下划线。 */
+  .ew-net{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px dashed var(--sw2-line-soft);font-size:13px;}
+  .ew-net:first-of-type{border-top:none;}
+  .ew-net .lab{color:var(--sw2-text-faint);font-size:12px;}
+  .ew-net b{color:var(--sw2-text);}
+  .ew-net.hier b{color:var(--sw2-text-dim);}
+  .ew-net b.who{cursor:pointer;border-bottom:1px dotted var(--sw2-line);}
+  .ew-net b.who:hover{color:var(--sw2-amber);border-bottom-color:var(--sw2-amber-dim);}
+  .ew-net .tail{font-size:11.5px;color:var(--sw2-text-faint);}
+
+  /* 变过的格 */
+  .ew-chg{padding:8px 0;border-top:1px dashed var(--sw2-line-soft);font-size:13px;}
+  .ew-chg:first-of-type{border-top:none;}
+  .ew-chg .arrow{font-family:var(--sw2-mono);color:var(--sw2-text-faint);margin:0 7px;}
+  .ew-chg .new{color:var(--sw2-amber);font-weight:600;}
+  .ew-chg .old{color:var(--sw2-text-faint);text-decoration:line-through;}
+  .ew-chg .meta{display:block;font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;}
+
+  /* 在办 */
+  .ew-ag{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 12px;font-size:13px;}
+  .ew-ag .gl{color:var(--sw2-text);}
+  .ew-ag .st{font-size:11.5px;color:var(--sw2-text-faint);margin-top:4px;font-family:var(--sw2-mono);display:flex;gap:12px;flex-wrap:wrap;}
+  .ew-ag .hush{font-size:10.5px;color:var(--sw2-red);border:1px solid rgba(223,108,98,.4);border-radius:999px;padding:1px 8px;}
+
+  /* ★ 空态：三种写法并排给你挑（同一份数据、同一处位置） */
+  .ew-empty{padding:10px 0 4px;font-size:13px;}
+  .ew-empty .v{display:flex;gap:10px;align-items:baseline;padding:5px 0;}
+  .ew-empty .v .k{flex:none;width:74px;font-size:11px;color:var(--sw2-text-faint);letter-spacing:1px;font-family:var(--sw2-mono);}
+  .ew-empty .v.a{color:var(--sw2-text-faint);}          /* 甲：留白 */
+  .ew-empty .v.b{color:var(--sw2-text-dim);}            /* 乙：一句人话 */
+  .ew-empty .v.c{color:var(--sw2-text-dim);}            /* 丙：写明为什么 */
+  .ew-empty .v.c .why{font-size:11.5px;color:var(--sw2-text-faint);}
+  .ew-empty .v.rec{background:rgba(227,173,85,.06);border-left:2px solid var(--sw2-amber);border-radius:0 6px 6px 0;padding-left:10px;}
+  .blank{height:16px;}
+
+  /* ---------- 四件事（已拍板） ---------- */
+  .dec{background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:12px;overflow:hidden;}
+  .dec-h{padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft);font-size:15px;font-weight:700;letter-spacing:.5px;}
+  .dec-h small{font-weight:400;font-size:12px;color:var(--sw2-text-faint);margin-left:9px;letter-spacing:0;}
+  .dec-h .ok{font-size:11.5px;font-weight:400;color:var(--sw2-green);border:1px solid rgba(143,191,143,.45);border-radius:999px;padding:1px 9px;margin-left:9px;letter-spacing:1px;}
+  .dec-i{padding:14px 18px;border-top:1px solid var(--sw2-line-soft);}
+  .dec-i:first-of-type{border-top:none;}
+  .dec-q{font-size:13.5px;font-weight:600;margin-bottom:4px;display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;}
+  .dec-q .n{font-family:var(--sw2-mono);color:var(--sw2-amber);margin-right:7px;}
+  .dec-q .done{font-size:11px;font-weight:400;color:var(--sw2-green);letter-spacing:.5px;margin-left:4px;}
+  .dec-o{display:flex;gap:11px;padding:7px 0 7px 2px;font-size:13px;color:var(--sw2-text-dim);align-items:baseline;}
+  .dec-o .m{flex:none;width:40px;font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);letter-spacing:1px;}
+  .dec-o .t b{color:var(--sw2-text);}
+  .dec-o .cost{display:block;font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;}
+  .dec-o.rec{background:rgba(227,173,85,.07);border-left:2px solid var(--sw2-amber);border-radius:0 7px 7px 0;padding-left:11px;}
+  .dec-o.rec .m{color:var(--sw2-amber);}
+  /* 面板与"下层"之间的那句指路（这一页自己的东西，不属于面板） */
+  .hintbar{font-size:12.5px;color:var(--sw2-text-dim);background:var(--sw2-panel);border:1px dashed var(--sw2-line);border-radius:10px;padding:11px 16px;line-height:1.8;}
+  .hintbar b{color:var(--sw2-amber);}
+  .jumpbtn{margin-left:12px;font:inherit;font-size:12.5px;color:#161006;background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);border:none;border-radius:7px;padding:5px 14px;cursor:pointer;font-weight:600;}
+  .jumpbtn:hover{filter:brightness(1.08);}
+  .foot{font-size:11.5px;color:var(--sw2-text-faint);line-height:1.9;padding:0 4px;}
+  .foot code{font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-dim);}
+</style>
+</head>
+<body>
+<div class="col">
+
+  <!-- ═══════════ 这一份自己的说明 ═══════════ -->
+  <div class="intro">
+    <h1>实体观览窗口 · 展示页 <small>给你看的样板 · 不是产品代码</small></h1>
+    <p>你要的那件事：<b>点一个实体，就能看到它的各种属性以及它的事迹</b>。这一页把那扇窗口画出来。</p>
+    <p>★<b>窗口是弹在页面上层的</b>（照你当场改的那一条）：下层是面板「角色与势力」那一页，
+       <b>点任意一行</b>，窗口就弹上来盖住它。<b>你现在就可以点</b>——7 行都是活的，
+       点不同的人，窗口里就换不同的人（含一个"什么都没有"的全空样本）。</p>
+    <p><b>四件事已照推荐拍板</b>（页面最底下逐条记着）：<b>六格</b> · <b>事迹新的在前、不印轮次</b> ·
+       <b>空态分两种写法</b> · <b>接线住新文件 <code>web/entity-window.js</code></b>。</p>
+    <p>★<b>真机看过之后你又改了几条</b>，这一页已照改：<b>窗口太大几乎占了整个屏幕</b> ⇒ 先改成
+       <b>820px × 最高 86% 的小窗</b>，<b>leg141 再说「窗口再大个百分之20差不多就可以」</b> ⇒ 放大两成到
+       <b>984px × 最高 90%</b>；<b>「被正文点名」那一格撤掉</b> ⇒
+       正文产出的事件本来就长在「事迹」里（带着「正文」那枚小标）；<b>格标题后面那半句括号说明文整批撤掉</b>；
+       <b>事迹拆成「他做的」与「涉及到他的」两格</b>。</p>
+    <div class="prov">
+      ★ <b>数据不是编的</b>：下面每一个字都来自你真账的副本 ——
+      <code>大荒z / 大荒z - 2026-09-01@00h37m41s559ms.jsonl</code>，
+      第 <b>1</b> 轮 · 实体 <b>640</b> 个（角色 531 / 势力 109）· 事件 <b>11</b> 件 · 编年 <b>7</b> 行 ·
+      在办谋划 <b>1</b> 条。取数走的是「先复制副本再解析」，你的原文件一个字节没碰。<br>
+      ★ <b>两个真账里的实情，这一页特意留着没美化</b>：①账上<b>根本没有「关系」这张表</b>
+      （关系是玩出来的，这一局还没长出来）⇒ 正好用来看"空的时候怎么写"；
+      ②<b>事件上不带「第几轮」这一格</b>（轮次编在 id 里）⇒ 这直接影响"事迹怎么排"，见底下第 ② 条。
+    </div>
+  </div>
+
+  <!-- ═══════════ 面板：角色与势力那一页 ═══════════ -->
+  <div class="sw2-window">
+    <header class="sw2-header">
+      <div class="sw2-badge">棋</div>
+      <div class="sw2-title-block">
+        <div class="sw2-title">观棋窗口</div>
+        <div class="sw2-subtitle">世界的眼睛 · Story World</div>
+      </div>
+      <span class="sw2-chip">江州</span>
+      <span class="sw2-chip sw2-tick">第 1 轮</span>
+      <div class="sw2-close" title="关闭">✕</div>
+    </header>
+    <nav class="sw2-tabs">
+      <div class="sw2-tab">♟ 观棋</div>
+      <div class="sw2-tab">📜 编年</div>
+      <div class="sw2-tab">🏛 大事纪·旧卷</div>
+      <div class="sw2-tab sw2-active">👥 角色与势力</div>
+      <div class="sw2-tab">📖 设定</div>
+      <div class="sw2-tab">⚙ 设置</div>
+    </nav>
+    <div class="sw2-view">
+      <div class="sw2-list-head">全册 640 位 · 这里只摆 7 位做样板 —— <b>点任意一行</b>，窗口就弹上来盖住这一页</div>
+      <div class="sw2-entity-list" id="list"></div>
+    </div>
+  </div>
+
+  <div class="hintbar">
+    ↑ 这一块是<b>下层</b>：面板的「角色与势力」页照旧摆在那儿。<br>
+    ★ <b>点上面任意一行</b> ⇒ 实体观览窗口<b>弹在这一层之上</b>（遮罩压暗下层）；
+    窗口里点 <b>✕</b>、或点窗口外的暗处、或按 <b>Esc</b> ⇒ 关掉、回到这一页。
+    <button class="jumpbtn" id="jump">▶ 打开窗口看看（默认看黄坤）</button>
+  </div>
+
+  <!-- ═══════════ ★ 新窗口：弹在页面上层（遮罩 ＋ 全屏壳，照 leg101/102 那套） ═══════════ -->
+  <div class="sw2-window-mask" id="mask">
+    <div class="entwin" id="entwin"></div>
+  </div>
+
+  <!-- ═══════════ 四件事（已拍板） ═══════════ -->
+  <div class="dec">
+    <div class="dec-h">四件事 —— <span class="ok">已拍板</span> <small>照推荐定；另加你真机看过之后改的几条（改小 → 再放大两成 · 撤第七格 · 撤说明文 · 事迹拆两格）</small></div>
+
+    <div class="dec-i">
+      <div class="dec-q"><span class="n">①</span>放哪几格？<span class="done">已定：六格</span></div>
+      <div class="dec-o rec"><span class="m">已定</span><span class="t"><b>六格</b>：来历与身份 · 变过的格 · <b>事迹 · 他做的</b> · <b>事迹 · 涉及到他的</b> · 他手上的事 · 关系。
+        <span class="cost">★leg141 改名：原来这两格叫「事迹」与「被卷进来」，<b>区分全靠标题上那行括号说明文</b>
+        （"涟漪头一个是他" vs "他在涟漪里但不是头一个"）——说明文一撤，名字自己就得站得住
+        ⇒ 照你的原话拆成「他做的」与「涉及到他的」。<b>格数没变，还是六格。</b></span></span></div>
+      <div class="dec-o rec"><span class="m">你撤的</span><span class="t">★第七格「**被正文点名**」**整格撤掉**（你的原话：「**被正文点名的次数是啥？？正文不也是给出事件给插件管理吗？那就直接放在事迹里面啊**」）。
+        <span class="cost">对，而且正对本仓那条"一条信息只许住在它该住的那一格"：那个计数是<b>引擎自己的依据册</b>（`dialogueFact` 那型源的门槛），<b>不是给玩家看的事实</b>；正文真正产出给玩家的东西<b>就是事件</b>，而那些事件本来就长在「事迹」里。</span></span></div>
+      <div class="dec-o rec"><span class="m">你撤的</span><span class="t">★格标题后面那半句**括号说明文整批撤掉**（你的原话：「**把（账上「涟漪」头一个是他；正文给的也在这一格里）这种文字给删了**」）。
+        <span class="cost">对：那半句讲的全是<b>引擎内部的黑话</b>（「涟漪」「头一个」），玩家读的是"这个人做过什么"——
+        <b>标题 ＋ 计数</b>已经把这一格说清了。产品那份连 `.sw2-ew-hint` 那条样式规则一起删了（撤了它就是零消费者的死码）。</span></span></div>
+    </div>
+
+    <div class="dec-i">
+      <div class="dec-q"><span class="n">②</span>事迹怎么排？<span class="done">已定：新的在前，不印轮次</span></div>
+      <div class="dec-o rec"><span class="m">已定</span><span class="t"><b>新的在前</b>（账上顺序整个倒过来），轮次那一栏<b>不印</b>。
+        <span class="cost">零解析、零猜测。★这条是被真账逼出来的：<b>事件上根本没有「第几轮」这一格</b>（11 件全都没有），
+        要按轮次分组就得从 id 里反解或给事件补一格 <code>tick</code>（动契约）——两样都不划算。</span></span></div>
+    </div>
+
+    <div class="dec-i">
+      <div class="dec-q"><span class="n">③</span>空的时候怎么写"没有"？<span class="done">已定：分两种</span></div>
+      <div class="dec-o rec"><span class="m">已定</span><span class="t"><b>分两种</b>：<b>主体格</b>（事迹 · 他做的 / 事迹 · 涉及到他的 / 在办 / 变过的格）空 ⇒ <b>写明为什么</b>；
+        <b>次要格</b>（关系）空 ⇒ 一句人话就够。
+        <span class="cost">照红线 2「空着就是空着」：不填占位值，但要说清是哪一种空。窗口里那个全空样本（须弥山）就是按这个口径写的。</span></span></div>
+    </div>
+
+    <div class="dec-i">
+      <div class="dec-q"><span class="n">④</span>接线住哪个文件？<span class="done">已定：新建 web/entity-window.js</span></div>
+      <div class="dec-o rec"><span class="m">已定</span><span class="t">新建 <code>web/entity-window.js</code>（照 leg73 搬快照族、leg78 搬热账族那两个先例）。
+        <span class="cost">★硬约束：<code>web/index.js</code> 现在 <b>3070 / 3100 行</b>，只剩 <b>30 行</b> —— 新窗口的接线塞不进去。
+        新文件只负责"点开/关闭 ＋ 取数 ＋ 拼 HTML"，数据一律现推、零新写通道。</span></span></div>
+      <div class="dec-o rec"><span class="m">你改的</span><span class="t">★窗口<b>弹在页面上层</b>（不是摊在页面里）。
+        <span class="cost">照做：<b>不另造窗口系统</b>，复用面板既有的 <code>.sw2-window-mask</code> ＋ <code>.sw2-window</code>
+        —— 本仓最忌"同一件事两条路"。这一页画的已经是弹窗形态。</span></span></div>
+      <div class="dec-o rec"><span class="m">你改的</span><span class="t">★真机看过之后：<b>窗口太大几乎占了整个屏幕</b> ⇒ 先改小成
+        <b>820px × 最高 86%</b>；★<b>leg141 又说「窗口再大个百分之20差不多就可以」</b> ⇒ 在那一版上放大两成 ⇒
+        <b>984px（＝820 × 1.2）× 最高 90%</b>。
+        <span class="cost">做法：<b>只覆盖尺寸三项</b>（宽/高/上限）——<code>.sw2-window</code> 那条基础规则是<b>面板专用</b>的
+        "占满整屏"（leg102 你当时要的），本窗口不该继承它。
+        ★<b>高度为什么只让 4 个点、宽度让满两成</b>：高度那一路有硬顶——140b 之前那版就是"占满整屏"，
+        你当场嫌过 ⇒ 90% 上下各留 5% 边距，仍明显是"一扇窗"而不是"一屏"。
+        <code>max-height</code> 是<b>上限</b>不是定高，内容短时窗口就短。</span></span></div>
+      <div class="dec-o"><span class="m">另记</span><span class="t">玩家可见版面真变了 ⇒ 升 <code>PANEL_BUILD</code>；真动了样式 ⇒ <code>CSS_VERSION</code> 同批升。
+        ★<b>你刷新看过 <code>leg140-dossier</code> 之后又改了版面 ⇒ 号必须再升一格（<code>leg140b-dossier</code>）；
+        再看过之后又改了这一批 ⇒ 再升（<code>leg141-deeds-split</code>）</b>，
+        否则你分不出自己拿到的是新版还是旧版。</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    ★ 这一页是<b>自包含</b>的：数据已经<b>逐字嵌在本页里</b>（页面最底下那段 <code>EV</code> / <code>ENT</code>）——
+    不联网、不读盘也能开，要复量就在本页里对着账核。<br>
+    ★ 取数路线（当时用的临时装置，全在仓外 <code>F:\deepseek\tmp\leg140-live\</code>）：
+    先复制真账副本 → <code>probe.mjs</code> 读账 → <code>pick.mjs</code> 挑实体 → 逐字抄进本页。
+    那一批是临时的，删掉不影响本页。<br>
+    ★ 这一页现在记的是<b>已拍板的形态</b>（四件照推荐定 ＋ 窗口改成弹在上层）——
+    它是接线前的样板；<code>web/</code> 里的代码还没动。
+  </div>
+
+</div>
+
+<script>
+// ── 真账副本里逐字抄出来的数据（第 1 轮 · 大荒z）────────────────────────
+const EV = {
+  ev_seed_1:{t:'前往帅府击杀薛铁衣',k:'seed',tm:null,pos:'地下水榭门外',quote:'万子明在水榭外候命，向黄坤汇报了帅府内部的防御漏洞...并引路前往帅府。'},
+  ev_seed_2:{t:'玉爪儿镇压太岁阴寒',k:'seed',tm:null,pos:'江州城地下水榭',quote:'利用[玉爪儿散发的雷阳之气镇压白小娥体内的太岁阴寒]以维持其生命迹象。'},
+  ev_seed_3:{t:'白狐雪姬隐匿于人族宗门历练',k:'seed',tm:null,pos:'人族宗门内',quote:'目前正于人族宗门内隐匿历练。'},
+  ev_seed_4:{t:'墨翟正建造破界舟企图渡过边界',k:'seed',tm:null,pos:'天机城中央',quote:'据传他正在建造一艘“破界舟”，企图渡过大荒边界，探寻仙界遗迹。'},
+  ev_seed_5:{t:'魔帝通过石床缓慢恢复本源',k:'seed',tm:null,pos:'弑神殿',quote:'三万元会前全力一枪的代价正通过石床缓慢恢复'},
+  ev_seed_6:{t:'四大魔尊在深渊争夺法则碎片',k:'seed',tm:null,pos:'噬道渊',quote:'深层是四大魔尊争夺最激烈之地——比修罗场更残酷'},
+  ev_1_500:{t:'黄坤的身份变成了「确立江州实际掌控者地位」',k:'dialogue',tm:'复苏历19025年 十月十八',pos:'江州城·西关旧屋',quote:'【变化】黄坤｜身份｜确立江州实际掌控者地位'},
+  ev_1_1:{t:'万法阁遣人携重宝正式入江州，承认了此地的新格局',k:'ripple',tm:'复苏历19025年 十月廿一',pos:'江州城',up:'ev_1_500'},
+  ev_1_2:{t:'白狐雪姬在人族宗门的秘境试炼中遭遇凶兽，险些暴露妖气',k:'ripple',tm:'复苏历19025年 十月廿一',pos:'人族宗门内',up:'ev_seed_3'},
+  ev_1_3:{t:'墨翟引天机城地脉之火入炉，成功锻打出破界舟的核心龙骨',k:'ripple',tm:'复苏历19025年 十月廿一',pos:'天机城中央',up:'ev_seed_4'},
+  ev_1_4:{t:'四大魔尊的斗法余波震碎了噬道渊外围壁垒，惊动了魔界诸宗',k:'ripple',tm:'复苏历19025年 十月廿一',pos:'噬道渊',up:'ev_seed_6'}
+};
+const KIND_CN = {seed:'起根',ripple:'涟漪',dialogue:'正文'};
+
+// 实体：账上原样（属性 ＋ 出处）· 事迹·他做的（ripples[0] === 自己）· 事迹·涉及到他的（自己在 ripples 里但不是头一个）
+const ENT = [
+  { id:'e_p1', name:'黄坤', kind:'character', you:true, loc:'未明', last:1,
+    attrs:[['身份','确立江州实际掌控者地位','变更']],
+    origin:'',
+    deeds:['ev_1_500'], involved:['ev_1_1'], agenda:null, relations:null, named:null,
+    changed:[{f:'身份',old:null,now:'确立江州实际掌控者地位',cause:'ev_1_500',tick:1,src:'变更'}],
+    tries:'★还有一处留痕：账上记着「实力」这一栏**查过一次、书里没明述**（<code>state: absent</code>）——所以这一栏是"书未明述"，不是"我们忘了查"。'
+  },
+  { id:'e_bk_429', name:'白狐·雪姬', kind:'character', you:false, loc:'未明',
+    attrs:[['身份','白狐公主','书里原话'],['实力','T3筑基境','书里原话'],['性别','女','书里原话'],['描述','银发冰蓝本命狐火,清冷孤僻寡言,目前正于人族宗门内隐匿历练。','书里原话']],
+    origin:'<span class="sw2-relone-who">青丘国</span><span class="drv">结构推导 · 成员行@青丘国</span>',
+    parent:'青丘国', parentSrc:'结构推导 · 成员行@青丘国',
+    deeds:['ev_seed_3','ev_1_2'], involved:[], agenda:null, relations:null, named:null, changed:[],
+    tries:'★归属那一格要标出"怎么来的"：<code>parentSource: 结构推导</code> —— 不是书里明写的，是从成员行推的。<br>★leg141b 起这一格**搬进「关系」**了（它本来就是一条边）；"怎么来的"跟着那条边走。'
+  },
+  { id:'e_bk_19', name:'万法阁', kind:'faction', you:false, loc:'东胜沧洲', last:1,
+    attrs:[['规模','极富, 垄断丹药灵器阵盘','书里原话'],['性质','修真百艺总坛','书里原话'],['倾向','商业合作','书里原话'],['领地','东海浮空岛','书里原话']],
+    origin:'',
+    deeds:['ev_seed_1','ev_1_1'], involved:[], relations:null, named:null, changed:[],
+    agenda:{goal:'借江州新主之势，垄断此地商路',stage:'进献重宝探底',progress:0,max:4,vis:'concealed'},
+    tries:'★势力的「实力」由麾下成员派生，账上自己不写 —— 这一格按既有口径**不渲染**。'
+  },
+  { id:'e_bk_1', name:'须弥山', kind:'faction', you:false, loc:'未明',
+    attrs:[['规模','下界菩提禅院的真正祖庭','书里原话'],['性质','人族佛门飞升者归宿','书里原话'],['倾向','正道','书里原话']],
+    origin:'', deeds:[], involved:[], agenda:null, relations:null, named:null, changed:[],
+    tries:'★这一位是**全空样本**：书里给的三栏有，事迹 / 在办 / 关系 / 点名**一样都没有** —— 空态就长这样。'
+  },
+  { id:'e_bk_2', name:'阐教', kind:'faction', you:false, loc:'未明',
+    attrs:[['规模','三代弟子限十二人','书里原话'],['性质','人族正道仙修第一传承','书里原话'],['倾向','正道','书里原话']],
+    origin:'', deeds:[], involved:[], agenda:null, relations:null, named:null, changed:[], tries:'' },
+  { id:'e_bk_3', name:'截教', kind:'faction', you:false, loc:'未明',
+    attrs:[['规模','号称万仙，实数约三千余','书里原话'],['性质','散修之教','书里原话'],['倾向','有教无类','书里原话']],
+    origin:'', deeds:[], involved:[], agenda:null, relations:null, named:null, changed:[], tries:'' },
+  { id:'e_bk_4', name:'瑶池', kind:'faction', you:false, loc:'未明',
+    attrs:[['性质','人帝内廷','书里原话'],['定位','天庭实权运作的副中枢','书里原话']],
+    origin:'', deeds:[], involved:[], agenda:null, relations:null, named:null, changed:[], tries:'' },
+  // ★★★leg141b（用户当场问「**势力的麾下怎么点击窗口不显示**」）：**这一行是为了把「麾下」画出来**。
+  //   ★**它不是编的**：它的 `crew` 就是 `白狐·雪姬`，而"白狐·雪姬的 parent 是青丘国"是**真账里的原话**
+  //     （见上面 `e_bk_429` 的 `parentSource: 结构推导 · 成员行@青丘国`）。
+  //     本行只是**从另一边看同一条边**（反向）——层级在账上只有一个家（`parent`），这里画的是它的反查。
+  { id:'e_bk_5', name:'青丘国', kind:'faction', you:false, loc:'未明',
+    attrs:[['性质','青丘狐族之国','书里原话']],
+    origin:'', parent:'', crew:['白狐·雪姬'],
+    deeds:[], involved:[], agenda:null, relations:null, named:null, changed:[],
+    tries:'★这一页是为了看「<b>麾下</b>」——它是 <code>parent</code> 的<b>反向反查</b>（谁归我管），与面板「麾下：」那一行<b>同一把尺子</b>。名字可点：点一下就换到那一页。'
+  }
+];
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ── 左边：面板那一页的行（三列，照 web/style.css:462）────────────────────
+function rowHtml(e, picked) {
+  const kinds = e.kind === 'faction' ? '势力' : '角色';
+  const originBits = [];
+  if (e.origin) originBits.push(e.origin);
+  for (const [k, v, src] of e.attrs) {
+    if (k === '实力') originBits.push(`<span class="sw2-relone-pow">${esc(v)}</span>`);
+    else if (k === '规模' || k === '性质' || k === '倾向') originBits.push(esc(v));
+  }
+  const ag = e.agenda
+    ? `<span class="sw2-aggoal">${esc(e.agenda.goal)}</span><span class="sw2-agstage">${esc(e.agenda.stage)} · ${e.agenda.progress}/${e.agenda.max}</span>`
+    : '';
+  return `<div class="sw2-entity-row${e.agenda ? ' sw2-hot' : ''}${picked ? ' sw2-pick' : ''}" data-open="${e.id}">`
+    + `<div class="sw2-cell"><div class="sw2-ename">${esc(e.name)}<small>${kinds}${e.you ? ' · 你' : ''}</small></div></div>`
+    + `<div class="sw2-cell sw2-relone">${originBits.join('<span class="sw2-relone-sep"> · </span>')}</div>`
+    + `<div class="sw2-cell">${ag}</div></div>`;
+}
+
+// ── 右边：★ 新窗口 ────────────────────────────────────────────────────
+function deedHtml(id, tagText, tagCls) {
+  const d = EV[id];
+  return `<div class="ew-deed"><div class="mk">${d.tm ? esc(d.tm.replace('复苏历19025年 ', '')) : '—'}</div><div class="bd">`
+    + `<div class="tt">${esc(d.t)}</div>`
+    + `<div class="mt"><span class="ew-tag ${tagCls}">${tagText}</span>`
+    + `<span>事发 <code>${esc(d.pos)}</code></span>`
+    + (d.up ? `<span>沿 <code>${d.up}</code> 而来</span>` : '')
+    + `</div>`
+    + (d.quote ? `<div class="ew-quote">书里原话 / 正文原话：${esc(d.quote)}</div>` : '')
+    + `</div></div>`;
+}
+
+function windowHtml(e) {
+  const kinds = e.kind === 'faction' ? '势力' : '角色';
+  const head = `<header class="ew-head"><div class="sw2-badge">观</div><div class="ew-who">`
+    + `<div class="ew-name">${esc(e.name)}${e.you ? '<span class="you">你 · 玩家棋子</span>' : ''}<span class="kd">${kinds}</span></div>`
+    + `<div class="ew-sub"><span>位置 <b>${esc(e.loc)}</b></span>`
+    + (e.last ? `<span>最近动过 <b>第 ${e.last} 轮</b></span>` : '<span>最近动过 <b>—</b></span>')
+    + `<span>账上 id <b>${e.id}</b></span></div></div>`
+    + `<div class="sw2-close ew-close" title="关闭（Esc）">✕</div></header>`;
+
+  // ① 来历与身份
+  // ① 来历与身份
+  //   ★★leg141b：**归属那一行（所属）从这里搬走了** —— 它现在住 ⑥ 关系（当成边看）。
+  //     一个事实不许印两遍（`spec-entities-page-ia.md` 的 D2 就是这个病）。
+  let s1 = `<div class="ew-sec"><div class="ew-sec-h"><span class="ew-sec-t">来历与身份</span>`
+    + `<span class="ew-sec-n">${e.attrs.length} 栏</span></div><dl class="ew-kv">`;
+  for (const [k, v, src] of e.attrs) {
+    s1 += `<dt>${esc(k)}</dt><dd>${esc(v)}<span class="src">${src === '变更' ? '玩出来的' : esc(src)}</span></dd>`;
+  }
+  s1 += `</dl>`;
+  if (e.tries) s1 += `<div class="ew-note">${e.tries}</div>`;
+  s1 += `</div>`;
+
+  // ② 变过的格
+  let s2 = `<div class="ew-sec"><div class="ew-sec-h"><span class="ew-sec-t">变过的格</span>`
+    + `<span class="ew-sec-n">${e.changed.length} 格</span></div>`;
+  if (e.changed.length) {
+    for (const c of e.changed) {
+      s2 += `<div class="ew-chg">${esc(c.f)} <span class="arrow">→</span>`
+        + (c.old ? `<span class="old">${esc(c.old)}</span><span class="arrow">→</span>` : `<span class="old">（原来没有）</span><span class="arrow">→</span>`)
+        + `<span class="new">${esc(c.now)}</span>`
+        + `<span class="meta">因 <code>${c.cause}</code> · 第 ${c.tick} 轮 · ${esc(c.src)}</span></div>`;
+    }
+  } else {
+    s2 += `<div class="ew-empty"><div class="v b">账上没记着这个实体的格变过 —— 它的栏都是书里给的。</div></div>`;
+  }
+  s2 += `</div>`;
+
+  // ③ 事迹 · 他做的（★leg141：格名照用户原话拆开 —— 「把事迹分为他做的和涉及到他的」）
+  let s3 = `<div class="ew-sec"><div class="ew-sec-h"><span class="ew-sec-t">事迹 · 他做的</span>`
+    + `<span class="ew-sec-n">共 ${e.deeds.length} 件</span></div>`;
+  if (e.deeds.length) {
+    // ★ 推荐口径：新的在前（账上顺序倒过来）
+    for (const id of [...e.deeds].reverse()) s3 += deedHtml(id, KIND_CN[EV[id].k], 't-' + EV[id].k);
+  } else {
+    s3 += `<div class="ew-empty">`
+      + `<div class="v a"><span class="k">甲·留白</span><span>（这里什么都没有）</span></div>`
+      + `<div class="v b"><span class="k">乙·人话</span><span>还没有事迹。</span></div>`
+      + `<div class="v c rec"><span class="k">丙·推荐</span><span>账上还没有他的事迹 —— 这本书里没写他在做什么，这一局也还没轮到他。<span class="why">（空着就是空着，不拿占位值凑）</span></span></div>`
+      + `</div>`;
+  }
+  s3 += `</div>`;
+
+  // ④ 事迹 · 涉及到他的（★leg141：与 ③ 成对 —— 同一件事的两面，格名自己说清）
+  let s4 = `<div class="ew-sec"><div class="ew-sec-h"><span class="ew-sec-t">事迹 · 涉及到他的</span>`
+    + `<span class="ew-sec-n">共 ${e.involved.length} 件</span></div>`;
+  if (e.involved.length) for (const id of [...e.involved].reverse()) s4 += deedHtml(id, KIND_CN[EV[id].k], 't-' + EV[id].k);
+  else s4 += `<div class="ew-empty"><div class="v b">还没有别人做的事牵到他。</div></div>`;
+  s4 += `</div>`;
+
+  // ⑤ 他手上的事
+  let s5 = `<div class="ew-sec"><div class="ew-sec-h"><span class="ew-sec-t">他手上的事</span>`
+    + `<span class="ew-sec-n">${e.agenda ? 1 : 0} 条</span></div>`;
+  if (e.agenda) {
+    s5 += `<div class="ew-ag"><div class="gl">${esc(e.agenda.goal)}</div>`
+      + `<div class="st"><span>${esc(e.agenda.stage)}</span><span>进度 ${e.agenda.progress}/${e.agenda.max}</span>`
+      + (e.agenda.vis === 'concealed' ? '<span class="hush">暗处</span>' : '') + `</div></div>`;
+  } else {
+    s5 += `<div class="ew-empty"><div class="v b">眼下没有在办的谋划。</div></div>`;
+  }
+  s5 += `</div>`;
+
+  // ⑥ 关系（真账里这张表都还没有 ⇒ 正好看空态）
+  // ⑥ 关系网（★leg141b：**一张网** —— 层级（所属/分支/机构/麾下）＋ 账上的边，不分出处）
+  //   为什么层级也算"关系"：它本来就是边（角色→势力、子势力→上级），只是住在 parent/branches/organs 里。
+  //   用户那一问的正解就是这个：**不并进来，开局那张网永远是空的**（层级不用等重抽就有）。
+  const net = [];
+  if (e.parent) net.push({ lab: '所属', nm: e.parent, tail: e.parentSrc || '', hier: true });
+  for (const b of (e.branches || [])) net.push({ lab: '分支', nm: b, tail: '', hier: true });
+  for (const g of (e.organs || [])) net.push({ lab: '机构', nm: g, tail: '', hier: true });
+  for (const m of (e.crew || [])) {
+    // ★★可点的行要挂**实体 id**（不是名号）：`paint()` 里那一行是 `openWin(el.getAttribute('data-open'))`，
+    //   而 `openWin` 拿它去 `ENT.find(x => x.id === picked)` —— 传名号会找不到人、整页当场炸。
+    //   ★这一处**本笔第一版写错了**（写成了 `data-open="${x.nm}"`）——正是 leg140 那条
+    //     "**接完线要把展示页与生产逐条对一遍差异**"当场逮住的（那次的病是反方向：展示页对、生产漏）。
+    const t = ENT.find((x) => x.name === m);
+    net.push({ lab: '麾下', nm: m, tail: '', hier: true, who: t ? t.id : null });
+  }
+  for (const r of (e.relations || [])) net.push({ lab: (r.dir === 'out' ? '对 ' : '被 ') + r.type, nm: r.name, tail: r.tail || '', hier: false });
+  let s6 = `<div class="ew-sec"><div class="ew-sec-h"><span class="ew-sec-t">关系</span>`
+    + `<span class="ew-sec-n">${net.length} 条</span></div>`;
+  if (net.length) {
+    for (const x of net) {
+      s6 += `<div class="ew-net${x.hier ? ' hier' : ''}"><span class="lab">${esc(x.lab)}</span>`
+        + (x.who ? `<b class="who" data-open="${x.who}">${esc(x.nm)}</b>` : `<b>${esc(x.nm)}</b>`)
+        + (x.tail ? `<span class="tail">${esc(x.tail)}</span>` : '') + `</div>`;
+    }
+  } else {
+    s6 += `<div class="ew-empty"><div class="v b">账上他还没跟谁连上 —— 书里没写他的归属与同僚，这一局也还没长出关系来。</div></div>`;
+  }
+  s6 += `</div>`;
+
+  return head + `<div class="ew-body">` + s1 + s2 + s3 + s4 + s5 + s6 + `</div>`;
+}
+
+// ── 装配 ＋ 开关窗口（★窗口是**弹在上层**的：点一行开；✕ / 点暗处 / Esc 关）──────
+let picked = 'e_p1';
+const mask = document.getElementById('mask');
+
+function paint() {
+  document.getElementById('list').innerHTML = ENT.map((e) => rowHtml(e, e.id === picked)).join('');
+  document.getElementById('entwin').innerHTML = windowHtml(ENT.find((x) => x.id === picked));
+  document.querySelectorAll('[data-open]').forEach((el) => {
+    el.addEventListener('click', () => openWin(el.getAttribute('data-open')));
+  });
+  const x = document.querySelector('#entwin .ew-close');
+  if (x) x.addEventListener('click', closeWin);
+}
+function openWin(id) { picked = id; paint(); mask.classList.add('sw2-open'); }
+function closeWin() { mask.classList.remove('sw2-open'); }
+mask.addEventListener('click', (ev) => { if (ev.target === mask) closeWin(); });      // 点窗口外的暗处
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeWin(); }); // Esc
+const jump = document.getElementById('jump');
+if (jump) jump.addEventListener('click', () => openWin(picked));
+paint();
+closeWin();   // ★开页时是关着的（先让你看清"下层"那一页），点一行或点按钮才弹上来
+</script>
+</body>
+</html>

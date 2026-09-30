@@ -1,0 +1,497 @@
+// story-world-v2/test/lookup-batch.test.js
+// leg25 d（细案 docs/spec-lookup-batch-refresh.md）：查书补全三件套的回归锁。
+//   ①force 覆盖（清掉旧 bug 误标的假「书未明述」）②分批**按条目去重**（不是按实体个数——那是错的）
+//   ③选人名单补已有原话、未查摆 —（不填占位值）④B6 行定位（定位不到退回整条）
+//   ⑤★接线审计：面板产物里每个 data-action 都必须有真实处理器（防"按钮画了没人接"）
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+    pickOneForLookup, forcedFields, missingFields, planBatches, runBatchLookup, resolveBookSource,
+    buildSelectPrompt, ENTITY_LOOKUP_MAX_ATTEMPTS, normalizeToPositionSet, deriveLocationFromBook,
+} from '../src/entity-lookup.js';
+import { renderAll, renderEntitiesHtml } from '../src/render.js';
+import { characterBookEntries, characterWorldNames, locateNameLine, locateNameSnippet, bookEntryText } from '../web/index.js';
+
+const world = (over = {}) => ({
+    version: 1,
+    context: {
+        world: '测试世界', tension: 0.5, positions: ['未明'], playerId: 'e_p1',
+        setting: { frozen: { fingerprint: 'f', extractedAt: 't', canon: { bookEntities: [] } } },
+    },
+    entities: [
+        { id: 'e_p1', kind: 'character', name: '你', location: '未明' },
+        { id: 'e_a', kind: 'character', name: '玄一道祖', location: '未明' },
+        { id: 'e_b', kind: 'character', name: '吞天妖王', location: '未明' },
+    ],
+    weights: {}, agendas: [], events: [], chronicle: [], milestones: [],
+    meta: { tick: 3, simLog: [] },
+    ...over,
+});
+
+// ---------- ① force 覆盖 ----------
+
+test('leg25 d：force 能推倒「书未明述」重查（否则旧 bug 误标的假 absent 永远查不动）', () => {
+    const w = world();
+    // 模拟被旧 bug 误标的现场：两栏都写成 absent
+    w.meta.entityFields = { e_a: { attempts: { 实力: { count: 1, state: 'absent' }, 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] } };
+    const e = w.entities.find((x) => x.id === 'e_a');
+    // 常规闸：absent 一律跳过（这是设计，不是 bug）
+    assert.deepEqual(missingFields(e, w.meta), [], '常规口径下 absent 已定案 → 不查');
+    // 覆盖闸：absent 必须能被重查（**显式面**——leg25 f 起默认面只剩实力）
+    const BOTH = ['实力', '位置'];
+    assert.deepEqual(forcedFields(e, w.meta, BOTH), BOTH, '★force 必须能覆盖 absent');
+    assert.deepEqual(forcedFields(e, w.meta), ['实力'], '★默认面口径：只覆盖「实力」（位置已摘出默认面）');
+    assert.deepEqual(pickOneForLookup(w, 'e_a', { forceFields: 'absent' }).missing, ['实力'], '默认面 force 只重查实力');
+    // 重试上限卡住的也要能覆盖
+    const w2 = world();
+    w2.meta.entityFields = { e_a: { attempts: { 实力: { count: ENTITY_LOOKUP_MAX_ATTEMPTS, state: 'pending' } }, fields: {}, sources: [] } };
+    assert.deepEqual(forcedFields(w2.entities[1], w2.meta, BOTH), ['实力'], '★卡在重试上限的也要能重查');
+});
+
+test('leg25 d：force 默认不动「已有值」的栏（除非显式 forceFields=all）', () => {
+    const w = world();
+    w.entities[1]['实力'] = 'T9渡劫巅峰';                       // 已有值
+    w.meta.entityFields = { e_a: { attempts: { 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] } };
+    const e = w.entities[1];
+    const BOTH = ['实力', '位置'];
+    assert.deepEqual(forcedFields(e, w.meta, BOTH), ['位置'], '已有值那栏不动（只覆盖 absent）');
+    assert.deepEqual(forcedFields(e, w.meta, BOTH, { forceFields: 'all' }), BOTH, 'forceFields=all 才连已有值一起重查');
+});
+
+// ---------- ② 分批：按条目去重（本细案最容易做错的地方） ----------
+
+test('leg25 d：分批按**条目载荷去重**打包，不按实体个数（实测教训：按个数会严重高估调用次数）', async () => {
+    const w = world();
+    // 三个实体共享同一条 8000 字符的条目（正照：吞天妖王/混元妖圣同属《混乱之地·万妖盟》）
+    const shared = { name: '混乱之地·万妖盟', text: 'x'.repeat(8000) };
+    const bookText = async (e) => ({ ok: true, entries: [shared] });
+    const r = await planBatches({ world: w, ids: ['e_p1', 'e_a', 'e_b'], bookText, budgetChar: 20000 });
+    assert.equal(r.batches.length, 1, '★共享条目只算一次载荷 → 全部装进同一批（按实体个数会错分成 3 批）');
+    assert.equal(r.totalEntries, 1, '★条目级去重：3 个实体只算 1 条条目');
+    assert.equal(r.totalChars, 8000, '载荷 = 条目正文长度，不是 3 倍');
+    // 换成互不共享的大条目 → 按预算拆批
+    let n = 0;
+    const uniq = async () => ({ ok: true, entries: [{ name: `条${n++}`, text: 'y'.repeat(15000) }] });
+    const r2 = await planBatches({ world: w, ids: ['e_p1', 'e_a', 'e_b'], bookText: uniq, budgetChar: 20000 });
+    assert.equal(r2.batches.length, 3, '互不共享且超预算 → 各占一批');
+});
+
+test('leg25 d：分批跳过无需要的实体（已有值/已定案不占批次）', async () => {
+    const w = world();
+    w.entities[1]['实力'] = 'T9'; w.entities[1]['位置'] = '昆仑山';
+    w.meta.entityFields = { e_p1: { attempts: { 实力: { count: 1, state: 'absent' }, 位置: { count: 1, state: 'absent' } }, fields: {}, sources: [] } };
+    const r = await planBatches({ world: w, ids: ['e_p1', 'e_a', 'e_b'], bookText: async () => ({ ok: true, entries: [] }) });
+    const skippedIds = r.skipped.map((s) => s.id).sort();
+    assert.deepEqual(skippedIds, ['e_a', 'e_p1'], 'e_a 实力已有值、e_p1 实力已定案 → 都不必查（默认面只问实力）');
+    assert.ok(r.batches[0].ids.includes('e_b'), '只有 e_b 真需要查');
+});
+
+test('leg25 d：批量查询走通一次并落账（runBatchLookup）', async () => {
+    const w = world();
+    const transport = async () => '{"玄一道祖":{"实力":"T9渡劫巅峰","位置":"昆仑山"}}';
+    const bookText = async () => ({ ok: true, entries: [{ name: '昆仑道宫', text: '- 玄一道祖 (男, T9渡劫巅峰): 人族守护神，居昆仑山。' }] });
+    // leg25 f（X4）：默认面只问「实力」⇒ ok 记 1；显式带上位置那条腿时才记 2。
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 5 });
+    assert.equal(r.stats.ok, 1, '★默认面：只落「实力」一栏');
+    assert.equal(r.ssot.entities.find((x) => x.id === 'e_a')['实力'], 'T9渡劫巅峰');
+    assert.equal(r.ssot.meta.entityFields.e_a.attempts['实力'].state, 'ok');
+    const r2 = await runBatchLookup({ ssot: world(), transport, bookText, ids: ['e_a'], tick: 5, fields: ['实力', '位置'] });
+    assert.equal(r2.stats.ok, 2, '显式要两栏 ⇒ 实力 + 位置都落账（位置那条腿仍是可用能力）');
+    assert.equal(r2.ssot.entities.find((x) => x.id === 'e_a')['位置'], '昆仑山');
+});
+
+test('leg25 d：批量里「书没读到」仍然不许写 absent（本轮修的那条红线在批量面同样成立）', async () => {
+    const w = world();
+    const transport = async () => '{}';
+    const r = await runBatchLookup({ ssot: w, transport, bookText: async () => ({ ok: false }), ids: ['e_a'], tick: 5 });
+    assert.ok(r.warning && r.warning.includes('取不到'), '读了但没读到 → 出警告');
+    const rec = r.ssot.meta.entityFields.e_a;
+    assert.ok(!JSON.stringify(rec).includes('absent'), '★批量面也不许写 absent（读不到 ≠ 书里没有）');
+    assert.equal(rec.attempts['实力'].state, 'pending', '记 pending，下轮再试');
+});
+
+// ---------- ③ 选人可见（只摆已有原话，未查摆 — ） ----------
+
+test('leg25 d：选人名单补上账上已有的实力/位置原话；未查的摆 —（绝不填占位值）', () => {
+    const w = world();
+    w.entities[1]['实力'] = 'T9渡劫巅峰';
+    w.entities[1]['位置'] = '昆仑山玉虚秘境';
+    const p = buildSelectPrompt(w);
+    assert.ok(p.includes('e_a\t玄一道祖\t角色\tT9渡劫巅峰\t昆仑山玉虚秘境'), '★有值的照抄原话摆出来');
+    assert.ok(p.includes('e_b\t吞天妖王\t角色\t—\t—'), '★未查的摆 —，不写 0 / 未知 / 空');
+    assert.ok(!/\t(0|未知|null|undefined)\t/.test(p), '不得出现占位值');
+    assert.ok(p.includes('书里的原话'), '口径写清：这是原话不是分数');
+    // 势力不显示实力（旧口径）
+    const w2 = world();
+    w2.entities = [{ id: 'e_f', kind: 'faction', name: '万妖盟', location: '南荒', 位置: '南荒', '实力': '三万铁骑' }];
+    assert.ok(buildSelectPrompt(w2).includes('e_f\t万妖盟\t势力\t—\t南荒'), '势力行不显示实力（哪怕账上有值）');
+});
+
+// ---------- ④ B6 行定位 ----------
+
+test('leg25 d（B6）：按名号定位到它自己那一行；定位不到退回整条', () => {
+    const content = [
+        '[势力: 万妖盟 (混乱绞肉机/妖修大本营)]',
+        '势力所在地: 南荒部洲·十万大山。',
+        '核心底蕴: 由不被各大纯血势力接纳的妖修组成。',
+        '代表人物:',
+        '- 混元妖圣 (男, T9渡劫初期): 精神图腾。',
+        '- 吞天妖王 (男, T8大乘中期): 现任盟主(饕餮蛟龙混血)。极度残暴且野心勃勃。',
+        '- 金刚猿王 (男, T6化神巅峰): 战王巨头。',
+    ].join('\n');
+    const line = locateNameLine(content, '吞天妖王');
+    assert.ok(line && line.startsWith('- 吞天妖王 (男, T8大乘中期)'), `★定位到它自己那一行：${line}`);
+    assert.ok(!line.includes('金刚猿王'), '★只给这一行，不带别人的资料（这正是把载荷降下来的关键）');
+    assert.ok(line.includes('T8大乘中期'), '书里的原话在行内');
+    // 冒号形也认
+    assert.ok(locateNameLine('某甲：T5元婴期，山门执事。', '某甲'), '冒号形标签也认');
+    // 定位不到 → null（调用方退回整条，零回归）
+    assert.equal(locateNameLine(content, '不存在的人'), null, '定位不到返回 null');
+    assert.equal(locateNameLine('', '吞天妖王'), null, '空正文安全');
+    // 不许跳过中间文字抓别的括号（v1 同款纪律）
+    assert.equal(locateNameLine('吞天妖王 与 金刚猿王 (男, T6化神巅峰) 交战。', '吞天妖王'), null,
+        '★名字后不是紧跟括号/冒号 → 不许远距离抓（防抓错成别人）');
+});
+
+// ---------- ④b 取原文：定位失败时**不许**退回到被截断的整条（否则 1200 截断风险仍在） ----------
+
+// ★测**真函数** `bookEntryText`（从 web/index.js 导出）。第一版我自带了一份镜像 helper，
+//   变异测试把真实现弄坏它照样绿 ⇒ 等于没测。教训：测试不许自带被测逻辑的复制品。
+const bookTextOf = (content, name = '吞天妖王', comment = '某条目') => async () => ({
+    ok: true,
+    entries: [{ name: comment, ...bookEntryText(content, name) }],
+});
+
+test('leg25 d：名号描述行在 1200 字符之后时，取原文必须仍能拿到它（否则又是假「书未明述」）', async () => {
+    // 用户质疑（2026-09-11）：「你不是按行直接命中吗，那还有 1200 的风险吗」——**有**：
+    //   locateNameLine 只认**行首**形态（`- 名号 (…)` / `名号：…`）。若正文把该名号写在段落里
+    //   （非行首），定位失败 → 退回 `content.slice(0,1200)` → 描述行落在 1200 之后就被切掉
+    //   → 模型在喂进去的原文里找不到它 → 记 absent → **假的「书未明述」**（与旧 bug 同款病）。
+    const filler = Array.from({ length: 40 }, (_, i) => `设定条目第${i}行：`.padEnd(40, '畴')).join('\n');   // > 1200 字符
+    const tail = '上古秘辛记载：吞天妖王于北荒现身，气息T8大乘中期，无人敢挡。';
+    const content = `${filler}\n${tail}`;
+    assert.ok(content.indexOf('吞天妖王') > 1200, '前置：该名号确实落在 1200 字符之后');
+    // 行首形态定位不到（它不在行首）——这是本用例的前提
+    assert.equal(locateNameLine(content, '吞天妖王'), null, '行首形态确实定位不到（段落里的提及）');
+    // 取原文：必须仍把含该名号的片段喂出去
+    const src = await resolveBookSource(bookTextOf(content), { name: '吞天妖王' });
+    assert.ok(src.ok, '书读到了');
+    const text = (src.entries[0] || {}).text || '';
+    assert.ok(text.includes('吞天妖王'), `★必须命中该名号（否则模型看不到 → 记 absent → 假「书未明述」）：${text.slice(0, 80)}`);
+    assert.ok(text.includes('T8大乘中期'), '描述原话在喂出的文本里');
+});
+
+test('leg25 d：段落形态提及 → 只喂那一段（不是整条，也不截断丢它）', async () => {
+    const filler = Array.from({ length: 40 }, (_, i) => `设定条目第${i}行：`.padEnd(40, '畴')).join('\n');
+    const content = `${filler}\n上古秘辛记载：吞天妖王于北荒现身，气息T8大乘中期，无人敢挡。\n另有一段无关记载：某甲某乙。`;
+    const src = await resolveBookSource(bookTextOf(content), { name: '吞天妖王' });
+    const text = (src.entries[0] || {}).text || '';
+    assert.ok(text.length < content.length / 2, '只喂相关那一段，不是整条');
+    assert.ok(!text.includes('某甲某乙'), '不带无关段落');
+});
+
+test('leg25 d：三档取文本的边界——都不许丢掉该名号，也不许多搬无关段落', () => {
+    const name = '吞天妖王';
+    // ①行首形态 → 只这一行
+    const withLine = '代表人物:\n- 吞天妖王 (男, T8大乘中期): 现任盟主。\n- 金刚猿王 (男, T6化神巅峰): 战王。';
+    const a = bookEntryText(withLine, name);
+    assert.equal(a.located, 'line');
+    assert.ok(a.text.startsWith('- 吞天妖王') && !a.text.includes('金刚猿王'), '行首形态：只给这一行');
+    // ②段落形态（行首定位不到）→ 给含它的那一段，且不受 1200 限制
+    const long = `${'填充'.repeat(900)}\n上古秘辛：吞天妖王于北荒现身，气息T8大乘中期。\n无关段落：某甲某乙。`;
+    assert.ok(long.indexOf(name) > 1200, '前置：名号在 1200 之后');
+    assert.equal(locateNameLine(long, name), null, '行首形态确实定位不到');
+    const b = bookEntryText(long, name);
+    assert.equal(b.located, 'snippet', '★落到段落兜底，而不是"退回截断整条"');
+    assert.ok(b.text.includes(name) && b.text.includes('T8大乘中期'), '★名号与描述原话都在');
+    // ③正文里根本没有 → 退回截断整条（此时丢它是对的：它确实没出现）
+    const none = '甲'.repeat(5000);
+    const c = bookEntryText(none, name);
+    assert.equal(c.located, 'none');
+    assert.equal(c.text.length, 1200, '退回时仍受截断防御约束');
+});
+
+test('leg25 d：★测试不许自带被测逻辑（本棒踩过：镜像 helper 让变异测试失去意义）', async () => {
+    // 这一条是纪律锁：`bookEntryText` 必须是**从 web/index.js 导出的真函数**，测试直接调它。
+    //   第一版我自带了一份镜像 helper，把真实现弄坏它照样绿 ⇒ 等于没测。
+    const mod = await import('../web/index.js');
+    assert.equal(typeof mod.bookEntryText, 'function', '真实现必须可被测试直接调用（导出）');
+    // 真函数必须真的走三档（行首 / 段落 / 兜底），任何一档被摘掉都会在上一条用例里变红
+    const src = String(mod.bookEntryText);
+    assert.ok(src.includes('locateNameLine') && src.includes('locateNameSnippet'), '两档定位都在真函数体内');
+});
+
+// ---------- ⑥ C1：查书的「位置」并入 location（用户拍板「合并吧」） ----------
+
+test('leg25 d（C1）：位置原话归一化到位置集——**取更长者**，集外/歧义不写', () => {
+    // 夹具 = 用户真实位置集的前若干项（实测 60 项，父子地名同时存在）
+    const POS = ['未明', '九宸玄陆', '十万大山', '四海八荒', '中天神洲', '中州', '西极贺洲',
+        '西极昆仑山', '玉虚秘境', '东胜沧洲', '北俱荒洲', '不周山', '南荒部洲', '天机小世界'];
+    // ① 原话就是集内一项
+    assert.deepEqual(normalizeToPositionSet('中州', POS), { value: '中州', how: 'exact', candidates: ['中州'] });
+    // ② 复合写法 → 命中多项时**取最长**（"位置集里最具体的那个地名"）
+    const a = normalizeToPositionSet('中天神洲·中州', POS);
+    assert.equal(a.value, '中天神洲', `★取最长：${JSON.stringify(a)}`);
+    assert.equal(a.how, 'longest');
+    const b = normalizeToPositionSet('南荒部洲·十万大山', POS);
+    assert.equal(b.value, '十万大山', '★取最长（"十万大山"4字 与 "南荒部洲"4字 并列时按集序，前者先）');
+    const c = normalizeToPositionSet('东胜沧洲·青丘狐山秘境', POS);
+    assert.equal(c.value, '东胜沧洲', '只命中一项时用它');
+    // ③ 集外 → 不写
+    const d = normalizeToPositionSet('虚空夹缝·无间棋局', POS);
+    assert.equal(d.value, null, '★集外地名不写进 location（引擎不发明地名）');
+    assert.equal(d.how, 'none');
+    // ⑤ '未明' 是兜底词，**不参与包含匹配**（否则任何含"未明"的串都会命中它）
+    assert.equal(normalizeToPositionSet('未明之地', POS).value, null, '兜底词不参与 contains');
+    // ⑥ 空值安全
+    assert.equal(normalizeToPositionSet('', POS).value, null);
+    assert.equal(normalizeToPositionSet('中州', []).value, null);
+});
+
+test('leg25 d（C1）：location 只写位置集原有项（唯一断言：不发明地名）', () => {
+    const w = world();
+    w.context.positions = ['未明', '南荒部洲', '十万大山'];
+    const transport = async () => '{"玄一道祖":{"实力":"T8大乘中期","位置":"南荒部洲·十万大山"}}';
+    const bookText = async () => ({ ok: true, entries: [{ name: '混乱之地·万妖盟', text: '- 玄一道祖 (男, T8大乘中期): 盟主。所在地: 南荒部洲·十万大山' }] });
+    return import('../src/entity-lookup.js').then(async ({ runBatchLookup }) => {
+        // leg25 f（X4）：位置那条腿要**显式**要（默认面只剩实力）
+        const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 7, fields: ['实力', '位置'] });
+        const e = r.ssot.entities.find((x) => x.id === 'e_a');
+        assert.equal(e['位置'], '南荒部洲·十万大山', '原话照抄留档');
+        assert.equal(e.location, '十万大山', 'location = 集内更长的那一项');
+        assert.ok(w.context.positions.includes(e.location), '★写进去的必须是位置集原有项');
+        assert.equal(r.ssot.meta.entityFields.e_a.fields['位置'].位置归一, 'longest');
+    });
+});
+
+// ---------- ⑦ 位置继承（零 token 结构推断）与它的安全闸 ----------
+
+test('leg25 d：位置继承——组织条目的驻地推给成员（零 token，不调模型）', () => {
+    const w = world();
+    w.context.positions = ['未明', '西极贺洲', '西极昆仑山', '玉虚秘境', '东胜沧洲', '东海浮空岛'];
+    w.entities = [
+        { id: 'e_f', kind: 'faction', name: '昆仑道宫', location: '未明' },
+        { id: 'e_c1', kind: 'character', name: '玄一道祖', location: '未明', parent: '昆仑道宫' },
+        { id: 'e_c2', kind: 'character', name: '冷霜月', location: '未明', parent: '昆仑道宫' },
+        { id: 'e_other', kind: 'character', name: '路人甲', location: '未明' },   // 不属于任何条目
+        { id: 'e_has', kind: 'character', name: '清玄真人', location: '东胜沧洲' },   // 已有位置
+    ];
+    const entries = [{
+        comment: '昆仑道宫',
+        key: ['昆仑道宫', '玉虚秘境', '西极贺洲'],
+        content: '[势力: 昆仑道宫]\n核心底蕴: 居西极贺洲西极昆仑山玉虚秘境, 天阶护山大阵。\n代表人物:\n- 玄一道祖 (男, T9渡劫巅峰): 人族守护神。\n- 冷霜月 (女, T5元婴巅峰): 黄金一代领袖。',
+    }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    const get = (id) => d.ssot.entities.find((x) => x.id === id);
+    assert.ok(d.stats.inherited >= 3, `门派自己 + 两名成员都应推定（实得 ${d.stats.inherited}）`);
+    for (const id of ['e_f', 'e_c1', 'e_c2']) {
+        assert.ok(w.context.positions.includes(get(id).location), `★${id} 的位置必须是位置集内原有项：${get(id).location}`);
+    }
+    assert.equal(get('e_c1').location, get('e_f').location, '成员的驻地 = 所属组织的驻地');
+    assert.equal(get('e_other').location, '未明', '不属于任何条目的实体不动（绝不张冠李戴）');
+    assert.equal(get('e_has').location, '东胜沧洲', '★已有位置的不覆盖（只填空位）');
+    assert.equal(w.entities.find((x) => x.id === 'e_c1').location, '未明', '纯函数：不改输入');
+});
+
+test('leg25 g（P1）：驻地字段名的**变体「所在地域」**不许被前缀命中成幻影地名', () => {
+    // 实测（demo/measure-leg25g-p1-regex.js）：旧正则 `(?:所在地|…)` 会命中「所在地域」的前缀「所在地」，
+    //   于是 `所在地域: 汜水关` 被读成 `域: 汜水关` ⇒ 归一后可能写进一个**书里没有的地名**（幻影）。
+    //   三国书 2 处（其 `[用户信息]` 条目），真实形态；这里锁"不许出碎片值"。
+    const w = world();
+    w.context.positions = ['未明', '汜水关', '许昌'];
+    w.entities = [{ id: 'e_p', kind: 'character', name: '用户信息', location: '未明' }];
+    const entries = [{
+        comment: '用户信息',
+        key: [],
+        content: '[用户角色信息]\n姓名: 黄坤\n所在地域: 汜水关\n当前职位: 义勇先锋',
+    }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    const loc = d.ssot.entities.find((x) => x.id === 'e_p').location;
+    assert.ok(!String(loc).includes('域:'), `★不许把「域: 汜水关」这种碎片当地名（实得 ${JSON.stringify(loc)}）`);
+    assert.ok(!String(loc).startsWith('域'), `★碎片不得进 location（实得 ${JSON.stringify(loc)}）`);
+
+    // 反向锁：**正常写法不受影响**（别为了防碎片把真驻地也挡掉）
+    const w2 = world();
+    w2.context.positions = ['未明', '西极昆仑山'];
+    w2.entities = [{ id: 'e_f', kind: 'faction', name: '昆仑道宫', location: '未明' }];
+    const entries2 = [{ comment: '昆仑道宫', key: [], content: '核心底蕴: 居西极贺洲西极昆仑山, 天阶护山大阵。' }];
+    const d2 = deriveLocationFromBook({ world: w2, entries: entries2 });
+    assert.equal(d2.ssot.entities.find((x) => x.id === 'e_f').location, '西极昆仑山', '正常驻地行照旧生效（边界不许误伤）');
+    // 字段名后紧跟汉字 = 不是该字段（如"所在地不详"），不许吞进来；
+    // ★夹具注意：来源串必须**严格长于**地名（ACCEPT 闸的现行契约，实体上一条测试锁的就是它）——
+    //   所以这里写成「中州·许昌」而不是光「许昌」，否则测的是闸不是边界。
+    const w3 = world();
+    w3.context.positions = ['未明', '许昌'];
+    w3.entities = [{ id: 'e_q', kind: 'character', name: '某人', location: '未明' }];
+    const entries3 = [{ comment: '某人', key: [], content: '所在地不详，行踪成谜。\n另一行：驻地: 中州·许昌' }];
+    const d3 = deriveLocationFromBook({ world: w3, entries: entries3 });
+    assert.equal(d3.ssot.entities.find((x) => x.id === 'e_q').location, '许昌',
+        '「所在地不详」不被当成字段（汉字边界生效），后面那段「驻地: 中州·许昌」照常收到');
+});
+
+test('leg25 d：位置继承的安全闸——来源串不比地名长就不接受（防脏位置集自指错配）', () => {
+    // 实测教训：若位置集被造脏（人名混进去），宽松匹配会把「曹操」匹配上「曹操」这种自指，
+    //   一次推出满账假位置（实测脏集上一次推出 204 条，绝大多数是错的）。
+    const w = world();
+    w.context.positions = ['未明', '曹操', '韩遂', '长安'];
+    w.entities = [
+        { id: 'e_a', kind: 'character', name: '曹操', location: '未明' },
+        { id: 'e_b', kind: 'character', name: '刘备', location: '未明' },
+    ];
+    const entries = [{ comment: '曹操', key: ['曹操', '曹孟德'], content: '人物档案：曹操\n· 姓名：曹操\n· 籍贯：沛国谯县' }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    assert.equal(d.stats.inherited, 0, '★来源串「曹操」与地名「曹操」等长 ⇒ 视为自指，不推出位置');
+    assert.equal(d.ssot.entities[0].location, '未明', '不写错位置（错位置比「未明」更坏）');
+    // 来源串明显更长（真·地点包含关系）→ 接受
+    const w2 = world();
+    w2.context.positions = ['未明', '十万大山'];
+    w2.entities = [{ id: 'e_x', kind: 'faction', name: '万妖盟', location: '未明' }];
+    const d2 = deriveLocationFromBook({
+        world: w2,
+        entries: [{ comment: '万妖盟', key: ['南荒部洲·十万大山'], content: '[势力: 万妖盟]\n势力所在地: 南荒部洲·十万大山。' }],
+    });
+    assert.equal(d2.ssot.entities[0].location, '十万大山', '★来源串更长 ⇒ 接受（真包含关系）');
+});
+
+test('leg25 d：★位置来源必须落账且外显——"书里明述"与"结构推导"不许混为一谈', async () => {
+    // 用户质疑（2026-09-11）：「既然不是通用的，这种功能有啥用，还不能保证会不会帮倒忙」。
+    //   要害在这里：推出来的位置**会进模型 prompt**（pack.js 实体行 / streams 的「各方位置」）。
+    //   不标明来源 ⇒ 模型把推导当书里的明述事实用 ⇒ 推错就是喂给模型的假事实。
+    //   故：①账上记 `位置来源`；②喂模型/注入文本/面板都带「（推）」标记。
+    const w = world();
+    w.context.positions = ['未明', '西极昆仑山'];
+    w.entities = [{ id: 'e_c1', kind: 'character', name: '玄一道祖', location: '未明' }];
+    const entries = [{
+        comment: '昆仑道宫', key: ['西极贺洲·西极昆仑山'],
+        content: '[势力: 昆仑道宫]\n核心底蕴: 居西极贺洲西极昆仑山, 天阶护山大阵。\n代表人物:\n- 玄一道祖 (男, T9渡劫巅峰): 人族守护神。',
+    }];
+    const d = deriveLocationFromBook({ world: w, entries });
+    assert.equal(d.ssot.entities[0].location, '西极昆仑山', '推定成功');
+    assert.equal(d.ssot.meta.entityFields.e_c1.位置来源, '结构推导', '★账上标"结构推导"');
+    assert.equal(d.ssot.meta.entityFields.e_c1.位置来源自, '昆仑道宫', '★记"从哪一条推出来的"（可审计）');
+    // ② 外显：注入文本带（推）——leg25 f 起位置行改为**按处聚合**，标记落在组头上
+    //   （同一地点的人共享同一个推定来源，逐人重复标"（推）"是冗余）
+    const { renderStreams } = await import('../src/streams.js');
+    const s = renderStreams(d.ssot, { chronicle: [], warnings: [] }, null);
+    const line = s.observer.join('\n');
+    assert.ok(line.includes('玄一道祖'), '★位置行里必须有这个名号（在它所属的地点组内）');
+    assert.ok(line.includes('西极昆仑山（推）'), '★推定来的地点必须标（推）——人不许把"引擎推的"当"书里写的"');
+    // ③ 面板也标
+    const html = renderEntitiesHtml(d.ssot, {});
+    assert.ok(html.includes('（推）'), '★面板标（推）——位置列已退场，来源标记改落名号格（引擎推的不许当书里写的）');
+    // ④ 书里明述的来源不被推导降级
+    const w2 = world();
+    w2.context.positions = ['未明', '西极昆仑山'];
+    w2.entities = [{ id: 'e_c2', kind: 'character', name: '清玄真人', location: '未明' }];
+    w2.meta.entityFields = { e_c2: { 位置来源: '书里原话', fields: {}, attempts: {} } };
+    const d2 = deriveLocationFromBook({ world: w2, entries });
+    assert.equal(d2.ssot.meta.entityFields.e_c2?.位置来源, '书里原话', '★"书里原话"不被结构推导覆盖（明述 > 推导）');
+});
+
+test('leg25 d：查书抽到的位置标"书里原话"（与结构推导分开）', async () => {
+    const w = world();
+    w.context.positions = ['未明', '十万大山'];
+    w.entities = [{ id: 'e_a', kind: 'character', name: '玄一道祖', location: '未明' }];
+    const transport = async () => '{"玄一道祖":{"位置":"南荒部洲·十万大山"}}';
+    const bookText = async () => ({ ok: true, entries: [{ name: '万妖盟', text: '所在地: 南荒部洲·十万大山' }] });
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 4, fields: ['实力', '位置'] });
+    assert.equal(r.ssot.entities[0].location, '十万大山');
+    assert.equal(r.ssot.meta.entityFields.e_a.位置来源, '书里原话', '★模型从原话抽的 ⇒ "书里原话"');
+});
+
+// ---------- ⑤ ★接线审计：画了按钮就必须有人接 ----------
+test('leg25 d：面板产物里每个 data-action 都必须有真实处理器（防"按钮画了没人接"）', async () => {
+    // 这一条治的是本棒反复踩的那类病：接线断了而测试全绿（异步 bookText / 卡挂世界指针都是这么漏的）。
+    const savedW = globalThis.window;
+    const savedD = globalThis.document;
+    // 最小 DOM 桩：web/index.js 末尾的引导段会问 document.readyState / 加监听——
+    //   给个"已就绪"的空壳即可（getCtx 拿不到 ctx 就不进 initPanel，零真 DOM 需求）。
+    globalThis.window = { addEventListener() {}, removeEventListener() {} };
+    globalThis.document = { readyState: 'complete', addEventListener() {}, getElementById: () => null };
+    try {
+        // ?wiretest：破模块缓存。web/index.js 的动作注册在 `if (typeof window !== 'undefined')` 里，
+        //   别的用例可能已在无 window 下导入过它 ⇒ 不破缓存会拿到没注册动作的那份（本用例自己踩过）。
+        await import('../web/index.js?wiretest');
+        await import('../src/render.js');
+        const handlers = new Set(Object.keys(globalThis.window.__sw2Actions || {}));
+        assert.ok(handlers.size > 0, '动作总线已注册');
+        const w = world();
+        w.entities[1]['实力'] = 'T9';           // 触发行内「查」那一档（★leg76：`lookupTask` 已随批量补全删除）
+        const html = JSON.stringify([
+            renderAll(w),
+            renderEntitiesHtml(w),
+        ]);
+        const actions = [...new Set([...html.matchAll(/data-action=\\?"([a-z0-9-]+)\\?"/g)].map((m) => m[1]))];
+        assert.ok(actions.length > 0, '产物里确有 data-action');
+        // 两类合法的"不由总线处理"的动作（白名单必须带出处，不许随手加）：
+        //   · advance-world：dispatchAction 里特判走 tick 队列（web/index.js 的 dispatchAction）
+        //   ★leg40b（体检）：`player-desc` 已从白名单撤除——它原来登记为"历史残留（无害：点一下只会在
+        //     状态条闪一句占位提示）"，而那句占位提示本身就是个病（把英文动作名印给玩家看，违 A-3）。
+        //     现在两头都治了：textarea 上的 `data-action` 撤掉（render.js 设置页），
+        //     `dispatchAction` 的兜底也改成人话并把动作名收进控制台。⇒ 白名单收成一项。
+        const NON_BUS = new Set(['advance-world']);
+        const dangling = actions.filter((a) => !handlers.has(a) && !NON_BUS.has(a));
+        assert.deepEqual(dangling, [], `★这些动作画了按钮但没有处理器：${dangling.join('、')}`);
+        assert.ok(actions.includes('lookup-entity'), '行内「查」在产物里');
+        assert.ok(handlers.has('lookup-entity'), '★行内「查」真的有处理器');
+        // ★★★leg76（用户令「这个按钮根本用不了，要么改成重抽名册，要么就删了」）：全册批量补全**已整族撤除**。
+        //   本条锁**两头都不许回潮**：产物里不许再有那枚钮、总线里也不许再有那个动作
+        //   （只锁一头的话，"按钮撤了但处理器留着"或反之都能溜过 —— 正是 leg40b 治的那类半拉子）。
+        assert.ok(!actions.includes('lookup-batch-all'), '★「⬇ 补全全册实力」那枚钮不许回潮（leg76 已撤）');
+        assert.ok(!handlers.has('lookup-batch-all') && !handlers.has('lookup-batch'), '★批量补全的总线动作也不许回潮');
+        assert.ok(!html.includes('补全全册实力'), '★文案也不许回潮（面板不许承诺一个不存在的钮）');
+        // ★细案实体页（leg49 Task 4）：工具条与分页器的三个动作必须真的有处理器。
+        //   上面 :433 那条是全产物差异检查（治"有没有漏"），这一段补的是**正向点名**
+        //   （治"点名的这三个必须在"）——两组判据分工不同，缺任一组都会漏掉一类断线。
+        for (const act of ['ents-filter', 'ents-sort', 'ents-page']) {
+            assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
+        }
+        // ★分组动作 `ents-group`：Task 5 起**控件已点亮**（分组钮连同分组渲染同批落地）——
+        //   这一段两条断言一起锁：处理器真实注册 + 产物里真的有控件产生它。
+        //   ★Task 4 时这里写的是反向断言（`!actions.includes('ents-group')`，"此刻产物里不该有分组控件"），
+        //     那是**刻意自失效**的临时锁；本笔点亮控件时按计划同一笔翻转（与 `web/index.js` 的
+        //     `page = 1` 复位一起，见 Task 5 报告）。
+        assert.ok(handlers.has('ents-group'), '★分组动作的处理器在位（控件已点亮，见下一条）');
+        assert.ok(actions.includes('ents-group'), '★分组控件已点亮（Task 5 与分组渲染同批）');
+        // ★终审 I1：计数**口径开关**（全册 / 当前结果）也是"画了按钮"的那一类 ⇒ 同一条审计 + 正向点名。
+        //   （上面 `:433` 那条差异检查已经会在缺处理器时咬红；这一段是**正向点名**，两组分工不同。）
+        assert.ok(handlers.has('ents-scope'), '★口径开关的处理器在位（`bus[ents-scope]`）');
+        assert.ok(actions.includes('ents-scope'), '★口径钮真的在产物里（否则上面那条是空锁）');
+        // ★leg50（细案 spec-chronicle-page-ia）：编年页工具条的五枚动作——同一条审计 + 正向点名。
+        //   上面那条差异检查（`:433`）已经会在缺处理器时咬红；这一段是**正向点名**（治"点名的必须在"）。
+        //   ★与本笔同时**撤掉**旧五筛动作 `set-filter`：撤了却留着渲染端 `data-action` = 死控件，
+        //     而这条审计正好是抓那个的（本笔一上手它就红了，那是它在干活，不是它坏了）。
+        //   ★★leg105 改造：账目层分页器已撤 ⇒ 产物里**只剩事件层**的 `ch-page` 钮。处理器**必须留**
+        //     （事件层那枚还活着），但"产物里真有控件"那条断言对 `ch-page` **收掉**——
+        //     它退化为与 `ents-page` 同族：**关键在钮上带着哪层**，判据的家在编年页自己的文件里。
+        for (const act of ['ch-layer', 'ch-closed', 'ch-range', 'ch-scope', 'ch-page']) {
+            assert.ok(handlers.has(act), `★${act} 必须有真实处理器`);
+            if (act !== 'ch-page') assert.ok(actions.includes(act), `★${act} 的控件真的在产物里（否则上面那条是空锁）`);
+        }
+        assert.ok(!handlers.has('set-filter'), '★旧五筛动作 `set-filter` 已撤（细案 §3.5）');
+    } finally {
+        if (savedW === undefined) delete globalThis.window; else globalThis.window = savedW;
+        if (savedD === undefined) delete globalThis.document; else globalThis.document = savedD;
+    }
+});
+
+test('★★★leg76：全册批量补全已撤——产物里不再有那枚钮、也不再有进度行（两头都锁）', () => {
+    // ★用户令：「这个按钮根本用不了，要么就改成重抽名册，要么就删了」。撤的依据（真账实测）：
+    //   ① 它只查 `forcedFields('absent')` 那一小撮（大荒z1 689 实体只问 11 个 / 实教 134 只问 1 个）；
+    //   ② 点了不当场跑、跑完还把总结句印成字面量 `null`；
+    //   ③ ★根因：它真会问的那 11 个里 **10 个是「势力」**，而提示词**明令势力不抽实力** ⇒ 永远补不上。
+    const w = world();
+    // 即使有人把旧的 `config.lookupTask` 塞进来，面板也**不许**再画出任何批量痕迹（防"改一处漏一处"）
+    for (const cfg of [undefined, { config: {} }, { config: { lookupTask: { cursor: 4, total: 623, success: 3, pending: 1, absent: 0, failed: 0 } } }]) {
+        const html = cfg === undefined ? renderEntitiesHtml(w) : renderEntitiesHtml(w, cfg);
+        assert.ok(!html.includes('data-action="lookup-batch-all"'), '★启动/停止那枚钮不许回潮');
+        assert.ok(!html.includes('补全全册实力'), '★「⬇ 补全全册实力」文案不许回潮');
+        assert.ok(!html.includes('■ 停止补全'), '★「■ 停止补全」文案不许回潮');
+        assert.ok(!html.includes('补全中'), '★在跑时的进度行也不许回潮');
+    }
+    // ★行内那枚「查」是好的 ⇒ 必须在（别把好的那枚一起删了）
+    assert.ok(renderEntitiesHtml(w).includes('data-action="lookup-entity"'), '★行内「查」必须还在');
+    // ★反向自证：面板那条说明**如实**说清"没有全册重查入口了"，不许指路到一个不存在的钮
+    const html = renderEntitiesHtml(w);
+    assert.ok(!html.includes('入口是工具栏里那枚'), '★不许再指路到那枚已撤的钮（面板不许承诺不存在的东西）');
+});

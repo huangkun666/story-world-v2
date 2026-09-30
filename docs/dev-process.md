@@ -1,0 +1,302 @@
+# 开发流程 · story-world v2（执行手册）
+
+> 性质：本项目的开发流程执行手册（交接 §8 任务书产物，用户 2026-09-07 明示）。
+> 定位：**给下一棒的执行手册**——不发明新流程，只把已在运转、已被两棒实测验证的运作方式写清楚。
+> 状态：已落盘（2026-09-07，第三棒）。依据：ANCHOR（唯一尺子）+ 两份细案 + 台账 + 两份交接。
+> 防的是什么：本手册自身不得长成"130 条边界"的新形态——它是指路索引，不是规则仓库（§8）。
+
+---
+
+## 0. 人话版：这会怎么样
+
+在这个项目里，一个想法要变成落地的机制，走的是一条固定管道：**先立尺子，再写细案，你拍板，然后逐步实施，验收，交接**。中间有两个闸门拦着乱来——机制没写细案不许开工（两段式），数字没有实测曲线不许定死（数据说话）。开发中冒出来的问题不怕攒，怕攒得没秩序：属于本阶段的当场消化，属于以后的登记排队，每条排队的问题**必须带触发条件**——什么事件会把它拉出来处理，没有触发条件的就是呆账。你随时翻开两份东西就能知道全部现状：台账（改了什么、为什么）和交接（现在走到哪、下一棒干什么）。本手册就是教下一棒怎么走这条管道、每份文档管什么、遇到问题停在哪。
+
+## 1. 流程总览（一条流）
+
+```
+想法/需求 → 人话版 → 细案（两段式第一步）→ 用户拍板 → 实施（逐步入场）
+         → 验收（判据达成 + 检验三问）→ 交接（下一棒任务写明）
+```
+
+**每个环节的规定动作：**
+
+| 环节 | 规定动作 | 闸门 |
+|---|---|---|
+| 想法/需求 | 用户点单；需求复述成一句人话（对准 ANCHOR 方向） | 对不上方向不做 |
+| 人话版 | **一切机制文档/细案/验收/交接开口先给「人话版：这会怎么样」**（铁律 3） | 先用一句话说清"用户会得到什么" |
+| 细案 | 两段式第一步：机制怎么设计、验收判据（可测）、**范围限制（本棒不做清单）**、拍板点显式列出、提案数字标注"提案"字样 | 见下"细案何时算可拍板" |
+| 拍板 | 用户过目；争议数字先出曲线/样本，后拍板（铁律 8） | 未拍板 = 草案 = 不得进入实施 |
+| 实施 | 按步骤入场；**每步三件事连着做：测试 → 部署 → 台账**（铁律 4） | 步子拆到"测试可验证"为止 |
+| 验收 | 判据逐条核对（有记录的证据，不凭印象）+ **检验三问过一遍**（ANCHOR §7） | 判据未达成不算验收 |
+| 交接 | 现状盘点 + 决策实录索引 + **下一棒任务写明**（用户明示） | 下一棒任务书必须存在 |
+
+**范围显式排除**（防问题积压进当前工作的闸门）：每阶段开工时显式写清"本棒不做"清单（范例：切片细案 §6 的 U1-U6）。边界外的问题一字不易地记入未决/台账、按依赖序排期（§6），不消化在当前阶段。"本棒不做"不是遮掩，是排期。
+
+**细案何时算可拍板**（判据，本手册补全）：
+
+1. 有**可测**的验收判据（不是形容词，是数字/行为断言，如"观棋侧出现第一条动态流条目"）；
+2. 有**范围限制**清单（本棒不做）；
+3. 拍板点**显式列出**（细案里单列一节）；
+4. 争议数字/契约**带曲线或样本**（数据先行，铁律 8）；拿不出数据的先标"提案"，走 §6 解法流程；
+5. 开口有人话版。
+
+不满足任何一条，细案退回补，不进入实施。
+
+## 2. 文档地图与职责分工
+
+> **接手第一入口 = 仓根 `STATE.md`（唯一活状态文件，leg106 起）。**
+> **它只写"当前值"**：① 三十秒版 ② **当前权威读数（唯一出处）** ③ 红线与规矩 ④ **唯一的活儿清单** ⑤ 上一棒 ⑥ 现场与发布流程。
+> 2026-09-11「文档重塑」立的规矩是**对的**（入口页 + 索引 + 全文按需查，不许预读全库），
+> 但三根支柱**在 105 棒里全部失效且没有自检**（leg106 实测）：
+> - **入口页膨胀**：`docs/START-HERE.md` 自订 ≈5 KB 上限，实测 **291,822 字节 = 超标 58 倍**，末行还在写"这份文件要保持短"；
+> - **索引漂移**：`LEDGER.md` 最新一行 = leg98，`docs/ledger.md` 已到 leg105（**缺 7 棒**），而"全文加一行索引加一行"的纪律连续七棒没执行；
+> - **尺子化石化**：`ANCHOR.md` 顶部的进度自述停在 leg26（落后 80 棒），却被列为"接手先读"。
+> ⇒ 治法（leg106）：**新增"当前值"的单一住处 + 一个守门的；历史文件只加墓碑、不修改内容**（"不修正过去，只标注过去"）。
+> 守门：`node scripts/audit-docs.mjs`（生成 `docs/index.json` + 核 STATE.md 与源码/README 逐项相同）。
+
+| 文档 | 职责（性质） | 何时建 | 何时更新 | 谁拍板 |
+|---|---|---|---|---|
+| `STATE.md`（仓根） | ★**接手第一入口（唯一）**：当前权威读数（§1，**唯一出处**）+ 红线与规矩 + **唯一的活儿清单** + 现场与发布流程 | leg106（2026-09-21） | **每棒交接时改值**；硬上限 20 KB；**不许长成按棒存档**（守门会红） | 用户 |
+| `docs/index.json` | ★**机器可读索引**（唯一生成物）：每棒 leg/date/title/交接路径/台账行号 + 当前读数 + 体积清点。答"哪个 leg 覆盖主题 X"靠它，**不靠读 922 KB 全文** | leg106 | `node scripts/audit-docs.mjs` 重新生成（**别手改**） | 生成物，无拍板 |
+| `docs/ledger.md` | 工程台账**全文**：变更与决策实录（改码三件事之三） | 首个变更时建 | **每次改码/决策/实测补一行**（★**它才是唯一台账**；索引职能已交给 `docs/index.json`，不必两处都写） | 记录即可，无拍板 |
+| `LEDGER.md`（项目根） | 🪦 **已冻结的历史索引快照**（停在 leg98，单行最长 8,556 字符）。只读 | 文档重塑（2026-09-11） | **不再更新** | — |
+| `ANCHOR.md` | **唯一尺子**：方向、架构轮廓、已定规则、未决点、决策记录 | 开工前建 | 🪦 **头部进度自述已冻结于 leg26**；§0–§7 的规则仍然有效、只读 | 用户 |
+| `docs/*-spec.md` | 机制细案：设计 + 步骤 + 验收判据 + 范围限制 | 机制新增时建（两段式第一步） | 拍板时定稿；验收通过后状态行更新；实施偏差记台账 | 用户 |
+| `docs/session-handoff-*.md` | 交接：现状盘点 + 下一棒任务书（★**待办只许引用 `STATE.md` §3，不许复制**） | 每棒结束时建 | 每棒一份，接力 | 用户（任务书内容） |
+| `docs/dev-process.md` | 本手册：流程怎么走、文档管什么、问题停在哪 | 第三棒建 | 交接棒发现手册与现状脱节时更新；**新增纪律须用户拍板** | 用户 |
+| `docs/START-HERE.md` | 🪦 **已冻结的按棒存档**（291 KB；L1–L83 按棒段 + L935 之后旧"入口页"正文） | 文档重塑（2026-09-11） | **不再更新**；里面的读数一律是历史值 | — |
+| `docs/handoffs/` | **归档区**：历史交接（leg2–leg27；当前交接留在 `docs/` 根作入口） | 知识库实施（2026-09-10） | 交接归档时移入并全局更新引用路径 | 用户 |
+| `docs/archive/` | **归档区**：已结稿（已定案报批包/敲定稿/讨论稿/草稿） | 知识库实施（2026-09-10） | 判定"已结/历史"即移入并更新引用 | 用户 |
+| `docs/decision-index.md` | **决策速查**：日期/决策/出处一行索引（细节回 ANCHOR §6/台账/细案状态行） | 知识库实施（2026-09-10） | 决策定案时补一行（与台账同批，铁律 4） | 记录即可，无拍板 |
+
+分工原则：**ANCHOR 保持短**（尺子不长肉——它已冻结）；**`STATE.md` 只写当前值、不长肉**（守门 20 KB 硬顶）；细案是机制的唯一设计载体（两段式）；`docs/ledger.md` 是唯一变更实录；**`STATE.md` §3 是唯一活儿清单**。文档地图只写在这里，不写入 ANCHOR（用户 2026-09-07 拍板）。
+
+
+## 3. 纪律清单（铁律九条 + 检验三问）
+
+每条都给"为什么"与"违例表现"。违例不是过错，是警报：任何一条被违反，先停下来问那条为什么存在。
+
+1. **没命令不动代码；机制新增两段式（先细案后实施）。**
+   为什么：旧项目 24 天 525 提交 683 测试，死于计划追着实弹问题跑——没有细案的实施=规则追着 bug 跑。违例：绕过细案直接改代码/加机制；"顺手加个小功能"。
+
+2. **上限/阈值先报批（提案标注后生效）。**
+   为什么：数字拍脑袋就是第二套债；所有预算/上限/衰减数字都是提案态直到曲线+报批（GC ≤2/≤15/≤5、4k 预算、8tick/-2%……）。违例：把提案值写进代码当定案、报批前悄悄生效。
+
+3. **一切机制文档/细案/验收/交接开口先给「人话版：这会怎么样」。**
+   为什么：文档第一读者是人；看不懂的机制文档等于没写；人话版还是"方向对不对"的第一道检验。违例：以术语开头的机制文档；验收报告没有判据对照。
+
+4. **改码三件事连着做：测试 → 部署 → 台账。**
+   为什么：每个变更带三个证据——能跑（测试）、能进系统（部署）、能回查（台账）。缺一件 = 变更没完成。违例：只改代码不补测试；改了不记台账（台账就是决策实录，不是仪式）。
+
+5. **审批=never：沙箱拒绝即终局，不越权重试。**
+   为什么：环境即纪律，审批策略是用户拍板的不可谈判项；绕过沙箱的尝试本身就是违例。违例：被拒后找替代路径/换工具重试同一操作。
+
+6. **先 read 再 edit 被改过的文件。**
+   为什么：多棒接力，文件状态属于上一个写下它的人；凭印象编辑会覆盖他人的现场。违例：不 read 直接 edit/write。
+
+7. **任何决定过一遍检验三问（ANCHOR §7）。**
+   三问：① 这个做法让世界**更像自己会转的棋局**吗？② 让**分量更接近客观**吗？③ 让**棋局更看得见**吗？对不上，就不做。违例：拍板不问三问；拿三问走形式。
+
+8. **数据说话：阈值/契约争议先出实测曲线/样本，后拍板。**
+   为什么：本棒两次实证（落子契约经活档实测定稿、GC 数字经冒烟曲线备报批）都是靠数据取胜；凭感觉拍板是 130 条债的入口。违例：凭直觉定契约/阈值；争议不下场实测直接争。
+9. **分层归属：任何修复必须声明所改层。**（第三棒新增，2026-09-07 用户拍板）
+   为什么：补丁式开发的来源不是"缺口存在"，而是缺口被发现时修在**错误的层**——裁决逻辑塞进 render、schema 例外写进 settle 的 if，层间之债越缝越厚。层定义与成员见 §9：契约层（schema/模板/打包序）/ 引擎层（纯函数结算）/ 渲染层（streams）/ 编排层（tick/传输）。修复落错层 = 补丁；一个修复被迫改两层 = 接口缺了，该修契约而不是缝。违例：修复不标层；把契约问题缝进引擎层；跨两层的修复不走细案。
+
+## 4. 质量防线
+
+- **黄金样本三锁**（`test/golden-slice.test.js` + `golden-world.min.json`）：
+  ① **引擎确定性逐字节锁**——同输入同世界步 → 结算输出逐字节一致（结算管线的不可变性之证）；
+  ② **标准 tick 锚点锁**——黄金世界跑标准 tick 后各锚点字段精确一致；
+  ③ **体积锁 [400, 4000]**——序列化体积防膨胀也防缩水（SSOT 漂移早报）。
+- **真 schema 强制**：模型输出必须过 `schema.js` 校验（SSOT 形状 + 世界步形状），非法即拒、**世界如实不动**（首跑 8/8 被拒就是它拦住的）。模型行为类问题（字段名漂移、null 越界）靠 **prompt 内嵌显式 JSON 模板**修（v2-slice-s4-2 教训：JSON 结构由 prompt 显式模板约束）。
+- **冒烟常设**：`src/smoke.js` 50 tick 合成连跑 + 断言器（输入恒 ≤ 预算 / 存储增长有界 / GC 数字实证 / 分量不发散 / 零非预期警告），升级路径为长跑防线 §2.5 的 100 tick 常设工具。
+- **纯函数不可变性**：结算管线（settle/pack/trim）全部纯函数、输入不可变；可回归、可逐字节锁。
+- **已入队的补强**（本棒提出、未实施、走 §6 流转）：
+  ① **模型输出快照 fixture**——真模型两轮实测的原始输出落盘成 fixture，引擎对历史真实输出跑回归。理由：真模型回归不能自动化（要密钥/花钱），74 个测试只锁引擎、锁不了模型；快照是零成本补偿。
+  ② **事件每 tick 产率上限**——新生盘算有 ≤2/回合，事件没有上限（旁观演示波及链双线并进、一轮 18+ 条）；"死"半缺闸，**已定案 ≤6/tick**（2026-09-07 报批支线 #12；曲线 max 4 开局/稳态 1，台账 L51/L54/L65）。
+
+## 5. 工具与命令手册
+
+- **运行位置**：`F:\deepseek\plugins\story-world-v2`（Node 24+，纯源码形态、零依赖、无构建）。
+- **测试**：`node --test`（**必须无参**——Node 24 下目录参数会被当模块加载；**且必须在插件目录内运行**）。
+  ★**当前基线不写在这里**——它是"当前值"，唯一出处是 **`STATE.md` §1**（由 `node scripts/audit-docs.mjs` 对着源码与 README 核）。
+  来历沿革见 `docs/ledger.md`（本手册此前把 `471/471` 写死在这里，leg106 复查时它已落后到无从对照——**又一个"读数多副本"**）。
+  ⚠ **在仓库根（`F:\deepseek\plugins`）跑会扫到整棵树**：Node 的 `--test` 不带路径参数时递归找 `*.test.js`，
+  会连带跑到 `backups/`、`harness/`、旧项目 `story-world` 的测试（实测 **7367 条、8 条红**，全与本项目无关）。
+  ⇒ **只在这个目录内跑**（那时是 1096 条全绿）。
+- **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——**部署位**：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（第十三棒落位，台账 L96；v1 同层同法先例；web/ 改动免重复拷贝，ST 页面刷新即载）；重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
+- **演示**（`node demo/<名称>.js`，在项目根目录运行）：
+  | 脚本 | 用途 |
+  |---|---|
+  | `slice-demo.js` | 切片验收证据：最小活棋盘一个完整 tick + 双流输出 |
+  | `smoke-demo.js` | 50 tick 合成冒烟曲线（输入/体积/GC 数字实证） |
+  | `live-demo.js` | 真模型活演示（玩家中心）：8 回合连跑，终局编年/盘算总览 |
+  | `bystander-demo.js` | 旁观者演示：旁观指数统计（世界自转实证） |
+  | `diag-transport.js` | 传输诊断：env/酒馆预设解析链路排障 |
+  | `capture-demo.js` | 真模型输出快照落盘（`--world live|bystander|player`；jsonl 可转制回归 fixture） |
+  | `convert-snapshots.js` | K23 快照转制器：snapshots/*.jsonl → test/fixtures/snapshots/*.json（重放回归 fixture，产出即再生成） |
+  | `export-world.js` | 演示桥（第十三棒）：fixture JSON / 真跑快照（jsonl 末行 world，旧快照无 world 链）→ K35 导出包（`--ticks N` 合成演化补多轮内容；SHA-256 回读自检，不过关不落盘）；ST 面板「设置→导入」装热账 |
+  | `status.js` | 一键状态总览（阶段/健康度/模块覆盖/队列；只聚合活事实，不添状态） |
+- **真模型传输**（`resolveWorldTransport()`）：env 优先 → 酒馆预设直读兜底 → null 则只能假传输/合成。
+  - env：`ST_OPENAI_BASE` / `ST_OPENAI_KEY` / `ST_WORLD_MODEL`（回退 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL`）。
+  - 酒馆预设：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\data\default-user\settings.json`（可用 `ST_SETTINGS_PATH` 覆盖）；递归定位旧插件 llmPresets 节点取活跃预设；base 自动归一化补 `/v1`。
+  - **密钥纪律**：运行时本机读取，不落库、不打印、不进代码。
+- **活档**（对照实验用）：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\data\default-user\chats\大荒z\大荒z - 2026-09-01@00h37m41s559ms.jsonl`——**一律先 cp 副本再解析**（铁律级别的现场纪律）。
+- **排障顺序**：`diag-transport.js` → 看台账 → 看交接 §5——前两份交接的环境节就是当时的排障手册。
+
+## 6. 未决点流转规则（两半：停车纪律 + 解法流程）
+
+**停车纪律（本棒拍板补全）**——问题怎么"攒"得有秩序：
+
+1. 发现问题的瞬间（实测/评审/用户追问）先问：**属本阶段吗？** 属内 → 当场消化（测试→部署→台账）。属外 → 登记。
+2. 登记一条未决点，**必须带三件套**：**触发条件**（什么事件把它从队列拉出来）、**拍板人**（通常 = 用户）、**前置数据**（要什么曲线/样本先备）。
+3. 没有触发条件的未决点 = 呆账（台账上没人认领的负债）——发现呆账就补触发条件或当场裁决（做/不做/改期）。
+4. 范围排除清单（§1）是"防积压进当前工作"的闸；本规则是"防积压变成坏账"的闸。
+
+**解法流程**（已有，交接 §8.6）：`提案 → 曲线/样本 → 报批 → 生效 → 台账回填`。已走通的范例：
+- 落子契约 v1：活档 17 样本 → 实测六发现 → 定稿（契约=数据流仲裁的赢家）；
+- GC 数字：≤2/≤15/≤5 暂定生效 → S7 冒烟曲线已备 → 正式报批待办。
+
+**当前队列快照（2026-09-07，按依赖序）：**
+
+| 未决点 | 状态 | 触发条件 | 前置数据 |
+|---|---|---|---|
+| 分量引擎细案 | **已拍板（P1-P7 全案）· K1-K12 实施完成（2026-09-07）** | —（已办结） | 判据全达（K1-K12 全绿 128/128）；静默双面无痕=K2 gate、静止衰减=K3、因果一致性报警=K5；数字正式报批随报批支线 |
+| GC 数字正式报批 | **已定案（2026-09-07 报批支线 #1-3）** | —（已办结） | 冒烟曲线（≤2 新生/≤15 在飞/≤5 宏大、输入峰 199/4000t）；台账 L44/L65 |
+| 设定注入缺口（未决点 4） | **已办结（2026-09-07 第八棒：T1-T6 拍板 → K24-K29 全入，判据 A-1..A-8 验收通过）** | —（已办结） | 备料已做：v1 `abstractCanon` 产出格式/书指纹缓存机制已归档（细案附录 A）；实施轨迹：台账 L67-L74；抽取面（prompt/净化）与初始化接线随 ST 阶段（T6 范围） |
+| 大势层数字正式报批（熵泵节奏/键表/带值/漂移步 + 强度算法参数 + TIDE_CAP） | **已定案（2026-09-08 报批二批 #1-13**；#14-16 注入词表撤销 → 细案 §3.4 v1.1 LLM 解析版，T7 已拍） | —（已办结） | 100t 曲线：熵泵种子 ≥8、强度域 [0,1] 多变且冷档衰减、挂因 ≥2、预算内零警告（台账 L70-L73/L81） |
+| 事件产率上限 | **已定案（K19 实施，2026-09-07 报批支线 #12）** | —（已办结） | 分布曲线在案（细案 §1：max 4 开局 / 稳态 1）；台账 L51/L54/L65 |
+| 模型输出快照 fixture | **已实施（K23：转制器 + ×8 fixture + 重放回归；2026-09-08 bystander 补跑入面缺口①闭合 + capture-demo 升级缺口②闭合——每 tick 落 world、重放接续 + 世界对照锁，台账 L83-L84）** | —（已办结） | 局限实录（台账 L58）：夹具补丁前 2 份为历史文物、旧快照无中间世界如实跳过；升级后新快照带 world 全链入面（下次真跑即生效） |
+| 玩家档案细案（原"玩家棋子入账"设计缺口） | **已拍板（P-A~P-F 全案）· K8-K12 实施完成（2026-09-07）· 影响系数/初始 attrs 已定案（报批支线 #4-9）** | —（已办结） | P-1..P-7 判据全达（128/128）；K11 曲线在案（台账 L32）；玩家 attrs 自动注入触发=设定注入管线（未变） |
+| K4 注入掩码真值 | **已解挂（K10：观察者=玩家，无玩家降级全见）** | — | V6 数值序断言锁定（streams.test） |
+| 方向相悖报警（K5 减项） | 未实现（无胜负裁定语义） | 薄裁定胜败语义拍板（因果链/大势层两阶段已过未触，维持候补——不随阶段自动触发） | 薄裁定只按量不产胜负（ANCHOR 未决点 3 之魂） |
+| K7 真模型实测 | **回填完毕**（live 8t + bystander 8t：8/8 schema 过、警告分类、门控真跑实证、V8 未停摆断言；夹具种子权重已在真跑发现后修补） | — | V1/V2/V8 真模型对照素材齐（快照 ×3 在 snapshots/）；转制 fixture 随因果链阶段 |
+| 盘算树（模型自主开新盘算） | **已拍板（T1-T4 全案）· K13-K17 全部入库· A-8 真跑回填完毕**（live/player 快照含自主提议 12 条；bystander 429 限流仅 1t，补跑待用户） | —（已办结） | K13-K17 施工序 + 判据 A-1..A-8；动机证据：K7 真跑"行动↔盘算不一致" |
+| 掩码观察者方向（评审发现：实施与拍板句意相悖——P-5"low weight→远事不可见" vs 实施 m=src/obs 低分量更可见；obs→0 断崖） | **已定案（2026-09-07：保留比值方向 + 存在感门 ε=0.05 报批支线 #10）** | —（已办结） | 台账 L42/L65；P-5 句意按实施口径理解 |
+| 取消通道（生命周期"取消"态，§3④ 六态补全） | **已实施（K18 契约 + K22 裁决全链）** | —（已办结） | 轻量版落地：模型提议放弃（带理由）→ 引擎无条件裁决终结 + 编年 + 托孤 + plot 联闭；与 T3 不冲突（模型只有提议权，引擎裁判） |
+| 暗处渲染（concealed 叙事暗度） | **已实施（K21：编年侧三型抑制）** | —（已办结） | 抑制面=adv/委派/兑现；上桌=事件/终结三态/拆环/联闭；数据窗口不变（ANCHOR §6 拍板原文） |
+| 其后按 ANCHOR §6（因果链强化 → 设定大势层 → 双流 UI） | — | — | 因果链强化（事件闭环/裁剪）→ 设定大势层（含熵泵摩擦制造、冻结/演化层分离）→ 双流 UI（ST 集成、异步化、里程碑视图） |
+| 未决点 1 深化 | 已知限制 | 提取调用增强时 | 条件句/多意图样本（活档已见"等灵脉得了后"） |
+| 因果链视图 + 编年过滤器 | **已办结（K39-K42 实施完成，2026-09-08；305/305；ST 实机冒烟待用户环境）**（`docs/chronicle-chain-view-spec.md`） | ST 面板实机冒烟（筛选/链入口/阅卷三动作） | 零新增提案数字；数据面实读完毕（settle 14+entropy 2 编年写行点 / links.up 单向语义 / 里程碑段级聚合 / 卷 fromTick-toTick 区间映射） |
+| 文档知识库（docs 归档 handoffs/archive + §2 文档状态表 + decision-index 决策速查 + 细案生命周期收敛） | **已办结（leg106，2026-09-21）** | — | 落地为：`STATE.md`（当前值唯一住处）+ `docs/index.json`（机器可读索引）+ `scripts/audit-docs.mjs`（守门）+ 三份历史文件加墓碑。★本行此前长期标着"待办（2026-09-09 用户令：仅登记不实施）"，而 `decision-index.md` / `docs/handoffs/` / `docs/archive/` **早已存在** ⇒ **"待办"本身也会过期**，这是文档守门存在的理由 |
+| 长战线可用性（首跑自检 / 测试连接 / 可取消 / 忙态 / 复制诊断 / web 接线端到端判据） | **待办**（leg106 登记，未做） | 用户点头 | **出处在 `STATE.md` §3**（活儿清单唯一一份就是它，本表不再复写） |
+
+**钻层盘点（2026-09-07 起的方式，新增建议可砍）：** 机制细案开工前，对相关链路向下钻一层，暴露项三类归类——**执行债**（已拍板未实现，排期顺手清）/ **设计缺口**（补细案或入队）/ **实现细节**（就地处理不设计）。本次盘点结果：
+
+| 项 | 类别 | 排期 |
+|---|---|---|
+| 满步强制结算败露/变形分支 | 执行债 | 分量引擎阶段结算改动期（K 序顺手） |
+| agenda.memory promises/blocked 写入路径（拆环受阻落 blocked） | 执行债 | K2 门控期（拆环语义关联） |
+| events.closed 关闭路径（事件闭环已知限制的执行面） | 执行债 | **已清（K9 最小面 → K19 闭环三型：源结清/链尾结清/常驻保留 + closedAt 落账）** |
+| 玩家尝试兑现机制（§4.7① 时差规矩补全——"结果归模拟器"现实际归主调用） | 设计缺口 | 玩家档案实施完成（K9 影响通道已立、兑现通道接线占位）；细则排队——触发=兑现通道设计拍板 |
+| 玩家 attrs 初始自动注入 | 设计缺口 | 设定注入管线落地（大势层阶段） | 当前手动（玩家档案细案 P-B）；抽象管线复用旧插件 |
+| 实体生灭（新实体来源 + 实体池无界——盘算有 GC 实体没有） | **已办结（K37 实体治理，2026-09-08；325/325，台账 L120）** | — | status 契约/newEntities/entityFates 带源三通道/对话依据册/覆灭复核/背景化 GC+复归/三点过滤/席位 32（细案 §3.7，A-10..A-12 全达；数字组提案态随 K38 报批） |
+| 主调用超时 / max_tokens（长输出截断、挂起无降级） | 设计缺口 | 编排层（ST 集成/异步化阶段） |
+| 别名扩充路径 + object 侧代词消解 | 设计缺口 | 提取调用增强（未决点 1 深化） |
+
+**"细案何时算可拍板"判据见 §1**——特殊地：契约/阈值的争议，判据里"数据先行"那条就是为它立的。
+
+## 7. 红线（不可谈判；ANCHOR 引文原样收录）
+
+1. **主角无特殊路径。** ANCHOR §0：“没有‘主角’类别，玩家只是**一枚由你控制的棋子**，分量按客观状态计算”；§4.7③：“主角行动只能从对话提取；模拟器永不写主角行动，只写世界对他的影响”。引擎对"主角"**无任何特殊代码路径**——这是 ANCHOR 的灵魂（交接 §7 原文）。实施注意：主角被撤销后，它的影子是"叙事焦点惯性"，分量引擎验收必须验**双面无痕**（§6 队列首行）。
+2. **冷历史出 SSOT。** 账只记"算分量、驱动棋局、支撑窗口"要用的（ANCHOR §2 复盘结论 3）；冷历史轮转出库（长跑防线 §2.2），**因果指针保留**——割断的是账本里的冗余，不是链条。
+3. **剪枝只砍文本，不砍语义。** 长跑防线 §1：“归档割断的是喂给 LLM 的文本，不是链条本身”；agenda 记忆由**引擎**维护，不由 LLM 生成（幻觉记忆比遗忘更糟）。
+4. **"客观分量"的表述边界（本棒补强，已同意）。** 分量的"客观" = **确定性计算 + 有界输入**：属性增量由模型提议、引擎只做边界钳制（薄裁定器）；文档表述不写"模型不参与"——引擎不参与的是决策，上游属性仍出自模型提议，钳制不卡方向可信度（对偶报警见 §6 队列首行）。
+
+## 8. 本手册自身纪律（防流程硬化）
+
+- **本手册不发明新流程**：只记录已被拍板/被实测验证的运作方式；新增或变更纪律，须经用户拍板并记台账。
+- **本手册是索引不是仓库**：机制细节归 ANCHOR/细案/台账，手册只指路（§2 分工原则）。任何一章若新增超过一屏的"例外条款"，先停，回检验三问。
+- **维护触发**：交接棒发现手册与现状脱节（新机制落地、文档增删、命令变化）时更新，更新记台账。
+- 旧项目死于 130 条边界堆叠；本手册的验收判据只有一条：**下一棒按它走，不必再发明流程，也堆不起规则。**
+
+## 9. 模块地图与分层归属（第三棒新增，2026-09-07 用户拍板）
+
+**分层归属表**（铁律 9 的层定义）：
+
+| 层 | 成员模块 |
+|---|---|
+| 契约层 | `schema.js` + `schemas/*`（SSOT 形状、世界步形状）、`prompts.js`（模板）、`pack.js`（打包序） |
+| 引擎层 | `check-step.js`、`worldstep.js`、`settle.js`（+ 分量引擎起 `weight.js`、`gate.js`） |
+| 渲染层 | `streams.js`、`render.js`（K33+） |
+| 编排层 | `tick.js`、`transport-http.js`、`st-preset.js`、`smoke.js`、`transport-config.js`、`abstract.js`、`storage.js`（K35+）、`async-tick.js`（K36+）、`web/index.js`（浏览器侧，K30+）、`web/idb-backend.js`（浏览器侧卷库，K35+） |
+
+> 🪦 **已删除的两个（2026-09-25 复查 · 别再当现状读）**：`player-inject.js` 与 `player-setup.js`
+> 由 **leg25c**（"四维浮点属性整条删除"那一棒）**两个模块整个删除**（`docs/handoffs/session-handoff-2026-09-11-leg25c.md` §4）。
+> ⇒ 本表上方与下面模块地图里那两行是**留档**，不是现行分层。
+
+**模块地图**（职责 / 契约 / 状态；状态：稳定=切片验收，计划=已拍板细案内；测试列 = 静态测试契约文件，用例数以 `node demo/status.js` 动态聚合为准；最近台账列 = 该模块最近一次变更步骤名）：
+
+> 🪦 **2026-09-21 · leg106 复查：本表的覆盖已明显落后，别当完整清单用。**
+> 实测：`src/` 现有 **44** 个 `.js` 模块，本表 + §9 分层表提到的只是其中一部分；
+> **以下 18 个模块在本手册里根本没有条目**（按字母序）：
+> `abstract-shape` · `abstract-tier` · `entity-lookup` · `init-source` · `limits` · `panorama` ·
+> `param-hub` · `params` · `param-store` · `position` · `ref-rules` · `render-base` · `sanitize-step` ·
+> `seed-roots` · `snapshot` · `tag-extract` · `undo-stack` · `unrest`；
+> ★**又少了两个**：`memory-bridge` 与 `recall` 由 **leg125**（那条通道整条拆除）**从盘上删除**
+> ⇒ 已从上面那串里移出（`docs/done-archive.md`：leg125 已办结；`test/module-layout.test.js` 那条棘轮也锁着）；
+> ★本段那个"现有 44 个 `.js` 模块"是 **leg106 的化石**——现行模块数以 `test/module-layout.test.js` 为准，别引用它。
+> 同理 `web/` 的 13 个模块里，本手册只列了 `index.js` 与 `idb-backend.js`。
+> **可靠的三条替代路径**：① `STATE.md`（现状）② `docs/index.json`（按主题反查是哪一棒做的）
+> ③ 直接读模块头部注释——本仓的模块注释写得比这张表详细（每族都带 leg 号与踩坑留档）。
+> **本表不再逐格回填**（那是又一份会漂的副本）；要更新只在"新增模块必须留头部注释"这条纪律上加码。
+
+| 模块 | 职责 | 契约（输入 → 输出） | 依赖 | 状态 | 测试 | 最近台账 |
+|---|---|---|---|---|---|---|
+| `schema.js` | 迷你校验器（零依赖、全错误列表） | (文档, 形状) → 错误列表 | — | 稳定 | schema.test.js | S2 · K2/K3/K5 扩展 |
+| `schemas/*.js` | 两份形状定义（SSOT / 世界步） | 形状常量 | schema.js | 稳定（K3 扩 lastActiveTick；K5 扩 actor/cause；K9 扩 playerAffected 审计；K18 扩 agendaCancels + milestones + events.closedAt；K24 扩 context.setting；K39 扩编年行 kind 章） | schema + golden/live/bystander/player 世界测试 + setting | S2 · K3 · K5 · K9 · K18 · K24 · K39 |
+| `extract.js` | 落子提取 | (对话, extractCtx) → 一条落子事实（OOC 滤除） | 词表/别名表 | 稳定 | extract.test.js | S3 契约定稿 |
+| `fingerprint.js` | 书指纹缓存：FNV-1a（v1 算法原样搬）+ LRU 有界 + 版本戳 | `bookFingerprint(text)` → 指纹串；`createCache(seed?)` → {get,set,size,keys}（命中=深拷贝返回） | — | 稳定（K26） | fingerprint.test.js | K26 |
+| `player-inject.js` | 玩家 attrs 自动注入（P-B 触发闭合；v1.1=LLM 解析版，T7 拍板；K32 增溯源账 v1.2）：玩家开档描述 → 一次小调用解析 | `injectPlayerAttrs(ssot,{playerDesc,parse,overwrite})` → 新 SSOT（有依据=解析值 [0,1] 钳制 / 无依据·失败=定案默认 #6-9 / 手填优先 / 幂等；overwrite 只覆盖 meta.playerParse 溯源账内键） | — | ★**已删除（leg25c）**（原标"稳定（K28 → v1.1 → K32 v1.2）"——★**文件已不在盘上**，此行是留档） | player-inject + player-setup | K28 · 第十棒 · K32 |
+| `pack.js` | 演化上下文打包（4k 预算 + 固定序 + 剪枝） | (ssot, moveFact) → {pack, text, estTokens} | — | 稳定（P3 已执行：不含分量，K2；K29 大势块——有 setting 取演化层强度 + 张力三件/环境量，无则回退数字） | worldstep + smoke + birth + backdrop-smoke | K2（P3） · K29 |
+| `prompts.js` | 主调用 prompt（八铁律 + 内嵌 JSON 模板） | pack → prompt 字符串 | OUTPUT_TEMPLATE（与 schema 逐字一致） | 稳定（v2-ripples-1：ripples=实体 id 显式化，第十三棒） | worldstep + streams 间接 + prompts（契约锁，第十三棒起） | S4 · K5 · K18 · 第十三棒 |
+| `check-step.js` | 世界步语义校验 | (step, world) → {ok, errors} | schema | 稳定（K18：agendaCancels 未知/已结算拒；K25：设定池保留键拒面） | worldstep.test.js + setting-guard | S4 · K18 · K25 |
+| `setting.js` | 设定池读写面：保留键空间判词 + 演化层写通道 + 张力强度 + 事件 id 契约解析器 | `isSettingRef(s)` → 布尔；`patchDynamic(setting,{key,delta})` → 新 setting（不可变、[0,1] 钳制）；`computeTensionIntensity(world,tick)` / `updateTensionIntensity`（K29，提案参数）；`eventBornTick(id)`（settle 同源共用） | —（schema 无设定池写面） | 稳定（K25/K29） | setting-guard.test.js + backdrop-smoke | K25 · K29 |
+| `worldstep.js` | 主调用管线（传输注入 → 解析 → 真 schema + 语义校验） | ({transport, ssot, pack}) → {ok, step/errors} | check-step | 稳定 | worldstep.test.js | S4 · K5 用例 |
+| `await settle.js` | 结算管线纯函数 | ({ssot, step, moveFact}) → {ok, ssot, stage} | check-step, pack, gate, weight | 稳定（K19 闭环三型+产率 / K20 归档里程碑 / K21 暗处渲染 / K22 取消裁决 / K27 熵泵挂段+bornTickOf 数字段扫描 / K29 张力强度更新段；K39 编年行 kind 章 14 处盖章） | settle + golden + gate + cause + decay + weight-smoke + player + event-close + archive + shade + cancel + snapshot-replay + entropy + chain | K9 · K11 · K22 · K27 · K29 · K39 |
+| `entropy.js` | 熵泵摩擦制造：环境推演器 + 越阈落状态源事件 + 恢复闭环（细案 §3.5，全部数字提案态） | `pulseEntropy(world, tick, chronicle)`——每 ENV_TICK 一步、引擎生成器 | setting.js（写通道） | 稳定（K27；K39 编年行盖 state 章） | entropy.test.js | K27 · K39 |
+| `streams.js` | 双流渲染（观棋三行 + RP 注入） | (ssot, stage, move) → 双流文本 | — | 稳定（K10 解挂：注入掩码真值=玩家观察者；无玩家全见 P-E） | streams.test.js | S6 · K10 |
+| `chain.js` | 因果链展开器（K40，链视图细案 §3.2 → A-15）：事件链上承（ripple 逐跳 / plot 盘算弧线 / state 终节点 / 里程碑聚合穿透）+ 下沿全分支树 + 三态防御，引擎层纯函数只读 | `expandChain(world, rootId)` → `{ok, root, up, down}`（节点：event/agenda/milestone/state-root/gap/leaf-note/terminal） | setting（eventBornTick 只读） | 稳定（K40） | chain.test.js | K40 |
+| `observatory.js` | 观测台纯函数（K38，敲定稿 I 条）：三读数+参考——拒签率（simLog new/old 双口径）/ 坏账率（全量引用扫描含里程碑穿透）/ 驻留（状态分布+闲置分位+摸鱼名单）/ 远期引用探针；零调用零创作只读账 | `rejectionStats(simLog)` / `scanDanglingRefs(world)` / `residencyStats(world)` / `probeStepAges(step, world)` / `summarizeObservatory(world)` | setting（eventBornTick） | 稳定（K38） | observatory.test.js + storage.test.js（冷档链） | K38 |
+| `render.js` | 渲染核心纯函数（K33/K34）：六页签 HTML 渲染 + 玩家语言词典 + 黑名单（第十三棒：ATTR_HINTS 属性释义 + 无障碍 sr 通道；K41 编年五筛 + 珠链视图渲染） | `renderAll(world, {config, oldVolumes, view})` → {board, chronicle, archive, entities, setting, settings, header}（同输入逐字节一致；引擎 id 只进 title 悬停；A-6 设定页与 frozen 逐字段一致；view.chronicleFilter=五筛视图态，缺省全选） | entropy（BANDS/ENV_KEYS 只读） | 稳定（K33 → K34 HTML 面；K41 五筛/链视图） | render.test.js | K33 · K34 · 第十三棒 · K41 |
+| `tick.js` | 完整 tick 编排 | ({transport, ssot, dialogue, extractCtx}) → 结果 | extract/pack/worldstep/settle/streams | 稳定 | streams + smoke + live + bystander | S6 |
+| `transport-http.js` | OpenAI 兼容传输（env 配置、base 归一化） | ({baseUrl, apiKey, model}) → transport(prompt → 文本) | — | 稳定（超时/max_tokens 缺口入队） | transport-http.test.js | S6 |
+| `st-preset.js` | 酒馆预设直读（Node-only：node:fs 读 settings.json，浏览器侧不触达） | (settingsPath?) → 传输配置 | transport-http | 稳定 | —（diag-transport 工具覆盖） | 活演示·真跑 |
+| `transport-config.js` | 传输配置解析（K30，浏览器适配套）：设置对象 → 传输配置 | `resolveBrowserTransport(settings)` → {transport, source:'settings', baseUrl, model} 或 null（未配置） | transport-http | 稳定（K30） | transport-config + browser-compat | K30 |
+| `abstract.js` | 抽象管线执行器（K31）：书源→指纹→抽取小调用→净化→落 context.setting（frozen 五件套 + dynamic 初值）；命中零调用/书变失效/force 覆盖 | `extractWorldSetting({sourceText, extract, cache, force, extractedAt, legacyTension})` → {ok, setting, cached, fingerprint, errors}；`applySettingToSsot(ssot, setting)` → 新 SSOT（不可变） | fingerprint（缓存 1→2 形状）、entropy（ENV_KEYS 键表） | 稳定（K31） | abstract.test.js + browser-compat | K31 |
+| `player-setup.js` | 玩家开档解析接线（K32）：playerDesc → 小调用 prompt → transport → 解析 → injectPlayerAttrs；OVERWRITE force 语义 | `runPlayerSetup({ssot, playerDesc, transport, overwrite})` → {ok, ssot, skipped?, parsed?}；`buildPlayerParsePrompt(desc)` → prompt | player-inject、transport 注入式 | ★**已删除（leg25c）**（原标"稳定（K32）"——★**文件已不在盘上**，此行是留档） | player-setup.test.js | K32 |
+| `storage.js` | 存储层核心（K35）：热账形状 / 冷档轮转（编年超阈值→前置段入卷，断链防线=里程碑/因果留热态）/ 阅卷还原 / 导出导入验签（SHA-256） | `rotateChronicle(world,{limits,volumeSeq,now})` → {hot, volume\|null}（纯函数）；`hotAccountShape/loadHotAccount`；`volumeToChronicleRows(volume)` → 编年行；`buildExportBundle/verifyImportBundle`（async，双端 webcrypto） | —（store 注入面：浏览器=web/idb-backend，测试=内存 mock） | 稳定（K35） | storage.test.js | K35 |
+| `async-tick.js` | 异步可靠性编排（K36 → 第十三棒）：回合推进串行队列（防重入锁）/ 失败世界不动 / 异常兜底 / 手动补推语义（save 允许异步，await 后 refresh；save 抛错=落账失败回执可重试） | `createTickQueue({tick,load,save,refresh,onStatus})` → {advance, busy}（advance → {ok, tick?}/ {ok:false, skipped?, error?, save?}） | —（注入面：tick/load/save/refresh 全由调用方接；save 可 async） | 稳定（K36 → 第十三棒） | async-tick.test.js | K36 · 第十三棒 |
+| `web/idb-backend.js` | IndexedDB 卷库适配（K35，浏览器专属）：chatId+卷号键，接口与 store 注入面同构 | `createIdbVolumeStore(chatId)` → {list, put, get} | —（顶层零 indexedDB，Node 冒烟安全） | 稳定（K35） | —（storage.test 内存 mock 同接口覆盖） | K35 |
+| `smoke.js` | 合成冒烟 + 断言器 | 50/100 tick → 断言结果 | tick | 稳定（K6 泛化：stepGen + 门控统计 + 曲线采样；K11 增 dialogueGen 落子段；K20 归档后断言语义=台阶修订；K29 张力强度/熵泵种子采样） | smoke + weight-smoke + tree-smoke + backdrop-smoke | K6 · K11 · K20 · K29 |
+| `weight.js` / `gate.js` | 分量公式 / 主动作权门控 | 见分量引擎细案 K1/K2 | settle | K1-K6 已落（公式/衰减/掩码/半径/门控/审计，提案态）· K18 agendaCancels 透传与静默滤除 | weight + gate + decay + weight-smoke | K1·K2·K6·K18（leg24 片3 起那个数已退出判据：门控/镜头序/裁定全换结构事实，见 `docs/slice3-verdict-teardown-spec.md`；但 `computeWeight*` 尚有调用点——seed 预填 `abstract.js`、账面重算 `settle.js`、张力强度 `setting.js`、麾下成员序 `pack.js membersOf`，勿当"已无消费者"） |
+| `demo/status.js` | 一键状态总览（本表与台账的聚合视图） | — → 阶段/健康度/模块覆盖/队列 | 只读文档与源码 | 稳定 | —（自校验：node demo/status.js） | 第三棒 |
+
+**模块契约 = schema 边界**：各模块唯一共享物是 SSOT 形状 + 世界步形状 + prompt 模板（都在契约层）——契约变更走拍板（P4 即范例）。维护视角：地图定位模块 → 读该文件 + 它的测试 → 完成，不必读全项目。施工序按模块拆步（K1 weight.js → K2 gate.js → ……），跨模块的一步拆两步。
+
+---
+
+## 10. 发布流程（leg103 跑通两遍，leg106 首次收进仓；★leg140 从 `STATE.md` §5.1 搬来）
+
+> ★**为什么搬到这里**：这一格是**流程**（怎么做一次发布），不是"当前值"。
+>   而 `STATE.md` 有 **20 KB 硬顶**、只装当前值，leg139 收尾时余量只剩 **254 字节**（守门已黄）
+>   ⇒ leg140 把它整段搬进本手册，`STATE.md` §5.1 只留一句指路。
+>   ★与 leg106 立的那条纪律同源：**当前值只许有一个家；流程归流程文档。**
+
+**「导出独立根树 → 仓外独立跑判据与冒烟 → 推发布仓 → 远端逐字节核验」**，**全程不碰工作区**
+（那个目录同时是用户的真机安装位）。
+
+- 工具：`node scripts/publish-release.mjs`（导出 + 仓外跑 + 推）· `node scripts/verify-release.mjs`（远端只读终检）
+- ★**绝不重写工作区**；推送用 `git` 底层（`read-tree` / `write-tree` / `commit-tree` + 临时 index）。
+- ★**每一步先核对现状、条件不成立就停下报因**，不硬来；**幂等守卫要比"本笔真正改掉的那一处"**。
+- **★上线（第 4 步）**：`node scripts/verify-release.mjs`——**远端只读终检**（版本三处一致 · 构建号 ·
+  README 读数逐字 · 新基建在位 · 发布树里没有 `snapshots/` 与 `package.json` ·
+  **8 个文件逐字节同 blob 哈希** · tag/release 现状）。
+- ★**远端核验必做**：main 指向 · 构建号 · README 读数 · 关键改动真在远端 ·
+  ★**逐字节同 blob 哈希** · tag/release 是否动过。
+- ★**别把本地 `main` 直接推上去**（它与 `origin/main` 不是同一条线——见 `STATE.md` §3 那条残留纪律）。
+
+---
+
+*开发流程文档 · 2026-09-07 · 第三棒落盘（交接 §8 任务书）；2026-09-07 补铁律 9 + §9 模块地图 + §6 钻层盘点。下一动作：分量引擎细案已拍板，实施 K1-K7 待用户指令。*
+*★2026-09-27 leg140：新增 §10「发布流程」（从 `STATE.md` §5.1 整段搬来，理由见该节头注）。*

@@ -1,0 +1,14 @@
+# story-world-v2 · 本仓忽略项
+#
+# ★★leg106（2026-09-21）：**真跑快照不进库**。
+#   为什么：`snapshots/*.jsonl` 是 `demo/capture-demo.js` 落下的**真模型输出快照**，
+#   每行形如 `{"tick":1,"dialogue":"（旁观：我只看不做）","raw":"{…}"}`——
+#   **第一格是真实 RP 输入、第二格是模型原始输出**。它们此前**被 git 跟踪**，
+#   而本仓的 `origin` 是 public 的 monorepo（`huangkun666/story-director`）
+#   ⇒ 等于把作者的对局连同模型原文一起公开。
+#   ★注意口径：**发布仓（`huangkun666/story-world-v2`）的树里本来就没有 `snapshots/` 与 `docs/`**
+#     （leg106 实测 = 0 文件）⇒ 从 ST 安装插件的人拿到的**一直是干净的**；本笔治的是**开发仓**。
+#   ★保留在工作区：判据与冒烟**不依赖** `snapshots/`（它们跑的是合成世界与 `test/fixtures/`），
+#     但 `demo/convert-snapshots.js` 要拿它们转制 fixture ⇒ **文件留在盘上，只是不再入库**。
+#   复现口径：`git ls-files snapshots/` 应为 **0 行**。
+snapshots/

@@ -1,0 +1,51 @@
+{
+  "note": "落子提取实测样本：活档摘录（大荒z 2026-09-01 会话，只读摘录进测试夹具，不解析原件）。期望为手写判定（契约 v1 的正确答案集）。",
+  "context": {
+    "playerName": "黄坤",
+    "entityNames": [
+      { "name": "白小娥", "aliases": ["小娥"] },
+      { "name": "云松子" },
+      { "name": "掌柜" },
+      { "name": "龙蛋" },
+      { "name": "薛铁衣" }
+    ],
+    "objectNames": ["灵脉"],
+    "locations": ["临渊城", "青竹村", "边关", "商路", "云砂坊市", "江州", "大盘谷"]
+  },
+  "samples": [
+    { "id": "l5", "dialogue": "呸，在我搜刮完后让他滚了",
+      "expected": { "verb": "搜刮", "object": null, "location": null, "attempt": true } },
+    { "id": "l9", "dialogue": "离开这里",
+      "expected": { "verb": "离开", "object": null, "location": null, "attempt": true } },
+    { "id": "l17", "dialogue": "你是什么来路，我之前怎么从未见过你",
+      "expected": { "verb": "盘问", "object": null, "location": null, "attempt": true } },
+    { "id": "l19", "dialogue": "你躲我后面，我小声说",
+      "expected": { "verb": "掩护", "object": null, "location": null, "attempt": true } },
+    { "id": "l25", "dialogue": "听起来，似乎是的，我去看看吧，你呆在这别动",
+      "expected": { "verb": "探查", "object": null, "location": null, "attempt": true } },
+    { "id": "l27", "dialogue": "也罢，信你一次，带路吧",
+      "expected": { "verb": "跟随", "object": null, "location": null, "attempt": true } },
+    { "id": "l43", "dialogue": "白小娥，你这么一个弱女子怎么敢一个人出来走江湖的？我语气温柔地说",
+      "expected": { "verb": "询问", "object": "白小娥", "location": null, "attempt": true } },
+    { "id": "l49", "dialogue": "云松子前辈，你看这些值几何？",
+      "expected": { "verb": "询价", "object": "云松子", "location": null, "attempt": true } },
+    { "id": "l53", "dialogue": "有畜生盯上我们了，我去解决",
+      "expected": { "verb": "迎战", "object": null, "location": null, "attempt": true } },
+    { "id": "l55", "dialogue": "我背你，我们现在要找个安全的地方，既然是你提出来这里的，那么你来说",
+      "expected": { "verb": "背负", "object": null, "location": null, "attempt": true } },
+    { "id": "l61", "dialogue": "终于也算有个清净地了，白小娥，我要开始修炼了，你帮我护法",
+      "expected": { "verb": "修炼", "object": "白小娥", "location": null, "attempt": true } },
+    { "id": "l69", "dialogue": "此地亦不宜久留，小娥我们离开这里（剧情直接跳到十天后，我和小娥来到了一处清净之地）",
+      "expected": { "verb": "离开", "object": "白小娥", "location": null, "attempt": true } },
+    { "id": "l73", "dialogue": "“小娥...你喜欢了我吗”我严肃地看着她的眼神问道，“我黄坤不是乘人之危的人，所以我必须先要问你”",
+      "expected": { "verb": "询问", "object": "白小娥", "location": null, "attempt": true } },
+    { "id": "l91", "dialogue": "这是？？龙蛋？？乖，以后我就是你的主人了",
+      "expected": { "verb": "收服", "object": "龙蛋", "location": null, "attempt": true } },
+    { "id": "l139", "dialogue": "等这灵脉得了后，我便可一举突破元婴了",
+      "expected": { "verb": "图谋", "object": "灵脉", "location": null, "attempt": true } },
+    { "id": "ooc1", "dialogue": "（继续）",
+      "expected": { "verb": null, "object": null, "location": null, "attempt": false } },
+    { "id": "ooc2", "dialogue": "（继续，这是我跟你说的，不是角色说的）",
+      "expected": { "verb": null, "object": null, "location": null, "attempt": false } }
+  ]
+}
