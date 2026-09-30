@@ -298,7 +298,7 @@ test('★leg150 接线：初始化把并进来的根直接落账，并进来的�
 // ⑥ 改了问法 ⇒ 缓存版本戳必须同批抬（leg141 ㉟ 的同款耦合）
 // ══════════════════════════════════════════════════════════════════════════════
 test('★★leg150 耦合：抽取的问法变了 ⇒ `CACHE_VERSION` 必须同批抬（否则老书命中旧缓存，新问法一次都不会被行使）', () => {
-    const fpSrc = read('../src/fingerprint.js');
+    const fpSrc = read('../src/fp-hash.js');
     const ver = Number((/CACHE_VERSION = (\d+)/.exec(fpSrc) || [])[1]);
     assert.ok(Number.isFinite(ver), '★`CACHE_VERSION` 必须取得到（它是这条耦合锁的一头）');
     assert.ok(ver >= 4, `★这一笔同时改了"删设定"与"并起根"两处问法 ⇒ CACHE_VERSION 必须 ≥4（现为 ${ver}）`);

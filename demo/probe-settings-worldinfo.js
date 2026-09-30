@@ -3,7 +3,7 @@
 // （键/globalSelect/各世界条目数/与 worlds 文件内容指纹对比）+ 大荒z 聊天头 chat_metadata.world_info。
 // 用法：node demo/probe-settings-worldinfo.js
 import { readFileSync } from 'node:fs';
-import { bookFingerprint } from '../src/fingerprint.js';
+import { bookFingerprint } from '../src/fp-hash.js';
 import { composeInitSource } from '../src/init-source.js';
 
 const SETTINGS = 'F:/jiuguanai/SillyTavern-Launcher/SillyTavern/data/default-user/settings.json';

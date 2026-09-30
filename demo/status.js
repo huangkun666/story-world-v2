@@ -20,7 +20,7 @@ const TEST_MAP = {
     'schemas/ssot.schema.js': ['schema.test.js', 'setting.test.js', 'golden-slice.test.js', 'live-world.test.js', 'bystander-world.test.js', 'entity-governance.test.js'],
     'schemas/world-step.schema.js': ['schema.test.js', 'entity-governance.test.js'],
     'extract.js': ['extract.test.js'],
-    'fingerprint.js': ['fingerprint.test.js'],
+    'fp-hash.js': ['fingerprint.test.js'],   // ★leg159c 改名：原名 `fingerprint.js` 撞 EasyPrivacy 那条规则
     'player-inject.js': ['player-inject.test.js'],
     'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js', 'backdrop-smoke.test.js', 'entity-governance.test.js', 'observatory.test.js'],
     'prompts.js': ['worldstep.test.js', 'streams.test.js', 'entity-governance.test.js'],

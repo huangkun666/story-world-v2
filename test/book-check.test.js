@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkBookSource, bookChangedStatus, rebaselinedStatus, bookChangedBannerHtml, REBASELINE_ACTION, REBASELINE_LABEL } from '../src/book-check.js';
 import { composeInitSource } from '../src/init-source.js';
-import { bookFingerprint } from '../src/fingerprint.js';
+import { bookFingerprint } from '../src/fp-hash.js';
 import * as bookSource from '../web/book-source.js';
 import { createBookRebaselineHub } from '../web/book-rebaseline.js';
 

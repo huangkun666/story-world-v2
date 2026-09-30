@@ -4,7 +4,7 @@
 //   node demo/match-source-fingerprint.js [世界书json路径] [导出世界json路径] [角色卡png路径]
 // 输出：条目数/总字符/各口径指纹（书纯拼 vs 书+卡四件套；浏览器合订缺省防御上限=500k）。
 import { composeInitSource } from '../src/init-source.js';
-import { bookFingerprint } from '../src/fingerprint.js';
+import { bookFingerprint } from '../src/fp-hash.js';
 import { readFileSync } from 'node:fs';
 
 function pngCardJson(path) {

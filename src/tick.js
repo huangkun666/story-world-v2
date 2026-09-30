@@ -318,9 +318,14 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     //   ★只在**真有丢/有截**时才加这个尾巴——没丢就一个字不多说（读数行本身已经够挤）。
     //   ★为什么必须出声：用户选了"只靠聊天模型"这条路 ⇒ 模型漏写、或值在正文里找不到，
     //     都会让"这一轮少记了东西"，而那**不能是静默的**（本仓最忌的失效形状）。
-    const dlgNote = (dialogueStats.dropped || dialogueStats.capped)
-        ? `正文落账 ${dialogueStats.events} 件（丢 ${dialogueStats.dropped + dialogueStats.capped} 件）`
-        : null;
+    //   ★★★leg159：**空转那几件也要出声**（用户令「值没变就不落账」）。
+    //     病（真账实测）：同一句【变化】连着三轮重复落账 ⇒ 三件同名事件；治了之后那一轮
+    //     "正文里有 2 条【变化】、账上一件没多"⇒ 不说清，玩家会读成"插件又漏记了"。
+    //     ★措辞要**如实**：它**不是**丢（丢＝那条没法用），是**本来就没发生新事**——两笔分开报。
+    const dlgBits = [];
+    if (dialogueStats.dropped || dialogueStats.capped) dlgBits.push(`丢 ${dialogueStats.dropped + dialogueStats.capped} 件`);
+    if (dialogueStats.noop) dlgBits.push(`${dialogueStats.noop} 件没变化（没落账）`);
+    const dlgNote = dlgBits.length ? `正文落账 ${dialogueStats.events} 件（${dlgBits.join(' · ')}）` : null;
     const readout = [readout0, dlgNote].filter(Boolean).join(' · ') || null;
     const main = await runMainCall({ transport, ssot: world, pack });
     // ★★★本次修（真模型 60 轮长跑实跑抓出来的病）：**校验被拒也要能自愈，不许整轮丢**。

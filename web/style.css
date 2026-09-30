@@ -975,6 +975,15 @@
 /* 「各处散落」：一个地方只有一条线路过的那一批（用户裁的名字，不是「其他」、不是「位置未明」） */
 .sw2-pan-other{border:1px dashed var(--sw2-line);border-radius:10px;background:var(--sw2-panel);padding:10px 13px;margin-bottom:14px;}
 .sw2-pan-otherh{font-size:12.5px;color:var(--sw2-text-dim);margin-bottom:5px;}
+/* ★★★leg160：**「时间段那一行」那两条规则整块撤掉**（`.sw2-pan-range` / `.sw2-pan-rangebtns`）——
+   那一族（分段钮 /「整本账」/ 再往前一段 / 往后一段）随用户 2026-10-01 那条令整族撤掉：
+   「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」
+   ⇒ 这一页画多少由账上那一格「往回看轮数」决定，**页面上没有控件**（来路见 `src/panorama.js` 文件头）。
+   ★留档：那两条规则当时**同批升过 `CSS_VERSION`**（leg159b）；撤它们也**真动了样式** ⇒ 本次同样升。
+   ★别再请回来：那一族带来的两条病都还在原地（方向错 ＋ 长度随局无限长，实测整本账 48 屏）。 */
+/* 「只有一件事」那一栏（用户拍的那条）：与「各处散落」同一族的台面，但边框实线、颜色更淡——
+   两栏都收零散的事，靠**框的虚实**分开（虚线＝跟别的事没连成一场；实线＝只有一件事、后面没人接）。 */
+.sw2-pan-loose{border:1px solid var(--sw2-line-soft);border-radius:10px;background:var(--sw2-panel);padding:10px 13px;margin-bottom:14px;}
 /* ★自证闸（本棒最值钱的一处）：总数对不对得上，印在页脚——与编年页那条同源 */
 .sw2-pan-selfcheck{font-size:11.5px;color:var(--sw2-text-faint);margin-top:16px;border-top:1px dashed var(--sw2-line);padding-top:8px;line-height:1.8;}
 .sw2-pan-selfcheck b{color:var(--sw2-text-dim);}
@@ -1090,7 +1099,15 @@
   .sw2-ew-note,.sw2-ew-cmeta,.sw2-ew-kindchip,.sw2-ew-hush,
   .sw2-baseline-hint,.sw2-pan-stat,.sw2-pan-hint,.sw2-pan-span,.sw2-pan-badge,.sw2-pan-sub,.sw2-pan-t,
   .sw2-pan-why,.sw2-pan-at,.sw2-pan-who,.sw2-pan-done,.sw2-pan-open,.sw2-pan-foot,.sw2-rawid-note,
-  .sw2-pan-dashilab,.sw2-pan-brg,.sw2-pan-else,.sw2-pan-share,.sw2-pan-selfcheck{font-size:12px;}
+  .sw2-pan-dashilab,.sw2-pan-brg,.sw2-pan-else,.sw2-pan-share,.sw2-pan-selfcheck,
+  /* ★leg159b：观棋页新加那两块里的小字**并进上面这份名单**——不许另起一条 `{font-size:12px;}`
+     （`test/mobile-layout.test.js` M7 那条棘轮取的是**第一条**整批规则的选择器表，另起一条等于
+     把它们挡在名单之外，判据当场红：实测 `.sw2-pan-rangebtns .sw2-btn (11.5px)` 没进名单）。
+     ★选择器要写到**产品真用的那一层**：`.sw2-pan-rangebtns .sw2-btn` 才压得过基准规则里那条 `11.5px`。 */
+  /* ★★★leg160：`.sw2-pan-range` 与 `.sw2-pan-rangebtns .sw2-btn` **已随那一族撤掉** ⇒ 名单里
+     这两格一并删（死选择器留在名单里，等于这份名单自己在说谎）。留下的 `.sw2-pan-loose` 是
+     leg159b 的另一半（「只有一件事的线」那一栏），用户没撤它。 */
+  .sw2-pan-loose{font-size:12px;}
   .sw2-fold > summary::before{width:15px;height:15px;}
 }
 

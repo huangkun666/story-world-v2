@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
-import { bookFingerprint, createCache } from '../src/fingerprint.js';
+import { bookFingerprint, createCache } from '../src/fp-hash.js';
 import { PARAM_GEARS } from '../src/params.js';
 import {
     buildAbstractPrompt,

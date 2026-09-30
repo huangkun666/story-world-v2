@@ -7,7 +7,7 @@
 // K34 渲染接线：refreshWorld(world, {config, oldVolumes}) 把 render.js 纯函数产物填入页签；
 //   面板零第二份状态（A-2 语义）；按钮走 data-action 委托 → window.__sw2Actions（K36 接调度，
 //   当前为占位提示）。纪律：模块顶层零 DOM（node --test 可动态导入；browser-compat 扫描覆盖）。
-import { renderAll, renderVolumeReadHtml, renderChainViewHtml } from '../src/render.js';
+import { renderAll, renderVolumeReadHtml, renderChainViewHtml } from '../src/render.js';   // ★leg160：`panoramaRangeFromValue` 那条 import 随那一族撤掉
 // ★★★leg85（丙案 · `src/render.js` 的第一个切口）：`LABELS` / `PANEL_BUILD` 这两个**共用底**的符号
 //   已随那一族搬进 `src/render-base.js` ⇒ 本文件改指新家（**不搞 re-export**：那会让"它到底住哪"
 //   重新变模糊，正是本仓 leg71 立规矩要治的病）。`test/render.test.js` 那边同批改指向。
@@ -99,7 +99,7 @@ import { seedRootsChunked, chunkBookText, SEED_CANDIDATES_TOP, SEED_CHUNK_CHAR, 
 // 「抄书流水线」整条删除（名册里不再有从书里抄来的属性/隶属，补抽按钮与 bus 动作同批下掉）。
 // bookFingerprint 的浏览器侧唯一用途是补抽前的指纹守卫，随之删除（书指纹仍由 extractWorldSetting 写进 setting）。
 // ★★★leg144：`createCache` **请回来了**（它此前只活在判据与 demo 里——见下面 `abstractCache` 那一段）。
-import { createCache } from '../src/fingerprint.js';
+import { createCache } from '../src/fp-hash.js';   // ★leg159c：原名 `fingerprint.js`——撞上 EasyPrivacy 那条规则，改名（行数不变）
 import { createIdbVolumeStore } from './idb-backend.js';
 // ★leg73：`../src/snapshot.js` 的 import **整条删掉**（判据②：那一族唯一的消费者是搬走的块；
 //   留着就是"块外还有人用"的假象，会让"谁拥有这块逻辑"重新变模糊）。
@@ -235,9 +235,7 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //   ⇒ `web/style.css` 新增 `.sw2-cv-mask` / `.sw2-cv-box` / `.sw2-cv-hint` 三条规则
 //     （浮层的壳、内层链视图的边距收口、底部提示）⇒ **CSS 动了就必须升位**，否则浏览器吃旧样式。
 //   ★顺带把停在 leg89 的号补齐：leg90–leg92 都没动样式，所以一直没升（那不是漏，是没动）。
-//   ★★leg94：`leg93c-chain-popup` → **`20260921-leg94-storyview`**——本笔**真的动了样式**：
-//     「说书」视图一整族 `.sw2-pan-*`（+ 里程碑条目 `.sw2-rawid-note` / `.sw2-rawid-num`）是新增的，
-//     不升号浏览器会拿旧样式表去画新 DOM（版面当场散）。
+//   ★★leg94：`leg93c-chain-popup` → **`20260921-leg94-storyview`**——本笔**真的动了样式**：「说书」视图一整族 `.sw2-pan-*`（+ 里程碑条目 `.sw2-rawid-note` / `.sw2-rawid-num`）是新增的，不升号浏览器会拿旧样式表去画新 DOM（版面当场散）。
 //   ★★★leg95：→ **`20260922-leg95-linesettles`**——**新增了一条规则** `.sw2-pan-idle`
 //     （说书页点层的第三种状态"没人再提了"：与"还开着"必须长得不一样，否则用户仍分不清
 //     "这一段还在往下长"和"账上还没放下来"）。★照仓里纪律：**动了样式就升**——
@@ -274,7 +272,8 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //     （世界尺度那九个框按「闸 / 尺」分两组，组头靠一条实线与上面分开）⇒ 按纪律同批升。
 //   ★★★leg157 → **`20260930-leg157-merged-scroll`**（用户令「**顺便把下拉的bug解决了**」＝观棋页"滚到
 //     最底部滚轮就失效、拉不上去"）：★**真动了样式**（grid 高度改由 flex 分配 ＋ 并页改 flex 列 ＋ 一条 `contain`）⇒ 同批升。为什么非改不可（`100%` 看着没毛病、其实让页多出 249px **够不着**的滚动）⇒ `web/style.css` 的 leg157 注释。
-const CSS_VERSION = '20260930-leg157-merged-scroll';
+//   ★★★leg160 → **`20261001-leg160-panel-window`**（用户令「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」）：★**真动了样式**——`.sw2-pan-range` 那两条规则整块撤掉、手机档名单里两格一并删 ⇒ 同批升。
+const CSS_VERSION = '20261001-leg160-panel-window';
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;
@@ -894,15 +893,13 @@ function volumeStore() {
 let sw2TickQueue = null;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
-// ★★★leg79/leg81（丙-web · **第四格**）：**视图态族已整族搬进 `web/view-state.js`**。
-//   本族的**八个状态**（两个视图对象 / 两枚词表 / 两个复位 / 两个组合期标志）**只住新模块**，
-//   本文件**一个字都不许再直接读写**（本仓最贵的病是"两份真相"）。
+// ★★★leg79/leg81（丙-web · **第四格**）：**视图态族已整族搬进 `web/view-state.js`**——本族的**八个状态**
+//   **只住新模块**，本文件**一个字都不许再直接读写**（本仓最贵的病是"两份真相"）。
 //   ★★本族特有的坑（别改成抓死）：**视图对象必须现取**——`viewState.chronicle()` / `viewState.entities()`。
 //     为什么：消费点是对**对象内字段**的就地写（`view.layer = v` / `view.filters.push(v)` / `view.page += 1`），
 //     而 `reset()` 会**换掉模块级绑定** ⇒ 谁把对象抓进变量，复位之后那些就地写就落到**被丢弃的旧对象**上
 //     （面板看起来"点了没反应"，且**不抛错、不报警**）。
-//   ★★本族**零注入形参**：它谁也不调（连上下文都不碰，比热账族更叶子）⇒ `createViewStateHub()` 无 deps。
-// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//   ★★本族**零注入形参**（它谁也不调；★说书页那一格同理：归一住 `src/panorama.js`）⇒ `createViewStateHub()` 无 deps。
 const viewState = createViewStateHub();
 
 // ---------- K34/K36：会话态（模块级 · 面板零第二份状态） ----------
@@ -2550,6 +2547,7 @@ if (typeof window !== 'undefined') {
         viewState.turnChroniclePage(String(payload?.value) === 'prev' ? -1 : 1);
         refreshSections(['chronicle']);
     };
+    // ★★★leg160：`bus['pan-seg']`（"看的是哪一段"那一族唯一的动作）**撤掉**——这一页画多少由账上那一格「往回看轮数」决定（设置里的框），页面上不再有钮可点。
 
     // ---------- leg49（细案 spec-entities-page-ia）：实体页工具条四枚动作 ----------
     // 口径：改状态一行 + 只重绘本页。**选数据一行都不写在这里**（全在 `src/render.js` 的纯函数里）。

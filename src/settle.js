@@ -1103,6 +1103,8 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
 //     ③ 值**必须在正文里找得到**（找不到 ⇒ 不收）：这是"不许把词换算成数"唯一能做成的**机械**判据
 //        ——词表判语义是红线明禁的（`ANCHOR.md` §4.8），所以只能靠"照抄"来核；
 //     ④ **必带因**：因 = 本轮注册的那条 `dialogue` 事件；同轮同实体同格**只落一次**。
+//     ⑤ ★★★leg159 新增：**跨轮也不许落空转**——账上那一格已经等于新值（逐字比）⇒ **不落事件、不写编年**，
+//        只记一格 `noop`（用户令「值没变就不落账」；★①–④ 管的是"这一条是不是真的"，⑤ 管的是"这事是不是新发生"）。
 //
 //   ★**玩家格可以走这条路**（用户 2026-09-24 裁定：「聊天肯定能落他这边所有更改过的所有角色属性」）——
 //     红线 1 禁的是**世界步替玩家写**（`check-step.js:319-321` 那条**原样不动**），
@@ -1132,7 +1134,7 @@ export const DIALOGUE_EVENT_CAP = Infinity;    // 已作废（原 60）：一轮
 export const DIALOGUE_UPDATE_CAP = Infinity;   // 已作废（原 6）：一轮有几个格变了就落几个格
 
 export function registerDialogueFacts(world, { facts = null, dialogue = '', tick = null } = {}) {
-    const stats = { events: 0, updates: 0, dropped: 0, capped: 0 };
+    const stats = { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0 };
     if (!world || !facts) return stats;
     const t = Number.isFinite(tick) ? tick : (world.meta?.tick ?? 0);
     // ★"值必须在正文里找得到"的比对面：**去空白后的正文**（照抄的是同一段字，空白差异不算差异）。
@@ -1192,6 +1194,24 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
         if (!isPlace && !CHANGE_FIELDS.includes(c.field)) { stats.dropped += 1; continue; }   // ② 格在册
         const val = String(c.value ?? '').trim();
         if (!val) { stats.dropped += 1; continue; }
+        // ★★★leg159（用户令「立项治：值没变就不落账」）：**跨轮空转不许再落一件"没发生的事"**。
+        //   病（leg158 在用户那份真账上量到的，见交接 §3.1①）：正文里同一句
+        //     `【变化】黄坤｜身份｜确立江州实际掌控者地位` 在第 1/2/3 轮各出现一次 ⇒ 落成**三件同名事件**，
+        //     而账上那格**从第 1 轮起就已经是它**。★代价不止"多两行"：「万子明」入局正是因它而生的，
+        //     而 `ch_3_ev_9` 是**沿着这条空转事件**长出来的（编年行 = 世界往下长的入口）。
+        //   根因：本函数原来**只在同一轮内**去重（下面那张 `wrote` 表，键＝`实体|格`）——跨轮一道都没有。
+        //   口径（逐字照用户那句）：**该实体该格的值已经等于新值 ⇒ 不落事件、不写编年、不进 `wrote`**，
+        //     只在 `stats` 里记一格 `noop`（读数行据此告诉玩家"模型把同一句话又说了几遍"）。
+        //   ★比法是**逐字**比（两侧都先 `trim`）：与"值必须在正文里找得到"那条同一个口径——
+        //     本仓不把词换算成数、也不替账判"意思一样"（词表判语义是红线明禁的，ANCHOR §4.8）。
+        //   ★`ent[c.field]` 是**账上此刻的值**：世界步那条路（`applyEntityUpdates`）写的就是它 ⇒ 两处同一格。
+        //   ★**没值**（undefined）≠ 空串：那是"这一格还没有过值"（红线 2 明写"空着就是空着"），
+        //     拿空串去顶它会把"第一次"判成"没变" ⇒ 只许"原来真有值、且与新值逐字相同"才算空转。
+        //   ★与红线 2 不冲突：这一条**不改任何值**，只是不落一件没发生的事（账记的是"发生了什么"，
+        //     不是"模型又说了一遍"）。★★不许把这个判断挪到渲染层去：那会让"账上是三条、面板上两条"，
+        //     正是本仓最忌的"两个真相"（交接 §4.1 明写）。
+        const cur = ent[c.field];
+        if (typeof cur === 'string' && cur.trim() === val) { stats.noop += 1; continue; }
         // ③ **值必须在正文里找得到**（找不到 ⇒ 它是换算/编出来的，不收）
         if (!bare.includes(val.replace(/\s+/g, ''))) { stats.dropped += 1; continue; }
         const pair = `${c.entityId}|${c.field}`;

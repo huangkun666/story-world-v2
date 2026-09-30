@@ -2,7 +2,7 @@
 // K26/设定大势层：书指纹缓存（细案 §3.2③ → A-3）——FNV-1a（v1 算法原样搬）+ LRU 有界 + 版本戳 + 深拷贝。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bookFingerprint, createCache } from '../src/fingerprint.js';
+import { bookFingerprint, createCache } from '../src/fp-hash.js';
 
 test('K26/A-3：FNV-1a 标准向量锁（v1 算法逐位同源）', () => {
     // 官方 FNV-1a 32 位测试向量：""→0x811c9dc5、"a"→0xe40c292c、"foobar"→0xbf9cf968

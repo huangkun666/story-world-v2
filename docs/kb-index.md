@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**274 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `fe8ebfe8-d7b6c977`（源文件 fe8ebfe8 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**279 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `b3086713-d7b6c977`（源文件 b3086713 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,11 +11,11 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg157-merged-scroll` |
+| 构建号 | `leg160-panel-window` |
 | 提示词号 | `v2-agenda-t1-31` |
 | 版本 | `1.0.1`（ST 扩展） |
-| 规模 | src **48** · web **19** · 判据 **120** · 探针 **76** · 文档 **174** |
-| 最新交接 | `session-handoff-2026-09-30-leg157-merged-scroll.md` |
+| 规模 | src **48** · web **19** · 判据 **120** · 探针 **76** · 文档 **179** |
+| 最新交接 | `session-handoff-2026-10-01-leg160-panel-window.md` |
 
 ## 卡片（按类分组）
 
@@ -23,20 +23,20 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| STATE.md · 0. 三十秒版：这台东西是什么 | `STATE.md:13` | 一个跑在 SillyTavern 里的**活世界引擎**。你每推进一步 RP，世界演化一步：势力与角色按自己的盘算行动，事件从行动里长出来、带因果。 |
-| STATE.md · 0.5  活儿在哪（接手第一件事） | `STATE.md:29` | ／ 你要知道的 ／ 只看这一处 ／ |
-| STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:40` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
-| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:73` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
-| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:135` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 上一棒 | `STATE.md:175` | - **本次**（2026-09-30 · ★★★**两件**：① **观棋页"滚到最底部滚轮就失效"治好了**（用户令「**顺便把下拉的bug解决了**」） |
-| STATE.md · 5. 现场（本机） | `STATE.md:193` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`，**不是** `F:\deepseek`；分支 **`main`**——★ |
+| STATE.md · 0. 三十秒版：这台东西是什么 | `STATE.md:12` | 一个跑在 SillyTavern 里的**活世界引擎**。你每推进一步 RP，世界演化一步：势力与角色按自己的盘算行动，事件从行动里长出来、带因果。 |
+| STATE.md · 0.5  活儿在哪（接手第一件事） | `STATE.md:28` | ／ 你要知道的 ／ 只看这一处 ／ |
+| STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:39` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
+| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:72` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
+| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:134` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
+| STATE.md · 4. 上一棒 | `STATE.md:176` | - **本次**（2026-10-01 · ★★★**说书页那一族撤掉，改成"画多少由玩家自己填"**，用户令「**还是把这个删了吧， |
+| STATE.md · 5. 现场（本机） | `STATE.md:190` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**） |
 
 ### 活儿（12）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
 | 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:747` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:892` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -81,7 +81,7 @@
 | 缺口 E2 | `docs/session-handoff-2026-09-22-leg109b-defects.md:122` | 名册只列活人 ⇒ 账上死了的人从聊天模型视野里整个消失；而给世界模型的"离场名册"不报死没死（有意为之，防编事实） |
 | 缺口 E3 | `docs/session-handoff-2026-09-22-leg109b-defects.md:123` | 同一人的 实力 两边可以不同（账本可改、聊天模型看到的是书里原值） |
 
-### 交接（104）
+### 交接（109）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -189,6 +189,11 @@
 | 交接 leg155（2026-09-30） | `docs/session-handoff-2026-09-30-leg155-contract-keys.md:1` | 0. 一句话 ／ 人话版：这东西现在比上一笔多了什么 ／ 1. 用户原话（逐字，本笔的授权全在这一格） ／ 2.  交付一：6 族一次清干净（全部先证过红） ／ axis 那一族的真相（本笔最该带走的一条） ／ next |
 | 交接 leg156（2026-09-30） | `docs/session-handoff-2026-09-30-leg156-stable-release.md:1` | 0. 一句话 ／ 人话版：这东西现在比上一笔多了什么 ／ 1.  交付一：稳定版（记忆层整族撤走） ／ 用户原话（逐字） ／ 撤走的清单（23 项，一整族不是"关掉"） ／ 一条特意保留的东西（别照"清理干净"的直觉去动 |
 | 交接 leg157（2026-09-30） | `docs/session-handoff-2026-09-30-leg157-merged-scroll.md:1` | 0. 一句话 ／ 人话版：这东西现在比上一笔多了什么 ／ 用户原话（逐字） ／ 定稿（改了什么） ／ 判据（＋2，全是先证过红） ／ 定稿（改了什么） ／ 3.  硬读数 ／ 4.  下一任做什么（活儿单） |
+| 交接 leg158（2026-09-30） | `docs/session-handoff-2026-09-30-leg158-single-line-cards.md:1` | 0. 一句话 ／ 1.  交付一：发布（用户点的第一件） ／ 2.  交付二：观棋页立卡门槛（用户拍「乙1」） ／ 用户原话（逐字） ／ 定稿（改了什么） ／ 2.1  改判据这件事，逐条如实登记 ／ 3.1 量出来的四 |
+| 交接 leg159（2026-09-30） | `docs/session-handoff-2026-09-30-leg159-noop.md:1` | 0. 一句话 ／ 1.  交付：跨轮空转不许落账（用户点「甲」） ／ 1.1 改了什么（三处，都在引擎/读数层） ／ 1.2 口径（逐条，都是"为什么这么判"） ／ 2.  下一任做什么（活儿单） ／ 3. 硬读数 ／  |
+| 交接 leg159（2026-09-30） | `docs/session-handoff-2026-09-30-leg159b-pan-range.md:1` | 0. 一句话 ／ 1.1 改了什么（三处，都在呈现层） ／ 1.4  路上被既有判据当场咬红的一处（别重踩） ／ 2.  下一任做什么（活儿单） ／ 3. 硬读数 ／ 4. 别做的事 ／ 5. 如实登记（本笔的边界） |
+| 交接 leg159（2026-09-30） | `docs/session-handoff-2026-09-30-leg159c-fp-hash-rename.md:1` | 0. 一句话 ／ 5.  下一任做什么（活儿单） ／ 6. 别做的事 ／ 7. 如实登记（本笔的边界） ／ 8.1 病：功能在，入口不在 ／ 8.2 治法（两处） ／ 8.4 硬读数 ／ 8.5  本节的边界（如实登记） |
+| 交接 leg160（2026-10-01） | `docs/session-handoff-2026-10-01-leg160-panel-window.md:1` | 0. 一句话 ／ 1.  撤掉的整族（一处不留） ／ 2.  新立的那一格（往回看轮数） ／ 3.  硬读数（两份账 · 真浏览器核过） ／ 3.1 长度（这一笔要治的就是它） ／ 3.3 四个号 ／ 4.  为什么撤（ |
 
 ### 细案（27）
 
@@ -249,30 +254,30 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:47` | **1459 / 1459 · fail 0 · skipped 0 · todo 0**（★leg157 **+2**：模型容量读取那两条；leg156 **−80**——记忆层整族撤走、判据随之下架；逐棒增减 ⇒ ` |
-| 当前值 · 冒烟 | `STATE.md:48` | **PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js` |
-| 当前值 · PANEL_BUILD | `STATE.md:49` | **`leg157-merged-scroll`** ｜ 复量：`src/render-base.js`（★leg157 升位：观棋页并页改 flex 列、**两栏可视高度真变了** 715 → 466；★leg156  |
-| 当前值 · ★主调用输出上限（出厂值） | `STATE.md:50` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
-| 当前值 · ★模型容量怎么来的 | `STATE.md:51` | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写**（走出厂值）并如实说"这个网关没报" ｜ 复量： |
-| 当前值 · ★手机端 | `STATE.md:52` | **面板在手机上能用**：页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮 |
-| 当前值 · ★抽取并发度 | `STATE.md:53` | **缺省 2 路**。★**是设置项**：设置页「模型通道」→「同时问几块」（只设下限，用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；★遇失 |
-| 当前值 · 包预算 出厂值 | `STATE.md:54` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js`（旋钮，面板可改；档位 30000/50000/60000） |
-| 当前值 · ★leg136 拆掉的闸 · leg141/141b · leg139 · leg137 · leg148 | `STATE.md:55` | ★★**已搬出本表**（本文件顶到 20 KB 上限，按守门那句把更早几笔搬走）⇒ 那几笔交付了什么、去哪儿量 ⇒ `docs/done-archive.md`。★本表只留**与当前值有关**的那一格：出包期**只剩整包 |
-| 当前值 · CSS_VERSION | `STATE.md:56` | **`20260930-leg157-merged-scroll`** ｜ 复量：`web/index.js`（`CSS_VERSION`；拼进地址那一步在 `web/status-bar.js`） |
-| 当前值 · MAIN_PROMPT_V | `STATE.md:57` | **`v2-agenda-t1-31`** ｜ 复量：`src/prompts.js`（★leg153：第 9 条补"按意思找回的旧事"怎么读——三种找法、一种东西；★leg137 那笔是 t1-30） |
-| 当前值 · ★leg153 · leg154 · leg155 · leg156 | `STATE.md:58` | ⇒ **已收进 `docs/done-archive.md`**（召回那一栏进包 · 社区报的两个 bug · 引擎写的键尺子上没登记 · **稳定版：记忆层整族撤走**＋发布仓 `main` 变成开发目录的导出；★`D |
-| 当前值 · web/index.js 行数 | `STATE.md:59` | **3099 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:341`；★leg157 **+2**（模型容量那两句注释）、leg156 −8 → ＋7、l |
-| 当前值 · CACHE_VERSION | `STATE.md:60` | **4**（leg150 **3 → 4**：抽取的**问法**变了——不抬就会命中旧缓存、新问法一次都不会被行使） ｜ 复量：`src/fingerprint.js` |
-| 当前值 · 发布仓 main | `STATE.md:61` | **`ced167b`** · 构建号 **`leg152-embed-card`** · 版本号 **`1.0.1`**（★leg156：**发布仓现在就是开发目录那棵树的导出**、**只有 `main` 一支**（那 |
-| 当前值 · release tag | `STATE.md:62` | **`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网） |
-| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:63` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数，改它＝一次发布） ｜ 复量：守门 R8 |
-| 当前值 · 版本号 | `STATE.md:64` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处）。★**leg156 未升**（新旧代码版本号相同 ⇒ 用户**看不出自己更新没 |
+| 当前值 · 判据 | `STATE.md:46` | **1466 / 1466 · fail 0 · skipped 0 · todo 0**（★leg159b/leg159 各 **+3/+4**；leg156 **−80**——记忆层整族撤走） ｜ 复量：`node  |
+| 当前值 · 冒烟 | `STATE.md:47` | **PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js` |
+| 当前值 · PANEL_BUILD | `STATE.md:48` | **`leg160-panel-window`** ｜ 复量：`src/render-base.js`（★leg160：说书页顶上那一行横带**整族撤掉**；这一页画多少改由账上那一格「**往回看轮数**」决定——起因是 |
+| 当前值 · ★主调用输出上限（出厂值） | `STATE.md:49` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
+| 当前值 · ★模型容量怎么来的 | `STATE.md:50` | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** ｜ 复量：`src/transport-htt |
+| 当前值 · ★手机端 | `STATE.md:51` | 页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12 |
+| 当前值 · ★抽取并发度 | `STATE.md:52` | **缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 |
+| 当前值 · 包预算 出厂值 | `STATE.md:53` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
+| 当前值 · ★往回看轮数 出厂值 | `STATE.md:54` | **50**（leg160 新立的第十格：**说书页往回画多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。★它与 `往事轮数`（给模型看的那个窗口，出厂也 50）是**两个旋钮两件事**，不许互相顶 |
+| 当前值 · ★leg136–leg156 各笔 | `STATE.md:55` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
+| 当前值 · CSS_VERSION | `STATE.md:56` | **`20261001-leg160-panel-window`** ｜ 复量：`web/index.js` |
+| 当前值 · MAIN_PROMPT_V | `STATE.md:57` | **`v2-agenda-t1-31`** ｜ 复量：`src/prompts.js`（★leg153：第 9 条补"按意思找回的旧事"怎么读） |
+| 当前值 · web/index.js 行数 | `STATE.md:58` | **3097 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:341`） ｜ 复量：`split('\n').length`（★**别用 PowerShel |
+| 当前值 · CACHE_VERSION | `STATE.md:59` | **4**（leg150 **3 → 4**：抽取的**问法**变了——不抬就会命中旧缓存） ｜ 复量：`src/fp-hash.js`（★leg159c 改名） |
+| 当前值 · 发布仓 main | `STATE.md:60` | **`f748203`** · 构建号 **`leg157-merged-scroll`** · 版本号 **`1.0.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地 |
+| 当前值 · release tag | `STATE.md:61` | **`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网） |
+| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:62` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
+| 当前值 · 版本号 | `STATE.md:63` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处）。★**leg156 未升**（新旧版本号相同 ⇒ 用户**看不出自己更新没更新 |
 
 ### 怎么跑（2）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:47` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
+| 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:46` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
 | 怎么发布（导出独立根树 → 仓外跑判据冒烟 → 推 → 远端逐字节核） | `scripts/publish-release.mjs:1` | node scripts/publish-release.mjs（推）· node scripts/verify-release.mjs（远端只读终检） |
 
 ### 代码地图（68）
@@ -290,7 +295,7 @@
 | src/entity-lookup.js | `src/entity-lookup.js:1` | story-world-v2/src/entity-lookup.js |
 | src/entropy.js | `src/entropy.js:1` | story-world-v2/src/entropy.js |
 | src/extract.js | `src/extract.js:1` | story-world-v2/src/extract.js |
-| src/fingerprint.js | `src/fingerprint.js:1` | story-world-v2/src/fingerprint.js |
+| src/fp-hash.js | `src/fp-hash.js:1` | story-world-v2/src/fp-hash.js |
 | src/gate.js | `src/gate.js:1` | story-world-v2/src/gate.js |
 | src/init-source.js | `src/init-source.js:1` | story-world-v2/src/init-source.js |
 | src/ledger-recall.js | `src/ledger-recall.js:1` | story-world-v2/src/ledger-recall.js |
@@ -350,16 +355,16 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
-- `9a96d3b story-world-v2 leg157 台账：STATE / work-current / 交接 ＋ 存档搬家 ＋ 生成物`
-- `f6ac4f4 story-world-v2 leg157 观棋页滚轮（真机量出来的）＋主调用输出上限 32768 与「直接读网关报的容量」`
-- `ac95ff4 story-world-v2 leg156 交接：稳定版交接文档 ＋ 台账当前值`
-- `ade3a44 story-world-v2 leg156b 「推过了」那条闸：手动按钮不再被它挡，且只有成功才记账`
-- `15bda9e story-world-v2 leg156 稳定版：把没验过的记忆层整族撤走`
-- `66e1af8 story-world-v2 leg155 契约登记：引擎写进账的键，尺子上没登记（逐族查出 6 族，活儿单当时只列了 2 族）——四份真账现在逐份全过`
-- `d9fc639 story-world-v2 leg154 记账（含一次撤正）：发布仓 main → 824abc5 / 构建号 leg154-hotfix`
-- `aa25537 story-world-v2 leg154 记账：发布仓 main ec5416d → 2e066dc（用户令「发推送吧，社区现在不是从release拿的」）`
-- `6b7aa7f story-world-v2 leg154 社区报的两个 bug：一个是我们的真错(懒加载卡)，一个不是`
-- `337c2d5 story-world-v2 leg153 台账与交接：STATE.md §1(判据1519/1519 · MAIN_PROMPT_V升t1-31 · 召回那一栏进包的当前值)与§4 ＋ README 判据数 ＋ 细案 §8.5.9(那一栏的落地版设计/查询串/代价/两条真bug)＋§10待定第2条(「名字那条路够不够」两份账都没答上) ＋ work-current §1 ＋ leg153 交接文档；长账那一格(400轮合成账·249卷·窗口外2186行其中1553行只住卷里·真嵌入2186行/110批/35.8秒)：向量2.63/6对名字基线1.88/6、两法重叠0-1/6、名字路天花板20.9%，★如实登记两个百分数都是模板性质、且长账上eventRef大量悬空(578→32)⇒这一问只能靠新开一局真写长的来答`
-- `a47e57f story-world-v2 leg153 召回那一栏进包(用户拍甲)：pack.js 新增「按意思找回的旧事」(跨栏去重/机械记账不进/缀在turnFacts之前/裁剪序在相关往事之后) ＋ 查询串第三样换成「聊天侧本轮提供的事件」(撤掉玩家原话) ＋ tick.js 新增注入口 recallVec(在 registerDialogueFacts 之后、出包之前) ＋ web/embed-runtime.js 的 recallForTick；★接最后一根线时咬出两条真 bug：召回只查事件表而索引单元是编年行(生产形状下每行都是空壳、读数却报 ok/returned 6)、换模型号的老索引被解成空索引却仍白撞一次网络；17 条新判据(P1-P9/R1-R4/V13-V13b)，变异 17/17 全被咬住`
-- `e105f45 story-world-v2 leg152i 收尾验收：22 项边界(残缺账/坏形状/荒唐输入一律不抛不编)机器化进判据；当场咬出并修掉 no-client 的读数歧义`
+- `f245dc6 leg160：说书页那一族撤掉，画多少改成玩家自己填`
+- `da564bd story-world-v2 leg159c 收尾：用户裁定「这也太他妈丑了吧…让下一任改吧」——停手，把活儿交接出去`
+- `5546594 story-world-v2 leg159c 续：默认那一屏补上入口（用户实机报「我的构建号是这样但是没看到你说的效果」）`
+- `22f12a7 story-world-v2 勘正：面板构建号**不在「设置」页**（在「参数」页最上面那行 ＋「角色与势力」页表头）`
+- `d3625c3 story-world-v2 leg159c 改名 src/fingerprint.js -> src/fp-hash.js（公共过滤列表误杀插件模块；用户拍「治本：改名」）`
+- `7dd6696 story-world-v2 leg159b 修：说书页自证闸那四格各数各的⇒ 同一条线被数两遍（真账当场报对不上）`
+- `0b542f0 story-world-v2 leg159b 说书页不再只讲最近这一段（用户拍甲：分时间段 + 补读归档来路；零散线单独收一栏）`
+- `0073ba4 story-world-v2 leg159 跨轮空转不许落账（用户拍甲：值没变就不落账）——引擎层一道跨轮的闸 ＋ 读数行两笔分开报 ＋ 真账上量出差 3 件`
+- `1f966a0 story-world-v2 leg158 补：本地预览装法（甲案）落进 dev-process §10.0——只装本地克隆、不推远端`
+- `f37e75c story-world-v2 leg158 补：用户立「以后更新了先不推，让我本地看到效果验证完后再推」（dev-process §10.0）＋ leg158 他答「先不发」`
+- `117b491 story-world-v2 leg158 观棋页立卡门槛加一条（乙1：≥2 条线 或 此处 ≥2 件事）＋ 读那份真账把「DeepSeek 质量不行」量成四件事 ＋ 发布 leg157（f748203）`
+- `55b3f79 story-world-v2 leg157 补充：真酒馆里补量一次（注入生效、几何对得上；那一局没世界 ⇒ 两栏仍未在真酒馆量到）`
 

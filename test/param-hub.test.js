@@ -20,7 +20,7 @@ import path from 'node:path';
 
 import { installFakeDom, makeLocalStorage, makeSt, makeHub, makeWorld } from './fixture-param.mjs';
 // ★leg135：`包预算` 的出厂值改用常量（别写死数字——写死就是第二份真相）。
-import { PACK_BUDGET_TOKENS } from '../src/limits.js';
+import { PACK_BUDGET_TOKENS, PANEL_WINDOW_TURNS } from '../src/limits.js';
 
 const { status: statusEl } = installFakeDom();
 const mod = await import('../web/index.js');
@@ -201,8 +201,9 @@ test('★★★leg46·⑤（用户报的那一条）：改完参数 → 世界�
     const c = hub2.commit(fresh);                            // 载入期：接纳 + 镜像
     // ★leg135：`包预算` 的出厂值 30000 → 50000（用户令「我预算抬到50000token」）。
     //   ★这一格**照常量取**、不写死数字——写死就是第二份真相（本仓那条纪律）。
-    assert.deepEqual(hub2.displayEnv(c.world), { 天时: '大灾', 每轮事件: '12', 每轮递线: '3', 每轮新生: '3', 每轮入局: '1', 待启用名单: '12', 顶层大计: '15', 在飞大计: '20', 包预算: String(PACK_BUDGET_TOKENS), 往事轮数: '50' },
-        '★上限输入框都画对（12 而不是回到 6；★leg63 起多了「每轮新生/每轮入局/待启用名单」；★leg114 起多了「包预算」；★leg133 起多了「往事轮数」）');
+    //   ★leg160：多了「往回看轮数」（说书页画多少，出厂 50）——同样照常量取。
+    assert.deepEqual(hub2.displayEnv(c.world), { 天时: '大灾', 每轮事件: '12', 每轮递线: '3', 每轮新生: '3', 每轮入局: '1', 待启用名单: '12', 顶层大计: '15', 在飞大计: '20', 包预算: String(PACK_BUDGET_TOKENS), 往事轮数: '50', 往回看轮数: String(PANEL_WINDOW_TURNS) },
+        '★上限输入框都画对（12 而不是回到 6；★leg63 起多了「每轮新生/每轮入局/待启用名单」；★leg114 起多了「包预算」；★leg133 起多了「往事轮数」；★leg160 起多了「往回看轮数」）');
     assert.deepEqual(c.world.context.setting.dynamic.env, { 天时: '大灾', 每轮事件: '12' },
         '★刷新之后镜像照旧同步给引擎');
 });

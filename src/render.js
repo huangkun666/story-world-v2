@@ -2629,11 +2629,18 @@ export function renderSnapshotsHtml(world, { config = {} } = {}) {
 }
 
 export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {}) {
+    // ★★★leg160：**说书页往回画多少轮**——读账上那一格（真源 > 镜像 > 出厂 50），
+    //   与信息带读参数真源**同一把尺子**（`effectiveLimits`）。★它是"画给玩家看多少"，
+    //   与 `pack.js` 那个"给模型看多少"（`往事轮数`）是两件事，不许互相顶替。
+    const panelTurns = effectiveLimits(world, config?.paramEnv ?? null).往回看轮数;
     return {
         board: renderBoardHtml(world, { config }),
         chronicle: renderChronicleHtml(world, { oldVolumes, view: view.chronicleView ?? null }),
         // ★★leg94：说书视图（零 LLM：把账上的字重新排成人话——用户令「你给我讲解我才能知道发生了什么」）
-        panorama: renderPanoramaHtml(world),
+        //   ★★★leg160：那一族"看的是哪一段"（分段钮 /「整本账」/ 视态那一格）**整族撤掉**——
+        //     这一页画多少只由 `panelTurns` 决定，**一个控件都不在页面上**（来路与两条理由见
+        //     `src/panorama.js` 文件头那一整段）。
+        panorama: renderPanoramaHtml(world, { panelTurns }),
         archive: renderArchiveHtml(world, { oldVolumes }),
         // ★leg49：实体页视图态随 `view.entsView` 透传（与 `view.chronicleFilter` 同款）——
         //   工具条的搜索/筛选/排序/翻页都落在这一个对象上（接线层只存状态，选数据住本层纯函数）。

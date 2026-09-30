@@ -114,7 +114,7 @@ test('★★leg80 丙-web②：新模块只许 import `../src/init-source.js`，
     //     ★边界一条没放宽：它仍**不含 `window`/`document`**，仍是真叶子（`src/macros.js` 零 import）。
     const WANT = [
         "import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';",
-        "import { bookFingerprint } from '../src/fingerprint.js';",
+        "import { bookFingerprint } from '../src/fp-hash.js';",
         "import { checkBookSource } from '../src/book-check.js';",
         "import { macroNamesFromCtx } from '../src/macros.js';",
     ];

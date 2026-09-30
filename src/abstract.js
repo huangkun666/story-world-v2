@@ -32,7 +32,7 @@
 //     照书办照旧生效（<上界势力_蟠桃园> 被判 location 的名号改判 faction、<X帝麾下_Y> 的上级照抄）；
 //     seed 入账 schema PASS；「渡虚帝.Organs=界渊长城/须弥界域」照旧出名。
 // ============================================================================================
-import { bookFingerprint } from './fingerprint.js';
+import { bookFingerprint } from './fp-hash.js';   // ★leg159c：原名 `fingerprint.js`，撞上 EasyPrivacy 那条规则（见该文件抬头）
 import { isMacroPlaceholder } from './macros.js';   // ★leg148：酒馆占位符不是一个名字（实体名那一格）
 import { PARAM_GEARS, PARAM_KEYS, normalizeParam } from './params.js';
 // leg24 片2：不再从 settle 借 ENTITY_ATTR_DEFAULT（该常量已删）——名册入账不预填数值

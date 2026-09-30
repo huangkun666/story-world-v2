@@ -27,7 +27,7 @@
 //     它每轮都可能换（换聊天/换卡），抓死一份就是"面板读着上一本书"（静默、不报错）。
 
 import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';   // 条目指纹的键归一（与起根同一份契约）
-import { bookFingerprint } from '../src/fingerprint.js';                        // ★leg112：书指纹（与抽取同一条算法）
+import { bookFingerprint } from '../src/fp-hash.js';                            // ★leg112：书指纹（与抽取同一条算法）；★leg159c 改名（原名撞广告过滤器）
 import { checkBookSource } from '../src/book-check.js';                          // ★leg112：换书检测（纯函数，只判断不说谎）
 import { macroNamesFromCtx } from '../src/macros.js';                            // ★leg148：酒馆宏的真名对
 

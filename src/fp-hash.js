@@ -1,4 +1,21 @@
-// story-world-v2/src/fingerprint.js
+// story-world-v2/src/fp-hash.js
+// ★★★leg159c（用户 2026-09-30 拍「治本：改名」）：**这个文件原来叫 `fingerprint.js`，被广告过滤器误杀。**
+//   病（社区那位装了过滤列表的人报「装不上」；本仓逐条独立复验过，装置 `F:/deepseek/tmp/leg159b-block/`）：
+//   EasyPrivacy 主线**第 982 行**有一条
+//     `/fingerprint.js^$domain=~github.com`
+//   ——它是拿来封 FingerprintJS 那个指纹库的（它的发行文件就叫这个名字），语义是"**路径里含
+//   `/fingerprint.js` 就拦，只有发起方是 github.com 才豁免**"。★它**没写 `third-party`**
+//   ⇒ **第一方请求照拦**：酒馆从本机 http 服务端抓 `…/story-world-v2/src/fingerprint.js` 时当场被掐断。
+//   ★★后果特别难查（这是非改不可的理由）：ES module 的依赖图里**任何一个文件抓取失败**，
+//   整个 `<script type="module">` 只派发一个**不携带任何信息的裸 Event**——`message`/`filename` 全是 null，
+//   `String(e)` = `[object Event]`（实测 `{"isEvent":true,"ctor":"Event","keys":["isTrusted"]}`）
+//   ⇒ 酒馆那句报错就长成 `[object Event]`、控制台几乎没有痕迹，**硬刷新无效**（从装好那一刻起 100% 触发）。
+//   ⇒ 改名到 `fp-hash.js`（不再含 `fingerprint` 这个词）。★口径：**文件名也是产品面**——
+//     自己的模块名撞上公共过滤列表的词，代价是"整个面板打不开"，而改名的代价只是几处 import。
+//   ★复验口径（装置 `verify-block.mjs`）：从入口 `web/index.js` 静态走一遍 import 图（65 个模块），
+//     按那条规则的语义逐个匹配 ⇒ 全仓**只有这一个**命中；把它的抓取拦掉 ⇒ 页面收到的正是那个裸 Event。
+//   ★★改名的纪律：**契约/引擎/渲染一个字没动**、页面可见面零变化 ⇒ `PANEL_BUILD`/`CSS_VERSION`/
+//     `MAIN_PROMPT_V`/`CACHE_VERSION` **四个号一个都不升**（`CACHE_VERSION` 与文件名无关，它管缓存形状）。
 // 书指纹缓存（K26/设定大势层，细案 §3.2③ + 附录 A → A-3）：v1 算法原样搬（director.js bookFingerprint / adapter.js abstractCache）。
 //   书指纹 = FNV-1a 32 位（offset 0x811c9dc5、prime 0x01000193、Math.imul、>>>0）+ 长度混入——书文本一变指纹即变；
 //   缓存 = LRU 有界（按 extractedAt 串序淘汰）+ 版本戳防形状演进——同指纹命中 = 零抽取调用（A-3）；

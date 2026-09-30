@@ -239,6 +239,66 @@ test('G20：★同轮同实体同格只落一次（去重照旧）；每轮格�
     assert.equal(st2.capped, 0, '★一条都没被配额吃掉');
 });
 
+// ── ⑥b ★★★leg159（用户令「立项治：值没变就不落账」）：**跨轮空转** ──────────────────
+// 病（leg158 在用户那份真账上量到的，见交接 §3.1①）：正文里同一句
+//   `【变化】黄坤｜身份｜确立江州实际掌控者地位` 在第 1/2/3 轮各出现一次
+//   ⇒ 落成 **三件同名事件**（`ev_1_500`/`ev_2_500`/`ev_3_501`），而账上那格**从第 1 轮起就是它**。
+//   ★代价不止"多两行"：「万子明」入局正是因它而生的，`ch_3_ev_9` 也是沿着这条空转事件长出来的。
+// 根因：`registerDialogueFacts` 只在**同一轮内**去重（`wrote` 表，键＝`实体|格`）——跨轮没有任何一道。
+// 口径（用户原话「**值没变就不落账**」）：**该实体该格的值已经等于新值（逐字比，比之前去掉首尾空白）
+//   ⇒ 不落事件、不写编年、不进 `wrote`**，只在读数里记一格 `noop`。
+//   ★与红线 2（"空着就是空着"）不冲突：这一条**不改任何值**，只是不落一件没发生的事。
+//   ★★不许在渲染层打补丁：那会让"账上是三条、面板上两条"——正是本仓最忌的"两个真相"。
+const CHG = (who, field, value) => `【变化】${who}｜${field}｜${value}`;
+const factsOf = (lines) => extractTags(tagIt(lines), CTX);
+// 一轮 = 一条正文＋同一条正文里那几条【变化】；`tick` 逐轮加一（与 `runTick` 的 `meta.tick + 1` 同口径）
+const turn = (world, lines, tick) => registerDialogueFacts(world, { facts: factsOf(lines), dialogue: tagIt(lines), tick });
+
+test('G29：★★★同一处变化连着三轮重复落账 ⇒ 只留第一件（跨轮空转不许再落账）', () => {
+    const w = mkWorld();
+    const line = CHG('黄坤', '身份', '确立江州实际掌控者地位');   // ★真账里那一句的逐字形状
+    const s1 = turn(w, [line], 1);
+    assert.equal(s1.updates, 1, '★第 1 轮：账上那格原来是空的 ⇒ 这是**真变化**，照落');
+    assert.equal(s1.events, 1, '★第一件事件照旧（这一条不许"顺手把第一次也吞了"）');
+    assert.equal(s1.noop, 0, '★第一轮不是空转');
+    const s2 = turn(w, [line], 2);
+    const s3 = turn(w, [line], 3);
+    assert.equal(s2.updates + s3.updates, 0, '★第 2/3 轮：格上已经是这句话 ⇒ 一个格都不许再落');
+    assert.equal(s2.events + s3.events, 0, '★★★病根就在这一格：原来这里落成第 2、第 3 件同名事件');
+    assert.equal(s2.noop, 1, '★空转要留痕（读数行靠它说"模型重复说了几遍"）');
+    assert.equal(s3.noop, 1);
+    assert.equal(w.events.length, 1, `★账上只留第 1 轮那一件（实际 ${w.events.length} 件）`);
+    assert.equal(w.chronicle.length, 1, '★编年也不许长出第二行（它是"往下长"的入口：真账里 `ch_3_ev_9` 就是从这条空转事件长出来的）');
+    assert.equal((w.meta.entityFields.e_p1.fields.身份 || {}).tick, 1, '★留痕仍是第 1 轮的因，不许被后两轮改写');
+});
+
+test('G30：★★值**真变了** ⇒ 照旧落账（反向自证：防"一律不落"）', () => {
+    const w = mkWorld();
+    turn(w, [CHG('黄坤', '身份', '江州话事人')], 1);
+    turn(w, [CHG('黄坤', '身份', '江州话事人')], 2);          // 空转那一轮（本条判据的对照项）
+    const s3 = turn(w, [CHG('黄坤', '身份', '大虞江州牧')], 3);
+    assert.equal(s3.updates, 1, '★值变了就是真变化 ⇒ 必须落（"一律不落"会把真事吃掉）');
+    assert.equal(s3.noop, 0, '★这一轮不是空转');
+    assert.equal(w.entities.find((e) => e.id === 'e_p1').身份, '大虞江州牧', '★格上是新值');
+    assert.equal(w.events.length, 2, '★两件事件：第 1 轮那件 ＋ 第 3 轮那件（第 2 轮是空转，不落）');
+});
+
+test('G31：★★跨轮空转的计数与账上真落下的件数**对得上**（读数行不许是一笔糊涂账）', () => {
+    // ★这条防的是"读数说空转了 2 次，账上却多了 3 件"——本仓最忌的"一个数两把尺子"。
+    const w = mkWorld();
+    const line = CHG('黄坤', '身份', '江州话事人');
+    let noop = 0, updates = 0, changes = 0;
+    for (let i = 1; i <= 4; i += 1) {
+        const s = turn(w, [line], i);
+        noop += s.noop; updates += s.updates; changes += 1;
+    }
+    assert.equal(noop, 3, '★4 轮里 3 轮是空转');
+    assert.equal(updates, 1, '★真落下的只有第 1 轮那一次');
+    assert.equal(noop + updates, changes, '★★空转 ＋ 真落 = 正文里那几条【变化】一条不差（这条等式就是"读数不许是糊涂账"）');
+    assert.equal(w.events.length, 1, '★账上事件数 = updates 那一支');
+    assert.equal(w.chronicle.length, 1, '★编年行数同样对得上');
+});
+
 test('G21：★玩家格**可以**由这条路落（红线 1 禁的是世界步替玩家写，不是禁戏里的既成事实）', () => {
     const w = mkWorld();
     const prose = tagIt(['【变化】黄坤｜身份｜江州话事人']);
@@ -269,7 +329,7 @@ test('G24：★★零扰动——没有三族料 ⇒ 账上一个字节都不碰
     const w = mkWorld();
     const before = JSON.stringify(w);
     const st = registerDialogueFacts(w, { facts: null, dialogue: '没有标签的正文', tick: 7 });
-    assert.deepEqual(st, { events: 0, updates: 0, dropped: 0, capped: 0 });
+    assert.deepEqual(st, { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0 });
     assert.equal(JSON.stringify(w), before, '★一个字节都不许动（老聊天/关着开关的世界逐字节不变）');
 });
 
@@ -400,6 +460,34 @@ const SEVEN = () => ({
 const dlgEvent = (sub, target, kind = 'action') => ({
     id: `ev_10_${DIALOGUE_EVENT_BASE}`, title: '正文里的事', source: { type: 'dialogue' },
     dialogueKind: kind, ripples: [sub, target].filter(Boolean), links: { up: [], down: [] }, closed: false,
+});
+
+// ★★★leg159 接线：**空转那一件要在读数行里出声**（不然玩家会把它读成"插件又漏记了"）。
+//   与 G31 的分工：G31 锁的是**引擎账**对得上（纯函数），这一条锁的是**玩家看得见的那行字**
+//   ——真跑 `runTick` 两轮：第 1 轮真落，第 2 轮同一句话（空转）。
+test('G32：★★真跑 runTick——跨轮空转那一件在读数行里说清（且与"丢"分开报）', async () => {
+    const w = mkWorld();
+    const line = CHG('黄坤', '身份', '确立江州实际掌控者地位');
+    const STEP0 = { actions: [], newEvents: [], agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [] };
+    const run = (dialogue) => runTick({ transport: async () => ({ text: JSON.stringify(STEP0) }), ssot: w, dialogue, extractCtx: {}, recall: false });
+    // 第 1 轮：账上原来没有这一格 ⇒ 真落一件
+    const r1 = await run(tagIt([line]));
+    assert.equal(r1.ok, true, `第 1 轮应当跑通（实际：${r1.error || ''}）`);
+    assert.equal(r1.dialogueStats.updates, 1, '★前提：第 1 轮真落了');
+    assert.equal(r1.dialogueStats.noop, 0);
+    // 第 2 轮：同一句话又来一遍 ⇒ 空转，账上一件不多（★账接着第 1 轮那份跑，不是新开一局）
+    const r2 = await runTick({
+        transport: async () => ({ text: JSON.stringify(STEP0) }), ssot: r1.ssot, dialogue: tagIt([line]), extractCtx: {}, recall: false,
+    });
+    assert.equal(r2.ok, true, `第 2 轮应当跑通（实际：${r2.error || ''}）`);
+    assert.equal(r2.dialogueStats.events, 0, '★第 2 轮一件都不落');
+    assert.equal(r2.dialogueStats.noop, 1, '★空转记账：1 件');
+    assert.equal((r2.ssot.events || []).filter((e) => e.source?.type === 'dialogue').length, 1,
+        `★账上那条路只有第 1 轮那一件（实际 ${(r2.ssot.events || []).filter((e) => e.source?.type === 'dialogue').length} 件）`);
+    // 读数行：**"没变化"与"丢"是两笔**——混成一句会让玩家以为插件漏记了
+    assert.ok(/没变化/.test(r2.tagReadout), `★读数行必须说清"这几件没变化、所以没落账"（实际：${r2.tagReadout}）`);
+    assert.ok(/没落账/.test(r2.tagReadout), '★而且要说"没落账"——它是**如实**，不是"丢了"');
+    assert.equal(/丢/.test(r2.tagReadout), false, '★★一个"丢"字都不许有：它不是丢（丢＝那条没法用），是本来就没发生新事');
 });
 
 test('G26：★★门控不再与提示词打架——被正文点到的人获得"应答资格"', () => {
