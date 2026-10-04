@@ -759,7 +759,15 @@
 //   （哪一段多少字 / 往事走哪一路），② 本来就是排查话术。★"跑过没有"这条口径（leg92）**没撤**，
 //   改由读数行说（没跑过 ⇒ 那一行直说"还没注入过"）。⇒ 玩家可见的那一卡真的少了两行字。
 //   ★`CSS_VERSION` **不升**（`web/style.css` 这一笔一个字节没动）⇒ 号仍停在 leg193 那一格。
-export const PANEL_BUILD = 'leg194-original-line-gone';
+// leg196（2026-10-05 第四笔 · **手机端真机报的 bug**）：用户令「**手机端有bug点击地图显示不完整
+//   如图所示，在最顶上只有一点点框框，把这个bug修复后然后推送**」。
+//   病：地图弹窗那张整屏遮罩只写了 `position:fixed;inset:0`，**自己不声明宽高**；而酒馆自己的样式表
+//   给 `<html>` 加了 `-webkit-transform` ＋ `-webkit-perspective` ⇒ 固定定位的包含块变成 `<html>`
+//   （实测它算出来的高度是 **0**）⇒ 遮罩塌成 **12px**、地图盒子 26px，玩家看到的就是"最顶上一小块框"。
+//   治法：跟另外两张遮罩一样**自己声明 `width:100%;height:100%`**（百分比按视口解析）＋ 手机档 `100dvh`。
+//   ⇒ **玩家可见版面真变了**（那一张浮层从"顶上一条缝"变回"整屏"）⇒ `PANEL_BUILD` 升一格；
+//   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了）。
+export const PANEL_BUILD = 'leg196-map-mobile';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

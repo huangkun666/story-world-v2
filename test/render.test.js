@@ -2567,7 +2567,12 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   （`leg194-original-line-gone`）——参数页那一卡底下**少了两行字**（那句原始读数 ＋ 排查那一行），
     //   玩家看得见。★这一笔 **`web/style.css` 一个字节没动** ⇒ `CSS_VERSION` **不升**
     //   （仍 `20261005-leg193-inject-readout`）——判据仍是那一条：**动没动样式**。
-    assert.equal(PANEL_BUILD, 'leg194-original-line-gone');
+    // ★★★leg196（2026-10-05 第四笔 · **手机端真机报的 bug** · 用户令「**手机端有bug点击地图显示不完整
+    //   如图所示，在最顶上只有一点点框框，把这个bug修复后然后推送**」）：`PANEL_BUILD` **升**
+    //   （`leg196-map-mobile`）——地图那张浮层从"顶上一条缝"变回"整屏"，玩家直接看得见。
+    //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了：那一张遮罩自己声明宽高 ＋ 手机档 `100dvh`）
+    //   ⇒ 下面 `CSS_PIN` 的号与指纹同批换掉。
+    assert.equal(PANEL_BUILD, 'leg196-map-mobile');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2604,7 +2609,11 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     // ★★★leg193：号与指纹**第六次换**（本笔真动了样式表：注入卡那一族行形收拢——`.sw2-field-head`
     //   把"标签＋框"包成一格、说明紧跟其下 ／ 新增读数行四条 `.sw2-inject-*`）。
     //   ★指纹在**全部改动落地之后**现算再填（它是"浏览器吃没吃到旧样式表"的唯一机械闸）。
-    const CSS_PIN = { ver: '20261005-leg193-inject-readout', sha: '5f5ee87d9886f0ede3b3991c5a311bcddabd28f55f665dea10e9765694fca6d3' };
+    // ★★★leg196：号与指纹**第七次换**（本笔真动了样式表：`.sw2-map-mask` 从"只有 `inset:0`"改成
+    //   **自己声明 `width:100%;height:100%`** ＋ `box-sizing:border-box`，手机档补 `height:100dvh`）。
+    //   病与全量读数见 `web/style.css` 那一处 leg196 注释（手机端真机报的"地图只在最顶上露一小块框"）。
+    //   ★指纹在**全部改动落地之后**现算再填（它是"浏览器吃没吃到旧样式表"的唯一机械闸）。
+    const CSS_PIN = { ver: '20261005-leg196-map-mobile', sha: '197715b65836ef8425eb9990c5c17baaf8276d3a237a0aab211ae9ae32b8f2b9' };
     const styleSha = createHash('sha256')
         .update(readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     assert.equal(cssVer, CSS_PIN.ver,
@@ -2628,7 +2637,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '194', '前置：本笔构建号为 leg194（撤掉那句原始读数的一笔），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '196', '前置：本笔构建号为 leg196（手机端地图浮层整屏那一笔），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

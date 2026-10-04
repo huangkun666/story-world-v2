@@ -2172,7 +2172,24 @@
   .sw2-story-app *{scroll-behavior:auto!important;transition:none!important;}
 }
 /* Map popup lives on body, outside the redrawable panel. */
-.sw2-map-mask{position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.66);display:flex;align-items:center;justify-content:center;padding:18px;color:#e7e2d7;font:14px/1.5 sans-serif}
+/* ★★★leg196（**手机端真机报的 bug**：用户 2026-10-05「点击地图显示不完整，在最顶上只有一点点框框」）：
+   这一条原来写的是 `position:fixed;inset:0` —— **只有四边偏移、自己不声明宽高**。
+   病根**不在 `inset` 这个写法本身**，而在**宿主页面把"视口"这件事改掉了**：
+   酒馆自己的 `public/style.css` 第 143 行起给 `<html>` 加了
+     `-webkit-transform: translateZ(0); -webkit-backface-visibility: hidden; -webkit-perspective: 1000;`
+   ⇒ 按规范，**`transform`/`perspective` 会给固定定位的子孙另立包含块** ⇒ 这里的 `top:0;bottom:0`
+   不再对着视口解析，而是对着 **`<html>` 那个盒子**；而 `<html>` 自己没有高度规则
+   （高度在 `body` 上：`body{height:100dvh}`）⇒ 实测 `<html>` 的算出来的高度是 **0**
+   ⇒ 遮罩高度 = 0 ＋ 手机档那 6px 上下内边距 ×2 = **12px**，地图盒子被压成 **26px**、
+   里面 700 多像素的内容全挤成一条带滚动条的缝。**用户那张截图就是这 12/26px。**
+   ★★治法（与 `.sw2-window-mask` / 事件链那两张遮罩**同一套写法**，它们从来没坏过）：
+   **自己声明 `width:100%;height:100%`** —— 固定定位元素的**百分比宽高是按"初始包含块＝视口"解析的**，
+   与 `<html>` 那个 0 高盒子无关 ⇒ 这一条不再依赖"宿主怎么对待视口"。
+   ★为什么原来没坏在别的遮罩上：那两张都写了 `width:100%;height:100%`（只有它漏了）；
+   而实测（真酒馆页面 ＋ 无头 Chrome，装置在 `F:/deepseek/tmp/leg196-map-mobile/`）：
+   同一页上 `inset:0` 那张 = 458×**12**，`width/height:100%` 那张 = 458×**1017**。
+   ★判据锁在 `test/mobile-layout.test.js`（★leg196 那一条：**凡整屏遮罩必须自己声明宽高**）。 */
+.sw2-map-mask{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;box-sizing:border-box;z-index:2147483646;background:rgba(0,0,0,.66);display:flex;align-items:center;justify-content:center;padding:18px;color:#e7e2d7;font:14px/1.5 sans-serif}
 .sw2-map-mask .sw2-map-box{box-sizing:border-box;background:#232528;border:1px solid #777164;border-radius:12px;width:min(1100px,100%);max-height:calc(100dvh - 36px);overflow:auto;padding:20px;box-shadow:0 12px 60px #0008}
 .sw2-map-mask .sw2-map-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sw2-map-mask h2{margin:0 auto 0 0}.sw2-map-mask h3{margin-top:12px}
@@ -2183,4 +2200,7 @@
 .sw2-map-mask .sw2-map-record{padding:9px 0;border-bottom:1px solid #777164}.sw2-map-mask summary{cursor:pointer;min-height:32px}
 .sw2-map-mask .sw2-map-graph{width:100%;height:auto;max-height:420px}.sw2-map-mask svg line{stroke:#aaa;stroke-width:2}.sw2-map-mask svg text{fill:currentColor;font-size:14px}.sw2-map-mask .sw2-map-edge-passage{stroke:#d9b978;stroke-dasharray:5 3}.sw2-map-mask .sw2-map-edge-adjacent{stroke:#7da7bb}
 .sw2-map-entry{display:flex;align-items:center;gap:12px}.sw2-map-mask button:focus-visible,.sw2-map-mask summary:focus-visible,.sw2-map-mask input:focus-visible{outline:2px solid #dfba74;outline-offset:3px}
-@media(max-width:620px){.sw2-map-mask{padding:6px;align-items:stretch}.sw2-map-mask .sw2-map-box{max-height:calc(100dvh - 12px);padding:12px}.sw2-map-mask .sw2-map-columns{grid-template-columns:1fr}.sw2-map-mask .sw2-btn,.sw2-map-mask summary{min-height:44px}}
+/* ★leg196：手机档跟 `.sw2-window-mask,.sw2-cv-mask` 同一条规矩——**动态视口高 `100dvh`**
+   （地址栏收起/展开时它自己跟着变；不认 `dvh` 的浏览器整条声明被丢掉，退回上面那条 `height:100%`，
+   那条也已经是**对着视口**解析的，不会塌）。 */
+@media(max-width:620px){.sw2-map-mask{padding:6px;align-items:stretch;height:100dvh}.sw2-map-mask .sw2-map-box{max-height:calc(100dvh - 12px);padding:12px}.sw2-map-mask .sw2-map-columns{grid-template-columns:1fr}.sw2-map-mask .sw2-btn,.sw2-map-mask summary{min-height:44px}}

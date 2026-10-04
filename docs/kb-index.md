@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**327 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `ee82f260-d7b6c977`（源文件 ee82f260 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `4c545796-d7b6c977`（源文件 4c545796 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,7 +11,7 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg194-original-line-gone` |
+| 构建号 | `leg196-map-mobile` |
 | 提示词号 | `v2-agenda-t1-34` |
 | 版本 | `1.1.0`（ST 扩展） |
 | 规模 | src **68** · web **38** · 判据 **167** · 探针 **76** · 文档 **201** |
@@ -23,13 +23,13 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| STATE.md · 0. 三十秒版：这台东西是什么 | `STATE.md:12` | 一个跑在 SillyTavern 里的**活世界引擎**。你每推进一步 RP，世界演化一步：势力与角色按自己的盘算行动，事件从行动里长出来、带因果。 |
-| STATE.md · 0.5  活儿在哪（接手第一件事） | `STATE.md:28` | ／ 你要知道的 ／ 只看这一处 ／ |
-| STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:40` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
-| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:74` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
-| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:136` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 当前工作 | `STATE.md:176` | leg195 发布已办结（用户 2026-10-05 令「我要发布了，这次是一次很大的更新」；拍板：推 main ＋ 升版本号 ＋ 打新 tag ＋ 发 release）：发布仓 main `88bd80e` → **` |
-| STATE.md · 5. 现场（本机） | `STATE.md:182` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
+| STATE.md · 0. 三十秒版：这台东西是什么 | `STATE.md:15` | 一个跑在 SillyTavern 里的**活世界引擎**。你每推进一步 RP，世界演化一步：势力与角色按自己的盘算行动，事件从行动里长出来、带因果。 |
+| STATE.md · 0.5  活儿在哪（接手第一件事） | `STATE.md:31` | ／ 你要知道的 ／ 只看这一处 ／ |
+| STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:43` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
+| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:77` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
+| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:139` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
+| STATE.md · 4. 当前工作 | `STATE.md:179` | leg196 已办结（用户 2026-10-05 真机报的 bug：「**手机端有bug点击地图显示不完整…在最顶上只有一点点框框，把这个bug修复后然后推送**」）：**病根在宿主页面**——酒馆给 `<html>`  |
+| STATE.md · 5. 现场（本机） | `STATE.md:185` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
 
 ### 活儿（12）
 
@@ -257,31 +257,31 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:47` | **2038 / 2038 · fail 0 · skipped 0 · todo 0**（含地点关系契约与查询、地理抽取与来源核验、地图弹窗开关、当轮地理输入与预算裁剪、导出回档、「往事怎么找」各格现读设置，以及字数额 |
-| 当前值 · 冒烟 | `STATE.md:48` | **PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js` |
-| 当前值 · PANEL_BUILD | `STATE.md:49` | **`leg194-original-line-gone`** ｜ 复量：`src/render-base.js`；参数页那一卡底下**两句原始读数整行撤掉**（用户 2026-10-05：「第二段话可以删了，这是用来调 |
-| 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:50` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
-| 当前值 · ★主调用输出上限（出厂值） | `STATE.md:51` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
-| 当前值 · ★模型容量怎么来的 | `STATE.md:52` | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** ｜ 复量：`src/transport-htt |
-| 当前值 · ★手机端 | `STATE.md:53` | 页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12 |
-| 当前值 · ★抽取并发度 | `STATE.md:54` | **缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 |
-| 当前值 · 包预算 出厂值 | `STATE.md:55` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
-| 当前值 · ★往回看轮数 出厂值 | `STATE.md:56` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
-| 当前值 · ★leg136–leg156 各笔 | `STATE.md:57` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
-| 当前值 · CSS_VERSION | `STATE.md:58` | **`20261005-leg193-inject-readout`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。leg193 加了注入卡那一族的行形规则（`.sw2-field |
-| 当前值 · MAIN_PROMPT_V | `STATE.md:59` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
-| 当前值 · web/index.js 行数 | `STATE.md:60` | **3097 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\n').length`（★**别用 PowerS |
-| 当前值 · CACHE_VERSION | `STATE.md:61` | **`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充"已有地图"，旧缓存一并失效） ｜ 复量：`src/fp-hash.js` |
-| 当前值 · 发布仓 main | `STATE.md:62` | **`e28be61`** · 构建号 **`leg194-original-line-gone`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**； |
-| 当前值 · release tag | `STATE.md:63` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs` |
-| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:64` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
-| 当前值 · 版本号 | `STATE.md:65` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 |
+| 当前值 · 判据 | `STATE.md:50` | **2039 / 2039 · fail 0 · skipped 0 · todo 0**（含地点关系契约与查询、地理抽取与来源核验、地图弹窗开关、当轮地理输入与预算裁剪、导出回档、「往事怎么找」各格现读设置，以及字数额 |
+| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js` |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg196-map-mobile`** ｜ 复量：`src/render-base.js`；**手机端地图浮层从"顶上一条缝"变回"整屏"**（用户 2026-10-05 真机报「点击地图显示不完整…在最顶上只 |
+| 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:53` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
+| 当前值 · ★主调用输出上限（出厂值） | `STATE.md:54` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
+| 当前值 · ★模型容量怎么来的 | `STATE.md:55` | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** ｜ 复量：`src/transport-htt |
+| 当前值 · ★手机端 | `STATE.md:56` | 页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12 |
+| 当前值 · ★抽取并发度 | `STATE.md:57` | **缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 |
+| 当前值 · 包预算 出厂值 | `STATE.md:58` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
+| 当前值 · ★往回看轮数 出厂值 | `STATE.md:59` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
+| 当前值 · ★leg136–leg156 各笔 | `STATE.md:60` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
+| 当前值 · CSS_VERSION | `STATE.md:61` | **`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。leg196 改的是地图那张整屏遮罩（自己声明宽高 ＋ 手机档 `100 |
+| 当前值 · MAIN_PROMPT_V | `STATE.md:62` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
+| 当前值 · web/index.js 行数 | `STATE.md:63` | **3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\n').length`（★**别用 PowerS |
+| 当前值 · CACHE_VERSION | `STATE.md:64` | **`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充"已有地图"，旧缓存一并失效） ｜ 复量：`src/fp-hash.js` |
+| 当前值 · 发布仓 main | `STATE.md:65` | **`e28be61`** · 构建号 **`leg194-original-line-gone`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**； |
+| 当前值 · release tag | `STATE.md:66` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs` |
+| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:67` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
+| 当前值 · 版本号 | `STATE.md:68` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 |
 
 ### 怎么跑（2）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:47` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
+| 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:50` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
 | 怎么发布（导出独立根树 → 仓外跑判据冒烟 → 推 → 远端逐字节核） | `scripts/publish-release.mjs:1` | node scripts/publish-release.mjs（推）· node scripts/verify-release.mjs（远端只读终检） |
 
 ### 代码地图（107）
@@ -398,6 +398,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）`
 - `0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）`
 - `0b2d4ef leg194: drop the raw inject readout line from the params card`
 - `f7104c0 leg193: inject readout row and a char budget that never cuts an event`
@@ -409,5 +410,4 @@
 - `a3c20f3 docs: hand off attribute retention and align cache metadata`
 - `b66c2ac Preserve extracted descriptive attributes and merge supplements`
 - `af634e9 Align strict setting evidence and reject empty replacements`
-- `503afd5 fix: reject unusable rounds without advancing and preserve valid proposals`
 

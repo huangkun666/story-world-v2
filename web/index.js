@@ -298,7 +298,8 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //   ★★★leg157 → **`20260930-leg157-merged-scroll`**（用户令「**顺便把下拉的bug解决了**」＝观棋页"滚到
 //     最底部滚轮就失效、拉不上去"）：★**真动了样式**（grid 高度改由 flex 分配 ＋ 并页改 flex 列 ＋ 一条 `contain`）⇒ 同批升。为什么非改不可（`100%` 看着没毛病、其实让页多出 249px **够不着**的滚动）⇒ `web/style.css` 的 leg157 注释。
 //   ★★★leg160 → **`20261001-leg160-panel-window`**（用户令「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」）：★**真动了样式**——`.sw2-pan-range` 那两条规则整块撤掉、手机档名单里两格一并删 ⇒ 同批升。
-const CSS_VERSION = '20261005-leg193-inject-readout'; // 参数页：说明贴近标签（`.sw2-field-head`）＋ 注入读数行那四条。
+//   ★★★leg196 → **`20261005-leg196-map-mobile`**（手机端真机报的 bug：地图浮层"只在最顶上露一小块框"）：**真动了样式**——`.sw2-map-mask` 从"只有 `inset:0`"改成**自己声明 `width:100%;height:100%`**，手机档补 `height:100dvh`。为什么非改不可（宿主给 `<html>` 加了 transform/perspective ⇒ 固定定位的包含块变成那个 0 高的盒子 ⇒ 遮罩实测塌成 12px）⇒ 全量读数在 `web/style.css` 那一处 leg196 注释里。
+const CSS_VERSION = '20261005-leg196-map-mobile'; // 地图浮层整屏：那一张遮罩自己声明宽高 ＋ 手机档 dvh。
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;

@@ -241,3 +241,61 @@ test('★leg145·M8：桌面口径没被动过（三条基础规则与两处既�
     const widthQueries = [...CSS.matchAll(/@media \(max-width:(\d+)px\)\{/g)].map((m) => m[1]);
     assert.deepEqual([...new Set(widthQueries)].sort(), ['620', '980'], `★宽度断点只许 620 与 980 两条（现 ${widthQueries.join('/')}）`);
 });
+
+// ─────────────────── ⑨ ★leg196：整屏遮罩必须**自己声明宽高**（手机端地图浮层那个 bug 的病根） ───────────────────
+test('★★leg196·M9：凡 `position:fixed` 的整屏遮罩，必须自己声明 width/height（不许只靠四边偏移或 inset）', () => {
+    // 病（用户 2026-10-05 手机真机报的：「**点击地图显示不完整…在最顶上只有一点点框框**」）：
+    //   地图那张遮罩原来只写 `position:fixed;inset:0`，**自己不声明宽高**。
+    //   而**宿主页面**（酒馆自己的 `public/style.css` 第 143 行起）给 `<html>` 加了
+    //     `-webkit-transform: translateZ(0); -webkit-backface-visibility: hidden; -webkit-perspective: 1000;`
+    //   ⇒ 按规范，`transform`/`perspective` 会给**固定定位**的子孙**另立包含块** ⇒ 这里的 `top:0;bottom:0`
+    //   不再对着视口解析，而是对着 **`<html>` 那个盒子**；而 `<html>` 自己没有高度规则
+    //   （高度在 `body` 上：`body{height:100dvh}`）⇒ 实测它算出来是 **0**
+    //   ⇒ 遮罩塌成 **12px**（0 ＋ 手机档 6px×2 内边距）、地图盒子 26px，七百多像素的内容挤成一条带滚动条的缝。
+    //   ★实证装置（真 `index.html` ＋ 真 `style.css` ＋ 无头 Chrome）：`F:/deepseek/tmp/leg196-map-mobile/`
+    //     —— 同一个页面上：只写 `inset:0` 的那张量到 **458×12**，写了 `width/height:100%` 的那张 **458×1017**。
+    // ★口径（治法）：固定定位元素的**百分比宽高是按"初始包含块＝视口"解析的**
+    //   ⇒ 自己声明宽高之后，这一条就与"宿主怎么对待视口"无关了。另外两张遮罩（`.sw2-window-mask` /
+    //   `.sw2-cv-mask`）一直就是这么写的，所以从来没坏过——**只有地图这张漏了**。
+    // ★这一条咬**全部** `position:fixed` 规则：将来谁再加第四张遮罩、漏了宽高，当场红。
+    const fixedRules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => /position\s*:\s*fixed/.test(m[2]))
+        .map((m) => ({ sel: m[1].trim().replace(/\s+/g, ' '), body: m[2] }));
+    assert.ok(fixedRules.length >= 3,
+        `前置：样式表里 \`position:fixed\` 的规则应当有一族（实测 ${fixedRules.length} 条）——取不到 ⇒ 下面是空绿`);
+    const selfSized = (body) => /(^|;)\s*width\s*:\s*100%/.test(body) && /(^|;)\s*height\s*:\s*(100%|100dvh)/.test(body);
+    const naked = fixedRules.filter((r) => !selfSized(r.body));
+    assert.equal(naked.length, 0,
+        `★★这 ${naked.length} 张固定定位的遮罩**没有自己声明宽高**（只靠四边偏移或 \`inset\`）：\n  `
+        + naked.map((r) => r.sel).join('\n  ')
+        + '\n  ⇒ 在酒馆那个给 `<html>` 加了 transform/perspective 的页面上，它会塌成一条缝（leg196 实测 12px）。\n'
+        + '  ⇒ 治法：`top:0;left:0;right:0;bottom:0;width:100%;height:100%;box-sizing:border-box`（照另外两张遮罩抄）。');
+    // ★地图那一张（本笔的病号）逐条点它的名，免得将来被"泛化"掉
+    const mapMask = ruleOf(CSS, '.sw2-map-mask');
+    assert.ok(mapMask, '前置：`.sw2-map-mask` 的基础规则在（取不到 ⇒ 下面全是空绿）');
+    assert.match(mapMask, /width\s*:\s*100%/, '★地图遮罩必须自己声明 `width:100%`');
+    assert.match(mapMask, /height\s*:\s*100%/, '★地图遮罩必须自己声明 `height:100%`（百分比按视口解析，不看 `<html>` 的脸色）');
+    assert.match(mapMask, /box-sizing\s*:\s*border-box/, '★它带内边距 ⇒ 必须 `border-box`（否则 `width:100%` 之外还要再加左右内边距，横着溢出）');
+    assert.ok(!/inset\s*:/.test(mapMask), '★不许退回"只写 `inset:0`"那一版（`inset` 这个写法本身没错，错在**只有它**）');
+    // ★手机那一档要按"**最后一个** 620 块"取——地图这一族住在文件末尾**它自己的**一个
+    //   `@media(max-width:620px){…}` 里（leg191 立的）。★**这是被层叠顺序逼出来的，不是笔误**：
+    //   地图的基础规则在文件末尾，手机档若写进前面那个 620 块，就会被**后面那条基础规则**盖掉
+    //   （媒体查询不加特异性、同特异性下后写的赢 —— 正是 leg104/leg145 那条老病）。
+    //   ⇒ 判据取"含 `.sw2-map-mask{` 的那个 620 块"，**别写死"第一个"**（本笔第一版就栽在这，
+    //     实测 `ruleOf(MQ620, …)` 取回空串 ⇒ 判据红在"取不到"，而不是红在"规矩不对"）。
+    //   ★登记的观察（本笔**没动**）：样式表里因此有**两个** 620 块，而 M8 那条"只许 620 与 980"
+    //     的正则只认带空格那种写法 ⇒ **它看不见这一个**。要不要合并/统一写法，留给下一棒拍板。
+    const at620 = [...CSS.matchAll(/@media\s*\(max-width:620px\)\{/g)].map((m) => m.index);
+    const mapMobileBlock = at620.length ? CSS.slice(at620.at(-1)) : '';
+    assert.ok(mapMobileBlock.includes('.sw2-map-mask{'),
+        '前置：最后一个 620 块里必须有地图那一族（取不到 ⇒ 下面那条是空绿）');
+    assert.match(ruleOf(mapMobileBlock, '.sw2-map-mask'), /height\s*:\s*100dvh/,
+        '★手机档跟另外两张遮罩同一条规矩：动态视口高 `100dvh`（地址栏收起/展开时它自己跟着变）');
+    // ★反向自证：把地图遮罩那两条宽高拿掉 ⇒ 上面那条"泛化"断言必须立不住（证明它真的在咬这件事）
+    const broken = CSS.replace(mapMask, mapMask.replace(/width:100%;height:100%;/, ''));
+    const brokenNaked = [...broken.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => /position\s*:\s*fixed/.test(m[2]))
+        .map((m) => m[2]).filter((b) => !selfSized(b));
+    assert.ok(brokenNaked.length > 0,
+        '★反向自证：拿掉地图遮罩那两条宽高之后，泛化那条应当把它记成"裸的"（本条会红）——证明这条判据不是空绿');
+});

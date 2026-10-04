@@ -331,13 +331,17 @@ const passes = [];
 const T = (label, ok, detail = '') => (ok ? passes.push(`${label}${detail ? ' · ' + detail : ''}`) : reds.push(`${label}${detail ? ' · ' + detail : ''}`));
 const W = (label, ok, detail = '') => { if (!ok) yellows.push(`${label}${detail ? ' · ' + detail : ''}`); };
 
-// R1 STATE.md 存在且够短，且不含按棒存档段（它是"当前值"，不是"流水账"）
+// R1 STATE.md 存在，且不含按棒存档段（它是"当前值"，不是"流水账"）
 T('STATE.md 存在', stateBytes > 0);
-T('STATE.md ≤ 20 KB', stateBytes > 0 && stateBytes <= 20480, `${stateBytes} 字节`);
-// ★R9 配套：**快顶格就提前报黄**——别等它红了才想起来该把旧的搬进 `docs/done-archive.md`
-//   （本文件是这个仓唯一"有硬顶"的那一份，顶格是常态而不是意外；黄一条比红一条便宜得多）。
-W('STATE.md 余量还够（≥ 5%）', stateBytes > 0 && stateBytes <= 19456,
-    `现 ${stateBytes} / 20480 字节（余 ${20480 - stateBytes}）⇒ 顶格前把 §4 里更早的一条搬进 docs/done-archive.md`);
+// ★★★leg196（**用户 2026-10-05 拍板：「破除STATE.md小于20KB的规矩吧」**）：**20 KB 硬顶撤了。**
+//   原来这里是两条：一条红（`STATE.md ≤ 20 KB`，20480 字节）＋ 一条黄（余量 ≥ 5%，19456 字节）。
+//   ★为什么撤（用户的理由）：那个硬顶把"写一句当前值"变成了"先做减法"——每一棒都要为了腾地方
+//     把旧读数搬进 `docs/done-archive.md`，实测撞过 **十几次**（leg112/113/114/115/116/125/127/131/
+//     141/142/143/144/150/157/164……），最紧的一次余量只剩 **3 字节**（leg141）。
+//     ⇒ 入口那一页的**内容**该由"是不是当前值"决定，不该由"还剩几个字节"决定。
+//   ★**只撤大小这一条，不撤纪律**：下面那条"不含按棒存档段"照旧红——**"只写当前值、不写流水账"
+//     是内容口径，与文件多大无关**；`docs/done-archive.md` 照旧是历史的家（想搬就搬，不再是必须）。
+//   ★`stateBytes` 这个读数**留着**（进 `docs/index.json`）：它从"闸门"降级成"体检数字"。
 T('STATE.md 不含按棒存档段', !/^> 🛑 20/m.test(stateText) && !/·\s*两笔\s*·/.test(stateText));
 
 // R2 STATE.md §1 与生产真源逐项相同（★这是"消灭读数多副本"的那一刀）
