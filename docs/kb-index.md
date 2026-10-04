@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**327 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `88325e33-d7b6c977`（源文件 88325e33 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `ee82f260-d7b6c977`（源文件 ee82f260 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -28,7 +28,7 @@
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:40` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
 | STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:74` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
 | STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:136` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 当前工作 | `STATE.md:176` | 参数页那一卡底下两句原始读数撤掉已办结（用户 2026-10-05 第二道令：「第二段话可以删了，这是用来调试的」＋「那句我让你抽出重点的话也删了，毕竟已经抽出来了」）：① `标签注入：…（position=0…）` 与 |
+| STATE.md · 4. 当前工作 | `STATE.md:176` | leg195 发布已办结（用户 2026-10-05 令「我要发布了，这次是一次很大的更新」；拍板：推 main ＋ 升版本号 ＋ 打新 tag ＋ 发 release）：发布仓 main `88bd80e` → **` |
 | STATE.md · 5. 现场（本机） | `STATE.md:182` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
 
 ### 活儿（12）
@@ -272,8 +272,8 @@
 | 当前值 · MAIN_PROMPT_V | `STATE.md:59` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
 | 当前值 · web/index.js 行数 | `STATE.md:60` | **3097 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\n').length`（★**别用 PowerS |
 | 当前值 · CACHE_VERSION | `STATE.md:61` | **`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充"已有地图"，旧缓存一并失效） ｜ 复量：`src/fp-hash.js` |
-| 当前值 · 发布仓 main | `STATE.md:62` | **`88bd80e`** · 构建号 **`leg160-panel-window`** · 版本号 **`1.0.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址 |
-| 当前值 · release tag | `STATE.md:63` | **`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网） |
+| 当前值 · 发布仓 main | `STATE.md:62` | **`e28be61`** · 构建号 **`leg194-original-line-gone`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**； |
+| 当前值 · release tag | `STATE.md:63` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs` |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:64` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
 | 当前值 · 版本号 | `STATE.md:65` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 |
 
@@ -398,6 +398,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）`
 - `0b2d4ef leg194: drop the raw inject readout line from the params card`
 - `f7104c0 leg193: inject readout row and a char budget that never cuts an event`
 - `be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)`
@@ -409,5 +410,4 @@
 - `b66c2ac Preserve extracted descriptive attributes and merge supplements`
 - `af634e9 Align strict setting evidence and reject empty replacements`
 - `503afd5 fix: reject unusable rounds without advancing and preserve valid proposals`
-- `1ccfd47 fix: hide filtered source rows and allow closing source details`
 

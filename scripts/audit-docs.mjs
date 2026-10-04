@@ -64,25 +64,28 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg157-merged-scroll';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
-//   ★★leg158（2026-09-30）：**用户点了"把这一笔发出去"** ⇒ 发布仓 main 从 `ced167b`（leg156b）推到
-//     **`f748203`**（构建号 `leg157-merged-scroll`）：脚本自带核验 **8/8 ✔**、只读终检 `verify-release.mjs`
-//     **20/20 ✔**；用户酒馆那份克隆也已 `git pull` 到它。⇒ **发布点跟着挪到 leg157**（人核过的真值）。
-//     ★tag/release **一个都没动**（tag 只跟 release 走）⇒ 点 release 下载的人拿到的仍是 `v1.0.1` 那棵。
-//     ★★路上撞到两处"每次都会撞"的坑，已写进 `docs/dev-process.md` **§10.1**：
-//       ① `git` 直连 github 是断的、**不读系统代理** ⇒ 给 `HTTPS_PROXY` 就通；
-//       ② `publish-release.mjs` 第④步 `commit-tree -p <远端 main>` 要**父提交在本地对象库里**，
-//          而发布仓不是本 monorepo 的远端 ⇒ 先从酒馆那份克隆 `git fetch` 取进来。
+const PUBLISHED_BUILD = 'leg194-original-line-gone';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+//   ★★leg195（2026-10-05）：**用户令「我要发布了，这次是一次很大的更新」** ⇒ 发布仓 main 从 `88bd80e`
+//     （leg160）一次推到 **`e28be61`**（构建号 `leg194-original-line-gone` · 版本号 **1.0.1 → 1.1.0**）：
+//     **leg161–leg194 那 51 笔一次上线**。脚本自带核验 **8/8 ✔**。
+//     ★与 leg158/leg160 那两次不同的一处：**这一笔同时发了 release**（用户拍板）——另打新 tag
+//       **`v1.1.0` → `e28be61`**（`prerelease:false`），旧四个 tag 原样不动。⇒
+//       **点 release 下载的人现在拿到的就是这一棵**（此前一直停在 `v1.0.1`）。
+//     ★记账次序照旧（别试图"追上 tip"）：正式那一笔先推（= `PUBLISHED_COMMIT_REF`），随后这一笔
+//       **纯记账提交**压在它上面再推一次 ⇒ `build`/`commit` 两格**必然落后远端 tip 一笔**，这是设计使然。
+//   ★leg158/leg160 留下的那两处"每次都会撞"的坑不改，见 `docs/dev-process.md` §10.1：
+//     ① `git` 直连 github 是断的、**不读系统代理** ⇒ 给 `HTTPS_PROXY` 就通（leg195 同样给了）
+//     ② `publish-release.mjs` 第④步 `commit-tree -p <远端 main>` 要**父提交在本地对象库里**
 //   ★leg154 那一笔的留档（**发布点已前移，但那次撤正的教训照旧管用**）：第一次推 `2e066dc` 是"导出整棵树"
 //     ⇒ 把分支上还没在真机验过的几笔一起带了出去，用户当场点出来（「还没测试的功能放上去干嘛？
 //     要不然我新开分支的意义在哪？」）⇒ 改成"上个发布树 ＋ 只这一处修复"，用 REST 推成 `824abc5`。
-const PUBLISHED_COMMIT_REF = 'f748203c7a2122b5e62eb14251f4a37f47cc5212';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
+const PUBLISHED_COMMIT_REF = 'e28be6162ab39b26d470eeaa0b2db141d52bd0c2';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
 // ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
 //   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
 //   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。
 //   ★**别把 `tagCommit` 接回 `PUBLISHED_COMMIT_REF`**——那会让生成物谎报"tag 指着 main 的尖端"。
-const PUBLISHED_TAG = 'v1.0.1';                  // ★最近那个 release 的 tag（★**修错版**：`prerelease: false`）
-const PUBLISHED_TAG_COMMIT = 'ec5416d';          // ★它**真的**指向哪一笔（= leg149 那一版，面板构建号仍 `leg145b-own-errors`；更旧的 `v1.0.0` → `778af70`、`v1.0.0-preview.2` → `2a86cfa`、`v1.0.0-preview.1` → `1a54424` 同样留着）
+const PUBLISHED_TAG = 'v1.1.0';                  // ★最近那个 release 的 tag（★**正式版**：`prerelease: false`）
+const PUBLISHED_TAG_COMMIT = 'e28be61';          // ★它**真的**指向哪一笔（= leg195 那一版，构建号 `leg194-original-line-gone`；更旧的 `v1.0.1` → `ec5416d`、`v1.0.0` → `778af70`、`v1.0.0-preview.2` → `2a86cfa`、`v1.0.0-preview.1` → `1a54424` 同样留着）
 //   ★本格**必然比远端 tip 落后至多一笔，这是设计使然**：它记的是"哪一笔把这一版送上线"，
 //     而"把它改成新值"这件事本身又要再提交、再推一次才到得了远端 ⇒ 永远有一笔纯记账提交压在它上面。
 //     （与 STATE.md §1 那一行 leg107 写的"★leg106 交接写完之后又推过一笔"是同一个形状。）
@@ -94,7 +97,7 @@ const PUBLISHED_TAG_COMMIT = 'ec5416d';          // ★它**真的**指向哪一
 //     （实测原文：`release.published.commit: 类型不同 ｜ release.published.date: 类型不同`）。
 //   ★口径回到本脚本 leg106 自己那条："一切'问本机'的结果不进这个文件"。
 //     日期与哈希一样是**人核过的事实**：值仍照 `git log -1 --format=%cs <REF>` 取，取完写死在这里。
-const PUBLISHED_COMMIT_DATE = '2026-09-30';
+const PUBLISHED_COMMIT_DATE = '2026-10-05';
 // ★守门用的禁词（见 R8）：这几个名字在生成物里**一律不许再出现**——它们分不清"本地号"与"已发布号"。
 const FORBIDDEN_RELEASE_KEYS = ['publishedBuild', 'publishedTag', 'publishedTagCommit'];
 const entriesDeep = (o, path = '', acc = []) => {

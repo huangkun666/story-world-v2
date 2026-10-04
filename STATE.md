@@ -59,8 +59,8 @@
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-34`** | `src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`newEvents[].position` 仍可省、仍不猜地点。 |
 | `web/index.js` 行数 | **3097 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） | `split('\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行） |
 | `CACHE_VERSION` | **`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充"已有地图"，旧缓存一并失效） | `src/fp-hash.js` |
-| 发布仓 main | **`88bd80e`** · 构建号 **`leg160-panel-window`** · 版本号 **`1.0.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，**点 release 下载的仍是 `v1.0.1` 那棵**）。★leg160 已推（用户令「**帮我推送吧**」）；本机那份克隆已 `reset --hard origin/main` 到它 | `node scripts/verify-release.mjs` |
-| release tag | **`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 | `node scripts/verify-release.mjs`（会联网） |
+| 发布仓 main | **`e28be61`** · 构建号 **`leg194-original-line-gone`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵）。★这一版是 leg195 推的（用户令「**我要发布了，这次是一次很大的更新**」）——**leg161–leg194 那 51 笔一次上线**；本机那份克隆已 `reset --hard origin/main` 到它 | `node scripts/verify-release.mjs` |
+| release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 下令发布，原话「我要发布了，这次是一次很大的更新」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑） | `test/browser-compat.test.js` |
 
@@ -175,7 +175,7 @@
 
 ## 4. 当前工作
 
-参数页那一卡底下两句原始读数撤掉已办结（用户 2026-10-05 第二道令：「第二段话可以删了，这是用来调试的」＋「那句我让你抽出重点的话也删了，毕竟已经抽出来了」）：① `标签注入：…（position=0…）` 与 ② `注入跑过 N 次…`／`注入器还没跑过（…把这条发我）` 不再画——① 的关键信息已抽成上面那行小格，② 本是排查话术；"跑过没有"那条口径（leg92）改由读数行说（没跑过 ⇒ 直说"还没注入过"）。证据在 `F:/deepseek/tmp/leg194-original-line-gone/`。不推远端。
+leg195 发布已办结（用户 2026-10-05 令「我要发布了，这次是一次很大的更新」；拍板：推 main ＋ 升版本号 ＋ 打新 tag ＋ 发 release）：发布仓 main `88bd80e` → **`e28be61`**（**leg161–leg194 那 51 笔一次上线**）· 版本号 **1.0.1 → 1.1.0**（两处 ＋ 判据锁 ＋ README ＋ STATE §1）· 新 tag **`v1.1.0`** 与新 release。顺手改对 README 那两处过时话（构建号在「**参数**」页最上面，**不在设置页**——用户点头）。机读记录与更新说明在 `F:/deepseek/tmp/leg195-publish/`，交接见 F 盘 `session-handoff-2026-10-05-leg195-publish-v110.md`。★上一笔（leg194 撤掉那两句原始读数）已搬进 `docs/done-archive.md`。
 
 ---
 

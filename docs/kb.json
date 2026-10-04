@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "88325e33-d7b6c977",
+  "fingerprint": "ee82f260-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "88325e33",
+  "sourceFingerprint": "ee82f260",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -283,6 +283,7 @@
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）",
       "0b2d4ef leg194: drop the raw inject readout line from the params card",
       "f7104c0 leg193: inject readout row and a char budget that never cuts an event",
       "be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)",
@@ -293,8 +294,7 @@
       "a3c20f3 docs: hand off attribute retention and align cache metadata",
       "b66c2ac Preserve extracted descriptive attributes and merge supplements",
       "af634e9 Align strict setting evidence and reject empty replacements",
-      "503afd5 fix: reject unusable rounds without advancing and preserve valid proposals",
-      "1ccfd47 fix: hide filtered source rows and allow closing source details"
+      "503afd5 fix: reject unusable rounds without advancing and preserve valid proposals"
     ]
   },
   "counts": {
@@ -479,7 +479,7 @@
       "kind": "入口/规矩",
       "src": "STATE.md",
       "line": 176,
-      "where": "参数页那一卡底下两句原始读数撤掉已办结（用户 2026-10-05 第二道令：「第二段话可以删了，这是用来调试的」＋「那句我让你抽出重点的话也删了，毕竟已经抽出来了」）：① `标签注入：…（position=0…）` 与 ② `注入跑过 N",
+      "where": "leg195 发布已办结（用户 2026-10-05 令「我要发布了，这次是一次很大的更新」；拍板：推 main ＋ 升版本号 ＋ 打新 tag ＋ 发 release）：发布仓 main `88bd80e` → **`e28be61`**",
       "keys": [
         "STATE",
         "入口",
@@ -7343,7 +7343,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 62,
-      "where": "**`88bd80e`** · 构建号 **`leg160-panel-window`** · 版本号 **`1.0.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖 ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`e28be61`** · 构建号 **`leg194-original-line-gone`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿  ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",
@@ -7377,7 +7377,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 63,
-      "where": "**`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
+      "where": "**`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
       "keys": [
         "当前值",
         "读数",
