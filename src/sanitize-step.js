@@ -3,7 +3,7 @@
 //
 // 为什么需要它（世界永久停摆的机制，本笔在真源上追到底）：
 //   `settleTick` 的纪律是**整步校验**——`checkWorldStep` 报一条错 ⇒ **整步退回、tick 不推进**
-//   （`settle.js:840-843`）。而模型一轮会写十几条提议，**一条写歪（少个 position、引错 id）就陪葬整轮**；
+//   （`settle.js:840-843`）。而模型一轮会写十几条提议，**一条写歪（少个 source、引错 id）就陪葬整轮**；
 //   下一轮它读回同一份账、递同一个包 ⇒ 很可能**又**写歪同一个地方 ⇒ **永久停摆、无自愈**。
 //
 //   ★本仓**早有正确先例**：`settle.js` 的 `spawnEntities`（"同名新实体 ⇒ 只丢那条提议"，leg32f）
@@ -31,10 +31,12 @@ import {
 //   ★**口径一个字不放宽**：本文件只用它的**判据**（合法/不合法 + 哪个 code），
 //     文案另走本文件自己的口（见下方 `SANITIZE_TEXT`）——净化器的理由是"丢掉理由"，
 //     与校验面（`$.foo[i].source: …` 整步拒）本来就不同形，两者都得是**逐字未变**（M4 判据锁着）。
-import { judgeRef, askRef } from './ref-rules.js';
+import { judgeRef, askRef, eventOrdinal } from './ref-rules.js';
 import { isSettingRef } from './setting.js';
 import { RIPPLE_TARGET_CAP } from './weight.js';
 import { normalizePosition } from './position.js';
+import { validate } from './schema.js';
+import { worldStepSchema } from './schemas/world-step.schema.js';
 
 /**
  * ★leg67：净化面的**文案口**——只放"与校验面措辞不同"的那几条（key = `ref-rules.js` 的判据 code）。
@@ -167,7 +169,9 @@ export function dropInvalidProposals(step, ssot) {
         newEvents: cur.newEvents.filter((ev, i) => {
             if (!ev || typeof ev !== 'object') return keep(dropped, 'newEvents', i, ev, '不是对象');
             if (!str(ev.title)) return keep(dropped, 'newEvents', i, ev, '缺标题');
-            if (!str(ev.position)) return keep(dropped, 'newEvents', i, ev, '缺位置（位置是必填——空着就是空着，但不能没有）');
+            if (ev.position !== undefined && !str(normalizePosition(ev.position))) {
+                return keep(dropped, 'newEvents', i, ev, '位置已填写但没有非空地点（无法确定请省略该字段）');
+            }
             if (!ev.source || !str(ev.source.type)) return keep(dropped, 'newEvents', i, ev, '缺事件源（无源之物不存在）');
             if (arr(ev.ripples).length > RIPPLE_TARGET_CAP) return keep(dropped, 'newEvents', i, ev, `波及名单超上限（${arr(ev.ripples).length} > ${RIPPLE_TARGET_CAP}）`);
             // ★★★leg67（甲案）：事件源（plot/state/ripple）判据问单一主人。
@@ -237,6 +241,37 @@ export function dropInvalidProposals(step, ssot) {
             return true;
         }),
     };
+
+    // 与整步校验使用同一份 schema：未知字段或字段类型错误只丢该条，
+    // 不让它再次拒绝整步、连带抹掉其它合法提议。内容不修写，拒因留痕。
+    for (const [family, schema] of Object.entries(worldStepSchema.props)) {
+        if (schema.kind !== 'array' || !Array.isArray(cur[family])) continue;
+        cur[family] = cur[family].filter((item, index) => {
+            const shape = validate(item, schema.items);
+            if (shape.ok) return true;
+            const originalIndex = arr(src[family]).indexOf(item);
+            return keep(dropped, family, originalIndex < 0 ? index : originalIndex, item, shape.errors.join('；'));
+        });
+    }
+
+    // 删除新事件会改变发号位次。依赖必须先按原始批次认身份：
+    // 被删事件的依赖一起丢，幸存事件的依赖映射到新号；只改簿记引用，不改故事内容。
+    const originalEvents = arr(src.newEvents);
+    const eventIds = newEventIdsOf(cur, (world.meta?.tick ?? 0) + 1);
+    for (const family of ['newAgendas', 'newEntities']) {
+        cur[family] = cur[family].flatMap((item, index) => {
+            const ref = item.source?.type === 'event' ? item.source.ref : null;
+            if (!ref || findEvent(null, world, ref)) return [item];
+            const ordinal = eventOrdinal(ref);
+            if (ordinal == null || ordinal < 1 || ordinal > originalEvents.length) return [item];
+            const targetIndex = cur.newEvents.indexOf(originalEvents[ordinal - 1]);
+            if (targetIndex < 0) {
+                keep(dropped, family, index, item, `事件源「${ref}」的本轮提议已丢弃`);
+                return [];
+            }
+            return [{ ...item, source: { ...item.source, ref: eventIds[targetIndex] } }];
+        });
+    }
 
     // 位置统一过一遍归一（剥「（推）」注解）——与 check-step ④ 段同一把尺子（`normalizePosition` 是叶子模块）。
     //   为什么净化器也要做：模型抄回带注解的地名时，校验器的留痕与落账都按"归一后"处理，
@@ -430,7 +465,7 @@ export function dropInvalidProposals(step, ssot) {
         //   那条闸读的是 `(step, world)` ⇒ 只算**世界账里在飞盘算**的被涉及面，与"本轮新建的盘算"无关；
         //   而它的输入面（属主 + 本步全部 actions + 波及名单）里，能被"丢掉一条提议"削掉的只有波及名单，
         //   一旦超限就丢不干净 ⇒ 靠丢提议降级**治不了它**（只能丢 actions/属主，越丢越伤世界）。
-        //   ⇒ 归"③ 世界安静一步"那条兜底路径处理（真账至今零次触发，见 settle.js:39 的留档）。
+        //   ⇒ leg187 起如实失败、不推进，保留原账供重试。
 
         const stable = STEP_KEYS.every((k) => next[k].length === cur[k].length);
         cur = next;

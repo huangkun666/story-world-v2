@@ -60,6 +60,7 @@ import { isParamStoreKey } from '../src/param-store.js';   // 判"这个键是�
 import { ENGINE_DERIVED } from '../src/params.js';         // ★leg53：引擎每轮算的那几格（不许当参数剥掉）
 // ★★★leg85：旧快照的"文风禁令/变量指令/其他"要在这里被摘掉（载入期那处迁移的**同一个函数**）。
 import { migrateStyleRulesFromCanon } from '../src/settle.js';
+import { diagnostics } from '../src/diagnostics.js';
 import { createIdbSnapshotStore } from './idb-backend.js'; // 存储适配（照旧卷同层同纪律）
 //
 // ---------- 注入形参（模块作用域；由 `createSnapshotHub` 构造时赋上）----------
@@ -71,6 +72,7 @@ let loadHotAccount = null;
 let readHotMeta = null;
 let sw2WriteHotMetaEnsuringParams = null;
 let flushHotMeta = null;
+let captureMemoryHistory = null, restoreMemoryHistory = null;
 // ★★★leg85：`hotAccountShape` **必须注入**（本棒当场咬出来的一个真缺陷，见文件末 `createSnapshotHub` 那段）。
 //   它原先在 `restoreSnapshot` 里是**裸引用**，而本文件从头到尾**没有**它（也没 import）——
 //   ⇒ 那条路一调就 `ReferenceError: hotAccountShape is not defined`，被 `catch (err)` 吞成
@@ -153,7 +155,7 @@ export function isParamOnlyChange(world) {
         return JSON.stringify(stripParamKeys(world)) === sw2SnapLastWorldFp;
     } catch (_) { return false; }
 }
-export function requestSnapshot(world, reason) {
+export function requestSnapshot(world, reason, keepId = null) {
     if (!world || typeof world !== 'object') return;
     const snapshot = JSON.parse(JSON.stringify(world));   // 立即取副本（后续可能被就地改）
     // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -175,6 +177,10 @@ export function requestSnapshot(world, reason) {
     }
     sw2SnapLast = [fp, ...sw2SnapLast].slice(0, 2);
     sw2SnapLastWorldFp = JSON.stringify(stripParamKeys(world));
+    const memory = captureMemoryHistory ? Promise.resolve().then(() => captureMemoryHistory(snapshot)).catch(err => {
+        diagnostics.record('快照', 'warn', '历史校验读取失败，恢复时将隔离未确认旧卷', { error: err });
+        return { version: 1, known: {}, verified: false };
+    }) : null;
     sw2SnapQueue = sw2SnapQueue.then(async () => {
         try {
             await ensureSnapshotChain();      // ★异步边界上再保一次（防 loadWorld 的第一次对齐竞态）
@@ -187,12 +193,14 @@ export function requestSnapshot(world, reason) {
                 anchorSeq: sw2SnapChain.anchorSeq,
                 reason: String(reason || '落账'),
             });
+            if (memory) p.snapshot.memoryHistory = await memory;
             await snapshotStore(freshCtx).put(p.snapshot);
+            diagnostics.record('快照', 'info', '快照已保存', { id: p.snapshot.id, tick: snapshot.meta?.tick, reason });
             // ★本笔修的真 bug：原写 `anchorWorld: snapshot`（锚点记成了当前世界）——留档见文件头 ⑤
             sw2SnapChain = { seq: p.nextSeq, anchorId: p.anchorId, anchorSeq: p.anchorSeq, anchorWorld: p.anchorWorld };
             // 保留窗口 15 步 · 锚点完整性由 planRetention 保证：丢锚就丢它名下的 delta
             const metas = await snapshotStore(freshCtx).list();
-            const plan = planRetention({ snapshots: metas });
+            const plan = planRetention({ snapshots: metas, keepId });
             if (plan.drop.length) await snapshotStore(freshCtx).drop(plan.drop);
             // ★leg108（B6）：刚拍的这一份**就是盘上现在这份**（快照钩在唯一落账收口上 ⇒ 它是刚写下去的那份账）
             await markCurrentSnapshot(p.snapshot.id);
@@ -200,6 +208,7 @@ export function requestSnapshot(world, reason) {
         } catch (err) {
             // 失败零阻塞：只进控制台（世界推进永远优先）
             console.warn('[story-world-v2] 快照失败（不影响世界推进）', String(err?.message || err));
+            diagnostics.record('快照', 'error', '快照保存失败', { error: err });
         }
     });
     // ★本笔加：**把这条写队列交出去**。拍快照仍是**零阻塞**（既有调用方不 await，行为一字不变），
@@ -260,7 +269,7 @@ export async function restoreSnapshot(targetId) {
         const r = restoreFrom({ snapshots: all, targetId });
         if (!r.ok) return { ok: false, error: r.error };
         const current = loadHotAccount(readHotMeta()) || accessLastWorld();
-        if (current) requestSnapshot(current, '恢复前自保');       // ②自保（异步，不阻塞这次恢复）
+        if (current) await requestSnapshot(current, '恢复前自保', String(targetId));
         // ★★★leg85：**恢复前先跑载入期那处旧账清理**（leg74 立、连续七棒登记的待办，本棒收口）。
         //   病（照 leg74 §3-A 原话）：这份快照若是 leg74 **之前**拍的，它账上还带着那几类
         //   （`文风禁令` / `变量指令` / `其他`）——**恢复一次就把用户已经拍板清掉的东西带回来**，
@@ -276,8 +285,14 @@ export async function restoreSnapshot(targetId) {
         //   ★★为什么是**就地算一次、两个消费者共用**（而不是"写成 `if (migrated !== r.world)` 只做副作用"）：
         //     后者会让写回用的仍是**没迁移的那一份**（`r.world`）——那正是"算了不用"的形状，
         //     判据若只锁"调了这个函数"，这种半吊子写法照样绿。⇒ 迁移结果必须**真的流到写回面**。
-        const migrated = migrateStyleRulesFromCanon(r.world);
-        if (migrated !== r.world) {
+        let migrated = migrateStyleRulesFromCanon(r.world);
+        const styleChanged = migrated !== r.world;
+        if (restoreMemoryHistory) {
+            const history = all.find(s => String(s.id) === String(targetId))?.memoryHistory || null;
+            migrated = { ...migrated, meta: { ...migrated.meta, memoryHistory: { known: { ...(history?.known || {}) }, restoredAt: migrated.meta?.tick } } };
+            await restoreMemoryHistory(migrated, history);
+        }
+        if (styleChanged) {
             console.info('[story-world-v2] 快照恢复：这份旧快照里的"文风禁令/变量指令/其他"已按载入期同一口径摘掉（不再带回账上）');
         }
         // ★leg41：恢复的是**世界账**（参数不在里面）⇒ 写回前先把真源镜像补上，
@@ -303,6 +318,7 @@ export async function restoreSnapshot(targetId) {
         } catch (_) {}
         // ★leg108（B6）：盘上现在是**被恢复的这一份**——★不是上面那份"恢复前自保"（那是最新的、但它是旧状态）
         await markCurrentSnapshot(String(targetId));
+        diagnostics.record('快照', 'info', '恢复完成，记忆已隔离', { id: targetId, tick: migrated.meta?.tick, flushed: flushed?.ok });
         const t = r.world?.meta?.tick;
         return { ok: true, tick: t, plan: r.plan, flushed };
     } catch (err) {
@@ -343,7 +359,7 @@ export async function refreshSnapshots({ silent = true } = {}) {
         sw2SnapshotCache = { list: r.list, text: r.text };
         if (accessLastWorld()) refreshWorld(accessLastWorld(), { oldVolumes: accessListedVolumes() });
     } catch (err) {
-        if (!silent) setStatus(`⚠ 快照刷新失败：${err?.message || err}`);
+        if (!silent) setStatus(`注意：快照刷新失败：${err?.message || err}`);
     }
 }
 
@@ -385,6 +401,8 @@ export function createSnapshotHub(deps) {
     accessLastWorld = deps.getLastWorld;
     assignLastWorld = deps.setLastWorld;
     accessListedVolumes = deps.getListedVolumes;
+    captureMemoryHistory = deps.captureMemoryHistory || null;
+    restoreMemoryHistory = deps.restoreMemoryHistory || null;
     return {
         snapshotList, restoreSnapshot, clearSnapshots, resetSnapshots,
         requestSnapshot, refreshSnapshots, snapshotStore,

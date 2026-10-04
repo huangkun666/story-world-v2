@@ -12,7 +12,7 @@
 //   （同一套自查也留在 `demo/audit-leg25h-adversarial.js`，可随时复跑看输出。）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupeRoster, sanitizeCanon, BOOK_ALIAS_MAX, BOOK_ALIAS_CHAR } from '../src/abstract.js';
+import { dedupeRoster, sanitizeCanon } from '../src/abstract.js';
 
 const names = (out) => out.map((m) => [m.name, ...(m.aliases || [])]);
 
@@ -52,8 +52,14 @@ test('roster合并·Q3：会不会丢东西（叫法 / 字段 / 已有值）', (
         dedupeRoster([{ name: '甲', kind: 'faction' }, { name: '甲', parent: '乙', location: '许昌', fields: { 规模: 'x' } }])[0],
         { name: '甲', kind: 'faction', parent: '乙', location: '许昌', fields: { 规模: 'x' } },
         '缺的字段由后一条补上');
-    assert.equal(dedupeRoster([{ name: '甲', parent: '原上级' }, { name: '甲', parent: '新上级' }])[0].parent, '原上级',
-        '★已有值绝不覆盖（明述优先）');
+    // ★★★Task 3 复查（task-3-review.md ④；依据设计 §6.2「发生明确矛盾时保留诊断并复核相关原文，
+    //   不能静默选择先到的值」）：同一身份的两个上级 = **明确矛盾** ⇒ 不选先到的那个，归属留空 + 留诊断。
+    //   旧断言要的是"保留先到者（明述优先）"——那正是被点名的"先到先得"口径（先前失败：改后实测 undefined）。
+    const parentConflicts = [];
+    const sameIdentity = dedupeRoster([{ name: '甲', parent: '原上级' }, { name: '甲', parent: '新上级' }], { conflicts: parentConflicts });
+    assert.equal(sameIdentity[0].parent, undefined, '★明确矛盾的归属不选先到者（留空，冲突进诊断）');
+    assert.ok(parentConflicts.some((c) => c.field === 'parent' && (c.values || []).includes('原上级') && (c.values || []).includes('新上级')),
+        `★两个值都要留诊断：${JSON.stringify(parentConflicts)}`);
 });
 
 test('roster合并·Q4：会不会改变旧行为（无别名时零扰动）', () => {
@@ -111,7 +117,7 @@ test('roster合并·leg60 同名重出：别名并进已收的那条，不许随
         '★第二条的别名不许跟着被丢的那条一起消失（旧法只 continue）');
 });
 
-test('roster合并·leg60 边界：非数组/非字符串/与正名同/超长超量，都不炸也不脏', () => {
+test('roster合并·leg60 边界：非数组/非字符串/与正名同 ⇒ 不炸也不脏；★已确认叫法**完整保存**', () => {
     const r = sanitizeCanon({
         bookEntities: [
             { name: '甲', aliases: '乙' },
@@ -121,8 +127,12 @@ test('roster合并·leg60 边界：非数组/非字符串/与正名同/超长超
     assert.equal(r.canon.bookEntities[0].aliases, undefined, '非数组不认（绝不发明叫法）');
     const b = r.canon.bookEntities[1];
     assert.equal(b.aliases.includes('乙'), false, '与正名相同的叫法不入表');
-    assert.equal(b.aliases.every((s) => typeof s === 'string' && s.trim() && s.length <= BOOK_ALIAS_CHAR), true,
-        '逐项都是非空字符串且 ≤ BOOK_ALIAS_CHAR');
-    assert.equal(b.aliases.length, BOOK_ALIAS_MAX, '超量截到每条上限（防模型灌一长串撑裂账本）');
-    assert.equal(b.aliases[0].length, BOOK_ALIAS_CHAR, '超长别名截断保留，不整条丢（截断后仍是原文片段）');
+    assert.equal(b.aliases.every((s) => typeof s === 'string' && s.trim()), true,
+        '逐项都是非空字符串（形状防线：非字符串/空串/与正名同/重复 一律不收）');
+    // ★★★Task 4（integration boundaries）：**两条静默数据丢失的上限已删**（旧法 `BOOK_ALIAS_MAX = 8`
+    //   截到 8 条、`BOOK_ALIAS_CHAR = 30` 把长别名切短，且**没有任何诊断**）。
+    //   依据：设计 §6.3「保留**全部**已确认叫法」、§9「别名完整保存」＋「没有新增数值阈值或数量上限」。
+    assert.equal(b.aliases.length, 10, `★已确认叫法一条都不许丢（旧法只留前 8 条）；实际 ${JSON.stringify(b.aliases)}`);
+    assert.equal(b.aliases.includes('丙'.repeat(50)), true, '★超长（>30 字）的完整别名必须原样保存，不许截短');
+    assert.equal(b.aliases.at(-1), '丑', '后面的叫法也必须都在（不是"截到上限就停"）');
 });

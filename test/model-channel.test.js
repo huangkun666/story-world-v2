@@ -179,7 +179,11 @@ test('★★`probeModelAction`：通了 ⇒ 结论行只有「通 · 模型 · �
     assert.equal(r.ok, true);
     const line = hub.renderState().modelProbe.line;
     assert.equal(hub.renderState().modelProbe.ok, true);
-    assert.match(line, /✓ 通/);
+    // ★★★leg166：这一条原来咬 `/✓ 通/`——那一枚 ✓ 是**玩家可见的 emoji**，
+    //   本笔按用户令「emoji 不要了」（leg165 的"全清"口径）把它从产出里撤掉了。
+    //   ★口径**一个字没放宽**：仍是"结论行要报出通了 ＋ 哪个模型 ＋ 耗时"三件事，只是不再靠一枚对勾说"通了"
+    //     （"通了"由这一行自己的存在 ＋ `modelProbe.ok` 说；见下面那三条断言）。
+    assert.match(line, /通/);
     assert.match(line, /m-a/, '★要报出测的是哪个模型');
     assert.match(line, /秒/, '★要报出耗时');
     assert.ok(!/字/.test(line), '★★用户 2026-09-27 当场裁的：**不写"回了几个字"**（那是内部噪声）');
@@ -215,13 +219,16 @@ test('★★设置页：两枚按钮 ＋ 清单 ＋ 结论行（清单没取到�
     assert.match(empty, /id="sw2_model"/, '★模型那一格照旧在（按钮是加在它旁边的）');
     assert.ok(!/data-action="pick-model"/.test(empty), '★没取到清单 ⇒ 一个模型项都不画（空着就是空着）');
 
+    // ★★★leg166：两个夹具字符串里的 ✓ 撤掉（它们是**玩家可见的 emoji**，用户令「emoji 不要了」）。
+    //   ★下面那条断言跟着改成咬**结论行正文**（`通 · m-a · 1.2 秒`）——它要证的事一个字没变：
+    //     "结论行真的印到了渲染面上"，只是不再靠一枚对勾当锚点。
     const full = renderSettingsHtml({ chronicle: [] }, {
-        config: { ...CONFIG, modelCatalog: { models: ['m-a', 'm-b'], note: '✓ 取到 2 个模型' }, modelProbe: { ok: true, line: '✓ 通 · m-a · 1.2 秒' } },
+        config: { ...CONFIG, modelCatalog: { models: ['m-a', 'm-b'], note: '取到 2 个模型' }, modelProbe: { ok: true, line: '通 · m-a · 1.2 秒' } },
     });
     assert.match(full, /data-action="pick-model" data-model="m-a"/, '★清单里每一项都要能点（键名在 data-model 上）');
     assert.match(full, /data-action="pick-model" data-model="m-b"/);
     assert.match(full, /sw2-model-cur[^>]*>m-a</, '★当前那一个要高亮（玩家一眼看出现在用的是哪个）');
-    assert.match(full, /✓ 通 · m-a · 1\.2 秒/, '★结论行要印出来');
+    assert.match(full, /通 · m-a · 1\.2 秒/, '★结论行要印出来');
     // ★口径要**窄**：设置页别处本来就有"字"（注入读数那句"注入了多少字"）⇒ 不许拿一个裸 `字` 去扫全页
     //   （本仓老毛病：词面代替语义）。咬的是**"回了几个字"这个形状**。
     assert.ok(!/回了\s*[\d,]+\s*个字/.test(full), '★渲染面上不许出现"回了几个字"');

@@ -125,7 +125,9 @@ test('leg25 f：bookEntriesForInherit 真跑——必须交出**原始 ST 条目
         assert.equal(typeof mod.bookEntriesForInherit, 'function', '取书口必须导出（可真测）');
         const entries = await mod.bookEntriesForInherit();
         assert.ok(Array.isArray(entries), '必须返回数组');
-        assert.equal(entries.length, BOOK_ENTRIES.length, `条目数应一致（实际 ${entries.length}）`);
+        assert.equal(entries.filter(e => e._sw2SourceKind === 'world-entry').length, BOOK_ENTRIES.length, '允许世界书正文仍带原 ST 字段');
+        assert.ok(entries.some(e => e._sw2SourceKind === 'character-field'), '卡正文也经同一取料入口');
+        assert.ok(entries.every(e => e._sw2Resolved), '下游只接收已经完成读取选择的副本');
         const first = entries.find((e) => String(e?.comment) === '昆仑道宫');
         assert.ok(first, '★条目必须带 `comment`（=条目名，结构推断按它匹配实体）');
         assert.match(String(first.content), /所在地/, '★条目必须带 `content` 正文（驻地就在正文里）');
@@ -136,12 +138,14 @@ test('leg25 f：bookEntriesForInherit 真跑——必须交出**原始 ST 条目
     }
 });
 
-test('leg25 f：取不到书 ⇒ 空数组（不猜位置、不报错——与查书路同纪律）', async () => {
+test('取不到世界书时仍可读取允许的角色卡正文，不编造书条目', async () => {
     const restore = installCtx(fakeCtx({ book: null }));   // 书没挂载 + loadWorldInfo 恒 null
     try {
         const mod = await import('../web/index.js?inherit2');
         const entries = await mod.bookEntriesForInherit();
-        assert.deepEqual(entries, [], '★读到 0 本书 ⇒ 不推断（空数组，绝不猜）');
+        assert.equal(entries.length, 1);
+        assert.equal(entries[0]._sw2SourceKind, 'character-field');
+        assert.equal(entries[0].content, '一个修真世界。');
     } finally {
         restore();
     }

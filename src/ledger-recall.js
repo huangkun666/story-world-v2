@@ -45,13 +45,21 @@
 //   实测（200 行账 · 1600 字预算）：按名取**一条排序都没有** ⇒ 留下的是**最老的 64 行**；
 //   而按词取有排序（命中多的在前、同分新的在前）⇒ 留下的是**最新的 63 行**。
 //   两条路一个记着陈年旧账、一个记着刚发生的事，**口径互相打架**。
-//   ★治法：**凡是"平铺型"的取法，命中之后统一按"轮次新的在前"排**（见 `newnessOf`）——
-//   读者是写下一段正文的模型，**最近发生的事最该在它眼前**。
+//   最近与名称模式仍按轮次新的在前；关键词模式按命中词数、再按新旧选择预算，
+//   避免一条新的一词记录挤掉旧的多词记录。聊天合并候选时复用同一匹配排序。
 //   ★原来这里还有一句"**有向的两种取法不排**"（`照因果上溯` 要一层层看来路、`照指针` 要那件事
 //   自己的顺序；替消费者重排就是替它决定它没要的东西）——本笔把那两种取法整个删了
-//   （见 `RECALL_MODES` 头注：**生产路径零调用**）⇒ 留下的三种**全是平铺型**，所以现在三种都排。
+//   （见 `RECALL_MODES` 头注：**生产路径零调用**）。向量模式保留相似度顺序。
 
 import { chronicleBriefKind, CHRONICLE_BRIEF_KINDS } from './chronicle-brief.js';
+// ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」）：**向量那一档**。
+//   ★依赖方向仍**单向**：`ledger-recall.js → embed-orchestration.js → ledger-vector.js`（真叶子）
+//     与 `→ chronicle-brief.js`（真叶子）⇒ **不成环**（判据 `module-layout.test.js` 的丙案⑤钉着）。
+//   ★为什么这一档要住在这里（而不是让消费者自己调向量层）：细案 §7 写死过——
+//     「**向量进来时仍是唯一入口**（`modes` 加一档，**别另开一条路**）」。
+//     本仓为"同一个判断两处各写一份"付过账（leg117 那张表分叉），这里不重蹈。
+import { recallForPack } from './embed-orchestration.js';
+import { RECALL_TOP_DEFAULT } from './ledger-vector.js';
 // ★本笔（死码清理）：原来这里还有第二条 import——`setting.js` 的 `eventBornTick`（leg118 借来的
 //   "一件事件出生在第几轮"那把尺）。它只服务 `withRound`，而 `withRound` 只服务那四种被删的取法
 //   ⇒ 一起删了。★本模块回到**一条 import**（仍是真叶子：不取世界、不碰 DOM、不碰存储）。
@@ -61,6 +69,14 @@ export const RECALL_MODES = Object.freeze({
     RECENT: 'recent',       // 最近优先：账是只往后加的顺序，取尾巴
     BY_KEYWORD: 'keyword',  // 按词：命中了哪些往事（**字面**匹配，弱）
     BY_NAMES: 'names',      // ★★按**账上真名**：拿调用方给的一段话，先点出里面出现了账上的哪些真名，再照名取
+    // ★★★leg161：**按意思取**（向量）——用户令「**那就让聊天侧也接上向量检索呗**」＋
+    //   「**向量记忆就是rp内标准的解决失忆方案**」。
+    //   ★**它是"唯一入口"里的一档**，不是另开一条路（细案 `docs/spec-memory-engine.md` §7 写死过）。
+    //   ★**查询向量由调用方嵌好递进来**（`q.qVector`）——本层**同步、不碰网络**（纪律②照旧：
+    //     存储与网络住浏览器侧）。没递向量 ⇒ 这一档**空手而归**（不抛、不编）。
+    //   ★**它捞的是"字面对不上"的那一段**：实测两法捞出来的行**几乎不重叠（0–1/6）**
+    //     ⇒ 与 `BY_NAMES` **并联**，不是替代。
+    BY_VECTOR: 'vector',
 });
 
 // ---------- ★本笔（死码清理）：删掉的四种取法，出处与凭据都留在这里，免得下一任再翻一遍 ----------
@@ -277,16 +293,20 @@ function modeKeyword(ssot, q) {
     const terms = keywordsOf(q.text);
     if (!terms.length) return [];
     const chron = chronicleOf(ssot, q.volumes);
-    const hits = [];
-    for (const r of chron) {
-        const t = String(r?.text ?? '');
-        let n = 0;
-        for (const term of terms) if (t.includes(term)) n += 1;
-        if (n > 0) hits.push({ row: r, score: n });
-    }
-    // 命中多的在前；同分按轮次新的在前
-    hits.sort((a, b) => (b.score - a.score) || (Number(b.row?.tick) - Number(a.row?.tick)));
-    return hits.map((h) => h.row);
+    const hits = chron.filter(r => terms.some(term => String(r?.text ?? '').includes(term)));
+    return rankKeywordMatches(hits, q.text);
+}
+
+/** 预算选择共用的字面排序：不同词命中数优先，同分看已有轮次；不修改数组或记录。 */
+export function rankKeywordMatches(items, text) {
+    const terms = keywordsOf(text);
+    return asItems(items).map((it, seq) => {
+        const value = String(it?.text ?? '');
+        const score = terms.reduce((n, term) => n + Number(value.includes(term)), 0);
+        return { it, score, newness: newnessOf(it), seq };
+    }).sort((a, b) => (b.score - a.score)
+        || ((b.newness ?? -Infinity) - (a.newness ?? -Infinity)) || (a.seq - b.seq))
+        .map(row => row.it);
 }
 
 // ★本笔删掉了 `modeByEntity`（按人/势力）——口径留档：它认**三种关系**（名字 / 他名下盘算的目标名 /
@@ -379,17 +399,52 @@ function newnessOf(it) {
     return null;
 }
 
-// ★哪些取法要排序：**平铺型**（取回来是一堆彼此平行的往事）要排。
+// 最近与名称模式按新旧排序；关键词模式保留上面的命中词数顺序。
 //   ★原来这里还写着"**有向型**不排——`照因果上溯` 的链顺序、`照指针` 的顺序本身就是信息"：
-//     本笔把那两种取法删了（生产路径零调用，见 `RECALL_MODES` 头注）⇒ 现在**三种全是平铺型**。
+//     那两种取法已删掉（生产路径零调用，见 `RECALL_MODES` 头注）。
+//   ★★★leg161：**向量那一档不排**——它的顺序**就是相似度序**（从最像到最不像），
+//     排了就把那一层唯一的产出（"哪几条最像"）毁掉。★它是**有向型**（第一个是"最像的"），
+//     与 `照因果上溯` 当年那条口径同源（"顺序本身就是信息"）。
 const MODES_SORTED = new Set([
-    RECALL_MODES.RECENT, RECALL_MODES.BY_KEYWORD, RECALL_MODES.BY_NAMES,
+    RECALL_MODES.RECENT, RECALL_MODES.BY_NAMES,
 ]);
+
+/**
+ * ★★★leg161：**按意思取**——把调用方嵌好的查询向量交给向量层，取回最像的 N 条**账上原文**。
+ *
+ * 【它为什么不在这里自己嵌】本层是**同步**的（`recallLedger` 的既有契约：出包那一刻必须同步跑完），
+ *   而嵌一条向量要**一趟网络**。⇒ 分工照旧：**存储与网络住浏览器侧**
+ *   （`web/embed-runtime.js` 把向量嵌好、由 `q.qVector` 递进来），本层只负责"取"。
+ *   ★没递向量（没配通道 / 还没嵌好 / 嵌失败）⇒ **空手而归**——不是坏行为，是"这一轮退回字面路"。
+ *
+ * 【它捞的是什么】窗口外、**字面对不上**的那一段（实测两法捞的行几乎不重叠 0–1/6）。
+ *   ★`floor` 由调用方按**同一个算法、同一份旋钮**算好递进来（`windowFromTick` ＋ 账上「往事轮数」）——
+ *     两处各算一次就会出现"这一行既在 `纪事` 里、又被召回回来"的重叠。
+ */
+function modeByVector(ssot, q) {
+    if (!Array.isArray(q?.qVector) || !q.qVector.length) return [];
+    const store = q?.vectorStore;
+    if (!store) return [];
+    const got = recallForPack(ssot, store, {
+        qVector: q.qVector,
+        floor: Number.isFinite(Number(q?.floor)) ? Number(q.floor) : 0,
+        top: Number.isFinite(Number(q?.top)) && Number(q.top) > 0 ? Math.floor(Number(q.top)) : RECALL_TOP_DEFAULT,
+        minScore: Number.isFinite(Number(q?.minScore)) ? Number(q.minScore) : 0,
+        excludeIds: Array.isArray(q?.excludeIds) ? q.excludeIds : [],
+        rippleIds: Array.isArray(q?.rippleIds) ? q.rippleIds : [],
+        tickNow: q?.currentTick ?? null,
+        rows: Array.isArray(q?.rows) ? q.rows : null,
+    });
+    // ★交出去的**必须是编年行那个形状**（`{id,tick,text,…}`）——本层其余取法都是这个形状，
+    //   消费者（`formatRecalled` / 包那一栏）按同一个形状读。`line` 是排好版的那一句，也一起带上。
+    return (got?.items || []).map((it) => ({ id: it.id, tick: it.tick, text: it.text, ...(it.timeMark ? { timeMark: it.timeMark } : {}), line: it.line, score: it.score }));
+}
 
 const MODE_FNS = {
     [RECALL_MODES.RECENT]: modeRecent,
     [RECALL_MODES.BY_KEYWORD]: modeKeyword,
     [RECALL_MODES.BY_NAMES]: modeByNames,
+    [RECALL_MODES.BY_VECTOR]: modeByVector,
 };
 
 /**
@@ -457,9 +512,9 @@ export function matchedKeysOf(ssot, text) {
  * ★检索层的**唯一入口**。
  * @param {object} ssot   世界账（调用方递进来；本层不自己去取任何东西）
  * @param {object} query  查询（见 DEFAULTS；`modes` 可以是字符串或数组，多方式是**并集**）
- *   · ★**三种取法都是平铺型，取回来一律按"轮次新的在前"排**（`recent`/`keyword`/`names`）。
+ *   · `recent`/`names` 按轮次新的在前；`keyword` 按命中词数、再按新旧；向量按相似度。
  *     （原来这里还写着"`cause`/`id` 是有向的、保留处理顺序"——那两种取法本笔删了。）
- *   · ★`limit` = 至多取几条，**默认 `null` 表示不限**；它排在排序之后 ⇒ 限掉的一定是最老的那几条。
+ *   · ★`limit` = 至多取几条，**默认 `null` 表示不限**；在各模式排序之后选取。
  *     真正的尺是 `maxChars`（字符预算）——条数不设上限是本仓血证（`entityUpdates ≤3` 那个静默闸）。
  * @returns {{ok:boolean, items:Array, reason:string, mode:string[], queryChars:number, total:number, matchedKeys?:string[]}}
  *   ★**永不抛**：任何异常都折成 `{ok:false, items:[], reason}`（纪律②）。
@@ -506,7 +561,7 @@ export function recallLedger(ssot, query = {}) {
             }
             for (const b of bucket) items.push(b.it);
         }
-        // ★条数闸（默认不限）：**排在排序之后**——所以"限几条"限掉的一定是最老的，不是随便几条。
+        // 条数闸默认不限；按各模式的选择顺序截取，关键词匹配不会再被新旧覆盖。
         const maxItems = Number.isFinite(q.limit) && q.limit >= 0 ? q.limit : Infinity;
         const capped = maxItems < items.length ? items.slice(0, maxItems) : items;
         out.total = capped.length;

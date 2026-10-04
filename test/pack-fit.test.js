@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     buildScaleAnchor, buildScaleAnchorWithFit, buildRuleAnchor, buildRuleAnchorWithFit,
-    buildEvolutionPack, TIER_TOP, DIM_TOP, SCALE_TABLE_TOP_PACK,
+    buildEvolutionPack,
 } from '../src/pack.js';
 // ★`RULE_PACK_TOP` 的真源在 **`abstract-tier.js`**（pack.js 是**引用式**取它，不重写数字 —— 那条纪律见 pack.js 头注）。
 //   ★★leg71（丙案）：真源**换家**——法则分类那三道进包上界随"档位归一 + 法则分类"一起搬到了新模块。
@@ -29,12 +29,15 @@ import { RULE_PACK_TOP } from '../src/abstract-tier.js';
 const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
 
 // ───────── 夹具（全自造） ─────────
-// ★★★leg135：夹具规模**跟着上限走**（旧值"30 张 × 3 档 3 维"是照旧上限 16/24/8 配的；
-//   新上限 64/300/16 下它**一条闸都咬不到** ⇒ A1-② 会退化成空转，实测当场红）。
-//   口径：**表数比 `SCALE_TABLE_TOP_PACK` 多**（表闸咬住）＋每张给足档位 ⇒ 三条闸一起咬。
-const fatCanon = () => ({
+// ★★★leg163（用户令「**删掉那三道，让预算当唯一的闸**」）：三道上限整批删除 ——
+//   `SCALE_TABLE_TOP_PACK` / `TIER_TOP` / `DIM_TOP` 三个常量已从 `pack.js` 删除。
+//   ⇒ 这个夹具（原名 `fatCanon`，"胖到咬闸"）**改了用途**：它不再用来"逼出截断"，
+//     而是用来锁**"规模再大也一条不丢"**（进包 === 共）。名字随之改成 `hugeCanon`。
+//   ★为什么必须改（留档）：旧口径是"夹具规模跟着上限走"——那让用例的**意义**挂在一个数字上，
+//     数字一改用例就静默空转（leg135 为此踩过一次）。改成锁"全进"之后，**规模与意义脱钩**。
+const hugeCanon = () => ({
     powerScale: [], dims: [], rules: [],
-    刻度: Array.from({ length: SCALE_TABLE_TOP_PACK + 6 }, (_, i) => ({
+    刻度: Array.from({ length: 70 }, (_, i) => ({
         名: `表${i}`, 源: '甲',
         档位: Array.from({ length: 6 }, (_, j) => ({ 档: `X${i}_${j}`, 注: '标' })),
         维度: [{ 名: `维${i}a`, 范围: '甲境' }, { 名: `维${i}b`, 范围: '乙境' }, { 名: `维${i}c`, 范围: '丙境' }],
@@ -95,7 +98,7 @@ function stripComments(src) {
 
 // ═══════════════ ① 薄壳一致（两支必须是同一个东西，含 null 边界） ═══════════════
 test('A1-①：WithFit 的 anchor 与薄壳逐字节同形（含两种 null 边界）', () => {
-    for (const [label, canon] of [['fat', fatCanon()], ['thin', thinCanon()],
+    for (const [label, canon] of [['huge', hugeCanon()], ['thin', thinCanon()],
         ['null', null], ['空表', { powerScale: [], dims: [], rules: [], 刻度: [] }],
         ['只有空白项', { dims: [{ name: '  ' }], powerScale: [{ level: '' }] }]]) {
         const shell = buildScaleAnchor(canon);
@@ -109,26 +112,36 @@ test('A1-①：WithFit 的 anchor 与薄壳逐字节同形（含两种 null 边�
     }
 });
 
-// ═══════════════ ② 真截断如实（读数与**实物**逐个对上） ═══════════════
-test('A1-②：真顶到预算时 进包 < 共，且读数与实物逐个相等（不是自己另算一遍）', () => {
-    const canon = fatCanon();
+// ═══════════════ ② 读数如实（且**没有截断** —— 上限已删） ═══════════════
+// ★★★leg163：这里原有 A1-②「真顶到预算时 进包 < 共」——**那一条连同三道上限一起作废**
+//   （现在没有"预算之内"这回事，书里有几条给几条）⇒ 改锁**它的反面**：
+//   **规模再大也一条不丢**（进包 === 共），且读数仍与**实物**逐个对上（不自己另算一遍）。
+//   ★为什么这条比旧的更有价值：旧锁只在"夹具刚好越界"时才有意义（规模一改就空转）；
+//     这条锁**规模越大越咬得住**——某天有人把上限加回来，它当场红。
+test('A1-②：上限已删 ⇒ 规模再大也**一条不丢**（进包 === 共），且读数与实物逐个相等', () => {
+    const canon = hugeCanon();
     const { anchor, fit } = buildScaleAnchorWithFit(canon);
     assert.ok(anchor?.length, '夹具必须真进包（否则这条用例什么都没验）');
-    // 咬到闸了 ⇒ 进包 < 共
-    assert.ok(fit.表.进包 <= SCALE_TABLE_TOP_PACK && fit.表.共 > fit.表.进包, `表：进包 ${fit.表.进包} / 共 ${fit.表.共}`);
-    assert.ok(fit.档.共 > fit.档.进包, `档：进包 ${fit.档.进包} / 共 ${fit.档.共}`);
-    assert.ok(fit.维.共 > fit.维.进包, `维：进包 ${fit.维.进包} / 共 ${fit.维.共}`);
+    // ★全进：三格都必须是"进包 === 共"
+    assert.equal(fit.表.进包, fit.表.共, `表：进包 ${fit.表.进包} / 共 ${fit.表.共}（必须相等）`);
+    assert.equal(fit.档.进包, fit.档.共, `档：进包 ${fit.档.进包} / 共 ${fit.档.共}（必须相等）`);
+    assert.equal(fit.维.进包, fit.维.共, `维：进包 ${fit.维.进包} / 共 ${fit.维.共}（必须相等）`);
     // ★读数 == 实物（数 `anchor` 自己的元素，而不是相信 fit 自报）
     const real = (key) => anchor.reduce((n, t) => n + ((t[key] || []).length), 0);
     assert.equal(fit.表.进包, anchor.length, '表.进包 必须等于 anchor 的条数');
     assert.equal(fit.档.进包, real('档位'), '档.进包 必须等于 anchor 里档位的实际条数');
     assert.equal(fit.维.进包, real('维度'), '维.进包 必须等于 anchor 里维度的实际条数');
-    // `共` 必须 ≥ 进包，且不超出 canon 里的真实总量（自造夹具：(上限+6) 张 × 6 档 / 3 维）
-    const N_TABLES = SCALE_TABLE_TOP_PACK + 6;
+    // `共` 必须等于账上的真实总量（自造夹具：70 张 × 6 档 / 3 维）
+    const N_TABLES = 70;
+    assert.equal(fit.表.共, N_TABLES, `共 必须等于账上表数（${N_TABLES} 张）`);
     assert.equal(fit.档.共, N_TABLES * 6, `共 必须等于账上档位总量（${N_TABLES} 张 × 6 档）`);
     assert.equal(fit.维.共, N_TABLES * 3, `共 必须等于账上维度总量（${N_TABLES} 张 × 3 维）`);
-    // 三道闸的常量本身也是判据的一部分（改预算必须连带改这条）
-    assert.ok(fit.档.进包 <= TIER_TOP && fit.维.进包 <= DIM_TOP, '进包数必须落在预算之内');
+    // ★反向锁：三个常量**不许回来**（回来了这条与上面几条一起红，且原因指得出）
+    const packSrc = readFileSync(new URL('../src/pack.js', import.meta.url), 'utf8');
+    for (const name of ['SCALE_TABLE_TOP_PACK', 'TIER_TOP', 'DIM_TOP']) {
+        assert.ok(!new RegExp(`export const ${name}\\b`).test(packSrc),
+            `★leg163：\`${name}\` 已删（用户令「删掉那三道，让预算当唯一的闸」）——不许加回来`);
+    }
 });
 
 test('A1-②b：法则块顶到条数闸时 进包 < 共（且 = RULE_PACK_TOP）', () => {
@@ -150,15 +163,17 @@ test('A1-③：没丢东西时包里**不出现** `刻度裁掉`（golden 与薄
     }
 });
 
-test('A1-③b：真丢东西时该键出现，且形状就是两个 WithFit 的读数', () => {
-    const canon = fatCanon();
+test('A1-③b：★leg163 起刻度**永不截断** ⇒ `刻度裁掉` 里不会再有 `刻度` 那一支（法则那支照旧）', () => {
+    // ★旧断言（"顶到预算 ⇒ 包里必须留下 `刻度` 读数"）随三道上限一起作废。
+    //   现在锁的是反面：**规模再大，`刻度` 那一支也不许出现**（出现了＝有人把上限加回来了）。
+    const canon = hugeCanon();
     const built = buildEvolutionPack(ssotOf(canon), null);
     const got = built.pack.setting?.刻度裁掉;
-    assert.ok(got, '★顶到预算 ⇒ 包里必须留下读数（这正是本棒要治的"静默"）');
-    const fit = buildScaleAnchorWithFit(canon).fit;
-    assert.equal(got.刻度.档.进包, fit.档.进包, '包里读数 == 真源读数（档）');
-    assert.equal(got.刻度.表.共, fit.表.共, '包里读数 == 真源读数（表·共）');
-    assert.ok(typeof got.刻度.原因 === 'string' && got.刻度.原因.length > 0, '必须说清是**哪道预算**切掉的');
+    assert.equal(got?.刻度, undefined, '★上限已删 ⇒ 刻度那一支永不出现（`刻度裁掉` 若存在，只该是法则那支）');
+    // 全进：包里刻度块的表数就是账上那些，一条不少
+    assert.equal((built.pack.setting.刻度 || []).length, 70, '★70 张表一条不丢');
+    // ★`刻度裁掉` 这个键名照旧（它同时装 `刻度` 与 `法则` 两支；刻度那支没了，法则那支还在用）——
+    //   本笔**不改键名**：改它要动包内键序与既有判据，而那不是本笔要治的病。如实登记在这里。
 });
 
 // ═══════════════ ④ 面板 == 包（一个数不许有两把尺子） ═══════════════
@@ -202,6 +217,8 @@ test('A1-⑤：`刻度裁掉` 只报**块级**预算，不冒充整包的 `trimm
     // 两块读数必须来自 WithFit（真源），不是本文件另算
     assert.match(pack, /buildScaleAnchorWithFit\(/, '出包必须读 WithFit 口');
     assert.match(pack, /buildRuleAnchorWithFit\(/, '出包必须读 WithFit 口（法则同款）');
-    // 键名与 `trimmed` 分工：本条不写 `trimmed`（那是 `trimPack` 的活）
-    assert.match(pack, /刻度裁掉/, '新键必须真的被用上');
+    // ★★★leg163：刻度那支已删 ⇒ 这个键现在**只由法则那支产生**。
+    //   本条锁的是"它仍然真的被用上"（法则那支还在），键名照旧。
+    assert.match(pack, /刻度裁掉/, '这个键必须仍然真的被用上（法则那支）');
+    assert.match(pack, /法则: \{ \.\.\.ruleFitRes\.fit/, '★它的内容来自法则那支的 WithFit 读数');
 });

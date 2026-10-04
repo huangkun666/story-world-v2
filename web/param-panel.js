@@ -244,7 +244,7 @@ export function gatherParamEvidence() {
         const tr = paramHub.writeTrace();
         ev['写入次数'] = tr.length;
         ev['写入审计'] = tr.map((e) => `${e.at} 写后[${e.keys.join('|') || '空'}]`
-            + `${e.lost.length ? ` ⚠丢了[${e.lost.join('|')}]` : ''}`
+            + `${e.lost.length ? ` 注意：丢了[${e.lost.join('|')}]` : ''}`
             + `${e.note ? ` (${e.note}${e.missing?.length ? ` 缺[${e.missing.join('|')}]` : ''})` : ''}`
             + ` ← ${e.stack}`);
         // ★一致性：面板画的值（真源 ⊕ 镜像 ⊕ 出厂默认）里，真源有的每一个键，镜像里必须同值
@@ -589,7 +589,7 @@ function playerIsTouchingParams() {
         if (!el) return false;
         const tag = String(el.tagName || '').toUpperCase();
         const isCtl = tag === 'SELECT' || tag === 'INPUT' || tag === 'BUTTON';
-        return isCtl && !!el.closest?.('#sw2_view_params, #sw2_view_settings, .sw2-tabs');
+        return isCtl && !!el.closest?.('#sw2_view_params, #sw2_view_settings, .sw2-tabs, [data-setting-search], [data-pan-search], [data-pan-location], [data-story-search-input], [data-story-world-input]');
     } catch (_) { return false; }
 }
 

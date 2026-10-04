@@ -161,6 +161,10 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         //     `adjudicate` 拿到的是**这个被削过的 gstep** ⇒ 看不见 `lookupLines` ⇒ 误判成"模型没点名"
         //     ⇒ **刚点过的名当轮就被清掉**（`context-chain.test.js` 那条端到端判据当场红，正是它逮住的）。
         //   ⇒ 照同一条理由透传：这两个格子是"模型要什么料"的请求，与"谁出不出手"无关，**不进静默门**。
+        // ★★★leg163：那两个里 `lookupScales` 那一个**整族撤走了**（用户令「既然是全塞了就不需要点名表了
+        //   所以删了这个功能即可」）⇒ 这一行现在**只剩 `lookupLines` 一格**。
+        //   ★上面那四段警告照旧有效、一个字没撤：**这是白名单式重建，漏一个键那条通道就哑**。
+        //     撤走那一格是**有意的**（不是漏），留下这一格是**必须的**（「故事线」那一栏只是地图，不给经过）。
         step: {
             actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities,
             entityFates: step.entityFates || [],
@@ -168,8 +172,7 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
             eventClosures: step.eventClosures || [],
             relationUpdates: step.relationUpdates || [],
             relationClosures: step.relationClosures || [],
-            // ★请求型两格：**有就照原样带走**（模型没写时**不补键**——"缺席"本身是有意义的信号）
-            ...(typeof step.lookupScales === 'undefined' ? {} : { lookupScales: step.lookupScales }),
+            // ★请求型那一格：**有就照原样带走**（模型没写时**不补键**——"缺席"本身是有意义的信号）
             ...(typeof step.lookupLines === 'undefined' ? {} : { lookupLines: step.lookupLines }),
         },
         silent: [...silentSet],

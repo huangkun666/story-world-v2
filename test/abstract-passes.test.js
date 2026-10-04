@@ -270,7 +270,7 @@ test('★leg150 每块上限：与老口径同一个算式（三国 14 块 ⇒ �
     assert.equal(maxRootsPerChunk(1), SEED_ROOTS_MAX, '一条块的书：上限就是总数（不许把上限算成 0）');
     assert.equal(maxRootsPerChunk(4), 2);
     assert.equal(maxRootsPerChunk(9), 2);
-    const web = read('../web/index.js');
+    const web = read('../web/seed-roots-wiring.js');   // ★Task 4：起根那一族搬去新家（web/index.js 有行数硬锁）
     assert.match(web, /maxPerChunk:\s*maxRootsPerChunk\(/, '★分块起根那条路也用这一个算式（不许内联第二份）');
 });
 

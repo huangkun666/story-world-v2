@@ -195,7 +195,7 @@ test('细案 ②：调用失败（byName=null）→ 一个字节都不写（这�
     const out = applyLookup({ ssot: w, ids: ['e_bk_2'], byName: null, sources: {}, tick: 5 });
     assert.equal(out.ssot, w, '原对象原样返回');
     assert.equal(out.ssot.meta.entityFields, undefined, '不留任何痕迹（下轮重试靠 tick 推进，不靠假痕迹）');
-    assert.deepEqual(out.stats, { ok: 0, pending: 0, absent: 0, unread: 0, written: [] });
+    assert.deepEqual(out.stats, { ok: 0, pending: 0, absent: 0, unread: 0, rejected: 0, written: [] });
 });
 
 test('细案 ②：幂等——已定案的实体不再进查询面；重复回写逐字节一致', () => {
@@ -304,7 +304,10 @@ test('细案 ⑤：runTick 前置步——选人/查书结果进包，主调用�
     const r = await runTick({
         transport, ssot: w, dialogue: '（继续）', extractCtx: {},
         preStep: async ({ ssot: cur }) => {
-            const pre = await runEntityLookupStep({ ssot: cur, transport, bookText, tick: 1 });
+            // ★Task 4：本用例的固定响应是**裸标量**（没有 `ev`）⇒ 走**显式** legacy 道。
+            //   新默认是严格出处道（每条字段要"该名号自己的来源编号 + 逐字原话"），
+            //   严格道下的正/负判据见 `test/integration-boundary-lookup.test.js`。
+            const pre = await runEntityLookupStep({ ssot: cur, transport, bookText, tick: 1, evidencePolicy: 'legacy' });
             preSteps.push(pre);
             return pre;
         },
@@ -338,7 +341,8 @@ test('细案 ⑤（leg25 d 回归）：**异步** bookText 也必须走通——
         : []);
     const r = await runTick({
         transport, ssot: w, dialogue: '（继续）', extractCtx: {},
-        preStep: async ({ ssot: cur }) => runEntityLookupStep({ ssot: cur, transport, bookText: asyncBookText, tick: 1 }),
+        // ★Task 4：固定响应无 `ev` ⇒ **显式** legacy 道（本条测的是**异步接线**，不是证据道）。
+        preStep: async ({ ssot: cur }) => runEntityLookupStep({ ssot: cur, transport, bookText: asyncBookText, tick: 1, evidencePolicy: 'legacy' }),
     });
     assert.equal(r.ok, true, `前置步不得炸掉 tick：${r.error || ''}`);
     const e2 = r.ssot.entities.find((e) => e.id === 'e_bk_2');

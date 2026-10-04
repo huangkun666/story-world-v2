@@ -110,11 +110,13 @@ test('★leg60 声明面取料：恒注入壳 + 成套声明进料（含禁用�
     assert.equal(r.catalog.skipped, 4, '未编译 4 条（张辽/张飞 各 2）——台账要带字数，第 3 件自检读它');
     assert.ok(r.catalog.skippedChars > 0, '未编译台账带字数');
     assert.equal(r.catalog.declaredDropped, 0, '没顶到防御上限时不许有"截掉的声明"');
-    assert.equal(r.entryCount, 4 + 4, 'entryCount = 启用 4 + 声明面 4');
+    assert.equal(r.entryCount, 4, '只有实际声明读取的 4 条正文，未读禁用人物档不能贡献题名');
+    assert.ok(!r.text.includes('【控制器_张辽】张辽') && !r.text.includes('【控制器_张飞】张飞'), '被排除人物档不从题名旁路补回');
+    assert.equal(r.catalog.enabled, 4, '原书的 4 条启用控制器仍留在来源诊断中');
     // 开关关掉 ⇒ 逐字退回旧口径（可回滚、可对照）
     const old = composeInitSource({ character: null, worldInfoEntries: entries, includeDeclared: false });
-    assert.ok(!old.text.includes('【演义战力体系】'), 'includeDeclared:false ⇒ 只读启用条目（旧口径）');
-    assert.equal(old.catalog, null, '关掉就不产出声明面读数');
+    assert.equal(old.ok, false, '不读声明正文时，纯控制器没有可用世界正文');
+    assert.ok(!old.text, '被排除的控制器不作为世界正文');
 });
 
 test('★leg60 泛用性守门：**没有壳的书零扰动**——合订文本与旧口径逐字节相同', () => {
@@ -188,8 +190,19 @@ test('★leg60 题名即名册：零 token 剥出 cast（自证：残差必须�
     //   顶层是 undefined ⇒ 191 个名号一个都没进册，而**判据全绿**（与"别名通道"同一个形状）。
     const composed = composeInitSource({ character: null, worldInfoEntries: entries });
     assert.equal(Array.isArray(composed.titleRoster), true, '★composed.titleRoster 必须是顶层数组（接线面）');
-    assert.deepEqual(composed.titleRoster.map((x) => x.name).sort(), ['关羽', '张辽', '张飞', '貂蝉'], '顶层键里就是那几个人');
-    assert.equal(composed.catalog.titleRoster.length, 4, 'catalog 摘要里也留一份（诊断面读它）');
+    assert.deepEqual(composed.titleRoster, [], '独立题名探测可列候选，合订只允许实际读取材料的候选');
+    assert.equal(composed.catalog.titleRoster.length, 0, '诊断与实际读取题名使用同一份结果');
+    // ★★（Task1 末次复查 Important 1）：这条期望**按已批准合同改过**（旧期望 = 4 个名字，实测失败：
+    //   `legal.titleRoster` 现为 `[]`）。为什么必须改：这 14 条里，四条被声明的正文（`张辽正史` 等）
+    //   本来就以**自己的题名行**进了正文（`compiledTitles`），于是那五条控制器的题名**一条题名行都没进
+    //   最终用料**（没有正文副本、没有题名副本）——旧法靠"只借 key"那档把它们的 key 并进自证，名册
+    //   才凑出四个名字。合同（用户已批准）：**最终用料即唯一证据面**，没进本次材料的壳一个字都不借。
+    //   ⇒ 这里如实断言空名册；**正向面不许治坏**——控制器题名行真进了正文时，题名与自证 key 照旧生效，
+    //   判据在 `test/abstract-input.test.js`（「进入正文的合法自动控制器题名的 key 仍是本次用料的证据」）。
+    const legal = composeInitSource({ worldInfoEntries: entries.map(e => ({ ...e, constant: true })) });
+    assert.deepEqual(legal.titleRoster, [], '恒注入声明让四条正文进了用料，但壳的题名行没进 ⇒ 壳的 key 不借给自证');
+    assert.ok(legal.text.includes('张辽字文远'), '★正向面：声明的正文照旧真读进实际用料（题名面变窄不等于料变少）');
+    assert.equal(legal.catalog.titleRoster.length, 0, '诊断与实际读取题名使用同一份结果（顶层与 catalog 同源）');
 });
 
 // ★leg60（交接第 3 件）：**编译完整性自检**——"书里有多少条设定类条目 vs 编译覆盖了多少 ⇒ 漏了如实报"。
@@ -319,14 +332,15 @@ test('卡内置世界书双通道：character_book 顶层与 data.character_book
     assert.ok(rData.text.includes('【k2】书内名号：金算盘。'));
 });
 
-test('双通道同内容去重：worldInfo 与 character_book 同键同文只记一次', () => {
+test('双通道跨来源同内容保留独立身份：worldInfo 与 character_book 可分别选择', () => {
     const card = { ...CARD, character_book: { entries: [{ key: '万法阁', content: '万法阁：藏经三千。' }] } };
     const r = composeInitSource({
         character: card,
         worldInfoEntries: [ENTRY('万法阁', '万法阁：藏经三千。')],
     });
-    assert.equal((r.text.match(/万法阁：藏经三千。/g) || []).length, 1);
-    assert.equal(r.entryCount, 1);
+    assert.equal((r.text.match(/万法阁：藏经三千。/g) || []).length, 2);
+    assert.equal(r.entryCount, 2);
+    assert.equal(r.sourceItems.filter(s => s.kind === 'world-entry').length, 2);
 });
 
 test('防御上限：仅超现实量级才裁剪（机制保留，正常世界书永不触发）', () => {

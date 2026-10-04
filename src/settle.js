@@ -266,7 +266,7 @@ function hangEvents(world, step, tick) {
             id,
             title: ev.title,
             source: { ...ev.source },
-            position: ev.position,
+            ...(ev.position ? { position: ev.position } : {}),
             ripples: [...(ev.ripples || [])],
             links: { up: ups, down: [] },
             closed: false,
@@ -826,10 +826,11 @@ function chronicleEvents(world, step, tick, chronicle) {
     const name = (id) => world.entities.find((e) => e.id === id)?.name || id;
     step.newEvents.forEach((ev, i) => {
         const ripples = ev.ripples?.length ? `，牵动 ${ev.ripples.map(name).join('、')}` : '';
+        const where = ev.position ? `，事发 ${ev.position}` : '';
         const row = {
             id: `ch_${tick}_ev_${i + 1}`,
             tick,
-            text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}，事发 ${ev.position}${ripples}`,
+            text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}${where}${ripples}`,
             kind: ev.source.type === 'plot' ? 'major' : ev.source.type === 'ripple' ? 'ripple' : 'state',
             eventRef: `ev_${tick}_${i + 1}`,
         };

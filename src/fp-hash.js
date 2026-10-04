@@ -17,14 +17,14 @@
 //   ★★改名的纪律：**契约/引擎/渲染一个字没动**、页面可见面零变化 ⇒ `PANEL_BUILD`/`CSS_VERSION`/
 //     `MAIN_PROMPT_V`/`CACHE_VERSION` **四个号一个都不升**（`CACHE_VERSION` 与文件名无关，它管缓存形状）。
 // 书指纹缓存（K26/设定大势层，细案 §3.2③ + 附录 A → A-3）：v1 算法原样搬（director.js bookFingerprint / adapter.js abstractCache）。
-//   书指纹 = FNV-1a 32 位（offset 0x811c9dc5、prime 0x01000193、Math.imul、>>>0）+ 长度混入——书文本一变指纹即变；
+//   书指纹 = FNV-1a 32 位（offset 0x811c9dc5、prime 0x01000193、Math.imul、>>>0）+ 长度混入——有效书文与作者题名共同参与；
 //   缓存 = LRU 有界（按 extractedAt 串序淘汰）+ 版本戳防形状演进——同指纹命中 = 零抽取调用（A-3）；
 //   深拷贝保护：命中返回拷贝，缓存本体不被下游改动（v1 同款）。
 // force 重抽（玩家主动「重新抽象」）= 调用方行为：set 总是覆盖同指纹条目，冲掉旧产物即可。
 
 export const FNV1A_OFFSET = 0x811c9dc5;
 export const FNV1A_PRIME = 0x01000193;
-export const CACHE_VERSION = 4;        // 缓存形状版本戳（形状演进时 +1，旧条目自动失效）
+export const CACHE_VERSION = 9;        // 增加地理抽取，旧抽取形状缓存失效
                                      // v1→v2（K31）：缓存值由 canon 五件套扩展为 {canon, tension, env}
                                      //   ——同指纹命中需还原 dynamic 初值（张力/环境量），只存五件套会在
                                      //   命中路径丢初值；v2 无持久化缓存，版本抬升零迁移成本。
@@ -51,10 +51,14 @@ export const CACHE_VERSION = 4;        // 缓存形状版本戳（形状演进�
                                      //     这一格才是那个该升的号（细案 §2.2 原写"要升 MAIN_PROMPT_V"，本笔勘正）。
 export const CACHE_MAX = 5;            // LRU 上限（v1 原值；多书共存有界）
 
-export function bookFingerprint(text) {
+export function bookFingerprint(text, titleRoster = []) {
+    // 题名还通过 extraDeclared 参与名册；预算截断正文时也不能漏掉这一份有效输入。
+    // 没有题名时沿用原算法，出处说明等诊断变化不影响名号指纹。
+    const names = [...new Set((Array.isArray(titleRoster) ? titleRoster : []).map((d) => String(d?.name ?? '').trim()).filter(Boolean))];
+    const input = names.length ? JSON.stringify([text, names]) : text;
     let h = FNV1A_OFFSET;
-    for (let i = 0; i < text.length; i += 1) { h ^= text.charCodeAt(i); h = Math.imul(h, FNV1A_PRIME) >>> 0; }
-    return `fnv1a_${h.toString(36)}_${text.length.toString(36)}`;
+    for (let i = 0; i < input.length; i += 1) { h ^= input.charCodeAt(i); h = Math.imul(h, FNV1A_PRIME) >>> 0; }
+    return `fnv1a_${h.toString(36)}_${input.length.toString(36)}`;
 }
 
 export function createCache(initialStore = {}) {
@@ -65,8 +69,13 @@ export function createCache(initialStore = {}) {
             if (!entry || entry.cacheVersion !== CACHE_VERSION) return null;
             return JSON.parse(JSON.stringify(entry));   // 深拷贝：保护缓存本体（v1 同款）
         },
-        set(fingerprint, canon, extractedAt) {
-            store[fingerprint] = { cacheVersion: CACHE_VERSION, fingerprint, extractedAt: extractedAt || '', canon };
+        set(fingerprint, canon, extractedAt, meta = null) {
+            // ★★★Task 3：**只有缓存才有的严格策略标记 + sourceDigest**（Codex 决议：缓存标量元数据
+            //   住在缓存信封里，**不进 world canon、不进关系边**）。`extractWorldSetting` 的严格缓存
+            //   复用要同时核对 `evidencePolicy === 'strict'` 与 `sourceDigest` 相同；旧条目没有这两格
+            //   ⇒ 严格道一律 miss（**绝不把"缺证明"当成 legacy 免检**）。legacy 调用保持旧的指纹命中口径。
+            //   ⚠`CACHE_VERSION` 本任务**不抬**（Task 4 负责）：旧条目靠上面这条闸自然失效，形状演进照旧走版本号。
+            store[fingerprint] = { cacheVersion: CACHE_VERSION, fingerprint, extractedAt: extractedAt || '', canon, ...(meta && typeof meta === 'object' ? meta : {}) };
             const keys = Object.keys(store);
             if (keys.length > CACHE_MAX) {
                 keys.sort((a, b) => String(store[a].extractedAt || '').localeCompare(String(store[b].extractedAt || '')));

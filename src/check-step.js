@@ -7,12 +7,9 @@ import { isSettingRef } from './setting.js';   // K25：设定池保留键空间
 import { RIPPLE_TARGET_CAP } from './weight.js';   // leg25：波及上限唯一真源（此前该上限生产 0 强制点=纸面机制）
 import { checkAgendaInvolvement } from './entity-lookup.js';   // 细案 §6 R2：单盘算一轮涉及实体 ≤15（唯一真源）
 import { normalizePosition } from './position.js';   // leg33：剥掉引擎自己打在 location 列上的「（推）」注解（叶子模块，无环）
-// ★★★leg64 第四轮（按需查表）：表名必须能对回账上真有的尺——**"无源之物不入局"那条纪律的表格版**。
-//   ★为什么从 `pack.js` 拿（不在本文件另写一份索引）：目录、进包、查表三处必须**同一把尺**
-//     （表名截断长度 `SCALE_NAME_MAX_PACK` 都一样），各写一份迟早出现"目录里有的表、点名说没有"。
-//   ★无环：`pack.js` 只依赖 `gate.js`/`abstract.js`，两者都不回头 import 本文件
-//     （`settle.js` 同时 import 了本文件与 pack.js，但**本文件不 import settle**——见 `position.js:3` 那条留档）。
-import { buildScaleTableIndex, sanitizeScaleRequests, SCALE_ONDEMAND_TOP } from './pack.js';
+// ★★★leg163：这里原先 import 了 `pack.js` 的 `buildScaleTableIndex`/`sanitizeScaleRequests`/
+//   `SCALE_ONDEMAND_TOP`（leg64 那条"按需查表"要拿它们核表名）。那一族已随「全塞」整族撤走
+//   ⇒ 本文件**不再 import `pack.js`**（撤走前那段注释担心的"无环"从此更不成问题）。
 // ★★★leg128：**点名取回一条故事线**（与刻度表那条按需通道同构）——净化要用的两把纯函数。
 //   ★只 import 叶子模块（`lines.js → setting.js`）⇒ 不成环。
 import { linesOf, lineIndexOf, sanitizeLineRequests, LINE_ONDEMAND_TOP } from './lines.js';
@@ -167,6 +164,14 @@ export function checkWorldStep(step, ssot) {
     // ① 形状：真 schema 强制
     const r = validate(step, worldStepSchema);
     if (!r.ok) return { ok: false, errors: r.errors, warnings: [] };
+
+    // 位置可省；填写了就要在归一后仍有地点，不能先放行空格再把它变成非法空串。
+    for (const [i, ev] of step.newEvents.entries()) {
+        if (ev.position != null && !normalizePosition(ev.position)) {
+            errors.push(`$.newEvents[${i}].position: 归一后没有地点（无法确定请省略该字段）`);
+        }
+    }
+    if (errors.length) return { ok: false, errors, warnings };
 
     const { entityIds, agendaIds, eventIds, positions } = indexIds(ssot);
     const playerId = ssot.context?.playerId;   // K8：玩家棋子标注（红线 1 代码化）
@@ -493,47 +498,19 @@ export function checkWorldStep(step, ssot) {
         }
     }
 
-    // ★★★leg64 第四轮：**按需查表**（`lookupScales`，可选组）——模型点名要的刻度表。
-    //   三条判据（都是机械的）：
-    //     ① **点名的表名必须对回账上真有的尺**（`buildScaleTableIndex`）。对不上 ⇒ 拒
-    //        ——"无源之物不入局"的表格版：模型编一个表名，引擎**不许替它造一张出来**；
-    //     ② 每轮 ≤ `SCALE_ONDEMAND_TOP` 张（防"我全要"把包塞爆）；
-    //     ③ 缺席合法（可选组，见 `world-step.schema.js` 那一格的注释）——本轮没要点表不是形状错误。
-    //   ★★它为什么**同时把结果写进 `ssot.meta.scaleRequests`**（本仓少见的一处写账）：
-    //     这一格要"**同一轮就生效**"——模型在这一轮的步里点名、出包时那张表就该在包里。
-    //     而 `checkWorldStep` 正是"步 → 包"之间唯一的引擎侧关口（`settle.js` 的 gstep 线：
-    //     先 check 再 buildEvolutionPack），且它**本来就返回 step**（净化掉非法项的版本是它的下游）。
-    //     ⇒ 写在这里 = 模型只拿得到**核过**的表名（编的名字进不了账），且不新增一条跨模块线。
-    //     生命周期：**每轮被新值覆盖**（没点名 ⇒ 写成空数组）⇒ 天然是"一次性"，不跨轮囤积
-    //     （与 `injectWorldBookRecall` 头注那条"过期内容冒充新检索"的坑同一条纪律）。
-    if (ssot && typeof ssot === 'object') {
-        // ★★★本次修（真模型 60 轮长跑实跑抓出来的病）：**"没写这一格"必须等于"这一轮不要"**。
-        //   病：老写法把整段包在 `typeof step.lookupScales !== 'undefined'` 里 ⇒ 模型**不写**这一格时
-        //     整段不跑 ⇒ `meta.scaleRequests` **保持上一轮的旧值** ⇒ 那张表**每轮重复递下去**，
-        //     而下面那句注释写着"没点名 ⇒ 写成空数组 ⇒ 天然是一次性"——**注释与实现不符**。
-        //   修法：把"写账"这一步从"有没有写这一格"里解耦出来——**没写 ⇒ 写空数组（= 清掉）**。
-        //   ★★一条不许破的旧账纪律（K6「终态 SSOT 逐字节不变」）：**从没点过名的世界一个字节都不碰**——
-        //     所以只在"这一轮写了 或 上一轮真有值要清"时才写账。没写过就永远不写。
-        const present = typeof step.lookupScales !== 'undefined';
-        const raw = Array.isArray(step.lookupScales) ? step.lookupScales : [];
-        const hadPrev = Array.isArray(ssot.meta?.scaleRequests) && ssot.meta.scaleRequests.length > 0;
-        if (present && !Array.isArray(step.lookupScales)) {
-            errors.push('$.lookupScales: 必须是字符串数组（表名照抄输入里的「刻度目录」）');
-        } else if (present && raw.length > SCALE_ONDEMAND_TOP) {
-            errors.push(`$.lookupScales: 每轮至多要 ${SCALE_ONDEMAND_TOP} 张尺（当前 ${raw.length}）——一次看不完那么多，挑这一轮真要用的`);
-        } else {
-            const { ok, missed } = present
-                ? sanitizeScaleRequests(raw, buildScaleTableIndex(ssot.context?.setting?.frozen?.canon))
-                : { ok: [], missed: [] };
-            for (const nm of missed) {
-                errors.push(`$.lookupScales: 账上没有《${nm}》这张尺（照抄输入「刻度目录」里的表名；编的表名不会给你造）`);
-            }
-            // ★**只在整步没有错误时**写账：这一步是"被拒的步不该留下任何痕迹"那条纪律
-            //   （`checkWorldStep` 是纯判官，唯一被允许的副作用就是这个"同一轮生效"的交接）。
-            //   写的是**核过**的表名（编的名字进不了账）。
-            if (!errors.length && (present || hadPrev)) ssot.meta = { ...(ssot.meta || {}), scaleRequests: ok };
-        }
-    }
+    // ★★★leg163：**按需查表那一族整族撤走**（`lookupScales` / `meta.scaleRequests` / 出包的 `刻度目录`
+    //   与 `刻度补`）。用户令：「既然是全塞了就不需要点名表了所以删了这个功能即可」。
+    //   为什么这个判断成立（本笔真账实测，不是推理）：leg135 那条「全塞」令把进包上限抬到
+    //   表 ≤`SCALE_TABLE_TOP_PACK` / 档 ≤`TIER_TOP` 之后，**真实书里的尺已经整本进包**——
+    //     · 大荒那份真账：1 张表 / 16 档 ⇒ 1 张全进；
+    //     · `real-world-dh`（新账形状）：45 张表 / 293 档 ⇒ **45 张全进、目录为空**。
+    //   ⇒ `刻度目录`（"我手里没有、但书里有"那份差距清单）**是空的**，点名这条通道**无表可点**。
+    //   ★撤走时必须**两样一起撤**（目录与点名是一件事的两半）：只留目录 ⇒ 目录叫模型去点名、
+    //     而点名那个口已经没了 = 本仓最忌的"提示词替机制承诺一个它做不到的事"。
+    //   ★★★leg163 同批的第二笔：**那三道上限也删了**（用户令「删掉那三道，让预算当唯一的闸」）——
+    //     `SCALE_TABLE_TOP_PACK` / `TIER_TOP` / `DIM_TOP` 三个常量已从 `pack.js` 删除。
+    //     ⇒ 上面"档位预算用尽时排在后面的表整张进不去"那条边界**随之消失**（现在书里有几张就给几张）。
+    //     唯一的闸是整包那一道 `trimPack`（真裁了写 `pack.trimmed`，机器可读、不静默）。
 
     // ★★★leg128：**点名要一条"故事线"的经过**（`lookupLines`，可选组）——与上面那道按需查表**逐条同构**：
     //     ① 点名的根必须**在这一轮真递出去的那一批线里**（`linesOf` 同一个上界）——编的 ⇒ 拒
@@ -597,10 +574,10 @@ export function checkWorldStep(step, ssot) {
     //   ★同族先例：`newEntities` 的位置不在集内早已是"归一 + 留痕、不拒整步"（leg32f）。
     //   ⚠机器可读承诺：本段留痕一律以 `位置集外:` 开头且**不进 errors**；
     //     故它**不计入拒签率分子**（`settle.js` 的拒签口径只数 `裁定:`/`校验拒绝:`/`提议丢弃`）。
-    for (const ev of step.newEvents) ev.position = normalizePosition(ev.position);
+    for (const ev of step.newEvents) if (ev.position != null) ev.position = normalizePosition(ev.position);
     for (const a of step.actions) if (a.position != null) a.position = normalizePosition(a.position);
     for (const [i, ev] of step.newEvents.entries()) {
-        if (!positions.has(ev.position)) {
+        if (ev.position && !positions.has(ev.position)) {
             warnings.push(`位置集外: $.newEvents[${i}].position="${ev.position}"（不在参照表内，照收——参照表不是闸）`);
         }
     }

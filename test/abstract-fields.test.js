@@ -26,9 +26,6 @@ import {
     isTransientCallError,
     SETTING_CHUNK_CHAR,
     BOOK_FIELD_KEYS,
-    BOOK_FIELD_MAX,
-    BOOK_FIELD_MAX_OPEN,
-    BOOK_FIELD_MAX_WIDE,
 } from '../src/abstract.js';
 // ★★★leg71（丙案）：`dedupeTiers` / `dedupeRules` 跟着"档位归一 + 法则分类"那一块搬到 `abstract-tier.js`。
 import { dedupeTiers, dedupeRules } from '../src/abstract-tier.js';
@@ -53,23 +50,23 @@ test('★leg61 属性净化：常用键照旧 · 表外键"值有出处才收" �
     const b = sanitizeBookFields({ 体质: '先天道体', 称号: '乱世之奸雄', 领地: '兖州' }, 'character', { sourceText: src });
     assert.equal(b.fields['体质'], '先天道体', '★键开放：表外键收下来了（旧法这里一律丢）');
     assert.equal(b.fields['领地'], '兖州', '表外键同样过出处闸');
-    assert.equal(b.fields['称号'], undefined, '值对不上原文 ⇒ 不收');
-    assert.deepEqual(b.inferred, ['称号'], '★丢的键要如实报（静默丢就是这轮要治的病）');
-    assert.deepEqual(b.unknown.sort(), ['体质', '领地'], '收下的表外键也记账（面板/诊断可追）');
+    assert.equal(b.fields['称号'], '乱世之奸雄', '值对不上原文也保留');
+    assert.deepEqual(b.inferred, [], '描述属性不再按出处丢弃');
+    assert.deepEqual(b.unknown.sort(), ['体质', '称号', '领地']);
     // 键名形态闸：占位符/整句话不许当键
     const c = sanitizeBookFields({ '<user>': '兖州牧', '这是一个很长的键名不合法': '兖州牧' }, 'character', { sourceText: src });
-    assert.equal(c.fields, null, '★占位符与超长键名不是"属性名"（与 §D 的 <user> 同族）');
+    assert.deepEqual(c.fields, { '<user>': '兖州牧', '这是一个很长的键名不合法': '兖州牧' }, '不再限制属性键名形态');
     // 上限：表外键比常用键宽松，但仍不许写成散文
-    const long = '甲'.repeat(BOOK_FIELD_MAX_OPEN + 20);
+    const long = '甲'.repeat(120);
     const d = sanitizeBookFields({ 长属性: long }, 'character', { sourceText: long });
-    assert.equal(d.fields['长属性'].length, BOOK_FIELD_MAX_OPEN, `表外键上限 ${BOOK_FIELD_MAX_OPEN} 字（截断而非丢弃）`);
+    assert.equal(d.fields['长属性'], long, '表外属性完整保存');
     // ★leg61：`定位`/`身份` 走**宽档**（真机验收发现这一栏常是"体质+性情"一句话，30 字会砍掉长的那批）
-    const wide = '甲'.repeat(BOOK_FIELD_MAX_WIDE + 10);
+    const wide = '甲'.repeat(120);
     const e1 = sanitizeBookFields({ 定位: wide }, 'character', { sourceText: src });
-    assert.equal(e1.fields['定位'].length, BOOK_FIELD_MAX_WIDE, `定位上限放宽到 ${BOOK_FIELD_MAX_WIDE} 字`);
-    assert.equal(e1.truncated, 1, '截断要计数（调用方汇总 · 不是静默）');
+    assert.equal(e1.fields['定位'], wide, '常用属性完整保存');
+    assert.equal(e1.truncated, 0);
     const e2 = sanitizeBookFields({ 性质: wide }, 'faction', { sourceText: src });
-    assert.equal(e2.fields['性质'].length, BOOK_FIELD_MAX, '其余常用键仍是旧上限 30（账面形态不变）');
+    assert.equal(e2.fields['性质'], wide, '势力属性完整保存');
 });
 
 test('★leg61 净化层：`entities`（属性遍）并入 canon.settings，没属性的条目不收', () => {
@@ -82,16 +79,16 @@ test('★leg61 净化层：`entities`（属性遍）并入 canon.settings，没�
         ],
     }, { sourceText: src });
     assert.equal(r.ok, true);
-    assert.deepEqual(r.canon.settings.map((s) => s.name), ['关羽']);
+    assert.deepEqual(r.canon.settings.map((s) => s.name), ['关羽', '吕布']);
     assert.equal(r.canon.settings[0].fields['实力'], '勇武99 / 统御95');
-    assert.ok(r.errors.some((e) => e.includes('吕布') && e.includes('原文里找不到')), '★丢的属性留痕（可追是哪条、哪个键）');
+    assert.equal(r.canon.settings[1].fields.武力值, '勇武100', '描述属性不再因出处丢弃');
 });
 
 // —— ② `所属` 落账（这一条是"抽出来了却一个都不落地"的锁）——
 test('★★leg61 `所属` 落账：名册里的归属必须写进实体（旧法三本账 856 条全丢）', () => {
     const book = [
         { name: '刘备军', kind: 'faction' },                       // 归属目标必须**是势力条目**，parent 那条路才认（既有口径）
-        { name: '关羽', kind: 'character', fields: { 所属: '刘备军', 身份: '汉寿亭侯', 实力: '勇武99 / 统御95', 表外属性: '某职' } },
+        { name: '关羽', kind: 'character', parent: '刘备军', fields: { 所属: '刘备军', 身份: '汉寿亭侯', 实力: '勇武99 / 统御95', 表外属性: '某职' } },
         { name: '曹魏军', kind: 'faction', parent: '曹魏', fields: { 规模: '约5-6万人' } },
         { name: '曹魏', kind: 'faction' },
     ];
@@ -106,8 +103,8 @@ test('★★leg61 `所属` 落账：名册里的归属必须写进实体（旧�
     assert.equal(gy['身份'], '汉寿亭侯');
     assert.equal(gy['实力'], '勇武99 / 统御95');
     assert.equal(gy['表外属性'], '某职', '★键开放：表外属性一并落账');
-    assert.equal(gy.parent, '刘备军', '既有口径不变：parent 仍由 `所属` 推出（两格分工见 schema 注释）');
-    assert.equal(gy.fieldSource['所属'], '书里原话', '来源逐字段留痕');
+    assert.equal(gy.parent, '刘备军', 'canon 已核验的 parent 进入关系，所属描述单独保存');
+    assert.equal(gy.fieldSource['所属'], '模型抽取', '保留属性并如实标记来源');
     // ★两格分工的**对照面**（这条锁的正是"混为一谈"）：目标不是势力条目时——
     //   `所属` 照抄原文（作者的写法就是事实），`parent` 不写（那是引擎梳理出的归属，宁缺勿造）。
     const book2 = [{ name: '貂蝉', kind: 'character', fields: { 所属: '司徒王允府' } }];
@@ -190,7 +187,7 @@ test('★leg61（leg150 改指 `buildAttrsOnlyPrompt`）：属性遍提示词的
     const shape = p.slice(p.indexOf('{'), p.lastIndexOf('}') + 1);
     assert.ok(!shape.includes('bookEntities'), '★形状里不许出现 bookEntities（名号由另一遍负责）');
     assert.ok(shape.includes('entities'), '形状里有 entities');
-    assert.ok(p.includes('值必须是本节原文里能逐字找到的原话'), '值必须有出处的铁律写在提示词里');
+    assert.ok(p.includes('相关描述散在不同句子时可以合并保留'), '提示词允许跨句保留补充属性');
     assert.ok(p.includes('键你可以按本书自己的写法起名'), '键开放（不预设一本书的字段名）');
 });
 
@@ -233,11 +230,13 @@ test('★★★leg63＋leg150 接线：**重抽**时每一块都问设定（`ski
     //     用户 2026-09-29 拍板删掉那一份（第一遍的名册遍本来就问了设定，而 leg63 已实测推翻
     //     "设定只在头块"这个前提：大荒首块只覆盖全书 10.1%）⇒ **初始化那一支现在每块都用属性那一片**。
     //     ★旧锁因此**按设计作废**（不是回归）：它锁的正是丙案要删的那件事。
-    assert.match(src, /const settingPass = \(t, isFirst\) => \(skipRoster/,
+    assert.match(src, /const settingPass = \(t, isFirst[^)]*\) => \(skipRoster/,
         '★设定遍的选词必须**按 skipRoster 分叉**（旧口径无条件"只有第 1 块问设定"）');
-    assert.match(src, /skipRoster\s*\n?\s*\? buildSettingOnlyPrompt\(t, declared\)/,
+    assert.match(src, /skipRoster\s*\n?\s*\? buildSettingOnlyPrompt\(t, declared,/,
         '★重抽那一支：**每块**都用设定遍提示词（不是只有第 1 块）');
-    assert.match(src, /: buildAttrsOnlyPrompt\(t, declared, rootsAsked && !isFirst \? \{ roots: \{ candidates: rootsCandidates \} \} : \{\}\)\);/,
+    // ★Task 3 复查（task-3-review.md ③）：这一支多带一格 `scope`（本次这一块真正展示的来源）——
+    //   锁的**性质不变**（初始化每一块都用属性那一片 + 第 2..N 块多带起根那一问），只是允许那一格。
+    assert.match(src, /: buildAttrsOnlyPrompt\(t, declared, \{ \.\.\.\(rootsAsked && !isFirst \? \{ roots: \{ candidates: rootsCandidates \} \} : \{\}\), \.\.\.\(evidence \? \{ sources: frozen, scope \} : \{\}\) \}\)\);/,
         '★初始化那一支：**每块**都用属性那一片（丙案），第 2..N 块再多带起根那一问（甲案）');
     // ★咬**定义与调用点**，不咬"全文出现没出现这个词"——留档注释里点名它是允许的
     //   （本仓的老毛病：判据咬词面，于是连自己的留档注释一起咬住。第一版就是这么假红的）。
@@ -286,30 +285,26 @@ test('★leg61 键表仍登记七个常用键（旧账形态不动，开放的�
     assert.deepEqual(BOOK_FIELD_KEYS.location, []);
 });
 
-test('★leg61 势力树端到端：`seedBookEntities` 真入账时把"名字里写着上级"的边连上', () => {
-    // 这一条锁的是**接线**（纯函数测过了，但纯函数绿 ≠ 真入账路径上有人调它——
-    //   leg60 的别名通道就是这么绿的：机制在、线断了）。
+test('Task3 势力树端到端：名字包含只作候选，`seedBookEntities` 不再据此连边/折叠', () => {
+    // ★★★Task 3 口径变更（依据：已批准设计 §6.2「名字包含仅用作搜索候选，不单凭两个名字互相包含
+    //   就建立势力上下级」；先有失败证据：旧断言在改后实测 folded=1→0、`昆仑道宫` 由被折叠变回独立实体）。
+    //   旧锁要的正是"名字包含 ⇒ 连边 ⇒ 折叠"——那条路已按设计移除。
     const book = [
         { name: '昆仑', kind: 'faction' },
         { name: '昆仑道宫', kind: 'faction' },
         { name: '万法阁', kind: 'faction' },        // 名字里没写上级 ⇒ 一个字都不许连
-        { name: '玄一道祖', kind: 'character', fields: { 所属: '昆仑道宫' } },
+        { name: '玄一道祖', kind: 'character', parent: '昆仑道宫', fields: { 所属: '昆仑道宫' } },
     ];
     const w = { context: { tension: 0.5, positions: ['未明'], setting: { frozen: { canon: { bookEntities: book } } } }, entities: [], weights: {} };
     const r = seedBookEntities(w);
     const byName = new Map(w.entities.map((e) => [e.name, e]));
-    // ★甲类边会**触发既有折叠**：这条边让"曹魏军式"的条目从独立棋子变成链顶的 `branches` 成员
-    //   （那正是"部门别当势力"想要的效果——它不再是一个平级棋手，而是父势力名下的一支）。
-    //   实测（本夹具）：`昆仑道宫` 折进 `昆仑.branches`，`folded = 1`。
-    assert.equal(r.folded, 1, '甲类边把子势力折进父的 branches（部门不再是平级棋手）');
-    const kunlun = byName.get('昆仑');
-    assert.ok(kunlun.branches.includes('昆仑道宫'), '★真入账路径上连上了（纯函数 + 接线两处都对才可能）');
-    assert.ok(!byName.has('昆仑道宫'), '已折叠 ⇒ 不再是独立实体（旧法：0/57 边、9 个"曹/魏"平级并列）');
+    assert.equal(r.folded, 0, '名字包含不再触发折叠');
+    assert.ok(byName.has('昆仑道宫'), '★子势力仍是独立实体（名字包含不得把它从账上抹掉）');
+    assert.equal(byName.get('昆仑道宫').parent, undefined, '名字包含不得写 parent');
+    assert.ok(r.warnings.some((x) => /候选/.test(x) && /昆仑道宫/.test(x)), `候选要留痕：${r.warnings.join('|')}`);
     assert.equal(byName.get('万法阁').parent, undefined, '名字里没有上级的势力不许被猜着连边');
-    // ★连锁反应（这一条是端到端判据抓出来的不一致）：角色的 parent 上溯到**链顶**
-    //   —— 若甲类边晚一步写，这里会是 `昆仑道宫`，于是"势力树上是昆仑 ⊃ 昆仑道宫、角色归属却指昆仑道宫"
-    //   （同一棵树两套答案）。
-    assert.equal(byName.get('玄一道祖').parent, '昆仑', '势力先连好 ⇒ 角色归属上溯到链顶');
+    // 模型主张的归属（玄一道祖 → 昆仑道宫）照常落账，且**不再上溯到"名字包含"的链顶**
+    assert.equal(byName.get('玄一道祖').parent, '昆仑道宫', '模型主张照常落账（无链顶可上溯）');
     assert.equal(byName.get('玄一道祖')['所属'], '昆仑道宫', '而 `所属` 照旧存书里的原话（两格分工）');
     assert.ok(r.parentVerified >= 1, `计数如实上报（实际 ${r.parentVerified}）`);
 });

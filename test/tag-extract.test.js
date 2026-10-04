@@ -737,7 +737,7 @@ test('leg89⑲：`sw2ToggleInject` 判据本体**真能跑**（关掉要说"已�
     const r2 = sw2ToggleInject('injectTagSpec', true);
     assert.equal(r2.on, true, '开关本身记下了');
     assert.equal(r2.ok, false, '★没有注入口 ⇒ 不许假装注入成功');
-    assert.ok(r2.line.includes('⚠'), r2.line);
+    assert.ok(r2.line.includes('注意：'), r2.line);   // leg165：警告标记由 ⚠ 改成文字「注意：」（用户令「emoji 不要了」）
     assert.equal(sw2ToggleInject('', true).ok, false, '没有键名 ⇒ 拒绝（不猜）');
 });
 test('leg89⑫：读正文——取最后一条；拿不到就给空串（**不退回更早的消息**）', () => {
@@ -879,4 +879,63 @@ test('leg115⑥：注入器真跑——第四段走 `INJECT_KEY_LEDGER` 写进�
     assert.equal(r2.off, true, '三段+第四段全关 ⇒ 报"已关"（不许报成"注入了 0 字"）');
     assert.equal(r2.tagsChars + r2.worldChars, 0, '关了就是零字');
     assert.ok(!r2.line.includes('账上往事'), `★"已关"那一行不该提第四段：${r2.line}`);
+});
+
+// ===========================================================================
+// ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」＋「**保证相关度最大就不用管时间了**」）：
+//   **聊天侧那一段的两路并联 ＋ 额度划分**。
+//   ★为什么必须有这一条（实测逼出来的，不是设想）：400 轮长账上，字面路取回 **641 行**、
+//     而 1600 字只装得下 **24 行** ⇒ 若两路合成一个池子按"轮次新的在前"装，
+//     **向量路那几行一条也挤不进去**（两臂读数一模一样 ⇒ 向量路等于没接）。
+//   ⇒ 治法：字面路一份额度（保眼前接得上话头），**向量路一份额度**（保"按意思找回来的旧事"有位置）。
+// ===========================================================================
+
+test('leg161①：★★两路并联——**向量路捞回来的旧事真进得了那一段**（不划额度就永远进不来）', async () => {
+    const written = [];
+    const fakeCtx = { setExtensionPrompt: (k, v) => written.push([k, v]), extension_prompt_types: { IN_PROMPT: 0 } };
+    // 账：**近处一大把**提到真名的行（字面路一抓一大把）+ **一件很旧、不带真名**的事（只有向量路够得着）
+    const many = [];
+    for (let t = 40; t <= 60; t += 1) many.push({ id: `ch_${t}_1`, tick: t, text: `「黄坤」在第 ${t} 轮又动了一次手，阵前交手` });
+    const world = {
+        entities: ENTITIES, context: { positions: LOCATIONS },
+        events: [], chronicle: [{ id: 'ch_3_1', tick: 3, text: '渡口那支车队在夜里没了，没人说得出是谁家的' }, ...many],
+        meta: { tick: 60 },
+    };
+    const inj = createInjector({
+        getCtx: () => ({ ...fakeCtx, chat: [{ is_user: false, mes: '黄坤' }, { is_user: true, mes: '继续' }] }),
+        getWorld: () => world,
+        isOn: (k) => k === 'injectLedgerRecall',
+        // ★向量路（这里注入假的）：它捞回来的正是"字面路够不着的那一件很旧的事"
+        vectorRecall: () => Promise.resolve([{ id: 'ch_3_1', tick: 3, text: '渡口那支车队在夜里没了，没人说得出是谁家的' }]),
+    });
+    inj.prefetchVectors();                 // 后台备（`apply` 是同步的，只能同步读缓存）
+    await new Promise((r) => setTimeout(r, 0));   // 让那次 promise 落定
+    const r = inj.apply();
+    assert.equal(r.ok, true);
+    const last = written.filter(([k]) => k === INJECT_KEY_LEDGER).pop()?.[1] || '';
+    assert.ok(last.includes('没人说得出是谁家的'), `★★向量路捞回来的那件旧事必须真进得去：${last.slice(0, 200)}`);
+    assert.ok(last.includes('第 3 轮') || last.includes('[第3轮]'), '★它自带"多久以前"（红线：召回必须带轮次）');
+    assert.ok(r.line.includes('向量路'), `★读数要如实说向量路那一半：${r.line}`);
+});
+
+test('leg161②：★向量路**没备好 / 抛错 / 没接** ⇒ 只走字面路（＝本笔之前的行为，不是坏行为）', async () => {
+    const written = [];
+    const fakeCtx = { setExtensionPrompt: (k, v) => written.push([k, v]), extension_prompt_types: { IN_PROMPT: 0 } };
+    const world = {
+        entities: ENTITIES, context: { positions: LOCATIONS }, events: [],
+        chronicle: [{ id: 'ch_5_1', tick: 5, text: '「黄坤」在第 5 轮动了一次手' }],
+        meta: { tick: 5 },
+    };
+    const base = { getCtx: () => ({ ...fakeCtx, chat: [{ is_user: false, mes: '黄坤' }, { is_user: true, mes: '继续' }] }), getWorld: () => world, isOn: (k) => k === 'injectLedgerRecall' };
+    // ① 根本没接向量路
+    const a = createInjector({ ...base }).apply();
+    assert.equal(a.ok, true, '没接向量路 ⇒ 字面路照常（第四段不许整段消失）');
+    // ② 接了但**抛错** ⇒ 不抛出去、只走字面路
+    const b = createInjector({ ...base, vectorRecall: () => { throw new Error('向量层炸了'); } });
+    b.prefetchVectors();
+    await new Promise((r) => setTimeout(r, 0));
+    const rb = b.apply();
+    assert.equal(rb.ok, true, '★向量路抛错不许影响注入（加速层不许影响世界，也不许拦住注入）');
+    const lastB = written.filter(([k]) => k === INJECT_KEY_LEDGER).pop()?.[1] || '';
+    assert.ok(lastB.includes('黄坤'), '字面路那部分照旧在里面');
 });

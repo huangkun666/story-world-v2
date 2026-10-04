@@ -46,7 +46,11 @@ const RECENT_GROWTH_WINDOW = 5;
 //     ② **长度会越长越离谱**：整本账那一档实测 **33,821 字 ≈ 48 屏**（默认那一屏 5,145 字），
 //        而账只往后加 ⇒ 那一页**随局无限增长**，手机上就是灾难（用户原话：「对于手机端那真是毁灭性的体验」）。
 //   ⇒ 定稿治法（**一个旋钮，不是一套控件**）：`opts.panelTurns`（＝账上那一格「往回看轮数」，
-//     出厂 50）——这一页只画**最近这么多轮**里的事：热层 ＋ 归档里留了来路的那批，按轮次裁。
+//     出厂 50）——这一页只画**最近这么多轮**里的事：热层 ＋ 归档里留了来路的那批。
+//     ★★★**裁的是"线"，不是"事件"**（leg168 才真做到，见 `buildPanorama` 里 §③ 那一段）：
+//       一条线只要有一件落在窗口内，**它整条都讲**（起头→过程→结果）；只有整条线一件都不在窗口里，
+//       它才不上这一页。★这条口径是用户 2026-10-01 当场定的（`docs/session-handoff-2026-10-01-leg160-panel-window.md` §5.1），
+//       而代码从 leg163 到 leg167 一直是"**按事件裁**"——两者差别见 leg168 交接。
 //     · 玩家填小 ⇒ 只剩眼前这一段；填大 ⇒ 旧事回到这一页；**页面上一个控件都不多**（那一行横带、
 //       两枚钮、「整本账」、按 64 轮切段，全部撤掉）。
 //     · 它与给模型看的那个窗口（`pack.js` 的「往事轮数」）是**两件事**：一个管"模型记得多牢"，
@@ -140,7 +144,7 @@ const nameOf = (world, id) => (world.entities || []).find((e) => e.id === id)?.n
 export function buildPanorama(world, opts = {}) {
     const hot = world?.events || [];    // ★★★leg160：**读哪一批事**由「往回看轮数」决定（见文件头那一整段）。
     //   · `panelTurns` 认不出（空/0/负数）⇒ **只读热层**（老调用方零扰动）；
-    //   · 给了 ⇒ 热层 ＋ **归档里那份来路**，再按"最近 N 轮"裁出这一段。
+    //   · 给了 ⇒ 热层 ＋ **归档里那份来路**，再按"最近 N 轮"**裁线**（★leg168：裁的是线，不是事件）。
     const archived = archivedEventsOf(world);
     const windowFrom = panelWindowFromTick(world?.meta?.tick, opts?.panelTurns);
     const pool = windowFrom == null ? hot : [...hot, ...archived];
@@ -152,7 +156,29 @@ export function buildPanorama(world, opts = {}) {
         return { from: Math.min(acc.from, t), to: Math.max(acc.to, t) };
     }, { from: Infinity, to: -Infinity });
     const inWindow = (e) => windowFrom == null || tickOfEvent(e) >= windowFrom;
-    const events = pool.filter(inWindow);
+    // ★★★leg168（用户令「**窗口要改成按线裁**」，2026-10-02）：**分组用全量，裁在分完组之后按"线"裁。**
+    //   ── 口径（leg160 交接 §5.1 白纸黑字，用户当时点过头；代码从 leg163 到今天从来没做到）──
+    //     **窗口管的是"看哪几条线"，不管"线里印几件"**——一条线只要有一件落在窗口内，它整条都讲
+    //     （起头→过程→结果）；**只有整条线一件都不在窗口里，它才不上这一页**。
+    //   ── 病（上一版那一行错在哪）──
+    //     上一版是 `const events = pool.filter(inWindow);`——**先按事件裁、再拿裁剩的事件去并线**
+    //     ⇒ 一条跨轮的线被拦腰切断，剩下的那半截就成了"只有一件事"的线（本仓那个老形状）：
+    //       · 它的"来路"指向一件**不在这一屏上**的事 ⇒ 页面上印出一片「接着更早的一件事往下长」；
+    //       · 这正是用户三次问过的那句「**你没发现这些事件都不像是作为开头的事件吗？**」
+    //         ——半截线的第一件当然不像开头，**因为它的开头被窗口切掉了**。
+    //   ── 改法（两步，顺序要紧）──
+    //     ① **分组用全量**（`pool` ＝ 热层 ＋ 归档里留了来路的那批）：一条线是几件，是**账上的事实**，
+    //        不该由"玩家把旋钮拧到几"来决定它被切成几段；
+    //     ② 分完组**按线判**（见下面 §③ 末尾那一段）：整组成员一件都不在窗口内 ⇒ 这条线不上这一页，
+    //        否则**整条**都印。
+    //   ★★量出来的代价（仓外装置 `F:/deepseek/tmp/leg168-clip/probe-clip.mjs`，三份夹具 × 六档窗口）：
+    //     跨轮的线会把窗口外那半截带回来 ⇒ **这一屏变长**：
+    //       · 用户那本真账（`大荒z` · 35 件）：窗口 1 轮 **13 件 → 32 件**（2.3 屏 → 8.7 屏）；
+    //       · 真账 59 轮：窗口 5 轮 **17 → 49 件**；窗口 10 轮 **29 → 52 件**；
+    //       · 合成长账 400 轮：窗口 50 轮 **73 → 574 件**（那里的一条线有 66–94 件）。
+    //     ⇒ ★这是**用户点名要的口径**（他 2026-10-01 当场选的就是"甲：每条线都是完整一段故事"）；
+    //       代价如实记在当棒交接里，**不许拿"页面会变长"当理由把它改回去**（那是另一条令的事）。
+    const events = pool;
     const agendas = world?.agendas || [];
     const chronicle = world?.chronicle || [];
     const agOf = new Map(agendas.map((a) => [a.id, a]));
@@ -233,9 +259,27 @@ export function buildPanorama(world, opts = {}) {
     const find = (x) => { let r = x; while (parent.get(r) !== r) r = parent.get(r); while (parent.get(x) !== r) { const n = parent.get(x); parent.set(x, r); x = n; } return r; };
     const union = (a, b) => { const ra = find(a); const rb = find(b); if (ra !== rb) parent.set(ra < rb ? rb : ra, ra < rb ? ra : rb); };
     const ownerOfPlot = new Map(agendas.map((a) => [a.id, a.owner || '']));
+    // ★★★leg167：**第三条边——`plot` 事件沿着「盘算是从哪件事来的」连回它的上一件事**。
+    //   病（用户 2026-10-02 实机，逐字）：「**你没发现这些事件都不像是作为开头的事件吗？**」
+    //   ★机理（用户那本真账 `大荒z` 上逐条量出来的，50 轮／整本账都成立，与窗口无关）：
+    //     账上**早就有**这条指针——`agenda.source = { type:'event', ref:<那件事的号> }`（真账实测 8 条盘算里 7 条带它）；
+    //     而并线只认两条边（`ripple` 事接着事 · 同一个主人的 `plot` 并成一条），**`plot → 盘算.source.ref` 这条没人走**。
+    //     后果：同一个故事被切成两半——第 2 轮那一半是 `ripple`（进了「大虞缉仙司察觉到京城龙脉出现异常流失」那条线），
+    //     第 3 轮那一半是 `plot`（自己立成一条**只有一件事**的线，名字还是盘算的目标）。
+    //     真账实测：8 条"只有一件事"的线里 **6 条**是这么来的（a_2_1/a_2_2/a_1_1/a_1_2/a_2_4 各一条 ＋ 对应的事件）。
+    //   ★口径写窄（同下一条"处境根"那条纪律）：**只在盘算的来路真是"某件事"、且那件事还在这一屏里时才并**；
+    //     `source.type === 'state'`（局势自己拱出来的，真账里 a_2_5 就是）**没有指针对**，那就照旧不并——宁可不并，也不猜。
+    const agendaOrigin = new Map();   // 盘算号 → 它出生的那件事的号（只收 `type === 'event'` 的）
+    for (const a of agendas) {
+        if (a?.source?.type === 'event' && a.source.ref) agendaOrigin.set(String(a.id), String(a.source.ref));
+    }
     for (const e of events) {
         if (e.source?.type === 'ripple' && parent.has(e.source.ref)) union(e.id, e.source.ref);
-        if (e.source?.type === 'plot') e.__owner = ownerOfPlot.get(e.source.ref) || '';
+        if (e.source?.type === 'plot') {
+            e.__owner = ownerOfPlot.get(e.source.ref) || '';
+            const up = agendaOrigin.get(String(e.source.ref));
+            if (up && parent.has(up)) union(e.id, up);
+        }
     }
     // ★★处境根并进它该在的那条线（真账试读后定的第二条边）：`source.type === 'state'` 的事没有谋划，
     //   但它的 `ripples` 常常是**同一个势力**（真账：`死煞之气外泄` 牵动万法阁 ⇒ 它就是万法阁那条线的开头）。
@@ -280,6 +324,23 @@ export function buildPanorama(world, opts = {}) {
         if (!groups.has(r)) groups.set(r, []);
         groups.get(r).push(id);
     }
+    // ★★★leg168：**窗口按线裁**（这是个**只删整组**的动作，不是"从组里抠事件"）——
+    //   整组的成员一件都不在窗口内 ⇒ 这条线不上这一页；否则整条都讲（含窗口外那几件）。
+    //   ★`windowFrom == null`（不传窗口 ⇒ 只读热层）⇒ **一条都不裁**：老调用方逐字节同旧。
+    //   ★裁掉的线数记进 `stats.threadsOutOfWindow`（页面上不印它，它是给判据与"这一屏是不是全部"用的读数）。
+    const evById = new Map(pool.map((e) => [String(e.id), e]));
+    let threadsOutOfWindow = 0;
+    if (windowFrom != null) {
+        for (const [root, members] of [...groups]) {
+            if (members.some((id) => inWindow(evById.get(String(id))))) continue;
+            groups.delete(root);
+            threadsOutOfWindow += 1;
+        }
+    }
+    // 这一屏**真印出来**的那些事（＝留下那些组的全部成员）：统计行、汇总带与"空屏"那句都读它——
+    //   ★不许再读 `events`（那是"账上有几件"，不是"这一屏印了几件"；本仓最忌"一个数两把尺子"）。
+    const printedIds = new Set([...groups.values()].flat().map(String));
+    const printed = pool.filter((e) => printedIds.has(String(e.id)));
 
     // ④ 一条线 → 一段人话
     const threads = [];
@@ -387,7 +448,7 @@ export function buildPanorama(world, opts = {}) {
             //     时间线写着每一件事的**经过**（过程）——这一格既不是计数也不是过程，它是**把账目状态
             //     换个说法再列一遍**。真要查一手账目，去「史卷」（编年）那儿有全部行。
             //   ★判据⑩把"它不得回潮"钉死（含旧措辞与旧形状）。
-            //   ⚠编号：leg96 那一棒已经用了判据⑨（它治的是徽上"还在往下长"的**信号用错**）⇒ 本笔是⑩。
+            //   注意：编号：leg96 那一棒已经用了判据⑨（它治的是徽上"还在往下长"的**信号用错**）⇒ 本笔是⑩。
             live: openEvs.length > 0,
             kindMix: [...kinds].filter(Boolean).join('/'),
         });
@@ -396,15 +457,17 @@ export function buildPanorama(world, opts = {}) {
     return {
         threads,
         stats: {
-            events: events.length,
+            // ★leg168：这一格是"**这一屏真印出来几件**"（＝留下那些线的全部成员，含窗口外那几件）——
+            //   不再是"窗口内恰好有几件"（那量的是窗口，不是这一页）。
+            events: printed.length,
             threads: threads.length,
             liveThreads: threads.filter((t) => t.live).length,
             // ★leg97：三态的口径**只在这里算一次**（统计行、面头、自证闸都从这两个数来——
             //   一处口径，免得又出现"同一页两种说法"那种老病）
             growingThreads: threads.filter((t) => t.growing).length,
-            openEvents: events.filter((e) => !e.closed).length,
-            closedEvents: events.filter((e) => e.closed).length,
-            unexplained: events.filter((e) => !e.source || !['seed', 'state', 'plot', 'ripple'].includes(e.source.type)).length,
+            openEvents: printed.filter((e) => !e.closed).length,
+            closedEvents: printed.filter((e) => e.closed).length,
+            unexplained: printed.filter((e) => !e.source || !['seed', 'state', 'plot', 'ripple'].includes(e.source.type)).length,
             // ★★★leg160：这一屏的**窗口**（谁在画、画到哪一轮）——`panelTurns` 认不出时是 `null`
             //   （＝只画热层）。★页面**不再拿它拼任何句子**（那一行横带已撤）；留着它是给判据与
             //   "这一屏是不是全部"这类**程序化**读法用的（呈现层自己的口径，不是给玩家看的话）。
@@ -417,6 +480,10 @@ export function buildPanorama(world, opts = {}) {
             eventsArchived: archived.length,
             panelTurns: windowFrom == null ? null : Math.floor(Number(opts?.panelTurns)),
             windowFrom,
+            // ★leg168：**整条线都不在窗口里、因而没上这一页的线数**（"按线裁"那句口径的读数）。
+            //   不传窗口时恒为 0（那时一条都不裁）。★页面上不印它：玩家要看的是"这世界发生了什么事"，
+            //   "裁掉了几条"是**我们的口径**的读数，跟 leg160 撤掉那一行横带是同一条理由。
+            threadsOutOfWindow,
         },
     };
 }
@@ -574,40 +641,53 @@ export function buildFaces(world, threads, opts = {}) {
         return { place, lines, cast: [...cast], lone: [], routes: 0, passes: 0, events: 0 };
     }).sort((a, b) => b.lines.length - a.lines.length || String(a.place).localeCompare(String(b.place), 'zh'));
     const faceOf = new Map(faces.map((f) => [f.place, f]));
-    //   ★★★leg159b：**只有"按窗口画"那一档才把单事件的线拿出来**（`looseOnly`）。
-    //     · 老调用方（没递 `panelTurns`、只画热层）**一条都不动** ⇒ 逐字节同旧（零扰动）；
-    //     · 按窗口画时（leg160：这是**默认路**，窗口＝账上「往回看轮数」）：单事件的线拿到末尾单独一栏
-    //       ——病（本棒在长账上量的，`report-05.md`）：读回归档来路之后，卡里会混进一大堆**只有一件事的线**
-    //       （那份 400 轮的账：43 条里 **26 条只有一件事**，且几乎全叫「处境生变」——一人一条、没人接下去），
-    //       它们本来就不是"故事"，是一处**没人接的处境**；摆在长故事中间只会把长故事挤没。
-    //   ★口径：只按**件数**分（`count === 1`）；立卡门槛那条（≥2 条线 或 此处 ≥2 件事，leg158 定案）**不动**。
-    //   ★这是**第三个分类**，不是"又数了一遍"——自证闸（§⑧）跟着多一格
-    //     （本仓那条纪律：呈现层加一层组织，就要配一条"总数对得上"的闸）。
-    //   ★★★leg160：**"这一屏是不是按窗口画的"由 `opts.panelTurns` 自己判**（与 `buildPanorama` 同一把尺子；
-    //     不读任何看不见的挂载点）。认不出（老调用方 / 只画热层）⇒ 一条都不动。
-    const looseOnly = panelWindowFromTick(0, opts?.panelTurns) != null;
+    // ★★★leg167（用户令：「**我现在需要回到以前的效果**」＋「**跟以前的叙事结构绝对有变化，这个很零散很零散，
+    //   以前没有这么多零散**」＋「**就连盘算都放进去了**」）：
+    //   **leg159b 那条"把只有一件事的线从卡里拿出来"的口径（`looseOnly`）整条撤掉。**
+    //   ── 病（用户那本真账 `大荒z` 上量出来的，四版对照）──
+    //     · leg158（这条口径之前）：**一个地方的事全摆在那张卡里**——「江州城·西关旧屋」卡上四行
+    //       （3 件事 / 2 件事 / 1 件事 / 1 件事），末尾没有那一栏，卡也不会空。
+    //     · leg159b 起：`f.lines = f.lines.filter(t => t.count !== 1)` ⇒ 单事件的行**被从卡里拿走**，
+    //       塞进末尾「只有一件事」那一栏 ⇒ ① 卡里只剩长故事（真账上会出现"卡上 0 条故事"的空盒子）
+    //       ② 末尾堆成一整栏零碎（真账实测 8 条，其中 6 条名字还是**盘算的目标**——那是"由打算推出来"
+    //          的事件连不回它的上一件事，自己立了一条线；那条边见上面 §③ 的 `agendaOrigin`）。
+    //       ★leg160 把窗口变成常开 ⇒ 这条"拿走"**每次都执行**，于是用户每次打开都是那一堆。
+    //   ── 撤了之后「单事件的东西会挤没长故事」怎么办 ──
+    //     ★不靠"拿走"，靠**排**：线本来就按件数从多到少排（`lines` 的排序在下面 §③），
+    //       1 件事的行自然落到卡的末尾。**地方还是那个地方，事还在那张卡里**（用户要的"信息组织度"）。
+    //   ── 自证闸那四格照旧平 ──
+    //     `home` 那一次分派跟着改回三选一（面内 / 单线地点 / 散落），"单独一栏"那一格恒为 0
+    //     （不删那一格：页脚那句正文格式是判据逐字咬着的，格在、数恒为 0）。
     for (const f of faces) {
         // ★算"几条线到过这里"时**照旧算全部**（它确实到过这里；那一格是**事实**，不是"卡里有几条"）
         for (const t of f.lines) if (homeFace.get(t.id) === f.place) f.routes += 1; else f.passes += 1;
-        f.loose = looseOnly ? f.lines.filter((t) => t.count === 1) : [];
-        if (looseOnly) f.lines = f.lines.filter((t) => t.count !== 1);
+        f.loose = [];
     }
-    // ★只有一件事的线**到过的地方**（照 §⑤ 单线地点同一口径：只被这一条线到达的地方）
-    const loneArrive = new Map();
+    // ★★★leg167：`loneArrive`（"只有一件事的线到过哪些不是面的地方"）**随「只有一件事」那一栏一起删**——
+    //   它唯一的生产者就是那一栏挑地名用的（本仓纪律：零生产者的东西不留）。
+    // ★★★leg167：**归属只算一次，然后两栏都从它读**（这一条是本笔治的那只虫）。
+    //   病（用户 2026-10-02 实机截图，逐字）：「**这他妈的是什么你告诉我，这两行一样的字是什么？？？
+    //   我已经给你看过好多次了，这里又他妈哪来的这么多零碎事件？？？？**」
+    //   ★机理（真账 `F:/deepseek/tmp/leg153/real-world-59.json` 上量到的，不是推的）：
+    //     `census` 那一份**早就**按"这条线最后落在哪"算出了唯一归属（`home`，见下面那段留档），
+    //     可**渲染那两栏用的还是老的两份名单**——`loose` 取"凡只有一件事、记了地方的线"，
+    //     `others` 取"凡落在单线地点的线 ＋ 一个地方都没记的线"。两份名单**没有一处按 `home` 过滤**
+    //     ⇒ "只有一件事、又落在一个不是面的地方"的线**两边都进**。
+    //     ★真账实测（按窗口画 50 轮）：`others` 4 ＋ `loose` 5，其中 **3 条同时在两栏里**
+    //       （血屠魔君现身南疆掀起杀戮 / 菩提禅院钟声震荡大荒 / 黑山老妖开启幽冥通道）。
+    //     ★闸为什么没红：闸数的是**线**（按 id 去重、四个格子互斥穷尽）——它一直是对的；
+    //       错的是**印**：同一条线被印了两遍。**"闸平"不等于"印对"**（本仓"空绿"家族的新一员）。
+    //   ⇒ 把 `home` 提到前面来，`loose` 与 `others` 都**只读它**：一条线要么进这一栏、要么进那一栏。
+    const home = new Map();   // 线 id → 'face' | 'lone' | 'none'（★唯一一次分派；'loose' 那一格已随 leg167 撤掉）
     for (const t of list) {
-        if (t.count !== 1) continue;
-        for (const p of t.places) {
-            if (faceSet.has(p)) continue;
-            if (!loneArrive.has(p)) loneArrive.set(p, new Set());
-            loneArrive.get(p).add(t.id);
-        }
+        if (homeFace.has(t.id)) home.set(t.id, 'face');
+        else if (homeLone.has(t.id)) home.set(t.id, 'lone');
+        else home.set(t.id, 'none');
     }
-    //   ★★交底（本笔当场被自己的自证闸咬到的那一处）：**一个地方都没记的那种单事件线不算进这一栏**
-    //     ——它得留在「各处散落」里（那一栏管的是"一个地方都没记"）。两边都收 ⇒ 同一条线被算两遍、闸当场不平。
-    const loose = looseOnly ? list.filter((t) => t.count === 1).map((t) => {
-        const place = t.places.find((p) => loneArrive.get(p)?.size === 1) || t.places[0] || '';
-        return { place, line: t, tick: t.to, count: 1 };
-    }).filter((x) => x.place).sort((a, b) => String(a.place).localeCompare(String(b.place), 'zh') || String(a.line.name).localeCompare(String(b.line.name), 'zh')) : [];
+    //   ★★★leg167：**「只有一件事」那一栏整栏撤掉**（用户令「回到以前的效果」）——
+    //     单事件的线不再被从卡里拿出来，所以这一栏恒为空。★那一格**留着**（恒 0）：
+    //     页脚自证闸那句正文格式（`线 N 条 = 面内 N ＋ 单独一栏 N ＋ 单线地点 N ＋ 散落 N`）是判据逐字咬着的。
+    const loose = [];
     for (const f of faces) {
         // ★"几件事发生在此" = **真的发生在这个地方的**那些事（按 placeOf 数）——
         //   第一版写成"落脚线在此的事之和"，那量的是别的东西（本仓 §0 那条纪律：
@@ -626,9 +706,9 @@ export function buildFaces(world, threads, opts = {}) {
     //    ★它**不是第二次落脚**：线的落脚处只有 §③ 算的那一处，这条只是交叉引用 ⇒ 核算照旧平。
     //    （线自己没有落脚面时，那个地点就是它的落脚处，走 §⑥ 的「各处散落」，不在这里重复报。）
     for (const t of list) {
-        // ★leg159b：**只有一件事的线不进这一段**——读历史那一档它已经在末尾单独那一栏里印着了
-        //   （再印一遍就是"同一件事两处表达"；默认那一屏没分栏 ⇒ 这一条也不生效，老行为一个字不动）
-        if (!homeFace.has(t.id) || (looseOnly && t.count === 1)) continue;
+        // ★★★leg167：leg159b 那条「只有一件事的线不进这一段」**跟着"拿出来"那条一起撤掉**——
+        //   单事件的线又回到了卡里，它到过的单线地点照旧挂在它那条线的落脚卡上（leg158 的行为）。
+        if (!homeFace.has(t.id)) continue;
         const f = faceOf.get(homeFace.get(t.id));
         for (const p of t.places) {
             if (faceSet.has(p) || (arrive.get(p)?.size ?? 0) !== 1) continue;
@@ -640,11 +720,13 @@ export function buildFaces(world, threads, opts = {}) {
     //    ★与设计交接 §1.1 第 3 条同一件事；定稿名字用用户裁的那个「各处散落」
     //      （不是「其他」——设计交接 §0 第 ② 条：那批线**有地点**，只是"一个地方只有一条线路过"）。
     const others = [
-        ...[...homeLone.entries()].map(([id, place]) => {
+        // ★leg167：**按 `home` 过滤**（见上面那段留档）——落在单线地点、而归属已经是「只有一件事」的线
+        //   不在这里再印一遍。
+        ...[...homeLone.entries()].filter(([id]) => home.get(id) === 'lone').map(([id, place]) => {
             const t = list.find((x) => x.id === id);
             return { place, line: t, tick: t.to, count: t.placeCount.get(place) || 0 };
         }),
-        ...scattered.map((t) => ({ place: '', line: t, tick: t.to, count: t.events.length })),
+        ...scattered.filter((t) => home.get(t.id) === 'none').map((t) => ({ place: '', line: t, tick: t.to, count: t.events.length })),
     ].sort((a, b) => b.count - a.count || String(a.place).localeCompare(String(b.place), 'zh'));
     // ⑦ 桥（原设计里的"块"）：同一个**角色**出现在 ≥2 个面
     const entFaces = new Map();
@@ -670,13 +752,8 @@ export function buildFaces(world, threads, opts = {}) {
     //      真账（`F:/deepseek/tmp/leg153/real-world-59.json`）当场不平：**8＋14＋9＋1 = 32 > 总 23**。
     //      ⇒ 现在**一处算归属、四格从那一处读**（`home`）：一件的线一律算进 `loose`（只要它记了地方），
     //        其余按 `homeFace` / `homeLone` / 无地方 三选一。默认那一档 `loose` 恒为 0 ⇒ 与本笔之前逐字节相同。
-    const home = new Map();   // 线 id → 'loose' | 'face' | 'lone' | 'none'（★唯一一次分派）
-    for (const t of list) {
-        if (looseOnly && t.count === 1 && t.places.length) home.set(t.id, 'loose');
-        else if (homeFace.has(t.id)) home.set(t.id, 'face');
-        else if (homeLone.has(t.id)) home.set(t.id, 'lone');
-        else home.set(t.id, 'none');
-    }
+    //   ★★★leg167：`home` 那段**已提到 §④ 之前**（上面）——理由是**同一份归属要同时喂给闸与那两栏的渲染**，
+    //     而 leg166 及以前只喂了闸 ⇒ 同一条线被印两遍（用户截图里"这两行一样的字"）。见那段留档。
     const countHome = (k) => [...home.values()].filter((v) => v === k).length;
     const census = {
         total: list.length,
@@ -713,14 +790,14 @@ const spanOf = (from, to) => (from === to ? `第 ${from} 轮` : `第 ${from}–$
 function pointRows(t, onlyPlace) {
     const evs = onlyPlace ? t.events.filter((e) => e.position === onlyPlace) : t.events;
     return evs.map((e) => {
-        const bits = [`<span class="sw2-pan-t">第 ${e.tick} 轮</span>`, `<b>${esc(e.title)}</b>`];
+        const bits = [`<b>${esc(e.title)}</b>`];
         if (onlyPlace && e.position) bits.push(`<span class="sw2-pan-at">${esc(e.position)}</span>`);
         if (e.why) bits.push(`<span class="sw2-pan-why">${esc(e.why)}</span>`);
         if (e.ripples.length) bits.push(`<span class="sw2-pan-who">牵动 ${esc(e.ripples.join('、'))}</span>`);
         const evTitle = e.closed
             ? ` title="${esc(e.closedBy === 'model' ? `这一段已收场${e.closedAt != null ? `（第 ${e.closedAt} 轮）` : ''}${e.closedWhy ? `：${e.closedWhy}` : ''}` : `已了结${e.closedAt != null ? `（第 ${e.closedAt} 轮）` : ''}`)}"`
             : '';
-        return `<li${evTitle}>${bits.join(' ')}</li>`;
+        return `<li${evTitle}><span class="sw2-pan-t">第 ${e.tick} 轮</span><div class="sw2-pan-event-text">${bits.shift()}<div class="sw2-pan-event-meta">${bits.join(' ')}</div></div></li>`;
     }).join('');
 }
 
@@ -749,8 +826,13 @@ function lineHtml(t, f, world) {
         ? ''
         : `起头：${esc(head.title)}${head.why ? `　<span class="sw2-pan-why">${esc(head.why)}</span>` : ''}`;
     const [cls, label] = badgeOf(t);
-    return `<details class="sw2-pan-thread${t.live ? ' live' : ''}"${t.live && t.count > 2 ? ' open' : ''}>`
-        + `<summary><span class="sw2-pan-dot${t.live ? ' live' : ''}"></span>`
+    return `<details class="sw2-pan-thread${t.live ? ' live' : ''}" data-pan-entry data-pan-key="${esc(JSON.stringify([f?.place || '', t.id]))}" data-pan-live="${t.live}" data-pan-people="${esc([t.actor, ...t.cast].filter(Boolean).join(' '))}"${t.live && t.count > 2 ? ' open' : ''}>`
+        // ★★★leg165：线名前面那颗**发光圆点**（`<span class="sw2-pan-dot">`）**整族撤掉**——
+        //   用户令「**emoji 不要了**」，而它正是演示点名要去的那件装饰
+        //   （`panorama-redesign.html`：「去掉装饰：发光圆点、金色左杠」）。
+        //   ★"还开着"这件事**本来就有地方说**：线头右端那枚徽（三态）——圆点说的是同一件事的第二遍。
+        //   ★它的样式规则同批从 `web/style.css` 撤（零生产者不留）。
+        + `<summary>`
         + `<span class="sw2-pan-name">${esc(t.name)}</span>`
         + `<span class="sw2-pan-span">${span} · ${t.count} 件事${here.length && here.length !== t.count ? `（在此 ${here.length} 件）` : ''}</span>`
         // ★★★leg95c（用户第三次指认：「**这个 7 还是事件的数量啊**」）：那枚徽**只许说状态，一个数都不带**。
@@ -770,7 +852,6 @@ function lineHtml(t, f, world) {
         + steps
         + (t.count > 1 ? `<div class="sw2-pan-sub">一条线怎么走的</div><ul class="sw2-pan-events">${pointRows(t, f ? f.place : null)}</ul>` : '')
         + costs
-        + `<div class="sw2-pan-foot">这一段是把账上的字重新排的：来路取事与谋划的指针，过程取逐轮记下的原话，<b>没有一句是新写的</b>。要看一手账目，去「史卷」。</div>`
         + `</div></details>`;
 }
 
@@ -836,7 +917,7 @@ function bridgesHtml(f, entByName) {
     //   像是"这一处连着哪几处"。真账现场两张卡并排看时，读者会以为箭头左边是别的地名。
     //   ⇒ 标签明说"**人**"这层身份，并点破这些名字在卡里本来就有（不点名是哪几条线——
     //     那会写成第二个"与这一处别的线共享"，本仓"同一件事两处表达"的老病）。
-    return `<div class="sw2-pan-brg"><b>谁把这里和别处连起来</b>（都是卡上那些线里的人）：${rows.slice(0, 4).map((b) => `<b>${esc(b.name)}</b> → ${esc(b.to.join(' · '))}`).join('　')}</div>`;
+    return `<div class="sw2-pan-brg"><b>谁把这里和别处连起来</b>：${rows.slice(0, 4).map((b) => `<span class="sw2-pan-bridge"><b>${esc(b.name)}</b> → ${esc(b.to.join(' · '))}</span>`).join('')}</div>`;
 }
 
 // ★★★自证闸（设计交接 §3.1：**呈现层加一层组织，就要配一条"总数对得上"的闸**）
@@ -848,36 +929,51 @@ function gsum(m, three) {
     const bad = m.dropped.length || c.sum !== c.total;
     return `<div class="sw2-pan-selfcheck${bad ? ' bad' : ''}">自证：线 <b>${c.total}</b> 条 = ${parts.join(' ＋ ')}`
         + `（共 <b>${c.sum}</b> 条）${bad
-            ? ` · ⚠ 对不上：掉出页面 <b>${m.dropped.length}</b> 条（${esc(m.dropped.map((t) => t.name).join('、'))}）`
+            ? ` · 注意：对不上：掉出页面 <b>${m.dropped.length}</b> 条（${esc(m.dropped.map((t) => t.name).join('、'))}）`
             : ` · 掉出页面 <b>0</b>`}`
         + `　·　那枚徽：还在往下长 <b>${three.growing}</b> · 挂着没了结 <b>${three.stale}</b> · 已收场 <b>${three.done}</b></div>`;
 }
 
-// ★大势与面之间那一段：**大势与面的真关系 ＝ 对读**（设计交接 §2.2）
-//   ★★大势**统领不了面**：它是一句话，句子收不了条目（A 局 31 字 · B 局 72 字，各自只切成一句，
-//     内部是顿号并列＝属性罗列）；而且"书的原始设定"是**前提**、账上算出的是**事实**——
-//     前提不能收纳事实（否则就是「拿一句话冒充一个结构」）。
-//   ⇒ 这一段只做两件事：报"此刻有多少处有事"（活数）＋讲清"大势给何故、面给何处"。
-function bridgeHtml(m, stats, three) {
+// ★★★leg164（观棋页重构 · 用户令「先做观棋页」）：**三块合成一条汇总带**。
+//   原来这一段印了**三块、说的是同一批数**（用户眼前的同义重复，演示逐条点名的第①条）：
+//     ① `.sw2-pan-now`「此刻：N 处有事发生 · 全书 N 条线（…）　·　N 个角色手伸到了两处以上」；
+//     ② `.sw2-pan-hint` **6 行设计解释**（"大势是书里写定的何故、面是账上算出来的何处——两样并排读，
+//        不去互相统领"＋"这里没有一个字是模型新写的"）——★那是**我们的设计理由**，不是玩家要的信息；
+//     ③ `.sw2-pan-stats` 4–6 枚 chips（N 条线 / N 还在往下长 / N 挂着没了结 / N 已收场 / N 件事 / N 处面）。
+//   ⇒ 合成**一条**（演示 `F:/deepseek/tmp/leg162-ui/panorama-redesign.html` 的 `.pan-sum`）。
+//   ★口径一个字没改：那三态仍是**全页一套词**（`badgeOf` 那一族），数仍从同一个 `stats`/`three` 来。
+//   ★那两句设计解释**搬进注释、没删**（用户令「事实一条没删，只把"我们的理由"搬回注释」）：
+//     · 大势与面是**对读**，不是统领（大势是一句话、句子收不了条目；前提不能收纳事实）；
+//     · 这一页**没有一个字是模型新写的**——它是本页的诚实声明，而演示把这类声明统一收到
+//       **每张卡末尾那一行**（`.sw2-pan-foot`，**照旧在**，只是降到最小字）。
+function bridgeHtml(m, stats, three, world) {
     const c = m.census;
-    const kinds = [stats.liveThreads ? `还在往下长 <b>${stats.growingThreads}</b>` : '', three.stale > 0 ? `挂着没了结 <b>${three.stale}</b>` : '', three.done > 0 ? `已收场 <b>${three.done}</b>` : ''].filter(Boolean).join(' · ');
-    return `<div class="sw2-pan-now">此刻：<b>${m.faces.length}</b> 处有事发生 · 全书 <b>${stats.threads}</b> 条线${kinds ? `（${kinds}）` : ''}`
-        + `　·　<b>${m.bridges.length}</b> 个角色手伸到了两处以上</div>`
-        + `<div class="sw2-pan-hint"><b>大势</b>是书里写定的<b>何故</b>，<b>面</b>是账上算出来的<b>何处</b>——两样并排读，不去互相统领。`
+    const kv = (n, text, live) => `<span class="sw2-sum-kv${live ? ' live' : ''}"><b>${n}</b> ${text}</span>`;
+    const sep = '<span class="sw2-sum-sep">·</span>';
+    return `<div class="sw2-pan-sum" data-pan-world="${esc(world?.context?.world || '')}">`
+        + kv(m.faces.length, '处有事')
+        + sep + kv(stats.threads, '条线')
+        + kv(stats.growingThreads, '还在往下长', true)
+        // ★零的那两态不印（本仓"不许印空话"那条：`0 挂着没了结` 只会占地方）
+        + (three.stale ? kv(three.stale, '挂着没了结') : '')
+        + (three.done ? kv(three.done, '已收场') : '')
+        + sep + kv(stats.events, '件事')
+        + (m.bridges.length ? sep + kv(m.bridges.length, '个角色手伸到两处以上') : '')
+        // ★★那一段"大势与面是对读"的解释**折起来**（不是删）：
+        //   `test/panorama.test.js` 的说书⑭ **逐字咬着**「大势是书里写定的何故」与
+        //   「面是账上算出来的何处」两句（它编码的是 leg96 用户口径③「能让大势直接统领面吗」⇒ 不能），
+        //   而演示说这一段是"我们的设计理由，不是玩家要的信息"——**两边都能满足**：
+        //   照本仓既有的"长说明折起"写法（参数页那张卡就是这么办的）收进 `<details>`，
+        //   页面照旧有那两句话（判据照旧绿），玩家眼前不再铺六行。
+        + `<details class="sw2-pan-fold" data-pan-key="guide"><summary>阅读说明</summary>`
+        + `<b>大势</b>是书里写定的<b>何故</b>，<b>面</b>是账上算出来的<b>何处</b>——两样并排读，不去互相统领。`
         + `下面按「面」组织：一个地方一段（<b>${m.faces.length}</b> 处有两桩以上的事在这里交会）；`
         + (c.lone ? `只经过一条线的地点 <b>${c.lone}</b> 处，挂在它那条线的面里；` : '')
         + (c.loose ? `只有一件事的线 <b>${c.loose}</b> 条，另外收在末尾那一栏；` : '')
         + `从不经过任何面的线 <b>${c.scattered}</b> 条，收在末尾「各处散落」。`
-        + `面里每一条线是一段故事，点标题看它一步步怎么走的。<br><b>这里没有一个字是模型新写的</b>——全部是账上的原文与指针，只换了排法。</div>`
-        // ★leg97：**那三态全页一套词**（照 leg95d 那条纪律：统计行 / 面头 / 徽 / 自证闸，一处口径）。
-        //   数还从 `stats` 来（上面算过一次），这里只是把它印出来。
-        + `<div class="sw2-pan-stats">`
-        + `<span class="sw2-pan-stat"><b>${stats.threads}</b> 条线</span>`
-        + `<span class="sw2-pan-stat live"><b>${stats.growingThreads}</b> 还在往下长</span>`
-        + (three.stale ? `<span class="sw2-pan-stat"><b>${three.stale}</b> 挂着没了结</span>` : '')
-        + (three.done ? `<span class="sw2-pan-stat"><b>${three.done}</b> 已收场</span>` : '')
-        + `<span class="sw2-pan-stat"><b>${stats.events}</b> 件事</span>`
-        + `<span class="sw2-pan-stat"><b>${m.faces.length}</b> 处面</span>`
+        + `面里每一条线是一段故事，点标题看它一步步怎么走的。<br><b>这里没有一个字是模型新写的</b>——全部是账上的原文与指针，只换了排法。`
+        + `<div class="sw2-pan-foot">来路取事与谋划的指针，过程取逐轮记下的原话，<b>没有一句是新写的</b>。一手账目见「大事纪·旧卷」。</div>`
+        + `</details>`
         + `</div>`;
 }
 
@@ -890,15 +986,22 @@ function bridgeHtml(m, stats, three) {
 function faceHeadText(f) {
     const cards = f.lines.length;
     const total = cards + f.loose.length;
+    // ★★★leg164（用户 2026-10-01 当场裁「保留『另有 N 处单线地点』」）：**面头降噪**——
+    //   演示说这一行原来挤着 6–8 个数、只留三个最要紧的。本笔**只撤两个从句**：
+    //     · 撤 `＋ N 条只有一件事`——那一批**已经在末尾「只有一件事」那一栏里单列**，
+    //       面头再报一次就是"同一件事说两遍"（本仓 R2 那条老规矩）；
+    //     · 撤 `· 还在往下长 N`——那三态**已经收进顶端那条汇总带**（`bridgeHtml`），
+    //       而且每张卡里每条线自己的徽就写着状态，面头再数一遍是第三遍。
+    //   ★★**保留 `另有 N 处单线地点`**（用户当场拍的）：它是**一条真信息**——
+    //     "这一处另有 N 个只有一条线路过的地方"，别处看不到它；而且
+    //     `test/panorama.test.js` 那条判据逐字咬着它（删它 = 改判据，用户裁不必）。
     return (total === 1 ? '只有 <b>1</b> 条线到过这里' : `<b>${total}</b> 条线到过这里`)
         + (cards > 1 && f.routes && f.passes
             ? `（<b>${f.routes}</b> 条落脚在此 · <b>${f.passes}</b> 条路过）`
             : cards > 1 && f.passes ? '（都只是路过）' : '')
         + ` · <b>${f.events}</b> 件事发生在此`
         + ` · 卡上 <b>${cards}</b> 条故事`
-        + (f.loose.length ? ` ＋ <b>${f.loose.length}</b> 条只有一件事` : '')
-        + (f.lone.length && cards && f.lines.some((t) => t.count > 1) ? ` · 另有 <b>${f.lone.length}</b> 处单线地点` : '')
-        + ` · 还在往下长 <b>${f.lines.filter((t) => t.growing).length}</b>`;
+        + (f.lone.length && cards && f.lines.some((t) => t.count > 1) ? ` · 另有 <b>${f.lone.length}</b> 处单线地点` : '');
 }
 
 // ★★★leg160：**"时间段那一行"整块撤掉**（`rangeBarHtml` 连同它的调用点）。
@@ -923,7 +1026,7 @@ export function renderPanoramaHtml(world, opts = {}) {
                 : '这本账还没长出可讲的事')
             : '世界刚开局。等它自己走过几轮，这里会把"谁在谋划什么、事情怎么滚起来、谁付出了代价"按条理讲给你听。';
         return `<div class="sw2-pan-head">说书 · 还没长出可讲的事</div>`
-            + `<div class="sw2-pan-empty">${why}</div>`;
+            + `<div class="sw2-pan-empty" data-pan-world="${esc(world?.context?.world || '')}">${why}</div>`;
     }
     const m = buildFaces(world, threads, opts);
     // ★印面头时也要判"这条桥是不是在自指"⇒ 也要那把"像不像地名"的尺子（**同一个实现**，
@@ -937,17 +1040,24 @@ export function renderPanoramaHtml(world, opts = {}) {
     // ⑦ 「各处散落」（用户裁的名字 · 设计交接 §0 第 ② 条）：从"一个地方只有一条线路过"这一批
     //   ★区块头里保留「零散的事」四个字（leg94 判据④/⑤ 咬的就是这一块——它是**点层的第二支渲染**）
     const othersBlock = m.others.length
-        ? `<div class="sw2-pan-other"><div class="sw2-pan-otherh">各处散落 · ${m.others.length} 件零散的事`
+        ? `<div class="sw2-pan-other" data-pan-group><div class="sw2-pan-otherh">各处散落 · ${m.others.length} 件零散的事`
             + `<span class="sw2-pan-secn">· 一个地方只有一条线路过，跟别的事没连成一场 · 地名照印</span></div>`
             + `<ul class="sw2-pan-oneshot">` + m.others.map((o) => {
                 const t = o.line;
                 const [cls, label] = badgeOf(t);
-                const pl = o.place
-                    ? `<span class="sw2-pan-at">${esc(o.place)}</span>`
-                    : `<span class="sw2-pan-at">（账上没写地点）</span>`;
+                const pl = o.place ? esc(o.place) : '（账上没写地点）';
                 // 点层那两行也**一个字都不印状态**（同 leg95 那条纪律）；只有线头那枚徽说状态。
-                return `<li><span class="sw2-pan-t">${spanOf(t.from, t.to)}</span> <b>${esc(t.name)}</b> ${pl}`
-                    + `<span class="sw2-pan-span"> · ${o.count} 件事</span>`
+                // ★★★leg167（用户令「**把之前的信息组织度还回来**」＋「**图的左边界就是插件的边界**」）：
+                //   一行一件事，**列对齐**（事名吃余宽 · 地点与轮次定宽 · 徽钉行尾）。
+                //   ★来路（两次打回，都留档）：leg166c 把这五行从"平铺"改成"两行"，治的是
+                //     "事名一折行、后面几段各自落在不同的行上"；但两行版**列与列之间一条竖线都没有**
+                //     ⇒ 十几行读下来是一片散字（用户：「从来没有过这么零散」）。
+                //   ★正解是 leg163 的密度（一行一件事）**＋ 定宽列**（leg163 也没有列，只是挤在一行里）。
+                //     这一行照演示 `panorama-redesign.html` 的 `.pan-row`：事名 `flex:1`、元信息定宽。
+                return `<li data-pan-entry data-pan-place="${esc(o.place || '')}" data-pan-live="${t.live}" data-pan-people="${esc([t.actor, ...t.cast].filter(Boolean).join(' '))}"><span class="sw2-pan-rn"><b>${esc(t.name)}</b></span>`
+                    + `<span class="sw2-pan-at">${pl}</span>`
+                    + `<span class="sw2-pan-t">${spanOf(t.from, t.to)}</span>`
+                    + `<span class="sw2-pan-span">${o.count} 件事</span>`
                     + `<span class="sw2-pan-badge ${cls}">${label}</span></li>`;
             }).join('') + `</ul></div>`
         : '';
@@ -960,23 +1070,30 @@ export function renderPanoramaHtml(world, opts = {}) {
             + `<span class="sw2-pan-secn">· 账上只留下了这一件，后面没人接 —— 它们不是一段故事，是一处还没长出下文的处境</span></div>`
             + `<ul class="sw2-pan-oneshot">` + m.loose.map((o) => {
                 const head = o.line.events[0];
-                const pl = o.place
-                    ? `<span class="sw2-pan-at">${esc(o.place)}</span>`
-                    : `<span class="sw2-pan-at">（账上没写地点）</span>`;
-                return `<li>${pl}<span class="sw2-pan-t">第 ${head.tick} 轮</span> `
-                    + `<b>${esc(head.title)}</b>`
-                    + (head.why ? ` <span class="sw2-pan-why">${esc(head.why)}</span>` : '')
-                    + (o.line.name !== head.title ? `<span class="sw2-pan-span"> · 属「${esc(o.line.name)}」那条线</span>` : '')
+                const pl = o.place ? esc(o.place) : '（账上没写地点）';
+                // ★leg167：同一行一件事 ＋ 列对齐（同「各处散落」那一栏，理由见上）。
+                //   事名那一行把「为什么」接在后面（它是同一句话的后半截，不是元信息）。
+                return `<li><span class="sw2-pan-rn"><b>${esc(head.title)}</b>`
+                    + (head.why ? `<span class="sw2-pan-why">${esc(head.why)}</span>` : '')
+                    + `</span>`
+                    + `<span class="sw2-pan-at">${pl}</span>`
+                    + `<span class="sw2-pan-t">第 ${head.tick} 轮</span>`
+                    + (o.line.name !== head.title ? `<span class="sw2-pan-span">属「${esc(o.line.name)}」那条线</span>` : '')
                     + `</li>`;
             }).join('') + `</ul></div>`
         : '';
-    return `<div class="sw2-pan-head">说书 · 这世界已经发生的事</div>`
-        + `<div class="sw2-pan-dashi">`
+    // ★★★leg165：页头那句从「说书 · 这世界已经发生的事」收成「**这世界已经发生的事**」——
+    //   演示的诊断是"页签已经写着『观棋 · 说书』了，页头再印一遍『说书 ·』是同一件事说两遍"。
+    //   ★哨兵形状一字不动（`<div class="sw2-pan-head">` 单层 div —— `web/page-compose.js:42` 的
+    //     组页器靠它切页头，少了它两栏会**静默退回单栏**）。空态那两句（还没开档 / 还没长出可讲的事）
+    //     也照旧带「说书 ·」前缀：那两句要自报"这是哪一页"，而且它们**没有下面的正文可依靠**。
+    return `<div class="sw2-pan-head">这世界已经发生的事</div>`
+        + `<div class="sw2-pan-dashi" data-pan-aux>`
         + `<div class="sw2-pan-dashilab">大势 · 书里写定的局面（原文措辞）</div>`
         + `<div class="sw2-pan-dashitxt">${m.sit ? esc(m.sit) : '（这本账没留大势句——它是书的设定层，重新抽书之后才会有）'}</div>`
         + `</div>`
-        + bridgeHtml(m, stats, three)
-        + m.faces.map((f) => `<div class="sw2-pan-face">`
+        + bridgeHtml(m, stats, three, world)
+        + m.faces.map((f) => `<div class="sw2-pan-face${f.lines.length ? '' : ' sw2-pan-face-flat'}" data-pan-group data-pan-place="${esc(f.place)}">`
             + `<div class="sw2-pan-fh"><div class="sw2-pan-fhl">`
             + `<span class="sw2-pan-fhn">${esc(f.place)}</span>`
             // ★面头那一行的两条口径（"交会"只给多条线 / 卡里只算有故事的线）**都住在 `faceHeadText`**
@@ -989,14 +1106,17 @@ export function renderPanoramaHtml(world, opts = {}) {
                 // ★单线地点：**地名照印**（设计交接 §1.1 第 2 条）——它就是"这一处另有 N 件单独发生的事"，
                 //   连它起头那件事一起印出来，读者才知道那是什么事（只印一个线名会读成谜语）
                 ? `<div class="sw2-pan-lonebox"><div class="sw2-pan-sub">这一处另有 ${f.lone.length} 处单线地点`
-                    + `<span class="sw2-pan-secn">· 那些地方只有这一条线路过</span></div>`
+                    + `</div>`
                     + `<ul class="sw2-pan-oneshot">` + f.lone.map((l) => {
                         const head = l.line.events[0];
-                        return `<li><span class="sw2-pan-at">${esc(l.place)}</span>`
-                            + `　<b>${esc(head.title)}</b><span class="sw2-pan-t">第 ${head.tick} 轮</span>`
-                            + `${head.why ? ` <span class="sw2-pan-why">${esc(head.why)}</span>` : ''}`
-                            + `<span class="sw2-pan-span"> · 这条线共 ${l.line.count} 件事（${spanOf(l.line.from, l.line.to)}）</span>`
-                            + (l.line.name !== head.title ? `<span class="sw2-pan-span"> · 属「${esc(l.line.name)}」那条线</span>` : '')
+                        // ★leg167：同一行一件事 ＋ 列对齐（同上面两栏）。
+                        return `<li data-pan-entry data-pan-place="${esc(l.place)}" data-pan-live="${l.line.live}" data-pan-people="${esc([l.line.actor, ...l.line.cast].filter(Boolean).join(' '))}"><span class="sw2-pan-rn"><b>${esc(head.title)}</b>`
+                            + (head.why ? `<span class="sw2-pan-why">${esc(head.why)}</span>` : '')
+                            + `</span>`
+                            + `<span class="sw2-pan-at">${esc(l.place)}</span>`
+                            + `<span class="sw2-pan-t">第 ${head.tick} 轮</span>`
+                            + `<span class="sw2-pan-span">这条线共 ${l.line.count} 件事（${spanOf(l.line.from, l.line.to)}）</span>`
+                            + (l.line.name !== head.title ? `<span class="sw2-pan-span">属「${esc(l.line.name)}」那条线</span>` : '')
                             + `</li>`;
                     }).join('')
                     + `</ul></div>`

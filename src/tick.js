@@ -3,7 +3,7 @@
 // 这就是"最小活棋盘跑通一次完整 tick"的入口。
 import { extractMove } from './extract.js';
 import { extractTags, hasTagFacts, tagReadoutLine } from './tag-extract.js';
-import { buildEvolutionPack, lineRootsOfPack, recordShownLines } from './pack.js';
+import { buildEvolutionPack, lineRootsOfPack, recordShownLines, windowFromTick, RECENT_WINDOW_TURNS } from './pack.js';
 import { runMainCall } from './worldstep.js';
 import { settleTick, registerDialogueFacts } from './settle.js';
 import { checkWorldStep } from './check-step.js';
@@ -105,15 +105,13 @@ export function stampChronicleTime(ssot, fromIndex, elapsed) {
 // 病灶（交接 §4.2）：整步校验是**全有或全无**——一条提议写歪 ⇒ 整步退回 ⇒ **tick 不推进**；
 //   下一轮读回同一份账、递同一个包 ⇒ 模型很可能又写歪 ⇒ 永远推不动（四个臂里 wide 撞到过连续两轮）。
 //
-// 三层收尾（用户拍板"降级重试 + 最后一步照常前进"）：
+// leg187：用户要求修复首轮空转却增加轮数，取消非法提议的空步成功兜底。
+// 当前收尾：
 //   ① **原样先试**——绝不动模型写对的东西（绝大多数轮走这一层，行为与修复前逐字节相同）。
 //   ② **降级重试**：走 `dropInvalidProposals` 把"注定过不了校验"的那几条丢掉，再校验一次；
 //      过了就落账，并把"丢了哪几条、为什么"如实挂在 `stage.warnings`。
-//   ③ **世界安静一步**：净化后仍不合法（例如 newEvents 缺 position 这类只有模型能补的毛病，
-//      或整轮根本没写对）⇒ 用**空步**照常推进一轮：tick 前进、账上不落任何提议、
-//      并写明"上一轮为什么被拒 + 世界照常往前走，没有停摆"。
-//   ★为什么③不能省：不省则②之后仍可能停摆（这正是本轮要根治的那件事）。
-//   ★③不是"静默吞掉"：拒因与丢弃清单全部进 `stage.warnings` ⇒ 面板裁定条看得见、`simLog` 落账可查。
+//   ③ 净化后全空或仍不能结算 ⇒ 失败、原账不动、轮数不增加，拒因经回执进调试台。
+//   合法安静步骤仍走①；失败的模型输出不能冒充它。重试仍在同一轮。
 //
 // 口径边界（写死防将来改歪）：**只丢提议，不改写提议**。净化器做减法（丢/摘），
 //   引擎**不替模型编内容**（编事实是另一条红线，见 ANCHOR）。
@@ -128,7 +126,8 @@ export function settleWithHealing({ ssot, step, moveFact = null, calls = 1, self
     // ② 降级重试：丢掉写歪的那几条，再校验一次（同轮引用由 `findEvent` 按位次解析，无需再传 id 名单）
     const { step: clean, dropped } = dropInvalidProposals(step, ssot);
     const pre = checkWorldStep(clean, ssot);
-    if (pre.ok) {
+    const hasProposals = Object.values(clean).some(value => Array.isArray(value) && value.length > 0);
+    if (pre.ok && hasProposals) {
         const back = dropped.map(reasonOf);
         const second = settleTick({ ssot, step: clean, moveFact, calls, preWarnings: back });
         if (second.ok) {
@@ -144,28 +143,12 @@ export function settleWithHealing({ ssot, step, moveFact = null, calls = 1, self
         rawErrors.push(...(second.stage.warnings || []).map(String));
     }
 
-    // ③ 世界安静一步（最后一步：保证"卡轮"不再等于"永久停摆"）
-    const quiet = settleTick({
-        ssot,
-        step: emptyStep(),
-        moveFact,
-        calls,
-        preWarnings: [
-            `裁定: 本轮提议全部未落账（${rawErrors.slice(0, 3).join('；')}${rawErrors.length > 3 ? ` 等 ${rawErrors.length} 条` : ''}）`,
-            '本轮按「世界安静一步」照常前进：你的这一步没有被写进世界，世界自己往前走了一轮——不会停在这里等你重试',
-        ],
-    });
-    if (quiet.ok) {
-        return {
-            ...quiet,
-            healed: {
-                used: true, fallback: true, dropped,
-                warnings: quiet.stage.warnings || [], errors: rawErrors,
-            },
-        };
-    }
-    // 连空步都过不了 = 引擎自己坏了（不是模型的问题）⇒ 如实抛给上层，不掩盖
-    return { ...quiet, healed: { used: true, fallback: true, dropped, warnings: quiet.stage.warnings || [], errors: rawErrors } };
+    // 非法输出不能用空步替代后计作成功。全被丢弃或仍不合法就保留原账，允许重试。
+    rawErrors.push(...(pre.errors || []).map(error => `校验拒绝: ${error}`));
+    const warnings = [...rawErrors, ...dropped.map(reasonOf),
+        `本轮未推进：${hasProposals ? '剩余提议仍无法结算' : '没有可落账的合法提议'}（世界原样未动，可重试）`];
+    return { ok: false, ssot, stage: { warnings, chronicle: [] },
+        healed: { used: true, fallback: false, failed: true, dropped, warnings, errors: rawErrors } };
 }
 
 /** 引擎最外层要求的八个组（`entityUpdates` 缺席合法，但**在场更稳**：它进来时校验面一致）。 */
@@ -196,7 +179,7 @@ function reasonOf(d) {
 //   ★**代价也如实登记**：拔掉之后，**世界模型这一侧再没有任何"来自正文"的输入**
 //     （标签那条路是用户有意关的）⇒ 它此后**只按账自己的状态演**。这不是意外，是本棒量出来的后果。
 
-export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null }) {
+export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null }) {
     // ★★两条提取路并存，**互不影响**（口径不同、消费面不同）：
     //   ① `extractMove(dialogue, extractCtx)` = **老口径**：读"玩家自己打的那句话"，靠 13 条动词词表归一。
     //      ★生产上恒 null（`extractCtx: {}` 是接线占位）——**保留不动**：那是被用户否掉的方向的留档，
@@ -236,6 +219,9 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
             picks = null;   // 前置步失败 → 退回引擎镜头（旧路径零扰动）
         }
     }
+    // 前置查书可能独立保存字段，先完成它，再隔离演算副本；
+    // 后续正文事实和已展示标记不许泄漏到输入账或前置保存持有的引用。
+    world = structuredClone(world);
     // ★★★leg122：**检索注入那一步已拔**（原来是这里调 `injectWorldBookRecall`，见 `runTick` 前那一大段留档）。
     //   ★`recall` / `recallStore` 两个形参**留着但没人读了**——照 `extractCtx` 的先例留档，撤它们要单独一笔；
     //     调用方仍可以照旧传（`recall: false` 之类），只是**不再有任何效果**。
@@ -297,9 +283,37 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     const dialogueStats = registerDialogueFacts(world, { facts: tagFacts, dialogue, tick: dialogueTick });
     // ★★★leg119：`ledgerVolumes` = **编年进了冷档的那些段（卷）**，由编排层取好递进来
     //   （与 `recallStore` 同一条路：引擎不碰存储，浏览器侧的东西一律从选项进来）。
-    //   ★不传 ⇒ `null` ⇒ 与接线之前**逐字节相同**（旧调用方零扰动）。
+    //   ★不传 ⇒ `null` ⇒ 与接线之前**逐字节相同**（旧调用方零扰动）。★leg153 起它多一个消费者：
+    //     召回要**热账 ＋ 卷**一起查（旧行轮转进卷之后，只查热账会**静默地少一整段**）。
+    // ★★★leg153（用户 2026-09-30 拍"甲：整栏进包"）／★leg161 **接回来**（用户令「**那就让聊天侧也接上向量检索呗**」）：
+    //   **按意思找回旧事**——拿"这一轮正在动的人和事"去**向量索引**里翻旧账，够得着字面对不上的那一段
+    //   （细案 `docs/spec-memory-engine.md` §8.5）。
+    //
+    //   ★★★**它必须排在这一行**（顺序是这个机制的一部分，不是位置偏好）：
+    //     ① **在 `registerDialogueFacts` 之后**：查询串要拿"聊天侧这一轮交上来的事"（用户 2026-09-30 裁：
+    //        「玩家这一轮说的话就不要了，应该是聊天侧本轮提供的事件」），而那批**刚刚才落到账上**；
+    //     ② **在 `buildEvolutionPack` 之前**：包要装它——"下一轮才给"那条路已被用户逐字判死。
+    //
+    //   ★为什么是一个**函数**、而不是像 `ledgerVolumes` 那样把数据递进来：这批料**只有走到这里才算得出来**
+    //     ——调用方在进 `runTick` 之前根本不知道这一轮正文落了哪几件事。存储与网络住在浏览器侧
+    //     （`web/embed-runtime.js`），引擎这一层照旧"不碰存储"。
+    //
+    //   ★**失败零阻塞**：抛错/超时/没配通道 ⇒ 这一栏不出现，世界照常推进（加速层不许影响世界）。
+    //   ★**代价如实登记**：它多花**一趟网络往返**（把查询串嵌成一条向量）——这是"当轮到位"必须付的钱，
+    //     也是这一栏唯一的新增开销（补嵌那条路照旧在 `afterTick` 里跑，不挡玩家）。
     const lim = resolveLimits(world);
-    const pack = buildEvolutionPack(world, moveFact, { picks, lim, turnFacts, volumes: ledgerVolumes });
+    let vecRecall = null;
+    if (typeof recallVec === 'function') {
+        // ★★窗口下界**与出包那一侧同一个算法、同一份旋钮**（`windowFromTick` ＋ 账上设的「往事轮数」）：
+        //   两处各算一次，就会出现"这一行既在 `纪事` 里、又被召回回来"的重叠（或反过来漏一段）。
+        const floor = windowFromTick(Number(world?.meta?.tick) || 0, lim?.往事轮数 ?? RECENT_WINDOW_TURNS);
+        try {
+            vecRecall = await recallVec({ ssot: world, tickNow: dialogueTick, floor, volumes: ledgerVolumes });
+        } catch (err) {
+            vecRecall = null;
+        }
+    }
+    const pack = buildEvolutionPack(world, moveFact, { picks, lim, turnFacts, volumes: ledgerVolumes, vecRecall });
     // ★★★leg151（引擎预取）：**"哪些线的经过递过了"当场就记**（`meta.linesShown`）。
     //   为什么在这里记、而不是等着一轮结束再记：一轮里还会再出一次包（结算那次，见下），
     //   而"递过"必须是**整轮**的口径 —— 不记的话第二次出包会把第一次刚递过的那几条**再递一遍**。
@@ -336,7 +350,7 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     //   ⇒ 定案：**同一个"步写歪了"，在哪儿被逮住就该在哪儿得到同一个处置**。
     //     本仓 leg40b 立那条自愈时要治的正是"一条提议写歪 ⇒ 整步被拒 ⇒ 轮卡住 ⇒ 永久停摆"——
     //     那一层却够不着这里，这就是病根。
-    //   ★它**不改写任何提议**（自愈只做减法：丢掉写歪的 → 重校验 → 再不行"世界安静一步"）；
+    //   ★它**不改写任何提议**（自愈只做减法：丢掉写歪的 → 重校验；leg187 再不行则失败、不推进）；
     //     校验那几条闸**一条都没放宽**（`checkWorldStep` 一个字节没动）——
     //     变的只是"被拒之后怎么办"，不是"什么算合格"。
     let stepForSettle = main.step;
@@ -347,7 +361,7 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
         }
         stepForSettle = main.rawStep;
     }
-    // ★leg40b 续：结算走**带自愈的**那条（①原样 → ②降级重试 → ③世界安静一步，见 `settleWithHealing` 头注）。
+    // 结算走带自愈的路径（①原样 → ②保留合法提议 → ③无法结算则失败、不推进）。
     //   这次改动治的是"一条提议写歪 ⇒ 整步被拒 ⇒ tick 不动 ⇒ 下一轮又一样 ⇒ 世界永久停摆"。
     // ★leg115：**先记住结算前编年有几行**——结算之后要靠它认出"本轮新落的行"（时间印记只盖新行）。
     //   ★★★leg123：这一行**已上移**到 `registerDialogueFacts` 之前（见上）——因为聊天侧那批
@@ -357,7 +371,7 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     //   （模型在结算那一段同样看得到）⇒ 一并记进"递过"。
     if (s.ok) recordShownLines(s.ssot, lineRootsOfPack(s.pack?.pack));   // 同上：取外壳内层
     if (!s.ok) {
-        return { ok: false, error: `结算拒绝: ${JSON.stringify(s.stage.warnings)}`, move, pack, streams: null, tagFacts, tagReadout: readout, dialogueStats };
+        return { ok: false, error: `结算拒绝: ${JSON.stringify(s.stage.warnings)}`, stage: s.stage, healed: s.healed, move, pack, streams: null, tagFacts, tagReadout: readout, dialogueStats };
     }
     const streams = renderStreams(s.ssot, s.stage, move);
     // ★★★leg89 补（用户：「把这一轮世界发生了什么注入上下文啊」）：

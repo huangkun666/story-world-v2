@@ -36,7 +36,7 @@ export function positionLine(world, { cap = LOC_GROUP_CAP } = {}) {
         shown.push(`另 ${groups.length - cap} 处（${restN} 人）`);
     }
     if (unknown.length) shown.push(`位置未载（${unknown.length}：书里没写，不是"在别处"）`);
-    return `📍 各归何处：${shown.join('｜') || '（账上还没有实体）'}`;
+    return `各归何处：${shown.join('｜') || '（账上还没有实体）'}`;
 }
 
 export function renderStreams(world, stage, moveFact) {

@@ -496,7 +496,15 @@ test('★★leg46·⑪e：**参数页上画出来的每个按钮都有人接**�
     //   ★leg87：夹具里那个 `playerDesc` 键已随「你的开档描述」整张卡撤掉（登记在 retired-controls）。
     const settingsHtml = renderSettingsHtml(st_liveWorld(), { config: { apiKey: '', baseUrl: '', model: '' } });
     const setActions = [...new Set([...settingsHtml.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]))];
-    assert.ok(setActions.includes('advance-world'), '★设置页必须有「推进一轮」那枚按钮（参数页撤了它，入口只能在这儿）');
+    // ★★★leg162（用户令「**上移就是独立于设置页了…整个窗口的上方**」）：`advance-world` 那枚按钮
+    //   **不再由设置页渲染**——它升进了**窗口外壳的动作条**（`settings.html`）⇒ 本处改指外壳模板。
+    //   ★"入口一个不少"那半条照旧（下面那两行），只是它的家在别处了。
+    //   ★`NON_BUS` 那个例外仍然只需登记一个 `advance-world`（`init-world` 本来就在总线上）。
+    const shell = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+    assert.ok(shell.includes('data-action="advance-world"'),
+        '★设置页那枚按钮已升进**窗口外壳的动作条**（参数页撤了它 ⇒ 全窗口的入口只能在外壳这一份）');
+    assert.ok(!settingsHtml.includes('data-action="advance-world"'),
+        '★leg162：设置页渲染产物里不许再有它（重复入口正是 leg52 撤参数页那一枚的理由）');
     // `advance-world` 是这个面上**唯一**的有意例外（走 tick 队列特判，不走动作总线）；其余一律要有人接。
     const NON_BUS = new Set(['advance-world']);
     for (const a of setActions) {

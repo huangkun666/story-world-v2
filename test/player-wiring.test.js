@@ -168,7 +168,8 @@ test('leg25 d：卡内置书 character_book 的复数键 keys 必须转成 ST �
         },
     };
     const es = characterBookEntries(card);
-    assert.equal(es.length, 2, '停用条目与无正文条目不入面（与 ST convertCharacterBook 同口径）');
+    assert.equal(es.length, 3, '收集保留禁用和空正文，实际是否读取由统一来源解析决定');
+    assert.equal(es[2].content, '', '空正文如实展示，不造内容');
     assert.deepEqual(es[0].key, ['吞天妖王', '万妖盟'], '★keys（复数）→ key（ST 标准形状）');
     assert.equal(es[0].comment, '混乱之地·万妖盟');
     assert.ok(es[0].content.includes('T8大乘中期'));

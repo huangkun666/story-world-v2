@@ -11,6 +11,10 @@ import { readFileSync } from 'node:fs';
 import { buildEvolutionPack } from '../src/pack.js';
 import { linesOf, lineIndexOf, sanitizeLineRequests, nodesOf, pickLinesToPrefetch, buildLineDetail } from '../src/lines.js';
 import { runTick } from '../src/tick.js';
+import { checkWorldStep } from '../src/check-step.js';
+// ★★★leg163：契约那一条要用生产校验器与自家尺子（不是另写一份判词）。
+import * as validateMod from '../src/schema.js';
+import * as ssotMod from '../src/schemas/ssot.schema.js';
 
 // 一份"账"：一棵 5 件、全收口的树（够 N=5 ⇒ 立得起一条线，其中 ev_4_1 是**多因点**）
 //   ＋ 一棵 2 件的小树（丙级：不够格，不立线）。
@@ -259,4 +263,41 @@ test('★★★leg151：无线可取的世界零扰动——不写任何新键�
     assert.equal('故事线' in p, false, '没线可立 ⇒ 那一栏根本不出现');
     assert.equal('线的经过' in p, false, '★取不到料 ⇒ 那一栏也不出现（空着就是空着）');
     assert.equal('linesShown' in (w.meta || {}), false, '★零扰动：取不到料就不许往账上写"递过"');
+});
+
+// ═══════════════ ★★★leg163：契约登记（"引擎真写的键，尺子上必须有登记"） ═══════════════
+// 病（leg162 交接先记下、本笔**先证红**核实）：`meta` 那块是 `additional:false`，而
+//   `check-step.js` 每轮往 `meta.lineRequests` 写"模型点名要了哪几条线"——**契约里没有这一格**
+//   ⇒ 只要模型点过一次名，**整份账就过不了自家 `ssotSchema`**（`$.meta.lineRequests: 未知字段`）。
+//   ★为什么这么久没显形：这个键**只在真点过名的那一局**才出现，而真账里从没点过
+//     （`lookupLines` 三趟真跑 150 轮一次没用过）⇒ 四份真账逐份全过、看不出病。
+//   ★同一族的第二个键 `scaleRequests`（leg64 按需查表写的）也漏登记——那条通道 leg163 已整族撤走，
+//     但**老账里已经躺着的那一批不许因此变得不合法**，所以它**照旧登记**（照 `recalled` 的先例）。
+test('★★★leg163 契约：引擎真写的那两格（lineRequests / scaleRequests）在 ssotSchema 里有登记', () => {
+    const { validate } = validateMod;
+    const { ssotSchema } = ssotMod;
+    // ① 先证"这一格真会被写"：走生产那条路（checkWorldStep 净化 lookupLines 后写账）
+    const w = worldWithOpenLine();
+    const root = linesOf(w).lines[0].根;
+    const step = {
+        actions: [], newEvents: [], agendaAdvances: [], newAgendas: [],
+        agendaCancels: [], newEntities: [], entityFates: [],
+        lookupLines: [root],
+    };
+    const r = checkWorldStep(step, w);
+    assert.equal(r.ok, true, `合法点名不该被拒（errors: ${JSON.stringify(r.errors)}）`);
+    assert.deepEqual(w.meta.lineRequests, [root], '★核过的根 id 真落进账（引擎的交接面）');
+    // ② 这一格必须过自家尺子 —— 这就是那条缺口原来的红点
+    const metaErrs = validate(w, ssotSchema).errors.filter((e) => e.startsWith('$.meta.'));
+    assert.deepEqual(metaErrs, [], '★写进 lineRequests 之后，meta 层必须一条违约都没有（缺口已堵）');
+    // ③ 同一族的第二个键（撤走那条通道留下的老账形状）也必须有登记
+    const w2 = world();
+    w2.meta = { ...w2.meta, scaleRequests: ['某张尺'] };
+    const metaErrs2 = validate(w2, ssotSchema).errors.filter((e) => e.startsWith('$.meta.'));
+    assert.deepEqual(metaErrs2, [], '★老账里躺着 scaleRequests 的那一批不许变得不合法（照 recalled 的先例）');
+    // ④ 反面：登记是"这两个键"，不是把 meta 放开成 additional:true
+    const w3 = world();
+    w3.meta = { ...w3.meta, 我编的键: [1] };
+    assert.ok(validate(w3, ssotSchema).errors.some((e) => e.includes('我编的键')),
+        '★meta 仍是 additional:false —— 不许借这次登记把它放开（否则引擎偷偷多写字段又没人管了）');
 });

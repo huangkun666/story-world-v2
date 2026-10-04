@@ -1,13 +1,45 @@
 /* story-world-v2/web/style.css —— 观棋窗口全量样式（K30 骨架 + K34 六页签，sw2_ 命名空间）。
    与 v1 sd_ 全隔离（共页共存）。取 ui-panel-mockup.html v3 的视觉语言：金=最新一轮、暗红=暗处、
    信息带副角安静、技术细节收敛。变量与 render.js 内联 var(--sw2-*) 对齐。 */
+/* ★★★leg164：**令牌层补齐 ＋ 全站换色**（观棋页重构那一笔）。
+   来路：演示 `F:/deepseek/tmp/leg162-ui/panorama-redesign.html`（leg162 画的观棋页"查清版"）。
+   用户 2026-10-01 当场拍「**全站换，并收拾写死的色**」——两条都落在这里：
+     ① **颜色值全批换成演示那一套**（更暗、更中性、强调色更蓝）；
+     ② **原来写死在别处、没走令牌的颜色，全部收进这一层**（否则"改一处处处变"是假的：
+        令牌变了、写死的那些不跟着变 ⇒ 配色半迁移，比不换还花）。
+   ★★为什么名字**保持 `sw2` 前缀**（不照演示改成 `--text`/`--border`/`--accent`）：
+     本文件第 2 行那条隔离纪律——这面板与 v1 的 `sd_` **同页共存**，而 `--text`/`--border`/
+     `--accent` 是通用名，别的扩展或酒馆自己也可能定义 ⇒ 撞车。**值照演示，名字带前缀。**
+   ★★两条判据把下面**五个**令牌当**六位十六进制字面量**读出来算对比度
+     （`test/style-cues-layout.test.js` 的 `cssVar`）：`--sw2-card` / `--sw2-card-2` /
+     `--sw2-line-soft` / `--sw2-text-faint` / `--sw2-amber` ⇒ **这五个不许写成 `rgba()` 或 `var()`**。
+     实测（本笔算过，判据也复算了）：灭格对卡底 3.21:1（要 ≥3）· 亮格 8.12:1（要 ≥4.5）·
+     两者差 4.91（要 ≥1.5）· 反向自证那两条仍 <2（1.07 / 1.15）。 */
 :root{
+  /* ── 尺度（★★★leg164 新立：原来一个都没有，字号/间距/圆角全是散在 1176 行里的字面量） ── */
+  --sw2-r-sm:4px; --sw2-r-md:6px; --sw2-r-lg:8px;
+  --sw2-sp-1:4px; --sw2-sp-2:8px; --sw2-sp-3:12px; --sw2-sp-4:16px; --sw2-sp-5:24px;
+  --sw2-fs-label:11px; --sw2-fs-sm:12px; --sw2-fs-md:13px; --sw2-fs-body:14px; --sw2-fs-lg:15px; --sw2-fs-xl:19px;
+
+  /* ── 颜色 ──
+     ★★★leg167（用户 2026-10-02 实机，逐字）：「**就是这个163你发我截图的时候，那时候不是黑色打底**」
+       ＋「**回退到没有更改ui的时候**」。
+     ── 量出来的事实 ──
+       · leg163（改 UI 之前）的窗口底是 **`#1b1f28`（蓝灰板）**、卡片 `#20252f`、正文 `#e8eaef`、
+         强调 琥珀 `#e3ad55` / 蓝 `#79a7d6`；
+       · leg164「全站换色」把它换成了**近黑中性板**（`#0e0f11` / `#141518` / `#f2f3f4` / `#d9a441` / `#5b8def`）。
+     ⇒ 用户说的"改了底色"就是这一笔。**本笔把这一族的色值退回 leg163 那一套**（名字不动、
+       后面的版面/结构/字号一笔不撤）：
+       ★退的是**色值**，不是版面——leg165/166 落的圆角/内距/字号/发丝分隔线**一个字不动**；
+       ★`rgba()` 那几格的 RGB 三元组**必须同批退**（它们就是旧色的分量；不退 ⇒ 半透明的那一批
+         （红/蓝/琥珀的柔光、遮罩）会跟主色对不上，出图是"两种色系混在一起"）。 */
   --sw2-panel:#1b1f28;
   --sw2-card:#20252f;
   --sw2-card-2:#262c38;
   --sw2-line:#2c3342;
   --sw2-line-soft:#242a36;
   --sw2-text:#e8eaef;
+  --sw2-text-body:#c4cad8;
   --sw2-text-dim:#9aa3b5;
   --sw2-text-faint:#6b7590;
   --sw2-amber:#e3ad55;
@@ -15,11 +47,86 @@
   --sw2-red:#df6c62;
   --sw2-green:#8fbf8f;
   --sw2-blue:#79a7d6;
+
+  /* ── 演示那套里还有、旧表缺的几格（**收拾写死的色**时要用） ── */
+  /* ★★★leg168：`--sw2-inset` **整格撤掉**（用户 2026-10-02 看完实机截图后指着输入框说的那句：
+     「**接着你看这个输入框，太黑了跟旁边格格不入**」）。
+     ── 它是什么、为什么该撤 ──
+       · 它是 `--sw2-inset:#050607`——演示 `--bg-inset` 那一格收进来的，语义是"**比窗口底再深一档**"；
+       · 它**只有一群消费者**：表单控件（`.sw2-input` / `.sw2-param-input` / `.sw2-param-select` /
+         `.sw2-ch-q` / `.sw2-ents-q` / `.sw2-field textarea`）与 `.sw2-source-line` 那条展示行；
+       · 那批控件在 **leg163（用户说"就163吧"的那一版）** 用的是**蓝灰板自己那三格**：
+         文本输入／搜索框／文本域 = `--sw2-panel`（`#1b1f28`）· 实体搜索 = `--sw2-card`（`#20252f`）·
+         参数页那两个小控件 = `--sw2-card-2`（`#262c38`）——**它们与所在的面卡只差一档**，不打架；
+       · leg164「全站换色」把这批控件统一改成了 `--sw2-inset`（近黑板下的"再深一档"），
+         leg167 退回了蓝灰板的**色值**却**没退这一批**（当时那条注释写的是"它的消费者全是表单控件，照旧成立"）
+         ⇒ 蓝灰板下 `#050607` 压在面卡 `#20252f` 上就是**卡里挖了几个黑洞**（实测 1.32:1，
+         比 leg163 那套的 1.07:1 刺眼得多）。**这就是用户指着说的那一处。**
+     ── 本笔怎么治：**照 leg163 逐格退回，不是另挑一个色**（用户令「回退到没有更改ui的时候」＋
+        「不要再自己设计了，直接照抄」）＋ 那一格**零消费者**了，照本仓纪律**不留死令牌**
+        （留着它的代价不是几行，而是**下一任会以为有人在用**）。 */
+  /* ★★★leg165：`--sw2-hover` / `--sw2-active` / `--sw2-line-strong` / `--sw2-card-3` **四个令牌整批撤掉**。
+     来路：它们是 leg164「收拾写死的色」时收进来的，而**唯一的生产者**就是观棋页那一段；
+     本笔把那一段按演示重写（去掉金色左杠、去掉悬停那一档、线头台面改用 `--sw2-inset`
+     ——★那一格后由 **leg167/leg168** 接手：leg167 把它改成实色 `#282f3c`、leg168 把 `--sw2-inset` 整格撤掉）
+     ⇒ 这四个令牌**零生产者**。照本仓纪律（零生产者的规则不留）同批删——
+     ★留着它们的代价不是"多几行"，而是**下一任会以为有人在用**（leg164 那笔刚因为"注释里的旧值当尺子"
+       红过一次，同一族）。★演示里那两格（`--bg-hover`/`--bg-active`）观棋页现在不消费，
+       将来谁要用**再按需收**，不许先囤着。 */
+  --sw2-blue-soft:rgba(121,167,214,.13);
+  --sw2-blue-line:rgba(121,167,214,.45);
+  /* ★★★leg166「其余七页落演示版面」：把演示里**通用名**的那几个尺度格收进来（值照演示，名字带前缀）。
+     ★为什么非收不可：演示那一套的"精简"有一半是**尺度**给的——4px 网格、小圆角、字号收敛。
+       观棋页那一族 leg164/leg165 已经把尺度令牌用上了，而**其余七页 ＋ 外壳全是字面量**
+       （`9px`/`10px`/`999px`/`13.5px`/`11.5px`…，实测散在 60 余处）⇒ 不先把格子备齐，
+       那七页只能照抄演示的字面量，"改一处处处变"又是一句假话（leg164 那条教训的同族）。 */
+  /* ★★★leg166：`--sw2-hover` / `--sw2-active` **请回来**（leg165 刚撤过，这一笔又收）。
+     ★为什么与 leg165 那条"零生产者不留"不矛盾：leg165 撤它们，理由是**当时唯一的生产者**
+       （观棋页线头那一栏）被重写掉了；而本笔把**其余七页 ＋ 外壳**按演示落版面，
+       演示那一套的层次**靠半透明叠层做**（不是靠加粗边框、也不是靠换底色）——
+       `.sw2-row:hover` / `.sw2-entity-row:hover` / `.sw2-tab:hover` / `.sw2-btn:hover`
+       / `.sw2-cold-row:hover` 这一族现在**真的有消费者**了。★按需再收，不是先囤着。 */
+  --sw2-hover:rgba(255,255,255,.04);
+  --sw2-active:rgba(255,255,255,.07);
+  --sw2-ok-soft:rgba(95,170,114,.16);
+  --sw2-red-soft:rgba(210,102,92,.16);
+
+  /* ── ★★★leg164「收拾写死的色」：下面这一批原来**直接写在 36 行规则里**、没有名字
+        ⇒ 改了上面那些令牌它们也不跟着变（"改一处处处变"就成了假话）。现在收进这一层。
+        ★这一批是**实色**（`#rrggbb`）；**半透明**的那些走下面那组 RGB 三元组，理由见那里。 ── */
+  --sw2-amber-pale:#e7cf95;                /* 代价那一列的字色 / 裁定块的强调字 */
+  --sw2-red-soft-fg:#c98a82;               /* 「暗」那一族的字色 */
+  --sw2-on-amber:#141006;                  /* 压在琥珀底上的字（玩家棋子 / 那枚「最新」徽） */
+  --sw2-kind-known-bg:#26313f;             /* 「明」那枚小徽 */
+  --sw2-kind-known-fg:#8fb2d6;
+  --sw2-kind-hidden-bg:#372627;            /* 「暗」那枚小徽 */
+  /* ★★★leg166：**七个令牌整批撤掉**——本笔按演示落版面之后它们**一个消费者都没有了**
+     （撤之前逐个在**剥掉注释**的表里数过 `var(--x)` 的出现次数，实测全是 0）：
+     · `--sw2-amber-deep` —— 页头徽章那条约 135° 金渐变（本笔改中性单色）；
+     · `--sw2-blue-deep` / `--sw2-on-blue` —— 实体观览窗徽章那条蓝渐变与它上面的字色（同上）；
+     · `--sw2-amber-glow` —— 链头那颗珠子的**光晕**（leg164 点名要去的"发光"一族，本笔撤掉）；
+     · `--sw2-grad-a` / `--sw2-grad-b` —— 时局句与链头珠子那两条**渐变带**（两处都改成卡底）；
+     · `--sw2-sp-6` —— 本笔开头新收的 32px 档，落完版面发现**一处都没用上**
+       ⇒ 照同一条纪律当场撤（"先囤着"正是 leg165 那条注释要治的东西）。
+     ★为什么不"留着以后可能有用"：死令牌的代价不是几行，而是**下一任会以为有人在用**
+       （leg164 那次"注释里的旧值当尺子"红过一次，同一族）。 */
+
+  /* ── ★★★leg164：**颜色的 RGB 三元组**（收 `rgba()` 用）──
+     为什么要单列这三个数：那 26 处写死的 `rgba()` 里，**颜色分量是旧色**
+     （例：`rgba(var(--sw2-red-rgb),.4)` 里的 `223,108,98` 就是**旧红** `#df6c62`）。
+     把分量做成令牌 ⇒ 改 `--sw2-red` 时它们**跟着变**；而**透明度留在调用处**
+     （`rgba(var(--sw2-red-rgb),.4)`）——透明度是每一处的微调，不是"色"。 */
+  --sw2-amber-rgb:227,173,85;
+  --sw2-red-rgb:223,108,98;
+  --sw2-green-rgb:143,191,143;
+  --sw2-blue-rgb:121,167,214;
+  --sw2-scrim-rgb:13,16,21;
+  --sw2-black-rgb:0,0,0;
 }
 .sw2-window-mask{
   position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
   z-index:50000;display:none;align-items:center;justify-content:center;
-  padding:20px;box-sizing:border-box;background:rgba(13,16,21,.55);
+  padding:20px;box-sizing:border-box;background:rgba(var(--sw2-scrim-rgb),.55);
 }
 .sw2-window-mask.sw2-open{display:flex;}
 /* ★★★leg102 `fullscreen`（用户令「**占满整个屏幕吧**」——承接 leg101：leg101 治的是
@@ -38,20 +145,28 @@
   width:100%;height:calc(100vh - 40px);display:flex;flex-direction:column;overflow:hidden;
   background:var(--sw2-panel);color:var(--sw2-text);
   border:1px solid var(--sw2-line);border-radius:12px;
-  box-shadow:0 20px 70px rgba(0,0,0,.6);
+  box-shadow:0 20px 70px rgba(var(--sw2-black-rgb),.6);
   font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
   font-size:14px;line-height:1.6;
 }
 
 /* ---------- 头部 / 状态条 / 页签 ---------- */
-.sw2-header{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--sw2-line-soft);}
+/* ★★★leg166「其余七页落演示版面」：外壳这一族按演示收（用户令「**像 saas 那样专业，精简，流利**」）。
+   逐条改法与理由：
+     ① **徽章去渐变、去发光**：演示的诊断是"金色渐变方块是**第二个视觉焦点**"（第一个是页签的选中态）
+        ⇒ 改中性单色（`--sw2-card-2` 底 ＋ `--sw2-line` 发丝边 ＋ `--sw2-text-dim` 字），
+        尺寸 34→**26px**、圆角 9→**6px**（演示 `.sw2-badge` 就是 26/6）。★"棋"那个字一个字没动。
+     ② 页头内距 `13px 18px`→**`12px 16px`**（演示 `--sp-3 --sp-4`）——4px 网格。
+     ③ 标题 15.5→**15px**、字距 `.5px`→**`-.01em`**（演示是"收紧"，旧值是"拉开"）。
+     ④ 状态条：圆点 7→**5px**（演示 `.sw2-dot`）、内距 `7px 18px`→**`8px 16px`**、下边线降一档。 */
+.sw2-header{display:flex;align-items:center;gap:var(--sw2-sp-3);padding:var(--sw2-sp-3) var(--sw2-sp-4);border-bottom:1px solid var(--sw2-line);}
 .sw2-badge{
-  width:34px;height:34px;border-radius:9px;flex:none;
-  background:linear-gradient(135deg,var(--sw2-amber),#b37e2c);color:#161006;
-  font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  width:26px;height:26px;border-radius:var(--sw2-r-md);flex:none;
+  background:var(--sw2-card-2);border:1px solid var(--sw2-line);color:var(--sw2-text-dim);
+  font-size:var(--sw2-fs-md);font-weight:600;display:flex;align-items:center;justify-content:center;
 }
 .sw2-title-block{flex:1;min-width:0;}
-.sw2-title{font-size:15.5px;font-weight:700;letter-spacing:.5px;}
+.sw2-title{font-size:var(--sw2-fs-lg);font-weight:600;letter-spacing:-.01em;}
 .sw2-subtitle{font-size:11.5px;color:var(--sw2-text-faint);}
 /* ★leg49：基础规则补上"可点"的三条（cursor/底色/字体）——实体页工具条把它当按钮用
    （`renderEntsToolbar` 里 chip 就是 `<button class="sw2-chip">`）。
@@ -63,20 +178,146 @@
    纯 `<span>`（「世界：—」/「轮次」），给了 `cursor:pointer` 就是"看着能点、点了一点反应没有"。
    ⇒ 手型只给**真的是按钮**的那些（实体页工具条与筛选行用的是 `<button class="sw2-chip">`）。
    判据（`test/style-cues-layout.test.js`）两面都咬：span 那一侧不许有手型、button 那一侧必须有。 */
-.sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:3px 11px;white-space:nowrap;cursor:default;background:var(--sw2-card);font-family:inherit;}
+/* ★★★leg166：chip 从 **999px 胶囊**改 **6px 方角**——演示那一套的判据第一条就是
+   "圆角只有 4/6/8 三档，没有 999px 胶囊"。这一枚是**页头那两格**（世界 / 轮次）与实体页工具条
+   共用的控件，改它一处，三处同时跟着变。
+   ★三条**一个字不许动**（`test/style-cues-layout.test.js` SCue②）：基础规则**不许给手型**、
+   必须显式写 `cursor:default`、且 `button.sw2-chip` 那一侧必须给手型（那两枚页头 chip 是纯 `<span>`）。 */
+.sw2-chip{font-size:12px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:2px var(--sw2-sp-2);white-space:nowrap;cursor:default;background:var(--sw2-card);font-family:inherit;}
 .sw2-chip[data-action],button.sw2-chip{cursor:pointer;}
 .sw2-chip.sw2-tick{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-family:"Cascadia Mono",Consolas,monospace;}
 .sw2-close{width:30px;height:30px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--sw2-text-faint);cursor:pointer;}
 .sw2-close:hover{background:var(--sw2-card);color:var(--sw2-text);}
-.sw2-statusbar{display:flex;align-items:center;gap:10px;padding:7px 18px;font-size:12px;color:var(--sw2-text-faint);border-bottom:1px solid var(--sw2-line-soft);}
-.sw2-dot{width:7px;height:7px;border-radius:50%;background:var(--sw2-green);flex:none;}
+/* ★★★leg162（用户令「**上移就是独立于设置页了…整个窗口的上方**」
+   ＋ 随后第二句「**把这两个放在右边和页签同一行要不然太丑了太突兀了**」）：
+   **一行导航**——左边是八个页签、右边是那两枚动作按钮，**同一条横线**。
+   ★为什么不能把按钮直接塞进 `.sw2-tabs`：手机档那一条把 `.sw2-tabs` 设成了
+     `overflow-x:auto` 的**横滑**容器（见文件末尾手机档②）⇒ 塞进去的按钮会**跟着被滚走**。
+     故外面再包一层（本规则），页签那侧照旧横滑、按钮**钉在右端不动**。
+   ★底边那条分隔线归本层（`.sw2-tabs` 自己那条要去掉，否则两条叠一起变粗）。
+   ★`flex:none`：本仓踩过的那条——外壳是定高 flex 列，带 `overflow` 的一层如果不写它，
+     "自动最小高度"会算成 0、可以被一直压扁（手机档②那段注释有实测）。 */
+.sw2-operation-toggle{display:none;}
+.sw2-vector-switch{display:flex;align-items:center;gap:10px;padding:8px 0 16px;}
+.sw2-vector-switch input{width:18px;height:18px;accent-color:var(--sw2-blue);}
+.sw2-debug-console,[data-source-picker]{min-width:0;}
+.sw2-debug-bar,[data-source-controls]{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+.sw2-debug-field{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--sw2-text-dim);}
+.sw2-debug-field select{color:var(--sw2-text);background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:6px;padding:8px;}
+.sw2-debug-fact{display:flex;flex-direction:column;gap:4px;min-width:0;padding:8px 10px;background:var(--sw2-card);border-radius:6px;font-size:12px;overflow-wrap:anywhere;}
+.sw2-debug-fact-label{color:var(--sw2-text-dim);font-weight:400;}
+.sw2-debug-fact-value{color:var(--sw2-text);}
+.sw2-debug-summary{margin:12px 0;}
+.sw2-debug-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;}
+.sw2-debug-log{max-height:52vh;overflow:auto;border:1px solid var(--sw2-line);border-radius:6px;}
+.sw2-debug-entry{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-bottom:1px solid var(--sw2-line-soft);overflow-wrap:anywhere;font-size:12px;line-height:1.7;}
+.sw2-debug-time,.sw2-debug-hint{color:var(--sw2-text-faint);}
+.sw2-debug-badge{color:var(--sw2-blue);}
+.sw2-debug-badge-warn{color:var(--sw2-amber);}
+.sw2-debug-badge-error{color:var(--sw2-red);}
+.sw2-debug-details{flex-basis:100%;min-width:0;}
+.sw2-debug-entry pre,[data-source-preview],[data-source-effective-text]{white-space:pre-wrap;overflow-wrap:anywhere;max-height:35vh;overflow:auto;font-size:12px;}
+[data-source-controls] .sw2-input{flex:1 1 220px;min-width:0;width:auto;}
+/* ★★★Task 2（批准设计 §4.2「桌面列表/正文两栏，手机顺序展开」）：
+   来源页从"每条一个 `<details>`"改成 **左列表 + 右原文/选段工作区 + 页底实际读取预览**。
+   桌面两栏（列表 minmax(0,1fr) ＋ 正文至少 300px）；窄屏顺序变为"列表 → 正文"（见文件末尾 620 档）。
+   ★控件族一个都没新造：输入仍是 `.sw2-input`、按钮仍是 `.sw2-btn`，这里只加"怎么排"。 */
+[data-source-picker] details{margin:8px 0;}
+[data-source-picker] input[type="checkbox"]{width:18px;height:18px;accent-color:var(--sw2-blue);}
+[data-source-batch]{position:relative;}
+[data-source-batch] > summary{cursor:pointer;list-style:none;font-size:var(--sw2-fs-sm);padding:5px var(--sw2-sp-3);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-card-2);color:var(--sw2-text-body);}
+[data-source-batch][open] > summary{background:var(--sw2-active);color:var(--sw2-text);}
+[data-source-batch] .sw2-btn{display:block;width:100%;margin:6px 0 0;text-align:left;white-space:nowrap;}
+[data-source-notices]{color:var(--sw2-text-dim);font-size:var(--sw2-fs-sm);line-height:1.7;margin:6px 0;overflow-wrap:anywhere;}
+[data-source-picker] [hidden]{display:none!important;}
+[data-source-columns]{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sw2-sp-3);align-items:start;margin-top:10px;}
+[data-source-columns][data-source-detail-open]{grid-template-columns:minmax(0,1fr) minmax(300px,.85fr);}
+[data-source-list]{min-width:0;}
+[data-source-group]{margin:0 0 10px;min-width:0;}
+[data-source-group] h4{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 4px;font-size:var(--sw2-fs-sm);font-weight:500;color:var(--sw2-text-dim);}
+[data-source-group] h4 .sw2-btn{padding:2px 8px;font-size:var(--sw2-fs-sm);line-height:1.5;}
+[data-source-group-name]{flex:1;min-width:0;overflow-wrap:anywhere;}
+[data-source-item]{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--sw2-line-soft);font-size:var(--sw2-fs-md);min-width:0;}
+[data-source-name]{flex:1 1 120px;min-width:0;overflow-wrap:anywhere;}
+[data-source-state-text],[data-source-read-label]{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);max-width:100%;overflow-wrap:anywhere;}
+[data-source-state-text]{flex:none;}
+[data-source-item] .sw2-btn{flex:none;padding:2px 8px;font-size:var(--sw2-fs-sm);line-height:1.5;}
+[data-source-empty]{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
+/* 列表很长时正文仍可见；grid 的 align-items:start 保持正文按内容定高。 */
+[data-source-detail-pane]{position:sticky;top:0;min-width:0;border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-card);padding:10px 12px;}
+[data-source-detail-pane] h4{margin:0 0 8px;font-size:var(--sw2-fs-md);display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;}
+[data-source-pane-title]{flex:1;min-width:0;overflow-wrap:anywhere;}
+[data-source-pane-source]{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);font-weight:400;}
+[data-source-pane-empty]{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);line-height:1.7;margin:0;}
+[data-source-reads]{display:flex;flex-wrap:wrap;gap:10px;font-size:var(--sw2-fs-sm);margin-bottom:6px;}
+[data-source-reads] label{display:inline-flex;align-items:center;gap:4px;}
+[data-source-read-state],[data-source-note]{color:var(--sw2-text-dim);font-size:var(--sw2-fs-sm);line-height:1.7;margin:6px 0;overflow-wrap:anywhere;}
+[data-source-original-label]{display:block;color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
+[data-source-original]{display:block;width:100%;box-sizing:border-box;min-height:150px;max-height:32vh;resize:vertical;white-space:pre;overflow:auto;margin-top:4px;}
+[data-source-segment-tools]{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0;}
+[data-source-segment-tools] .sw2-btn{padding:2px 8px;font-size:var(--sw2-fs-sm);line-height:1.5;}
+[data-source-segment-count]{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
+[data-source-segments]{list-style:none;margin:0;padding:0;max-height:22vh;overflow:auto;}
+[data-source-segment]{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--sw2-line-soft);font-size:var(--sw2-fs-sm);}
+[data-source-segment] code{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;}
+[data-source-segment-range]{color:var(--sw2-text-faint);flex:none;}
+[data-source-segment-invalid] code{color:var(--sw2-amber);}
+[data-source-segments] .sw2-btn{padding:1px 7px;font-size:var(--sw2-fs-sm);line-height:1.5;}
+[data-source-effective] > summary{cursor:pointer;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);}
+[data-source-effective-entries]{margin:6px 0;padding-left:18px;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);max-height:24vh;overflow:auto;}
+[data-source-effective-entries] li{display:flex;gap:10px;justify-content:space-between;overflow-wrap:anywhere;}
+.sw2-navrow{display:flex;align-items:center;flex:none;border-bottom:1px solid var(--sw2-line-soft);}
+/* ★动作条（两枚世界级动作）——它**住外壳**、不属于任何一页（八页常驻）。
+   ★形状照既有控件语言：`.sw2-btn` 原样用，**不新增控件族**；`margin-left:auto` 把它推到最右。
+   ★右端那一格是**状态**（由 `web/index.js` 读总闸真值写进去），不是解释文字 ⇒ 安静、不抢眼。 */
+.sw2-actionbar{display:flex;align-items:center;gap:8px;flex:none;padding:0 18px 0 0;}
+.sw2-actionbar .sw2-btn{flex:none;}
+.sw2-actionbar-state{margin-left:10px;font-size:11.5px;color:var(--sw2-text-faint);white-space:nowrap;}
+/* 关着总闸时那一格要看得出来（"已暂停"不是一句普通说明，是当前后果） */
+.sw2-actionbar-state.sw2-paused{color:var(--sw2-text-dim);}
+.sw2-statusbar{display:flex;align-items:center;gap:var(--sw2-sp-2);padding:var(--sw2-sp-2) var(--sw2-sp-4);font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);border-bottom:1px solid var(--sw2-line-soft);}
+.sw2-dot{width:5px;height:5px;border-radius:50%;background:var(--sw2-green);flex:none;}
 .sw2-main{color:var(--sw2-text-dim);}
-.sw2-tabs{display:flex;gap:4px;padding:10px 14px 0;flex-wrap:wrap;}
-.sw2-tab{padding:8px 15px;font-size:13.5px;cursor:pointer;color:var(--sw2-text-faint);border-radius:8px;user-select:none;}
-.sw2-tab:hover{color:var(--sw2-text);background:var(--sw2-card);}
-.sw2-tab.sw2-active{color:var(--sw2-text);background:var(--sw2-card-2);box-shadow:inset 0 -2px 0 var(--sw2-amber);}
-.sw2-view{display:none;padding:16px 18px 20px;}
-.sw2-view.sw2-active{display:block;flex:1 1 auto;min-height:0;overflow:auto;}
+/* ★leg162：`border-bottom` 移到外层 `.sw2-navrow`（两条叠一起会变粗）。
+   ★★`overflow-x:auto` ＋ `flex:1 1 0;min-width:0` 是**量出来的**（真 Chrome 两档实测，别删）：
+     只写 `flex:1`（＝`flex:1 1 0%`，主轴基准 0）时，`min-width` 若还是 `auto`，
+     这一行的**自动最小宽度**就等于"页签一排下来的内容宽" ⇒ 它会**把整行顶出窗口**
+     （实测手机 390：按钮右边缘跑到 **1033px**，窗口只有 384 ⇒ 按钮被推到屏幕外；
+      窄桌面 1024：页签折两行、按钮浮在两行中间 ⇒ 与页签**不在同一行**）。
+     给 `min-width:0` ＋ `overflow-x:auto` ⇒ 页签那一半缩得下去、装不下就**自己横滑**，
+     右端那两枚按钮**永远钉在窗口内**。 */
+/* ★★★leg166：页签按演示改成「**纯文字 ＋ 2px 下划线**」（用户令「像 saas 那样专业，精简，流利」）。
+   演示的逐条对照（左＝本笔之前）：
+     · 圆角块（`border-radius:8px` ＋ hover 给底 ＋ 选中给 `--sw2-card-2` 底）
+       ⇒ **去圆角、去底**，只留一条 `border-bottom`；
+     · 选中态原来是 `box-shadow:inset 0 -2px 0 var(--sw2-amber)`（**琥珀**）⇒ 改 **2px `--sw2-blue`**
+       ——演示的强调色只有一支（`--accent` 理性蓝），而琥珀在本仓是**语义色**（"还开着/在暗处"），
+       拿它当"选中"会让两种意思撞在同一支颜色上（"去装饰"那一族要治的正是这个）；
+     · 内距 `8px 15px` → **`0 12px` ＋ `height:40px`**（高度由固定高给，不靠内距撑）；
+     · 字号 13.5→**13px**、选中态加 `font-weight:500`（演示 `.sw2-tab.sw2-active`）。
+   ★★三条**一个字不许动**（用户令 ＋ 判据咬着，`test/mobile-layout.test.js` M4）：
+     ① 页签那一半要 `overflow-x:auto` ＋ `flex:1 1 0` ＋ `min-width:0`（手机档横滑，见下面那段长注释）；
+     ② `.sw2-navrow` 的 `flex:none`（它是外壳定高 flex 列的直接子元素，带 overflow 的那层不写它会被压扁）；
+     ③ 底边那条分隔线归 `.sw2-navrow`（本规则**不许**再写一条 `border-bottom`，两条叠一起会变粗）。 */
+.sw2-tabs{display:flex;gap:var(--sw2-sp-1);padding:0 var(--sw2-sp-4);flex-wrap:nowrap;flex:1 1 0;min-width:0;overflow-x:auto;scrollbar-width:none;}
+.sw2-tabs::-webkit-scrollbar{display:none;}
+.sw2-tab{padding:0 var(--sw2-sp-3);height:40px;display:flex;align-items:center;font-size:var(--sw2-fs-md);cursor:pointer;color:var(--sw2-text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;user-select:none;}
+.sw2-tab:hover{color:var(--sw2-text-body);}
+.sw2-tab.sw2-active{color:var(--sw2-text);border-bottom-color:var(--sw2-blue);font-weight:500;}
+/* ★★★leg167（用户令「**图的左边界就是插件的边界，也就是说字和边界几乎没距离**」）：
+   页留白 16px → **20px 24px**（24px ＝ 演示 `.wrap` 的 `--sp-5`，也是这一套语言里的"页边"那一档）。
+   为什么必须动（量出来的，不是审美）：用户那扇窗 **2464px 宽**，16px 页边只占 **0.65%** ——
+   在这么宽的窗口上，卡片左边缘离窗边几乎是贴着（他原话"字和边界几乎没距离"）。
+   ★八页一起改（不是只改观棋页）：页边是**外壳那一层**的语言，一页一个数就成了"每页各有一套边距"。
+   ★手机那一档（≤620px）在文件末尾照旧覆盖成 `12px 12px 16px`——那一档一个像素没动。 */
+.sw2-view{display:none;padding:20px 24px;}
+/* ★leg166：`.sw2-view.sw2-active` 补上 `display:flex;flex-direction:column`（照演示 `.sw2-view`）。
+   ★为什么敢补：并页那一页（`#sw2_view_panorama.sw2-active`，id 特异性更高）本来就写着
+     `display:flex;flex-direction:column`，两处**逐字同向** ⇒ 它一个字都不变（判据 `panorama.test.js`
+     咬的那两条 `display:flex` / `flex-direction:column` 照旧命中它自己那条规则）。
+   ★其余七页从 `display:block` 变成**列 flex 容器**：它们的孩子都是块级、宽度撑满
+     ⇒ 版面**逐像素同旧**（没有 `align-items` 就默认 `stretch`，没有 `gap` 就不加间距）。 */
+.sw2-view.sw2-active{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto;}
 /* ★★★leg101 `fitwindow`：**当前那一页**吃掉外壳剩下的整块高度，并成为它自己的滚动面。
    为什么非有这一条：外壳现在是定高 flex 列（见顶部 `.sw2-window`），页签与页脚 `flex:none`，
    中间必须有东西**把余高接住**——否则 flex 容器按内容排，`.sw2-merged-grid{height:100%}`
@@ -86,20 +327,25 @@
    ★用类选择器 `.sw2-view.sw2-active`（不是在 `.sw2-view` 上写 `flex:1`）：非当前页是 `display:none`、
      但**它们仍然是这个 flex 容器里的项**——`display:none` 的项不参与布局，两者本就等价，
      这里取更明确的一头：**只有当前页吃高度**。 */
-.sw2-placeholder{padding:26px 20px;border:1px dashed var(--sw2-line);border-radius:10px;color:var(--sw2-text-faint);font-size:13px;text-align:center;}
-.sw2-col-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+/* ★leg166：占位块照演示收（圆角 10→6、虚线降一档、内距走 4px 网格）。 */
+.sw2-placeholder{padding:var(--sw2-sp-5) var(--sw2-sp-4);border:1px dashed var(--sw2-line);border-radius:var(--sw2-r-md);color:var(--sw2-text-faint);font-size:var(--sw2-fs-md);text-align:center;}
+.sw2-col-head{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);letter-spacing:.07em;display:flex;align-items:center;gap:var(--sw2-sp-2);margin-bottom:var(--sw2-sp-3);}
 .sw2-col-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
-.sw2-ref{color:var(--sw2-blue);cursor:help;border-bottom:1px dotted transparent;font-size:11px;}
+.sw2-ref{color:var(--sw2-blue);cursor:help;border-bottom:1px dotted transparent;font-size:var(--sw2-fs-label);}
 .sw2-ref:hover{border-bottom-color:var(--sw2-blue);}
 
-/* ---------- 观棋：时局句（重心） ---------- */
+/* ---------- 观棋：时局句（重心） ----------
+   ★leg166：这一族在**设定页**也有一份消费者（`render.js:368` 的时局块）⇒ 本笔按演示收一收：
+   ① 渐变底撤掉（演示的层次靠叠层，不靠渐变）⇒ 改用卡底 ＋ **一条 2px 理性蓝左杠**
+      （与观棋页「大势」那条引用块同一套语言——演示里"前提/引用"就是一条杠，不是一张带渐变的卡）；
+   ② 圆角 10→6；③ 左杠 4→**2px**（4px 是"强调块"的旧语言，2px 才与引用块同族）。 */
 .sw2-digest{
-  background:linear-gradient(120deg,#272e3c 0%, #20252f 60%);
-  border:1px solid var(--sw2-line);border-left:4px solid var(--sw2-amber);
-  border-radius:10px;padding:14px 18px;margin-bottom:10px;
+  background:var(--sw2-card);
+  border:1px solid var(--sw2-line);border-left:2px solid var(--sw2-blue-line);
+  border-radius:var(--sw2-r-md);padding:var(--sw2-sp-3) var(--sw2-sp-4);margin-bottom:var(--sw2-sp-2);
 }
-.sw2-digest-line{font-size:16.5px;font-weight:700;letter-spacing:.3px;line-height:1.5;}
-.sw2-digest-sub{margin-top:4px;font-size:13px;color:var(--sw2-text-dim);}
+.sw2-digest-line{font-size:var(--sw2-fs-lg);font-weight:600;letter-spacing:-.01em;line-height:1.5;color:var(--sw2-text);}
+.sw2-digest-sub{margin-top:var(--sw2-sp-1);font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);}
 
 /* ---------- 观棋：信息带 ----------
    ★★★leg98（用户令「**里面有两个大势卡片留一个就好了**，世情 · 3 键，还有浪尖，张力，盘算数量
@@ -110,17 +356,36 @@
    ★定稿**两栏**：左＝世情 3 键（**竖排**，它本来就是竖的行）；右＝三行读数（盘算 / 张力 / 浪尖）。
      **竖排的归竖排、横排的横排** ⇒ 不再把两种排版硬塞进同一条边里。
    ★同时**撤掉带里的「大势」格**（与四层顶上那格是同一句话，照 leg97 裁 `digest` 的口径：同一件事不说两遍）。 */
-.sw2-infoband{display:flex;align-items:stretch;border:1px solid var(--sw2-line-soft);border-radius:10px;background:var(--sw2-card);margin-bottom:10px;overflow:hidden;}
-.sw2-band-block{padding:10px 14px;flex:1;min-width:0;}
+/* ★★★leg165（用户令「**和演示的样式有很大区别**」）：这一族按演示收一收。改的四样都在"看起来像不像"上：
+     ① 框：`--sw2-line-soft`（#212225）→ `--sw2-line`（更淡的那一档）；圆角 10px → 6px（与面卡同族）；
+     ② 内边距：`10px 14px` → `12px 16px`（演示的 `--sp-3 --sp-4`）；
+     ③ 标签：`10.5px / letter-spacing:2px` → `11px / .07em`（与说书页头、栏名同一套小标签语言）；
+     ④ 行距：三条世情行 `margin-bottom:5px` → `padding:8px 0` + 行间细分线（演示的 `.env-row`）。
+     ★为什么值得改：它**压在故事轴上面**，高一截就是从左栏的可视高度里扣（用户那句
+       「我要往下翻很久才能看到这些」治过一次，别再胖回去）。 */
+.sw2-infoband{display:flex;align-items:stretch;border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-card);margin-bottom:var(--sw2-sp-2);overflow:hidden;}
+.sw2-band-block{padding:var(--sw2-sp-3) var(--sw2-sp-4);flex:1;min-width:0;}
 .sw2-band-block + .sw2-band-block{border-left:1px solid var(--sw2-line-soft);}
-.sw2-band-label{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:7px;}
+.sw2-band-label{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);letter-spacing:.07em;margin-bottom:var(--sw2-sp-3);}
 /* ★leg98：左栏（世情 3 键）**定宽**——它是三条刻度行，宽度要跟它自己的内容走；
    右栏（读数）吃剩下的全部宽度，三行各自左对齐。 */
 .sw2-infoband > .sw2-band-block:first-child{flex:0 0 340px;}
-.sw2-band-read{display:flex;flex-direction:column;justify-content:center;gap:7px;}
+.sw2-band-read{display:flex;flex-direction:column;justify-content:center;}
 /* 三行读数：每行开头一个小标签（定宽 ⇒ 三行的内容左边对齐，读数才成"一列"） */
-.sw2-readrow{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0;}
-.sw2-readrow .sw2-readkey{flex:0 0 36px;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
+/* ★演示的读数行是"**一行一格、行间一条细分线**"（`.readrow`），这里照它收：
+   行距交给 `padding` 与那条线，不再靠 `gap` 猜。 */
+.sw2-readrow{display:flex;align-items:baseline;gap:var(--sw2-sp-3);flex-wrap:wrap;min-width:0;padding:var(--sw2-sp-2) 0;}
+.sw2-readrow + .sw2-readrow{border-top:1px solid var(--sw2-line-soft);}
+.sw2-readrow:first-child{padding-top:0;}
+.sw2-readrow:last-child{padding-bottom:0;}
+/* ★★★leg167：`flex:0 0 40px` → **`flex:0 0 auto` ＋ `min-width:40px`**。
+   病（用户整窗截图上肉眼可见）：浪尖那一行的标签是「**浪尖 · 刚收尾的大动作**」（11 字），
+   而这一格被写死 40px ⇒ 标签**折成三行**（"浪尖 ·" / "刚收尾" / "的大动作"），
+   出图是"标签竖着排、右边一片空"。
+   ★`40px` 是照演示 `.readkey{width:56px}` 定的那一格，而演示的标签只有两个字（盘算/张力/浪尖）
+     —— 真页面这一格带了一个**分组名后缀**（它同时说"这一行是什么"与"这一组是什么"），
+     40px 装不下是**必然**，不是偶发。⇒ 改成"按内容宽，但不小于 40px"。 */
+.sw2-readrow .sw2-readkey{flex:0 0 auto;min-width:40px;font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);}
 /* 读数区里那几样各归各位：数字不再自带下边距（行距由 `.sw2-band-read` 的 gap 管） */
 .sw2-band-read .sw2-num-sub{margin-top:0;}
 .sw2-band-read .sw2-clash-sub{margin-top:0;}
@@ -129,25 +394,29 @@
    于是值被推到右缘、中间那整条 1fr 空着（用户截图：名字在左、值在右、中间一片死区）。
    ⇒ 加**第三栏**（分段档位条）填那条空，三栏 = 名字 / 刻度 / 原话。
    ★`44px` → `max-content`：档位名是两三字（乱象/天时/时局），固定 44px 本来就会把"张力推手"挤裂。 */
-.sw2-env-row{display:grid;grid-template-columns:max-content 1fr max-content;gap:8px;align-items:center;margin-bottom:5px;}
-.sw2-env-row:last-child{margin-bottom:0;}
-.sw2-env-row .sw2-env-name{font-size:11.5px;color:var(--sw2-text-dim);}
+.sw2-env-row{display:grid;grid-template-columns:max-content 1fr max-content;gap:var(--sw2-sp-3);align-items:center;padding:var(--sw2-sp-2) 0;}
+.sw2-env-row + .sw2-env-row{border-top:1px solid var(--sw2-line-soft);}
+.sw2-env-row:first-child{padding-top:0;}
+.sw2-env-row:last-child{padding-bottom:0;margin-bottom:0;}
+.sw2-env-row .sw2-env-name{font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);}
 /* leg26：`.sw2-danger`（越阈危险带）整条下架——档位没有"危险/安全"之分，引擎对参数零表态。
    同批下架 `.sw2-env-bar.sw2-env-unknown`（空心条）——档位是原话，不画条。
    ★leg40b（面板本体体检）：那条"档位条"本身（`.sw2-env-bar` + 内层 i）**这一棒才真正删掉**——
    leg26 只是把空心态下架了，实心条还在，而它是 `width: 0% | 100%` 的**两态恒真**装饰
    （有值就满格、没值就空），既不是比例也不是进度，只让玩家以为这里有个数。 */
-.sw2-env-row .sw2-env-val{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-dim);text-align:right;}
-.sw2-clash-main{font-size:14.5px;font-weight:700;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
-.sw2-clash-main .sw2-int{font-size:12px;font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-amber);font-weight:400;}
-.sw2-clash-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}
+.sw2-env-row .sw2-env-val{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-md);color:var(--sw2-text-body);text-align:right;font-variant-numeric:tabular-nums;}
+.sw2-clash-main{font-size:var(--sw2-fs-lg);font-weight:600;display:flex;align-items:baseline;gap:var(--sw2-sp-2);flex-wrap:wrap;letter-spacing:-.01em;}
+.sw2-clash-main .sw2-int{font-size:var(--sw2-fs-sm);font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-text-dim);font-weight:400;font-variant-numeric:tabular-nums;}
+.sw2-clash-sub{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);margin-top:2px;line-height:1.5;}
 /* ★leg98：浪尖从"独立一栏的竖列"改成**读数行里的横排条目**——
    它现在住在 `.sw2-readrow`（flex 行）里，竖列会把整行顶高、又跟左边的小标签对不齐。 */
-.sw2-tides{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;min-width:0;}
-.sw2-tide{font-size:12px;color:var(--sw2-text-dim);}
-.sw2-big-num{font-size:19px;font-weight:700;font-family:"Cascadia Mono",Consolas,monospace;}
-.sw2-big-num small{font-size:12px;color:var(--sw2-text-faint);font-weight:400;margin-left:2px;}
-.sw2-num-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;line-height:1.55;}
+.sw2-tides{display:flex;flex-wrap:wrap;gap:var(--sw2-sp-1) var(--sw2-sp-3);align-items:baseline;min-width:0;}
+.sw2-tide{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);}
+/* ★leg166：大数从**琥珀等宽**改成**正文色 ＋ 只给数字等宽**（演示的口径："等宽只用于数字与 id"，
+   而这里原来连"8/15"整个都走等宽；颜色上琥珀是语义色，一个纯读数不该借它）。 */
+.sw2-big-num{font-size:var(--sw2-fs-xl);font-weight:600;color:var(--sw2-text);line-height:1.2;font-variant-numeric:tabular-nums;}
+.sw2-big-num small{font-size:var(--sw2-fs-md);color:var(--sw2-text-faint);font-weight:400;margin-left:2px;}
+.sw2-num-sub{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);margin-top:2px;line-height:1.55;}
 
 /* ---------- ★★★leg98 补四：并页那一页改**两栏**（用户令「**你总得把这个放在上面吧？
    而且我要往下翻很久才能看到这些**」）
@@ -168,7 +437,7 @@
 /* ★★★leg157 `merged-scroll`：**高度改由 flex 分配**（`height:100%` → `flex:1 1 auto`；
    理由与全部读数写在下面那条 `#sw2_view_panorama.sw2-active` 的注释里——先读它再动这里）。 */
 .sw2-merged-grid{
-  display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:var(--sw2-sp-4);align-items:start;
   height:auto;flex:1 1 auto;min-height:320px;
 }
 /* ★★★leg157（用户令「**顺便把下拉的bug解决了**」——"下拉"＝观棋页**滚到最底部滚轮就失效、拉不上去**）：
@@ -236,6 +505,9 @@
 /* ★leg99：右栏原来那条 `position:sticky;top:0` **撤掉**——"能不能滚"已经由 `overflow-y` 表达，
    sticky 是"整页滚、右栏钉住"那个模型的产物；两个模型并存会互相打架（钉住的东西在滚动容器里不动）。 */
 @media (max-width:980px){
+  #sw2_view_setting .sw2-setting-live-grid{grid-template-columns:minmax(0,1fr);gap:16px;}
+  #sw2_view_setting .sw2-setting-env{border-left:0;padding-left:0;border-top:1px solid var(--sw2-line);padding-top:16px;}
+  #sw2_view_settings .sw2-settings,#sw2_view_params .sw2-params-grid{grid-template-columns:minmax(0,1fr);}
   .sw2-merged-grid{grid-template-columns:minmax(0,1fr);height:auto;min-height:0;}
   .sw2-merged-main,.sw2-merged-side{height:auto;overflow:visible;padding-right:0;}
   /* ★★★leg104（样式一批 · **窄屏丢内容**）：信息带首栏原来写死 `flex:0 0 340px`（`.sw2-infoband:114`
@@ -258,14 +530,20 @@
      （本仓忌"面板抢玩家的手"）。 */
 
 /* ---------- 观棋：盘算总览 + 动态流 + 位置速览 ---------- */
-.sw2-agenda-strip{margin-bottom:12px;}
-.sw2-agenda-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;}
-.sw2-agenda-card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:8px;padding:9px 12px;}
-.sw2-agenda-card.sw2-agenda-hidden{border-left:3px solid var(--sw2-red);}
+.sw2-agenda-strip{margin-bottom:var(--sw2-sp-3);}
+/* ★★★leg165：演示那一栏是**一列堆叠、每张卡 8px 间距**（`.agenda` + `margin-bottom:var(--sp-2)`），
+   而这里原来是 `auto-fit/minmax(240px)` 的网格 —— 在 ~450px 的右栏里正好挤成**三列**，
+   每张卡只剩一百多像素宽，目标句折成两行（真机图上就是那一坨）。
+   ⇒ 右栏窄，**一列**才是它该有的样子。 */
+.sw2-agenda-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sw2-sp-2);}
+.sw2-agenda-card{background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-3);}
+/* ★「暗处」那一条原来是**红色左杠**（3px）——照演示：暗处是"那枚小徽"说的事（`.agenda-vis.hidden`），
+   不是给整张卡染一条红边（那是"去掉装饰"要治的东西）。⇒ 左杠撤掉，卡自己的框与别的卡一致。 */
+.sw2-agenda-card.sw2-agenda-hidden{border-color:var(--sw2-line);}
 .sw2-agenda-card .sw2-ahead{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
-.sw2-agenda-card .sw2-aowner{font-size:12px;font-weight:700;color:var(--sw2-amber);}
-.sw2-agenda-card .sw2-agoal{font-size:13px;line-height:1.5;}
-.sw2-agenda-card .sw2-astage{margin-top:4px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-agenda-card .sw2-aowner{font-size:var(--sw2-fs-md);font-weight:600;color:var(--sw2-text);}
+.sw2-agenda-card .sw2-agoal{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);line-height:1.5;}
+.sw2-agenda-card .sw2-astage{margin-top:var(--sw2-sp-2);display:flex;align-items:center;gap:var(--sw2-sp-2);font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);}
 .sw2-agenda-card .sw2-aprog{display:flex;gap:3px;margin-left:auto;}
 /* ★★★leg104（样式一批 · **没点亮的格子看不见**）：灭的那一格原来用 `--sw2-card-2`（#262c38）
    压在卡片底 `--sw2-card`（#20252f）上＝ **1.10:1**（实测算出来的，等于没画）⇒ 一根"3/4"的档位条
@@ -274,32 +552,39 @@
 .sw2-dotstep{width:6px;height:6px;border-radius:50%;background:var(--sw2-text-faint);display:inline-block;}
 .sw2-dotstep.on{background:var(--sw2-amber);}
 .sw2-agenda-card .sw2-asteps{font-family:"Cascadia Mono",Consolas,monospace;font-size:10.5px;}
-.sw2-agenda-empty{grid-column:1/-1;font-size:12.5px;color:var(--sw2-text-faint);padding:10px;border:1px dashed var(--sw2-line);border-radius:8px;text-align:center;}
-.sw2-visible{font-size:9.5px;padding:0 5px;border-radius:3px;letter-spacing:2px;}
-.sw2-visible.v-known{background:#26313f;color:#8fb2d6;}
-.sw2-visible.v-hidden{background:#372627;color:#c98a82;}
+.sw2-agenda-empty{grid-column:1/-1;font-size:12.5px;color:var(--sw2-text-faint);padding:var(--sw2-sp-3);border:1px dashed var(--sw2-line);border-radius:var(--sw2-r-md);text-align:center;}
+/* ★leg166：小徽从 **3px 方角**改 **4px**（演示的圆角只有 4/6/8 三档；3px 是本表里唯一的孤例）。 */
+.sw2-visible{font-size:9.5px;padding:0 5px;border-radius:var(--sw2-r-sm);letter-spacing:0;}
+.sw2-visible.v-known{background:var(--sw2-kind-known-bg);color:var(--sw2-kind-known-fg);}
+.sw2-visible.v-hidden{background:var(--sw2-kind-hidden-bg);color:var(--sw2-red-soft-fg);}
 
-.sw2-board-main{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start;}
-.sw2-feed{display:flex;flex-direction:column;gap:8px;}
-.sw2-entry{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:11px 14px 10px;position:relative;}
-.sw2-entry .sw2-ctext{font-size:14.5px;line-height:1.65;}
-.sw2-entry .sw2-cmeta{margin-top:5px;font-size:11.5px;color:var(--sw2-text-faint);display:flex;gap:12px;align-items:center;}
-.sw2-entry .sw2-cmeta .sw2-round{font-family:"Cascadia Mono",Consolas,monospace;}
-.sw2-entry.sw2-latest{background:var(--sw2-card-2);border-color:var(--sw2-amber-dim);border-left:3px solid var(--sw2-amber);box-shadow:0 0 0 1px rgba(227,173,85,.08), 0 6px 24px rgba(0,0,0,.35);}
-.sw2-entry.sw2-latest .sw2-ctext{font-size:15.5px;font-weight:600;}
-.sw2-now{position:absolute;top:-9px;right:12px;font-size:10.5px;letter-spacing:2px;color:#141006;background:var(--sw2-amber);border-radius:4px;padding:2px 8px;font-weight:700;}
-.sw2-entry.sw2-hidden{background:linear-gradient(100deg, rgba(223,108,98,.06), transparent 40%), var(--sw2-card);}
-.sw2-milestone-strip{margin-top:4px;padding:8px 14px;font-size:12.5px;color:var(--sw2-text-dim);background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;}
-.sw2-milestone-strip b{color:var(--sw2-amber);font-weight:600;}
-.sw2-goto{color:var(--sw2-blue);cursor:pointer;margin-left:6px;}
+.sw2-board-main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:var(--sw2-sp-3);align-items:start;}
+.sw2-feed{display:flex;flex-direction:column;gap:var(--sw2-sp-2);}
+.sw2-entry{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-2) var(--sw2-sp-3);position:relative;}
+.sw2-entry .sw2-ctext{font-size:var(--sw2-fs-md);line-height:1.65;color:var(--sw2-text-body);}
+.sw2-entry .sw2-cmeta{margin-top:var(--sw2-sp-1);font-size:11.5px;color:var(--sw2-text-faint);display:flex;gap:var(--sw2-sp-3);align-items:center;}
+.sw2-entry .sw2-cmeta .sw2-round{font-family:"Cascadia Mono",Consolas,monospace;font-variant-numeric:tabular-nums;}
+/* ★★★leg166：`.sw2-entry` 这一族（动态流 / 实体观览窗的事迹行）按演示收——
+   ① 圆角 9→6、框 `--sw2-line-soft`→`--sw2-line`；
+   ② ★**「最新」那一条的重音整族撤掉**：原来 `border-left:3px solid --sw2-amber` ＋ **外发光阴影**
+      ＋ 换底 ＋ 字号加大加粗——四重重音同时上，而演示点名要去的就是"金色左杠 ＋ 发光"这一族；
+      ⇒ 改成**只留一条 2px 理性蓝左杠**（与"当前/选中"同一支颜色），底/字号/阴影一律回到常态。
+   ★`.sw2-entry` 现在**唯一的生产者**是 `web/entity-window.js:240` 的事迹行
+     （观棋页那份动态流 `renderFeedHtml` 自 leg99 起已不在页面上）；这一族照旧**同一件事一种印法**。 */
+.sw2-entry.sw2-latest{border-left:2px solid var(--sw2-blue);}
+.sw2-now{position:absolute;top:-9px;right:12px;font-size:10.5px;letter-spacing:0;color:var(--sw2-text-dim);background:var(--sw2-card-2);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-sm);padding:0 6px;font-weight:600;}
+.sw2-entry.sw2-hidden{border-left:2px solid rgba(var(--sw2-red-rgb),.5);}
+.sw2-milestone-strip{margin-top:var(--sw2-sp-1);padding:var(--sw2-sp-2) var(--sw2-sp-3);font-size:12.5px;color:var(--sw2-text-dim);background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);}
+.sw2-milestone-strip b{color:var(--sw2-text);font-weight:600;}
+.sw2-goto{color:var(--sw2-blue);cursor:pointer;margin-left:var(--sw2-sp-1);}
 .sw2-goto:hover{text-decoration:underline;}
 
-.sw2-side{display:flex;flex-direction:column;gap:8px;}
-.sw2-entity{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:11px 12px;}
-.sw2-entity-head{display:flex;align-items:baseline;gap:7px;margin-bottom:6px;}
-.sw2-entity-name{font-weight:700;font-size:14px;}
-.sw2-entity-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;}
-.sw2-entity-loc{font-size:12px;color:var(--sw2-text-dim);margin-left:auto;}
+.sw2-side{display:flex;flex-direction:column;gap:var(--sw2-sp-2);}
+.sw2-entity{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-2) var(--sw2-sp-3);}
+.sw2-entity-head{display:flex;align-items:baseline;gap:var(--sw2-sp-1);margin-bottom:var(--sw2-sp-1);}
+.sw2-entity-name{font-weight:600;font-size:var(--sw2-fs-md);}
+.sw2-entity-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:0;}
+.sw2-entity-loc{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);margin-left:auto;}
 /* leg24 片5：影响力分数条（.sw2-weight-row/.sw2-wval）已从渲染中撤掉——分数不再参与决策，不摆给玩家看。
    下面这组是替代它的事实标记：在办/据/无据（空着就是空着，用中性灰点明"真没有据"）。 */
 .sw2-fact-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
@@ -324,30 +609,45 @@
 .sw2-gearbar-unset i{background:transparent;border:1px dashed var(--sw2-text-faint);}
 .sw2-env-row.sw2-nodata .sw2-gearbar{opacity:.7;}
 /* leg26：参数页的下拉（世界参数档位）——沿用面板既有观感，不新造组件 */
-.sw2-param-select{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:3px 7px;font-size:12px;font-family:inherit;min-width:96px;line-height:1.4;}
+/* ★leg166：参数页这几个控件的字号保持**字面量**（`test/render.test.js` 那条「参数页版式」
+   直接读字面量：`.sw2-param-select` 要 ≤13px、`.sw2-row > em` 要 <13px ⇒ 换令牌会让它读出 `NaN`）。
+   ★只改尺寸与配色（内距走 4px 网格、圆角 8→6、聚焦态由琥珀改理性蓝环）。 */
+/* ★★★leg168（用户令，逐字）：「**接着你看这个输入框，太黑了跟旁边格格不入**」——
+   **表单控件那一批的底色整批退回 leg163**（只退**底**那一格；圆角/内距/字号那些版面一个字不动）。
+   ── 这一批有七条规则，底一律回到 leg163 的原令牌 ──
+     `.sw2-input`（设置页的地址/密钥/模型那几个框）·`.sw2-field textarea`·`.sw2-ch-q`（编年搜索）
+       ·`.sw2-source-line`（出包来源那条展示行）      ⇒ `var(--sw2-panel)`  `#1b1f28`
+     `.sw2-ents-q`（角色与势力搜索）                   ⇒ `var(--sw2-card)`   `#20252f`
+     `.sw2-param-select` / `.sw2-param-input`（参数页） ⇒ `var(--sw2-card-2)` `#262c38`
+   ── 为什么（一条都不用猜，照 leg163 抄）──
+     leg164 把这七处统一改成了 `--sw2-inset` (`#050607`)，那是**近黑中性板**下"比窗口底再深一档"那一格；
+     leg167 退回蓝灰板**色值**时没退这一批 ⇒ `#050607` 压在面卡 `#20252f` 上差 **1.32:1**，
+     出图就是"卡里挖了几个黑洞"。leg163 那一套的差是 **1.07:1**（`--sw2-panel` 对面卡），
+     与旁边的字和框**只差一档**，不打架。★`--sw2-inset` 那一格**同批撤掉**（零消费者不留）。 */
+.sw2-param-select{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:3px var(--sw2-sp-2);font-size:12px;font-family:inherit;min-width:96px;line-height:1.4;}
 /* 展开的原生列表：给了字号就跟着走（macOS/部分浏览器仍按系统渲染，这里只管能管的那部分） */
 .sw2-param-select option{font-size:12px;font-family:inherit;}
-.sw2-param-select:focus{outline:none;border-color:var(--sw2-text-faint);}
+.sw2-param-select:focus{outline:none;border-color:var(--sw2-blue);box-shadow:0 0 0 3px var(--sw2-blue-soft);}
 /* ★★★leg54（用户令「把调数字的框直接变成输入框或者无上限」）：**数字输入框**。
    为什么另立一个类而不是复用 `.sw2-param-select`：语义不同（一个选、一个填），
    且**将来的宽度/对齐要分开调**；共用会让"改下拉的宽"顺手改到输入框上（本仓"一处口径"的反面）。
    ★数字框的三条专属规则：①定宽（不然浏览器给个很宽的默认值，把「常用：3 / 6 / 9」挤走）；
    ②右对齐（数位对齐，读数快）；③去掉浏览器给 number 框的上下箭头
    （本面板一屏四个框，箭头既占地方又容易被滚轮误触——参数页早就为滚轮误触立过规矩）。 */
-.sw2-param-input{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:3px 7px;font-size:12px;font-family:inherit;width:72px;text-align:right;line-height:1.4;}
-.sw2-param-input:focus{outline:none;border-color:var(--sw2-text-faint);}
+.sw2-param-input{background:var(--sw2-card-2);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:3px var(--sw2-sp-2);font-size:var(--sw2-fs-sm);font-family:inherit;width:72px;text-align:right;line-height:1.4;}
+.sw2-param-input:focus{outline:none;border-color:var(--sw2-blue);box-shadow:0 0 0 3px var(--sw2-blue-soft);}
 .sw2-param-input::-webkit-outer-spin-button,.sw2-param-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .sw2-param-input[type=number]{-moz-appearance:textfield;appearance:textfield;}
 /* 「常用：3 / 6 / 9」那串**建议值**（leg54：`LIMIT_GEARS` 从白名单降级为建议）——它不该抢过值本身 */
 .sw2-limit-suggest{flex:none;}
 .sw2-param-val{color:var(--sw2-amber);}
 /* leg26 c：参数的性质标签（自变量/因变量）——因变量只是呈现，没有旋钮 */
-.sw2-param-kind{margin-left:6px;font-size:10px;padding:1px 6px;border-radius:7px;border:1px solid var(--sw2-line);color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}
+.sw2-param-kind{margin-left:var(--sw2-sp-1);font-size:10px;padding:1px 6px;border-radius:var(--sw2-r-sm);border:1px solid var(--sw2-line);color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}
 .sw2-param-kind-dep{border-style:dashed;}
 /* ★leg33d（用户令「加一个启动和关闭插件的入口，要不然这个插件会直接自动生效」）：
    「插件总闸」那一张卡要说得出"它是总闸"——它管插件自己，其余开关管插件对外的动作。
    只用一条左边框 + 极浅底色，不动既有卡片规则（参数页版式是 leg27 修过的，别在这里重排）。 */
-.sw2-master-switch{border-left:3px solid var(--sw2-amber);background:rgba(255,190,90,.05);}
+.sw2-master-switch{border-left:3px solid var(--sw2-amber);background:rgba(var(--sw2-amber-rgb),.05);}
 .sw2-master-switch h4{font-weight:600;}
 
 /* ---------- leg27 后：修参数页版式（用户实机：「参数的ui页太丑了，说明文字太大，下拉表刚拉开没多久自己就关了」）----------
@@ -360,131 +660,210 @@
    ⚠ 为什么敢做全局（而不是新造 `sw2-param-row`）：`.sw2-row` 的**生产者只有两处**（参数页 + 快照页，
      后者另有 `.sw2-snap-*` 专用类），旧账里没有第三种用法 ⇒ 补基础规则不会误伤别页。
      两个既有局部变体（`.sw2-cold-mgmt .sw2-row` / 快照行）选择器更具体 ⇒ 优先级不受影响。 */
-.sw2-row{display:flex;align-items:baseline;gap:12px;padding:7px 0;font-size:13px;color:var(--sw2-text-dim);}
-.sw2-row > span:first-child{flex:none;min-width:52px;color:var(--sw2-text);}
+.sw2-row{display:flex;align-items:baseline;gap:var(--sw2-sp-3);padding:var(--sw2-sp-2) 0;font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);}
+.sw2-row > span:first-child{flex:none;min-width:52px;color:var(--sw2-text-body);}
+/* ★leg166：说明文字保持**字面量 11.5px**（有意不走 `--sw2-fs-*` 令牌）。
+   理由是一条真判据：`test/render.test.js` 那条「参数页版式」**读的就是这个字面量**
+   （它断言"说明文字必须明显小于正文 14px"，写法是 `/font-size\s*:\s*([\d.]+)px/`）——
+   换成 `var(--sw2-fs-label)` 会让它读出 `NaN` ⇒ 判据红，而它咬的那件事（说明比正文小）**一点没变**。
+   ★同族的还有 `test/mobile-layout.test.js` 那份"手机上 <12px 的一律抬到 12px"的**棘轮名单**：
+     它按**字面量**扫全表，故凡是进了那份名单的选择器，字号一律留字面量。 */
 .sw2-row > em{font-style:normal;font-size:11.5px;line-height:1.5;color:var(--sw2-text-faint);flex:1;min-width:0;}
-.sw2-row + .sw2-row{border-top:1px dashed var(--sw2-line-soft);}
+/* ★leg166：行间由**虚线**改成**发丝实线**（虚线在本仓是"空态/未载"的语义；用它当分隔线是错的口径）。 */
+.sw2-row + .sw2-row{border-top:1px solid var(--sw2-line-soft);}
 /* ★★leg52：并卡后的**自变量组标题行**（「天时」/「时局」独占一行）。
    为什么要有它：四键并成一张卡之后，参数名不再有卡头可挂，而"当前/设定为"两行本身不提参数名
    ⇒ 出图一看是「当前 大灾 / 设定为 [大灾▾]」，玩家分不清是天时还是时局（真浏览器抓出来的回归）。
    两条规则：①标题行**不带**虚线（它归下面两行管，不是并列的第三行）；
              ②紧跟标题的那一行**也不带**虚线（否则标题会被一条线从自己的内容上切开）。 */
 .sw2-row.sw2-param-name{padding-bottom:2px;color:var(--sw2-text);}
-.sw2-row.sw2-param-name > b{color:var(--sw2-text);font-size:13px;}
+.sw2-row.sw2-param-name > b{color:var(--sw2-text);font-size:var(--sw2-fs-md);}
 .sw2-row.sw2-param-name + .sw2-row{border-top:none;padding-top:2px;}
 .sw2-row b.sw2-param-val{flex:none;color:var(--sw2-amber);font-weight:600;min-width:44px;}
-.sw2-set-card .sw2-actions{display:flex;gap:8px;flex:none;}
-.sw2-set-card .sw2-btn{padding:4px 12px;font-size:12.5px;}
-.sw2-set-card.sw2-actions-inline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.sw2-agenda{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);margin-bottom:6px;}
+.sw2-set-card .sw2-actions{display:flex;gap:var(--sw2-sp-2);flex:none;}
+.sw2-set-card.sw2-actions-inline{display:flex;align-items:center;gap:var(--sw2-sp-3);flex-wrap:wrap;}
+.sw2-agenda{font-size:var(--sw2-fs-sm);line-height:1.5;color:var(--sw2-text-dim);margin-bottom:var(--sw2-sp-2);}
 .sw2-agenda b{color:var(--sw2-text);font-weight:600;}
 .sw2-stage{display:flex;align-items:center;gap:6px;}
-.sw2-stage .sw2-stagetext{font-size:11px;color:var(--sw2-text-faint);}
-.sw2-entity.sw2-player{border-style:dashed;border-color:var(--sw2-line);}
-.sw2-entity.sw2-player .sw2-entity-name::before{content:"你 · ";color:var(--sw2-amber);font-weight:700;}
-.sw2-note{font-size:11px;color:var(--sw2-text-faint);margin-top:4px;}
+.sw2-stage .sw2-stagetext{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);}
+.sw2-entity.sw2-player{border-color:var(--sw2-line);}
+.sw2-entity.sw2-player .sw2-entity-name::before{content:"你 · ";color:var(--sw2-amber);font-weight:600;}
+.sw2-note{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);margin-top:var(--sw2-sp-1);}
 
 /* ---------- leg25 f：观棋侧栏「各归何处 · 速览」（按处聚合，取代"一实体一卡"） ----------
    旧版 563 张实体卡（HTML 231 KB），位置只是卡右上角一个词 ⇒ 世界里唯一的空间结构看不出来。
    新版以**地点为组头**、组内用 chip 列名号：一眼看得出"哪里聚了多少人、都有谁"。
    两筐都摆：有处可循（按地点）+ 位置未载（单列，如实说"书里没写"——未载 ≠ 在别处）。 */
-.sw2-locgroup{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 12px;}
+/* ★leg166「其余七页落演示版面」：右栏那两张卡（速览分组 / 地图）按演示收——
+   圆角 9→6、框降到 `--sw2-line`、内距走 4px 网格。★"位置未载"那一组仍走**虚线**
+   （虚线在本仓是"空着就是空着"的语义，这一处正是那个意思，不是装饰）。 */
+.sw2-locgroup{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-2) var(--sw2-sp-3);}
 .sw2-locgroup-unknown{border-style:dashed;background:transparent;}
-.sw2-locgroup-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;}
-.sw2-locgroup-name{font-weight:700;font-size:13.5px;color:var(--sw2-text);}
-.sw2-locgroup-n{font-size:11px;color:var(--sw2-amber);font-family:"Cascadia Mono",Consolas,monospace;}
-.sw2-locgroup-note{font-size:11px;line-height:1.6;color:var(--sw2-text-faint);margin-bottom:6px;}
+.sw2-locgroup-head{display:flex;align-items:baseline;gap:var(--sw2-sp-2);margin-bottom:var(--sw2-sp-1);}
+.sw2-locgroup-name{font-weight:600;font-size:var(--sw2-fs-md);color:var(--sw2-text);}
+.sw2-locgroup-n{font-size:var(--sw2-fs-label);color:var(--sw2-text-dim);font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-locgroup-note{font-size:var(--sw2-fs-label);line-height:1.6;color:var(--sw2-text-faint);margin-bottom:var(--sw2-sp-1);}
 .sw2-locchips{display:flex;flex-wrap:wrap;gap:5px;}
-.sw2-locchip{font-size:11.5px;padding:1px 7px;border-radius:6px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
-.sw2-locchip small{font-size:9.5px;color:var(--sw2-text-faint);margin-left:4px;letter-spacing:1px;}
-.sw2-locchip-busy{color:var(--sw2-text);border-left:2px solid var(--sw2-amber-dim);}
-.sw2-locchip-me{background:var(--sw2-amber);color:#141006;font-weight:700;}
+.sw2-locchip{font-size:var(--sw2-fs-label);padding:1px 7px;border-radius:var(--sw2-r-sm);background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
+.sw2-locchip small{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);margin-left:4px;letter-spacing:0;}
+.sw2-locchip-busy{color:var(--sw2-text);box-shadow:inset 2px 0 0 var(--sw2-amber-dim);}
+.sw2-locchip-me{background:var(--sw2-amber);color:var(--sw2-on-amber);font-weight:700;}
 .sw2-locchip-me::before{content:"你 · ";font-weight:700;}
 .sw2-locgroup-unknown .sw2-locchip{background:transparent;border:1px dashed var(--sw2-line-soft);color:var(--sw2-text-faint);}
 
 /* leg25 g：位置展示**收成一个入口「地图」**（用户 2026-09-11：「太拥挤了，收缩到一个入口内，就叫地图吧，
    这就是个暂时的展示功能」）。默认收起——开口只报一行摘要，要看再点开。
    形态跟本仓已有的两处折叠（`.sw2-milestone` / `.sw2-source-alt`）一致，不另立体系。 */
-.sw2-map-details{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:9px 12px;}
-.sw2-map-summary{display:flex;align-items:baseline;gap:8px;cursor:pointer;user-select:none;font-size:12.5px;color:var(--sw2-text-dim);}
+.sw2-map-details{background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-3);}
+.sw2-map-summary{display:flex;align-items:baseline;gap:var(--sw2-sp-2);cursor:pointer;user-select:none;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);}
 .sw2-map-summary:hover{color:var(--sw2-text);}
-.sw2-map-title{font-weight:700;font-size:13px;color:var(--sw2-text);}
-.sw2-map-brief{font-size:11px;color:var(--sw2-text-faint);font-family:"Cascadia Mono",Consolas,monospace;}
-.sw2-map-note{font-size:11px;line-height:1.6;color:var(--sw2-text-faint);margin:8px 0 8px;}
+.sw2-map-title{font-weight:600;font-size:var(--sw2-fs-md);color:var(--sw2-text);}
+.sw2-map-brief{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);font-family:"Cascadia Mono",Consolas,monospace;}
+.sw2-map-note{font-size:var(--sw2-fs-label);line-height:1.6;color:var(--sw2-text-faint);margin:var(--sw2-sp-2) 0;}
 .sw2-map-details > .sw2-side{margin-top:2px;}
 
 /* ---------- 编年页 ---------- */
 /* ★leg50（细案 spec-chronicle-page-ia）：**撤掉 560px 的内滚动框**——真账实测内容实高 14326px
    挤在 560px 里（溢出 25.6 倍、一屏只看得到 13 行）⇒ 改自然高度，与「角色与势力」同一套。 */
-.sw2-chronicle{display:flex;flex-direction:column;gap:5px;padding-right:4px;}
-.sw2-ch-line{display:flex;gap:12px;align-items:baseline;padding:7px 10px;border-radius:7px;font-size:13.5px;}
-.sw2-ch-line:hover{background:var(--sw2-card);}
+/* ★leg166「其余七页落演示版面」：编年页按演示的**列表**语言重排——
+   演示那一套里"一屏 137 行"不是 137 个盒子，而是**一个容器 ＋ 发丝分隔的行**
+   （`.sw2-rows` / `.sw2-row + .sw2-row{border-top}`）。本页原来是"每行自带 7px 圆角 ＋ 行间距"，
+   与演示的密度差得最远的一处。
+   ★改法逐条：① 外层 `.sw2-chronicle` 给**一个**卡底与发丝边（行不再各自成盒）；
+     ② 行内距 `7px 10px` → **`8px 16px`**（演示 `.sw2-row` 的 `--sp-3 --sp-4`）、去圆角；
+     ③ 行间由 `gap:5px` 改成**一条发丝分隔线**（`border-top`，首行不给）；
+     ④ 悬停改**半透明叠层**（`--sw2-hover`）——演示的层次靠叠层，不靠换一整块底色。
+   ★★`overflow:hidden` **有意不写**：本页的行里有真控件（「链」钮、分页器），
+     裁掉圆角的同时会把它们的**聚焦环**一起裁掉（`overflow:hidden` 是硬裁，不是只裁背景）。 */
+/* ★★★leg166b（用户当场打回来：「**字的排版完全乱完乱完了，我连看都看不懂**」）：
+   **这一条是本笔真正的那一半**——上面那一版只改了圆角/边框/内距，**版式一行没动**，
+   于是行里那五样东西（轮次 · 事名 · 因/事发/牵动 · 「链」钮 · 类别徽）仍**挤在同一行**、
+   字号又几乎一样大 ⇒ 出图是一堵**没有层次的灰字墙**。
+   演示那一套为什么读得懂：它的行是**两行**——第一行是事名（正文色、稍大），
+   第二行是**元信息**（小一号、暗一档）。层次**由字号与颜色一起给**，不是靠分隔符。
+   ⇒ 照它改：行改 **grid（轮次 | 正文块 | 控件）**，正文块内部**竖排两行**。
+   ★★DOM **一个字没动**（`.sw2-ch-nm` / `.sw2-ch-mid` 仍是那两个 span，判据
+     `chronicle-page.test.js` §T2 照旧咬得到）——改的纯粹是"它们怎么摆"。
+   ★三处实测调过：轮次格 `44px`（「第 38 轮」那种中文要放得下）· 正文块 `min-width:0`
+     （否则长账句把「链」钮顶出屏幕）· 元信息**行内续排**（它是三小段，不该各占一行）。 */
+.sw2-chronicle{display:flex;flex-direction:column;background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-1) 0;}
+/* ★leg166b：**四列**——轮次 | 正文块 | 「链」钮 | 类别徽。
+   ★为什么从三列改成四列（本笔当场量出来的）：原来「链」钮与徽挤在同一个 `auto` 列里，
+   两个加起来 ~80px ⇒ 徽被挤到**下一行**去了（出图：每行下面孤零零挂一枚「事件」）。
+   ⇒ 各占一列。
+   ★`align-items:baseline`：轮次是 11px 等宽、事名是 13px ⇒ 用 `start` 会看出**两条基线错开**
+     （截图里「38」比「「玄十三…」」高半行）。控件那一列自带 `align-self` 兜底。 */
+.sw2-ch-line{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:var(--sw2-sp-3);align-items:baseline;padding:var(--sw2-sp-3) var(--sw2-sp-4);font-size:var(--sw2-fs-md);}
+.sw2-ch-line .sw2-chainbtn,.sw2-ch-line .sw2-ch-badge{align-self:start;}
+.sw2-ch-line + .sw2-ch-line{border-top:1px solid var(--sw2-line-soft);}
+.sw2-ch-line:hover{background:var(--sw2-hover);}
 .sw2-ch-line .sw2-ch-round{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);flex:none;width:44px;text-align:right;}
-.sw2-ch-line .sw2-ch-text{flex:1;min-width:0;color:var(--sw2-text-dim);display:flex;gap:10px;align-items:baseline;}
+/* 正文块：**竖排两行**（事名一行、元信息一行）——演示 `.sw2-entry .sw2-body` 那一条 */
+.sw2-ch-line .sw2-ch-text{min-width:0;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:2px;}
 /* 账目行的原文可能很长 ⇒ 单行截断（"一行只有三样"这条版式不许被长账句撑破） */
 /*   ★实测（700px 宽窗）：`sw2-ch-mid` 原先写 `flex:none` ⇒ 它**不肯让位**，21 行正文压到
      「链」钮与徽上（最多压 98px）。定稿：**事名与中段都许缩、都截断**，"链"钮与徽永远不让位
      （它们是控件与判据，缩没了就是另一种病）。 */
+/* ★leg166b：事名那一行——**正文色、稍重**（它是这一行的主句）。截断留着（长账句不许撑破版式），
+   但它现在**独占一行**，所以几乎不会再被截到（原来跟四样东西抢同一行，实测常被压到 98px）。 */
 .sw2-ch-line .sw2-ch-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
-.sw2-ch-line.sw2-ch-event .sw2-ch-nm{flex:0 1 auto;color:var(--sw2-text);font-weight:600;}
-.sw2-ch-line.sw2-ch-book .sw2-ch-nm{flex:1 1 auto;}
-.sw2-ch-line .sw2-ch-mid{flex:0 1 auto;min-width:48px;font-size:12.5px;color:var(--sw2-text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.sw2-ch-line .sw2-ch-k{color:var(--sw2-amber-dim);}
+.sw2-ch-line.sw2-ch-event .sw2-ch-nm{color:var(--sw2-text);font-weight:600;}
+.sw2-ch-line.sw2-ch-book .sw2-ch-nm{color:var(--sw2-text-body);}
+/* ★leg166b：元信息那一行——**小一号 ＋ 暗一档**（演示 `.sw2-meta` 的口径：`--fs-sm` ＋ `--text-faint`）。
+   它是**三小段**（因 / 事发 / 牵动），所以自己仍是横排、许折行，而不是各占一行。
+   ★`overflow` 那一族撤掉：它原来是为了在单行里抢地方，现在它独占一行、该让它自然折行。 */
+.sw2-ch-line .sw2-ch-mid{min-width:0;font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);line-height:1.5;display:flex;flex-wrap:wrap;gap:2px var(--sw2-sp-3);}
+.sw2-ch-line .sw2-ch-k{color:var(--sw2-text-dim);}
 .sw2-ch-line .sw2-ch-w{color:var(--sw2-text-dim);}
-.sw2-ch-line.sw2-ch-event{background:var(--sw2-card);border-left:3px solid var(--sw2-amber-dim);padding-left:7px;}
-/* 类别徽：真事件 = 事件；账目 = 四个子类词（细案 §3.1） */
-.sw2-ch-badge{flex:none;font-size:10.5px;border-radius:6px;padding:0 7px;}
-.sw2-ch-badge.ev{color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);}
-.sw2-ch-badge.bk{color:var(--sw2-text-faint);border:1px dashed var(--sw2-line);}
+/* ★leg166：事件行原来靠"整行染一层卡底 ＋ 3px 琥珀左杠"标出——那是 leg164 之前的装饰语言
+   （演示点名要去掉的就是这一类"给整行染色/加杠"）。改成**只给一条发丝左线**：
+   它与上面的分隔线同族（都是 1px 的 `--sw2-line-soft`），只是竖着站，读起来仍是"这一行不一样"，
+   却不再把行与行之间那条分隔线压住（原来"染底 ＋ 竖杠"两层同时上，一眼看过去是三重重音）。 */
+.sw2-ch-line.sw2-ch-event{background:transparent;border-left:1px solid var(--sw2-line);padding-left:calc(var(--sw2-sp-4) - 1px);}
+/* 类别徽：真事件 = 事件；账目 = 四个子类词（细案 §3.1）
+   ★leg166b：从**描边小徽**改成**实底小片**（描边那一种在四列网格里视觉重量太大，
+   而且演示的 `.sw2-badge2` 就是"淡底 ＋ 无框"）。★它现在**自己占一列**，不再被挤到下一行。 */
+.sw2-ch-badge{flex:none;font-size:10.5px;border-radius:var(--sw2-r-sm);padding:1px 6px;white-space:nowrap;background:var(--sw2-card-2);color:var(--sw2-text-dim);}
+.sw2-ch-badge.ev{color:var(--sw2-amber-pale);background:rgba(var(--sw2-amber-rgb),.12);}
+.sw2-ch-badge.bk{color:var(--sw2-text-faint);}
 /* ★leg94：`.sw2-ch-roll`（编年页里程碑插行）随那一段渲染一起撤掉了——类名已无生产点，规则留此无主，
    故删除。里程碑本身没消失：它长在大事纪页的 `.sw2-milestone` 卡上（用户令：「这是大事纪旧卷的东西」）。 */
 /* 分层块（真结构 = details.sw2-ch-group，判据按它咬——不是 <summary> 那种恒真判据） */
-.sw2-ch-group{margin:6px 0 2px;border:1px solid var(--sw2-line-soft);border-radius:9px;background:var(--sw2-card);}
-.sw2-ch-group > summary{display:flex;align-items:baseline;gap:10px;padding:8px 12px;cursor:pointer;user-select:none;list-style:none;}
+.sw2-ch-group{margin:var(--sw2-sp-2) 0;border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-card);overflow:hidden;}
+.sw2-ch-group > summary{display:flex;align-items:baseline;gap:var(--sw2-sp-3);padding:var(--sw2-sp-2) var(--sw2-sp-3);cursor:pointer;user-select:none;list-style:none;}
 .sw2-ch-group > summary::-webkit-details-marker{display:none;}
-.sw2-ch-group > summary:hover{background:var(--sw2-card-2);border-radius:9px;}
-.sw2-ch-group > summary .sw2-ch-gt{font-weight:600;font-size:13px;color:var(--sw2-text);}
-.sw2-ch-group > summary .sw2-ch-gc{font-size:11.5px;color:var(--sw2-text-faint);}
-.sw2-ch-group[open] > summary{border-bottom:1px solid var(--sw2-line-soft);border-radius:9px 9px 0 0;}
+.sw2-ch-group > summary:hover{background:var(--sw2-hover);}
+.sw2-ch-group > summary .sw2-ch-gt{font-weight:600;font-size:var(--sw2-fs-md);color:var(--sw2-text);}
+.sw2-ch-group > summary .sw2-ch-gc{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
+.sw2-ch-group[open] > summary{border-bottom:1px solid var(--sw2-line-soft);}
 .sw2-ch-empty{padding:10px 12px;font-size:12.5px;color:var(--sw2-text-faint);}
 /* 层内分页器（细案 §3.4：分页器的粒是"层"，不是"组"） */
 .sw2-ch-pager{display:flex;align-items:center;gap:10px;padding:2px 0 4px;}
 .sw2-ch-pager .sw2-ch-hit{font-size:12px;color:var(--sw2-text-faint);margin-left:auto;}
 .sw2-ch-pager .sw2-ch-hit b{color:var(--sw2-text);}
-/* 工具条（照实体页"乙 · 分组块"排布：每块自带标签、块内 nowrap、块整体折行） */
-.sw2-ch-tools{margin-bottom:9px;}
-.sw2-ch-tools-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;}
-.sw2-ch-g{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;}
-.sw2-ch-g + .sw2-ch-g{border-left:1px solid var(--sw2-line-soft);padding-left:12px;}
-.sw2-ch-gl{font-size:11px;color:var(--sw2-text-faint);letter-spacing:1px;flex:none;}
-.sw2-ch-g-q{flex:1;min-width:190px;}
-.sw2-ch-q{width:100%;padding:6px 10px;border-radius:7px;border:1px solid var(--sw2-line);background:var(--sw2-panel);color:var(--sw2-text);font:inherit;font-size:13px;}
-.sw2-ch-q:focus{outline:none;border-color:var(--sw2-amber-dim);}
+/* 工具条（照实体页"乙 · 分组块"排布：每块自带标签、块内 nowrap、块整体折行）
+   ★★★leg166b：**搜索框独占一行**。原来它跟四个筛选块挤在同一条 flex 行里，
+   而它是 `flex:1` ⇒ 在 1440 宽下被拉成一条**一千多像素的空长条**，
+   四个筛选块被挤到右边一坨 —— 这正是用户说的「排版完全乱完」的一处。
+   ⇒ 搜索块 `flex:1 1 100%`（**占满一整行**，后面的筛选块自然折到第二行），
+   并在它下面给一条发丝线把"找"与"筛"分开。★DOM 一个字没动，判据按 `.sw2-ch-g` 块咬，块内排布照旧。 */
+.sw2-ch-tools{margin-bottom:var(--sw2-sp-3);}
+.sw2-ch-tools-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sw2-sp-2) var(--sw2-sp-4);}
+.sw2-ch-g{display:flex;align-items:center;gap:var(--sw2-sp-2);flex-wrap:nowrap;}
+.sw2-ch-g + .sw2-ch-g{border-left:1px solid var(--sw2-line-soft);padding-left:var(--sw2-sp-3);}
+.sw2-ch-gl{font-size:11px;color:var(--sw2-text-faint);letter-spacing:0;flex:none;}
+.sw2-ch-g-q{flex:1 1 100%;padding-bottom:var(--sw2-sp-3);border-bottom:1px solid var(--sw2-line-soft);}
+/* 紧跟搜索块的那一块：它是第二行的**第一块** ⇒ 不许再画那条竖分隔线（否则行首凭空一条杠） */
+.sw2-ch-g-q + .sw2-ch-g{border-left:0;padding-left:0;}
+.sw2-ch-q{width:100%;padding:6px var(--sw2-sp-3);border-radius:var(--sw2-r-md);border:1px solid var(--sw2-line);background:var(--sw2-panel);color:var(--sw2-text);font:inherit;font-size:var(--sw2-fs-md);}
+/* ★leg166：四个输入框的**聚焦态**统一改成演示那条「焦点环」（`border-color:--sw2-blue` ＋ 3px `--sw2-blue-soft` 外环）。
+   病：原来是 `border-color:var(--sw2-amber-dim)`——**琥珀是本仓的语义色**（还开着/在暗处），
+   拿它当"焦点"等于两支意思撞在同一支颜色上；而演示的强调色只有一支（理性蓝），焦点/选中/链接共用它。
+   ★只改**聚焦那一格**，输入框本身的尺寸/内距/字号一个字没动（那几处各自有它的来路，见下面各条注释）。 */
+.sw2-ch-q:focus{outline:none;border-color:var(--sw2-blue);box-shadow:0 0 0 3px var(--sw2-blue-soft);}
 
 /* ---------- 大事纪·旧卷页 ---------- */
-.sw2-arch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
-.sw2-milestone{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:13px 15px;}
-.sw2-milestone-head{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
-.sw2-milestone-id{font-family:"Cascadia Mono",Consolas,monospace;font-size:11.5px;color:var(--sw2-amber);}
-.sw2-mspan{font-size:11.5px;color:var(--sw2-text-faint);}
-.sw2-milestone h5{font-size:15px;margin-bottom:5px;}
-.sw2-milestone details{margin-top:7px;}
-.sw2-milestone summary{font-size:12px;color:var(--sw2-text-dim);cursor:pointer;user-select:none;}
+/* ★leg166「其余七页落演示版面」：本页三族按演示收——圆角 9→6、框 `--sw2-line-soft`→`--sw2-line`、
+   内距走 4px 网格。★演示里这一页的长清单（249 卷）是**一个容器 ＋ 发丝分隔的行**，
+   故 `.sw2-cold` 的虚线框改成实线（虚线在本仓是"空态/未载"的语义，用它装一列真数据是错的口径）。 */
+.sw2-arch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--sw2-sp-3);}
+.sw2-milestone{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-3) var(--sw2-sp-4);}
+.sw2-milestone-head{display:flex;align-items:center;gap:var(--sw2-sp-2);margin-bottom:var(--sw2-sp-1);}
+.sw2-milestone-id{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);}
+.sw2-mspan{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
+.sw2-milestone h5{font-size:var(--sw2-fs-lg);margin-bottom:var(--sw2-sp-1);}
+.sw2-milestone details{margin-top:var(--sw2-sp-2);}
+.sw2-milestone summary{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);cursor:pointer;user-select:none;}
 .sw2-milestone summary:hover{color:var(--sw2-text);}
-.sw2-rawids{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);margin-top:5px;word-break:break-all;}
-.sw2-cold{background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;padding:13px 15px;margin-top:12px;}
-.sw2-cold h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:8px;}
-.sw2-cold-row{display:flex;align-items:center;gap:10px;font-size:13px;padding:7px 8px;border-radius:7px;}
-.sw2-cold-row:hover{background:var(--sw2-card-2);}
-.sw2-vol{font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-text);flex:none;}
-.sw2-volinfo{color:var(--sw2-text-dim);flex:1;}
-.sw2-volact{font-size:12px;color:var(--sw2-blue);cursor:pointer;flex:none;}
+.sw2-rawids{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);margin-top:var(--sw2-sp-1);word-break:break-all;}
+.sw2-cold{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-3) var(--sw2-sp-4);margin-top:var(--sw2-sp-3);}
+.sw2-cold h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:.07em;margin-bottom:var(--sw2-sp-2);}
+.sw2-cold-row{display:flex;align-items:center;gap:var(--sw2-sp-3);font-size:var(--sw2-fs-md);padding:var(--sw2-sp-2) 0;}
+.sw2-cold-row + .sw2-cold-row{border-top:1px solid var(--sw2-line-soft);}
+.sw2-cold-row:hover{background:var(--sw2-hover);}
+.sw2-vol{font-family:"Cascadia Mono",Consolas,monospace;color:var(--sw2-text);flex:none;font-variant-numeric:tabular-nums;}
+.sw2-volinfo{color:var(--sw2-text-dim);flex:1;min-width:0;}
+.sw2-volact{font-size:var(--sw2-fs-sm);color:var(--sw2-blue);cursor:pointer;flex:none;}
 .sw2-volact:hover{text-decoration:underline;}
 
 /* ---------- 角色与势力页 ---------- */
-.sw2-list-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.sw2-roster{width:100%;max-width:1520px;margin:0 auto;}
+.sw2-roster-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:4px 0 18px;}
+.sw2-roster-head h2{margin:0 0 8px;font-size:22px;font-weight:600;letter-spacing:.02em;line-height:1.4;}
+.sw2-roster .sw2-list-head{font-size:12px;letter-spacing:0;margin:0;flex-wrap:wrap;gap:6px 12px;}
+.sw2-roster .sw2-list-head::after{display:none;}
+.sw2-roster-tip{font-size:12px;color:var(--sw2-text-faint);}
+.sw2-roster-columns{display:grid;grid-template-columns:212px minmax(0,1.6fr) minmax(0,1fr);gap:var(--sw2-sp-4);padding:10px var(--sw2-sp-4);color:var(--sw2-text-faint);font-size:12px;border-bottom:1px solid var(--sw2-line);}
+/* ★leg166「其余七页落演示版面」：本页是"一屏 60 行"的长清单 ⇒ 照演示的**列表**语言重排。
+   演示那一套里，长清单**不是一个盒子一行**，而是**一个容器 ＋ 发丝分隔的行**（`.sw2-rows`）。
+   逐条：① 行内距 `7px 12px`→**`8px 16px`**（演示 `--sp-3 --sp-4`）、`gap` 16→**12px**；
+     ② 分隔线由"每行自带 `border-bottom`"改成**相邻行给 `border-top`**——末行不再多出一条悬空的线；
+     ③ 悬停改半透明叠层（`--sw2-hover`）——演示的层次靠叠层。
+   ★★两处**一个字不许动**：`.sw2-entity-row` 的 `grid-template-columns:212px`（`mobile-layout.test.js`
+     M8 咬着"宽屏仍是三列"，单列那条住 620 断点里）与 `.sw2-entity-row[data-action]` 的手型规则。 */
+.sw2-list-head{font-size:11px;color:var(--sw2-text-faint);letter-spacing:.07em;margin-bottom:var(--sw2-sp-2);display:flex;align-items:center;gap:var(--sw2-sp-2);}
 .sw2-list-head::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
-.sw2-entity-list{display:flex;flex-direction:column;gap:7px;}
+.sw2-entity-list{display:flex;flex-direction:column;background:transparent;border:0;border-radius:0;}
 /* leg25 f 版式重做（用户实拍「能不能美化一下这个 ui」）：
    旧版 6 列 `150/74/130/1fr/1.6fr/96px` 把「未载」这种空态单独塞进一整列，还和名号同基线 ⇒
    最没信息的词占最显眼的位置；而规模/上级/麾下/麾下实力全挤在同一个 div 里连成长段 ⇒ 糊成一团。
@@ -509,7 +888,18 @@
      评审第一轮曾"就地删掉旧六列那条、在下面另写一条新的"——留下同一选择器两处声明（下面那条静默
      盖住上面那条残骸）+ 一段指向不存在位置的散文 ⇒ 本笔把规则**搬回原位**、删掉下面那份副本
      （与上一轮修 `.sw2-chip` / `.sw2-agstage` 同一条纪律）。 */
-.sw2-entity-row{display:grid;grid-template-columns:212px minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:baseline;padding:7px 12px;border-bottom:1px solid var(--sw2-line-soft);}
+/* ★leg166b：三列比例按**内容真形状**重配（第二列那一串"归属与来历"是最长的，
+   第三列「在办」通常只有一句）——原来 `1.3fr : 1fr` 让最长的列与最短的列几乎一样宽，
+   于是第二列折三行、第三列留一大片空。★`212px` 首列**一个字没动**（`mobile-layout.test.js` M8 咬着）。 */
+.sw2-entity-row{display:grid;grid-template-columns:212px minmax(0,1.6fr) minmax(0,1fr);gap:var(--sw2-sp-4);align-items:start;padding:14px var(--sw2-sp-4);min-height:70px;box-sizing:border-box;}
+/* ★leg166：分隔线改"相邻行给 `border-top`"（原来每行自带 `border-bottom` ⇒ 末行会多出一条悬空的线，
+   而它下面紧跟的是分页器）。★这一条与本行基础规则**同族**（同选择器前缀，不是第二条 `.sw2-entity-row`）。 */
+.sw2-entity-row + .sw2-entity-row{border-top:1px solid var(--sw2-line-soft);}
+.sw2-entity-row:hover{background:var(--sw2-hover);}
+/* ★leg166：分组块里那一份（`.sw2-ents-grp-block > .sw2-entity-list`）**不许再套一层卡**——
+   分组块自己已经是卡（`border:1px solid --sw2-line-soft` ＋ `--sw2-card` 底），套两层就是"卡里套卡"。
+   故这里把卡底/边框/圆角退掉，只留"发丝分隔的行"。 */
+.sw2-ents-grp-block > .sw2-entity-list{background:transparent;border:0;border-radius:0;}
 /* 热行（有在办盘算，`.sw2-hot` 由 `src/render.js` 按 `busyOwners` 打）：**只靠左那根琥珀竖脊 +
    一层淡底**标出。★「覆盖空气」的处置（评审第二轮 #4）：第一轮把 `background:var(--sw2-card-2)`
    单独挂在 `.sw2-hot` 上，而**基规则从头到尾没设过 `background`** ⇒ 那条声明在语义上是"覆盖空气"
@@ -517,15 +907,22 @@
    两条路里选了**如实注释 + 留原样**：① 把淡底并进基规则会让**所有**行都染上底色（真账 621 行，
       那是"改一整页观感"，超出本轮评审修正的范围）；② 删掉这半句则热行当场失去淡底（同样改观感）。
    ⇒ 底色**就在本行原地**交代清楚、不假称它压着谁；`.sw2-hot` 的语义 = 左脊（结构）+ 淡底（强调）。 */
-.sw2-entity-row.sw2-hot{background:var(--sw2-card-2);border-left:2px solid var(--sw2-amber);}
+.sw2-entity-row.sw2-hot{background:var(--sw2-card-2);box-shadow:inset 2px 0 0 var(--sw2-amber);}
 .sw2-entity-row > *{min-width:0;}
 .sw2-cell{min-width:0;}
-.sw2-ename{font-weight:700;font-size:14.5px;line-height:1.35;}
-.sw2-ename small{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:400;font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1px;margin-top:2px;}
+/* ★leg166b：名号那一格**竖排**——名字一行、它的小字（势力/在场）一行。
+   原来 `.sw2-ename small` 是 `display:flex`，而 `.sw2-ename` 又是行内排版 ⇒ 在 212px 那一格里
+   实测折成**四行**（「浩/然/剑/宗」那种挤压），一屏 60 行里有大半行都在折行 ⇒ 版式全乱。
+   ⇒ 名号格成**块级**、小字那一行 `flex-wrap` 照旧（它是三四个短词）。 */
+.sw2-ename{font-weight:600;font-size:16px;line-height:1.45;letter-spacing:0;display:block;overflow-wrap:anywhere;}
+.sw2-ename small{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:400;font-size:12px;color:var(--sw2-text-faint);letter-spacing:0;margin-top:5px;}
 /* 「归属与来历」那一格（三列版式的第二格；`render.js` 的 `origin`/`crewHtml` 拼出来的一串）。
    ★这一串会被 `-webkit-line-clamp:2` **剪掉第三行起**——所以每类值的颜色都显式落一条，
      剪没剪、剪在哪，读样式表就能查得到（旧六列版式里这些是分开的格子，不需要 clamp，也就没这些类）。 */
-.sw2-relone{font-size:12.5px;line-height:1.5;color:var(--sw2-text-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+/* ★leg166b：这一串是**最长的那一格**（真账里常有"麾下 甲、乙、丙…"几十号人），
+   `line-height:1.5` 在两行 clamp 下挤成一坨 ⇒ 放到 **1.6**（演示的正文行高）。
+   ★`-webkit-line-clamp:2` **留着**：它是"这一格最多两行"的闸，撤了长名单会把行撑成六行。 */
+.sw2-relone{font-size:13px;line-height:1.75;color:var(--sw2-text-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;}
 .sw2-relone-who{color:var(--sw2-text);}
 .sw2-relone-pow{color:var(--sw2-amber);}
 .sw2-relone-dim{color:var(--sw2-text-faint);}
@@ -539,7 +936,7 @@
 /* 在办盘算：这一行的主句 */
 .sw2-aggoal{color:var(--sw2-text);font-weight:600;}
 .sw2-agstage{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;}
-.sw2-eattr{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
+.sw2-eattr{font-size:11px;padding:2px var(--sw2-sp-2);border-radius:var(--sw2-r-sm);background:var(--sw2-card-2);color:var(--sw2-text-dim);white-space:nowrap;}
 .sw2-eattr b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;margin-left:3px;}
 /* 空态 chip（未载/未查/未加载到/书未明述）：虚线 + 淡色 —— 让"没有数据"看起来就是没有数据。 */
 .sw2-eattr.nodata{background:transparent;border:1px dashed var(--sw2-line-soft);color:var(--sw2-text-faint);}
@@ -549,13 +946,14 @@
    ★三列版式与关系格的规则**不在这里**——它们已搬回各自版位（约 :250 那段 · 关系格那段）；
      本文件同一选择器只许声明一次（评审第二轮 #1：这里曾又落一条 `.sw2-entity-row`，
      静默盖住上面那条残骸），故本段只放"工具条—分组—分页"这三类新物件。 */
-.sw2-agcell{font-size:12.5px;line-height:1.5;color:var(--sw2-text);}
+.sw2-agcell{font-size:13px;line-height:1.65;color:var(--sw2-text);overflow-wrap:anywhere;}
 /* 在办那一格里的阶段后缀：与 `.sw2-agstage`（旧内联那支，仍是块级）同色，只补一个同行间距。
    ★不重复写一条裸 `.sw2-agstage{...}`——本文件已有一条（"在办盘算：这一行的主句"那段），
      再写一条就是同一套规则说两遍（本仓"同一事实不说两遍"）。故按**落点**限定。 */
-.sw2-agcell .sw2-agstage{color:var(--sw2-text-faint);margin-left:6px;}
-.sw2-ents-tools{display:flex;flex-direction:column;gap:7px;margin:8px 0 10px;position:sticky;top:0;background:var(--sw2-panel);z-index:3;padding:6px 0;}
-.sw2-ents-tools-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.sw2-agcell .sw2-aggoal{display:block;font-weight:500;}
+.sw2-agcell .sw2-agstage{display:inline-block;color:var(--sw2-text-faint);margin:5px 6px 0 0;}
+.sw2-ents-tools{display:flex;flex-direction:column;flex:none;gap:12px;margin:0 0 16px;background:transparent;padding:0;}
+.sw2-ents-tools-row{display:flex;flex-wrap:wrap;gap:var(--sw2-sp-2);align-items:center;}
 /* ★★leg49 工具条排布（乙 · 分组块 · 用户拍板「就乙吧」）：
    原来 21 个控件平铺、靠 flex-wrap 自然折行 ⇒ 实测折成 9 个视觉行（工具条 154px），
    且「分组」标签与它管的 4 枚钮被折到不同行。现在控件按"一伙的"分块：
@@ -565,16 +963,23 @@
 .sw2-ents-gl{color:var(--sw2-text-faint);font-size:11px;letter-spacing:1px;white-space:nowrap;}
 /* 搜索块特殊：它是**唯一该伸缩**的块（其余按内容宽度），窄屏时可独占一行 */
 .sw2-ents-g-q{flex:1 1 220px;padding-left:0;border-left:0;}
-.sw2-ents-q{flex:1;min-width:180px;padding:6px 10px;border-radius:6px;border:1px solid var(--sw2-line);background:var(--sw2-card);color:var(--sw2-text);font:inherit;}
-.sw2-chip.on{background:var(--sw2-amber-dim);color:var(--sw2-text);border-color:var(--sw2-amber);}
+.sw2-ents-q{flex:1;min-width:0;min-height:40px;padding:8px var(--sw2-sp-3);border-radius:var(--sw2-r-md);border:1px solid var(--sw2-line);background:var(--sw2-card);color:var(--sw2-text);font:inherit;box-sizing:border-box;}
+.sw2-ents-q:focus{outline:none;border-color:var(--sw2-blue);box-shadow:0 0 0 3px var(--sw2-blue-soft);}
+/* ★leg166：筛选片"选中"由**琥珀**改成**理性蓝**（演示的强调色只有一支：焦点/选中/链接共用它）。
+   琥珀在本仓是语义色（"还开着/在暗处"），拿它当"选中"会让两种意思撞在同一支颜色上。 */
+.sw2-chip.on{background:var(--sw2-blue-soft);color:var(--sw2-text);border-color:var(--sw2-blue-line);}
 .sw2-chip-n{opacity:.7;margin-left:5px;}
 .sw2-ents-hit{color:var(--sw2-text-dim);font-size:12px;margin-left:auto;}
-.sw2-ents-pager{display:flex;gap:10px;align-items:center;justify-content:center;padding:14px 0;}
+.sw2-ents-pager{display:flex;gap:10px 16px;align-items:center;justify-content:center;flex-wrap:wrap;padding:20px 0;border-top:1px solid var(--sw2-line-soft);}
 .sw2-ents-empty{padding:34px;text-align:center;color:var(--sw2-text-faint);}
-.sw2-ents-grp-block{margin:0 0 12px;}
-.sw2-ents-grp-block>summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-radius:7px;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);}
+.sw2-ents-grp-block{margin:0 0 var(--sw2-sp-3);}
+.sw2-ents-grp-block>summary{cursor:pointer;display:flex;gap:var(--sw2-sp-3);align-items:baseline;padding:12px var(--sw2-sp-4);background:var(--sw2-card-2);border:0;border-radius:var(--sw2-r-md);}
+.sw2-ents-grp-block>summary:hover{background:var(--sw2-hover);}
 .sw2-ents-grp-t{font-weight:600;}
-.sw2-ents-grp-c{color:var(--sw2-text-faint);font-size:12px;}
+.sw2-ents-grp-c{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
+/* ★leg166：分组块展开后，头与身之间**不许留缝**（两块各自带圆角会露出面板底，看着像断成两截）——
+   头那一侧只留上圆角、身那一侧由 `.sw2-ents-grp-block > .sw2-entity-list` 退掉卡底（见上面那段）。 */
+.sw2-ents-grp-block[open]>summary{border-radius:var(--sw2-r-md) var(--sw2-r-md) 0 0;border-bottom:0;}
 /* ★终审 M6：工具条里那两处落点的**自带声明**（此前有生产者、零声明；同一把尺子还漏了 `.sw2-ents-asks` 自己）。
    取值都是**落点专属**的，不重复 `.sw2-hint` / `.sw2-ents-grp-block` 已说过的话：
    · `-batch-note` 是工具条里那句**整句指路**（同一行还有一段"在跑进度"，两者同为 `.sw2-hint`）⇒ 占满一整行，
@@ -583,22 +988,34 @@
      **展开时**独占一行（`[open]` 那支）——否则那三行释义会被挤进钮与钮之间的窄格里；
    · `-asks-body` 是释义正文：按 `.sw2-ents-grp-block>summary` 那套卡片语言给一块底（同 `--sw2-card` /
      `--sw2-line-soft` / 7px 圆角），并限宽到 72ch（一行别拉过 900px，读起来才不折返）。 */
-.sw2-ents-batch-note{flex:1 1 100%;}
+.sw2-ents-batch-note{margin:8px 0 0;}
+.sw2-ents-folds{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 24px;}
+.sw2-ents-options{flex:0 1 auto;}
+.sw2-ents-options[open]{flex:1 1 100%;}
 .sw2-ents-asks{flex:0 0 auto;}
 .sw2-ents-asks[open]{flex:1 1 100%;}
-.sw2-ents-asks-body{margin-top:6px;padding:8px 10px;border-radius:7px;background:var(--sw2-card);border:1px solid var(--sw2-line-soft);font-size:12px;line-height:1.7;color:var(--sw2-text-dim);max-width:72ch;}
+.sw2-ents-asks-body{margin-top:8px;padding:8px 0;font-size:13px;line-height:1.8;color:var(--sw2-text-dim);max-width:72ch;}
+.sw2-ents-options>summary,.sw2-ents-asks>summary{cursor:pointer;width:fit-content;min-height:32px;box-sizing:border-box;padding:4px 0;font-size:12px;color:var(--sw2-text-dim);}
+.sw2-ents-options>summary:hover,.sw2-ents-asks>summary:hover{color:var(--sw2-text);}
+.sw2-ents-options>summary span{margin-left:8px;color:var(--sw2-blue);font-size:12px;}
+.sw2-ents-options .sw2-ents-tools-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid var(--sw2-line-soft);border-bottom:1px solid var(--sw2-line-soft);}
+.sw2-ents-options .sw2-ents-g{border-left:0;padding-left:0;flex-wrap:wrap;min-width:0;}
+.sw2-ents-options .sw2-ents-gl{min-width:36px;}
 
 /* ---------- 设定档案页 ---------- */
-.sw2-sv-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
-.sw2-sv-title{font-size:16px;font-weight:700;}
-.sw2-sv-sub{font-size:11.5px;color:var(--sw2-text-faint);margin-top:2px;line-height:1.6;}
-.sw2-sv-cards{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.sw2-sv-chip{font-size:11.5px;border-radius:999px;padding:3px 10px;border:1px solid var(--sw2-line);color:var(--sw2-text-dim);}
-.sw2-sv-chip.ok{color:var(--sw2-green);border-color:rgba(143,191,143,.4);}
-.sw2-sv-chip.stale{color:var(--sw2-red);border-color:rgba(223,108,98,.4);}
-.sw2-sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
-.sw2-set-card{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:10px;padding:12px 14px;}
-.sw2-set-card h4{font-size:11px;color:var(--sw2-text-faint);letter-spacing:2px;margin-bottom:9px;display:flex;align-items:center;gap:7px;}
+/* ★leg166「其余七页落演示版面」：本页两族按演示收。
+   ★★`.sw2-set-card` 是**参数页/快照页/设置页三页共用**的那张卡（本文件里只许声明一次）⇒
+     它的圆角/框/内距一改，四页同时跟着变——这正是"改一处处处变"该有的样子。 */
+.sw2-sv-head{display:flex;align-items:flex-start;gap:var(--sw2-sp-3);margin-bottom:var(--sw2-sp-3);flex-wrap:wrap;}
+.sw2-sv-title{font-size:var(--sw2-fs-lg);font-weight:600;letter-spacing:-.01em;}
+.sw2-sv-sub{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);margin-top:2px;line-height:1.6;}
+.sw2-sv-cards{margin-left:auto;display:flex;align-items:center;gap:var(--sw2-sp-2);flex-wrap:wrap;}
+.sw2-sv-chip{font-size:var(--sw2-fs-sm);border-radius:var(--sw2-r-md);padding:2px var(--sw2-sp-2);border:1px solid var(--sw2-line);color:var(--sw2-text-dim);}
+.sw2-sv-chip.ok{color:var(--sw2-green);border-color:rgba(var(--sw2-green-rgb),.4);}
+.sw2-sv-chip.stale{color:var(--sw2-red);border-color:rgba(var(--sw2-red-rgb),.4);}
+.sw2-sv-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sw2-sp-3);align-items:start;}
+.sw2-set-card{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-3) var(--sw2-sp-4);}
+.sw2-set-card h4{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);letter-spacing:.07em;margin-bottom:var(--sw2-sp-2);display:flex;align-items:center;gap:var(--sw2-sp-2);}
 /* ★★★leg143（用户令「**把参数页的样式改一下**」＋ 展示页 `docs/spec-params-page-mockup.html` 已拍板）：
    世界尺度那九个框按「**闸 / 尺**」分成两组——组头是一行（组名 ＋ 一句它管什么），
    靠**一条实线**与上面那批控件分开（`.sw2-row + .sw2-row` 给的是**虚线**，两者一眼分得开）。
@@ -606,78 +1023,173 @@
      它下面还跟着"设定为"那一行）；而这里是**分组头**，语义不同（它管的是下面**一串**框，
      不是某一格的名字）。★只有三条声明，不动 `.sw2-row` 的基础规则（参数页版式是 leg27 修过的，别在这里重排）。 */
 .sw2-row.sw2-limit-group{margin-top:10px;padding-top:9px;border-top:1px solid var(--sw2-line);}
-.sw2-row.sw2-limit-group > b{color:var(--sw2-text);font-size:13px;letter-spacing:1px;}
+.sw2-row.sw2-limit-group > b{color:var(--sw2-text);font-size:var(--sw2-fs-md);letter-spacing:0;}
 /* 紧跟组头的那一行**不带**虚线（否则组头会被一条线从自己的内容上切开——同 `.sw2-param-name` 那条口径） */
 .sw2-row.sw2-limit-group + .sw2-row{border-top:none;padding-top:2px;}
 /* ★leg89：注入那张卡的内层容器——开关行**自己就是一张 `.sw2-set-card.sw2-actions-inline`**
    （它带 `display:flex`），第一版把它套进外层卡里 ⇒ 卡里套卡、布局是乱的。这里只负责竖着排。
    ★leg143：那一卡**已搬去参数页**（用户令「设置里的那些闸其实也可以归到参数页」）——规则本身没动，
      两个类名都照旧（搬的是画在哪一页，不是长什么样）。 */
-.sw2-inject-box{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+.sw2-inject-box{display:flex;flex-direction:column;gap:var(--sw2-sp-2);margin-top:var(--sw2-sp-2);}
 .sw2-inject-box .sw2-set-card{margin:0;}
 .sw2-set-card h4::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
-.sw2-sv-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--sw2-line-soft);font-size:13px;align-items:baseline;}
+/* ★★★leg169：**开关行压扁 ＋ 卡里的分组**（用户令「优化其他页的结构问题」）。
+   病（量出来的）：参数页那四枚注入开关**各自是一整张 `.sw2-set-card`** 套在外层卡里（卡里套卡），
+   实测一行高 **84px** 而里面只有一行字 ⇒ 四行吃掉 336px，一屏只放得下五个控件；
+   而那一卡里 **8 个控件一条直线排下来、中间一个小标题都没有**（`src/render.js:659-678`）。
+   ⇒ 两条规则治它，**一个字的结构都没改**：
+     · `.sw2-tgl`：同一套 DOM（`.sw2-set-card.sw2-actions-inline` 的类一个不少）只换外观——
+       去掉卡壳与内距、压到 7px、相邻行一条发丝线；
+     · `.sw2-group-h`：卡内的小组标题（"四枚开关" / "怎么取往事" …）。
+   ★判据认的类名与写通道（`data-action="set-param"` / `data-inject-switch`）**一个字节没动**。 */
+.sw2-set-card.sw2-tgl{background:none;border:none;border-radius:0;padding:7px 0;gap:var(--sw2-sp-3);}
+.sw2-set-card.sw2-tgl + .sw2-set-card.sw2-tgl{border-top:1px solid var(--sw2-line-soft);}
+.sw2-set-card.sw2-tgl h4{font-size:var(--sw2-fs-md);color:var(--sw2-text-body);letter-spacing:0;margin:0;}
+.sw2-set-card.sw2-tgl h4::after{display:none;}
+.sw2-set-card.sw2-tgl .sw2-actions{margin-top:0;}
+.sw2-group-h{display:flex;align-items:baseline;gap:var(--sw2-sp-2);font-size:var(--sw2-fs-sm);
+  color:var(--sw2-text-body);letter-spacing:.05em;margin:12px 0 2px;}
+.sw2-group-h > em{font-style:normal;font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:1;min-width:0;}
+.sw2-group-h:first-child{margin-top:0;}
+.sw2-sv-row{display:flex;gap:var(--sw2-sp-3);padding:var(--sw2-sp-2) 0;border-bottom:1px solid var(--sw2-line-soft);font-size:var(--sw2-fs-md);align-items:baseline;}
 .sw2-sv-row:last-child{border-bottom:none;}
-.sw2-sv-row b{color:var(--sw2-amber);font-weight:700;flex:none;width:110px;}
+.sw2-sv-row b{color:var(--sw2-text);font-weight:600;flex:none;width:110px;}
 .sw2-sv-row span{color:var(--sw2-text-dim);}
-.sw2-sv-para{font-size:13.5px;color:var(--sw2-text-dim);line-height:1.75;margin-bottom:8px;}
+.sw2-sv-para{font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);line-height:1.75;margin-bottom:var(--sw2-sp-2);}
 .sw2-sv-para:last-child{margin-bottom:0;}
-.sw2-sv-hist{display:flex;gap:10px;padding:5px 0;font-size:13px;align-items:baseline;}
+.sw2-sv-hist{display:flex;gap:var(--sw2-sp-3);padding:5px 0;font-size:var(--sw2-fs-md);align-items:baseline;}
 .sw2-hist-tick{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--sw2-text-faint);flex:none;width:56px;}
 .sw2-sv-hist span:last-child{color:var(--sw2-text-dim);}
 
 /* ---------- 设置页 ---------- */
-.sw2-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.sw2-source-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 11px;border:1px solid var(--sw2-line-soft);border-radius:8px;background:var(--sw2-panel);}
-.sw2-source-tag{font-size:13.5px;font-weight:600;}
-.sw2-source-note{font-size:11.5px;color:var(--sw2-text-faint);}
+.sw2-settings{display:grid;grid-template-columns:1fr 1fr;gap:var(--sw2-sp-3);}
+.sw2-source-line{display:flex;align-items:center;gap:var(--sw2-sp-3);flex-wrap:wrap;padding:var(--sw2-sp-2) var(--sw2-sp-3);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-panel);}
+.sw2-source-tag{font-size:var(--sw2-fs-md);font-weight:600;}
+.sw2-source-note{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
 .sw2-source-alt{position:relative;}
-.sw2-source-alt summary{font-size:11.5px;color:var(--sw2-blue);cursor:pointer;list-style:none;user-select:none;}
+.sw2-source-alt summary{font-size:var(--sw2-fs-sm);color:var(--sw2-blue);cursor:pointer;list-style:none;user-select:none;}
 .sw2-source-alt summary:hover{text-decoration:underline;}
-.sw2-source-alt-body{position:absolute;top:calc(100% + 4px);left:0;z-index:5;padding:8px 12px;min-width:210px;background:var(--sw2-card-2);border:1px solid var(--sw2-line);border-radius:8px;font-size:12.5px;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.sw2-source-alt-body{position:absolute;top:calc(100% + 4px);left:0;z-index:5;padding:var(--sw2-sp-2) var(--sw2-sp-3);min-width:210px;background:var(--sw2-card-2);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:var(--sw2-sp-2);box-shadow:0 8px 24px rgba(var(--sw2-black-rgb),.4);}
 .sw2-source-alt-body span{cursor:pointer;color:var(--sw2-blue);}
 .sw2-source-alt-body span:hover{text-decoration:underline;}
-.sw2-field{margin-top:11px;}
-.sw2-field label{display:block;font-size:12px;color:var(--sw2-text-dim);margin-bottom:5px;}
-.sw2-field textarea{width:100%;min-height:84px;resize:vertical;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13.5px;}
-.sw2-field textarea:focus{outline:none;border-color:var(--sw2-amber-dim);}
-.sw2-hint{font-size:11.5px;color:var(--sw2-text-faint);margin-top:4px;}
+.sw2-field{margin-top:var(--sw2-sp-3);}
+.sw2-field label{display:block;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);margin-bottom:var(--sw2-sp-1);}
+.sw2-field textarea{width:100%;min-height:84px;resize:vertical;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-2) var(--sw2-sp-3);font-family:inherit;font-size:var(--sw2-fs-md);}
+.sw2-field textarea:focus{outline:none;border-color:var(--sw2-blue);box-shadow:0 0 0 3px var(--sw2-blue-soft);}
+/* ★★★leg169：**一个数字不许占整条宽度**（用户令「优化其他页的结构问题」）。
+   病（量出来的）：参数页那四个数字框**各宽 1329px**——`.sw2-field` 是块级、里面的 input 撑满
+   ⇒ 一个"12"孤零零占满一整屏，标签与它的控件之间隔着一千多像素。
+   设置页同病：8 个输入框 655 / 621 / 431px（`node …/shot.mjs` 的读数）。
+   ⇒ 给"标签在左、控件在右"的行形：**标签吃余宽、控件定宽**。
+   ★宽的那一种（服务地址 / 密钥 / 文本域）**照旧全宽**——只有加了 `.sw2-field-inline` 的才收窄。 */
+.sw2-field.sw2-field-inline{display:flex;align-items:center;gap:var(--sw2-sp-3);margin-top:var(--sw2-sp-2);}
+/* ★★★leg169b（用户把设置页打回来：「**你要不自己看看你截图的设置那页好看吗？？？**」）：
+   第一版（leg169）让**标签吃余宽、控件钉死 132px** ⇒ 出图一看两个病：
+     ① 标签与控件之间**隔了 470px 空白**，一行成了两列互不相干的字；
+     ② **地址框把值截断了**（`http://127.0.0.1:8` 被切）——我下那条尺子时只说"收窄"，
+        **没区分"哪些框装的是长值"（地址/密钥/模型号）与"哪些装的是数字"**。
+   ⇒ 定稿：**标签定宽 150px（对齐成一条线）＋ 控件紧跟、吃余宽（给 520px 上限免得又拉成一整条）**；
+     **只有数字框**才收窄右对齐。★"收窄"这条口径只对数字成立；对长值成立的是"**得给得下**"。 */
+.sw2-field.sw2-field-inline > label{flex:none;width:150px;margin:0;}
+.sw2-field.sw2-field-inline > .sw2-input{flex:1 1 auto;min-width:0;max-width:520px;}
+.sw2-field.sw2-field-inline > .sw2-input[type="number"]{flex:none;width:96px;max-width:none;text-align:right;}
+.sw2-field.sw2-field-inline > .sw2-ctl-row{flex:1 1 auto;min-width:0;}
+.sw2-input.sw2-num{flex:none;width:96px;text-align:right;}
+/* ★★★leg169b：**两列不再各留一片空洞**——出图看出来的病：`世界设定`（短）与 `模型通道`（长）同一行，
+   两列的**行高取高的那一张** ⇒ 左栏下面空出约 500px，而第三张卡孤零零落在第二行左边、右边又空一格。
+   ⇒ 按"**谁高谁独占一列**"摆：**模型通道跨两行占右列**，左列让两张短卡叠着（世界设定 / 记忆通道），
+     `旧卷与存储` 照旧整宽收尾。★卡一张没少、DOM 顺序一个字没动（只是栅格坐标）。
+   ★`align-items:start` 同时钉着：短卡只占自己那么高，不许被撑到与长卡同高。 */
+.sw2-settings{align-items:start;}
+/* ★★★leg169：**注入卡里那四个数字框**——同一条病的窄写法（只作用于这一卡，不碰设置页那些该全宽的框）。
+   ★为什么按"."限定在这一卡：设置页的服务地址/密钥/文本域**要全宽**，全局改会把它们一起收窄。 */
+/* ★★★（2026-10-05 · 用户令「**让说明靠近一点，隔得太远了**」）：**标签＋框同一行，"说明"紧跟它下面**。
+   病（用户截图量的）：旧形状里 `.sw2-field` 是 flex 行、里面排着"标签 ／ 框 ／ 说明"三样 ⇒
+   **说明被挤到框底下另起一行**，而它上面还压着"总说明"那一段的摘要（第三行）⇒ 标签与"说明"
+   实测隔着一百多像素（那不是间距，是两行空行）。治法：**标签与框包进 `.sw2-field-head` 一格**
+   （一行两列：标签吃余宽、框定宽——leg169 的口径照旧），`.sw2-field` 变**竖列** ⇒ 说明只在下一行。
+   ★这一条是本笔唯一的"老形状"，两个类都留着以防别处复用。 */
+.sw2-inject-box > .sw2-field{display:flex;flex-direction:column;align-items:stretch;gap:0;margin-top:var(--sw2-sp-2);}
+.sw2-inject-box > .sw2-field > .sw2-field-head{display:flex;align-items:center;gap:var(--sw2-sp-3);min-width:0;}
+.sw2-inject-box > .sw2-field > .sw2-field-head > label{margin:0;flex:1;min-width:0;}
+.sw2-inject-box > .sw2-field > .sw2-field-head > .sw2-input{flex:none;width:132px;text-align:right;}
+/* ★★★leg169：**总闸那一行的字不再折成三行**（实测：卡头在 flex 行里与两枚按钮抢宽 ⇒ 折三行）。
+   `.sw2-actions-inline` 本来就是 `flex-wrap:wrap` ⇒ 把"当前后果句"整行推下去，卡头就有整宽了。 */
+.sw2-master-switch > em{flex:1 1 100%;margin:0;}
+/* ★★★leg169：**列表行的"两行层次"**（用户令「优化其他页的结构问题」）。
+   口径：**主句一行 ＋ 元信息一行**（小一号、暗一档）——这是演示那套"读得懂"的形状。
+   ★leg166 已经在**编年行**与**观棋页那三栏**落过同一件事（那两处是各自的私有类）；
+     这里收成**通用一件**，给快照行 / 旧卷行 / 大事纪条目用（同一形状不再抄第三遍）。
+   ★★**字号一律走 ≥12px 的令牌**：`test/mobile-layout.test.js` M7 有一条棘轮——
+     基础规则里凡 <12px 的选择器，**必须在手机那份"抬到 12px"的名单里**，
+     新加一个不在名单里的就当场红（本笔第一版给 `.sw2-group-h > em` 写了 11.5px，自己踩了一次）。 */
+.sw2-row2{display:flex;align-items:center;gap:var(--sw2-sp-3);padding:var(--sw2-sp-2) 0;font-size:var(--sw2-fs-md);}
+.sw2-row2 + .sw2-row2{border-top:1px solid var(--sw2-line-soft);}
+.sw2-row2 > .sw2-row2-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.sw2-row2 > .sw2-row2-main > b{color:var(--sw2-text-body);font-weight:600;font-size:var(--sw2-fs-md);}
+.sw2-row2 > .sw2-row2-main > span{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
+.sw2-row2 > .sw2-row2-side{flex:none;color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);font-variant-numeric:tabular-nums;}
+.sw2-row2 > .sw2-btn{flex:none;margin-left:0;}
+/* ★★★leg169：**大事纪那一纪的条目**——原来是 4 个标题用「、」连成一句话（`titles.slice(0,4).join('、')`）
+   ⇒ 四件不同的事读起来像一件。现在一件一项、折行排（取数一个字没动，仍是前 4 条）。 */
+.sw2-milestone h5{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;}
+.sw2-ms-item{font-size:var(--sw2-fs-md);color:var(--sw2-text-body);}
+/* ★★★leg169：**一纪里那几十条**——旧写法是一条 `· ` 分隔的**流式文本** ＋ `word-break:break-all`
+   （真账一纪实测最多 20 条）⇒ 一坨断词、看不出有几件。改成折行的项，分隔靠 gap 不靠文本里的「·」。
+   ★这一条必须写在 `.sw2-rawids` 原规则**之后**（同特异性下后写的赢）。 */
+.sw2-rawids{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;word-break:normal;}
+.sw2-rawids .sw2-rawid{display:inline-flex;align-items:baseline;gap:5px;}
+/* ★★★leg169：**卡片自己的收尾行**——快照页那枚「重置快照」原来**裸挂在卡外**（一条 `.sw2-row`），
+   与它管的那个清单分家。搬进卡里之后给它一条上边线，与上面那批行分开。 */
+.sw2-row.sw2-card-foot{margin-top:12px;border-top:1px solid var(--sw2-line);padding-top:9px;}
+.sw2-hint{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);margin-top:var(--sw2-sp-1);line-height:1.55;}
 /* ★★leg52（用户令「说明文字太长」）：**长说明折叠**壳。
    口径三条（与 src/render.js 的 foldHint 一一对应，两处必须同时改）：
      ① 首句**留在外面**（结论先给），只有"展开才看"的部分进这里；
      ② `<summary>` 必须**看得见**——它是"还有说明"这件事的招牌，不许做成隐形触发区；
      ③ 展开体沿用 `.sw2-hint`（同一个字号/颜色），即"折叠只改**在不在**，不改**长相**"。 */
-.sw2-fold{margin-top:4px;}
-.sw2-fold > summary{font-size:11.5px;color:var(--sw2-text-faint);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px;padding:1px 0;}
+.sw2-fold{margin-top:var(--sw2-sp-1);}
+.sw2-fold > summary{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:var(--sw2-sp-1);padding:1px 0;}
 .sw2-fold > summary::-webkit-details-marker{display:none;}
 .sw2-fold > summary::before{content:'？';display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid var(--sw2-line);border-radius:50%;font-size:9px;line-height:1;}
 .sw2-fold[open] > summary{color:var(--sw2-text-dim);}
 .sw2-fold > summary:hover{color:var(--sw2-text-dim);}
-.sw2-fold-body{margin-top:5px;padding-left:9px;border-left:2px solid var(--sw2-line);}
+.sw2-fold-body{margin-top:5px;padding-left:var(--sw2-sp-2);border-left:2px solid var(--sw2-line);}
+/* ★★★（2026-10-05 用户令「在旁边添加一个小问号说明作用即可」）：参数页注入卡那四格各挂一枚小问号。
+   形状完全复用上面的 `.sw2-fold`（`？` 圆圈 ＋ `<details>`）；这里只补"它住哪一格"：
+   它必须是 `.sw2-field` 的**直接子元素**（`grid-column:1/-1` 让它占满整行、落在输入框下面一行），
+   **不许塞进 `<label>` 里面**——块级 `<details>` 放进 label 不合规范，而且点它会顺带把焦点带进数字框。 */
+.sw2-fold.sw2-fold-inline{grid-column:1/-1;display:flex;flex-direction:column;align-items:flex-start;margin-top:2px;}
+.sw2-fold.sw2-fold-inline > summary{min-height:0;padding:0;}
 /* 视障可达工具类（第十三棒 A 案）：释义文本对读屏可见、对视线隐藏（title 只是鼠标通道，不算无障碍） */
 .sw2-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
-.sw2-input{width:100%;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:8px;padding:8px 11px;font-size:13px;font-family:"Cascadia Mono",Consolas,monospace;}
-.sw2-input:focus{outline:none;border-color:var(--sw2-amber-dim);}
+.sw2-input{width:100%;background:var(--sw2-panel);color:var(--sw2-text);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:6px var(--sw2-sp-3);font-size:var(--sw2-fs-md);font-family:"Cascadia Mono",Consolas,monospace;line-height:1.4;}
+.sw2-input:focus{outline:none;border-color:var(--sw2-blue);box-shadow:0 0 0 3px var(--sw2-blue-soft);}
 .sw2-key-mask{letter-spacing:3px;color:var(--sw2-text-faint);}
 /* ★★★用户令（2026-09-27）「把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下」：
    模型那一行的**控件横排**（输入框 ＋ 两枚按钮）＋ 清单 ＋ 结论行的两种颜色。
    ★口径：不新造控件语言——输入框仍是 `.sw2-input`、按钮仍是 `.sw2-btn`，这里只加"怎么排"与"清单长什么样"。 */
-.sw2-ctl-row{display:flex;gap:8px;align-items:center;}
+.sw2-ctl-row{display:flex;gap:var(--sw2-sp-2);align-items:center;}
 .sw2-ctl-row .sw2-input{flex:1;min-width:0;}
-.sw2-ctl-row .sw2-btn{padding:8px 14px;font-size:12.5px;white-space:nowrap;}
-.sw2-models{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;padding:9px 10px;border:1px dashed var(--sw2-line);border-radius:8px;}
-.sw2-model{padding:3px 11px;border-radius:999px;border:1px solid var(--sw2-line);background:transparent;color:var(--sw2-text-dim);font-family:"Cascadia Mono",Consolas,monospace;font-size:11.5px;cursor:pointer;}
-.sw2-model:hover{border-color:var(--sw2-amber-dim);color:var(--sw2-text);}
-.sw2-model.sw2-model-cur{border-color:var(--sw2-amber);color:var(--sw2-amber);background:rgba(227,173,85,.08);}
+.sw2-ctl-row .sw2-btn{white-space:nowrap;}
+.sw2-models{display:flex;flex-wrap:wrap;gap:var(--sw2-sp-2);margin-top:var(--sw2-sp-2);padding:var(--sw2-sp-2) var(--sw2-sp-3);border:1px dashed var(--sw2-line);border-radius:var(--sw2-r-md);}
+.sw2-model{padding:2px var(--sw2-sp-2);border-radius:var(--sw2-r-md);border:1px solid var(--sw2-line);background:transparent;color:var(--sw2-text-dim);font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);cursor:pointer;}
+.sw2-model:hover{background:var(--sw2-hover);border-color:var(--sw2-line);color:var(--sw2-text);}
+.sw2-model.sw2-model-cur{border-color:var(--sw2-blue);color:var(--sw2-blue);background:var(--sw2-blue-soft);}
 .sw2-hint.sw2-ok{color:var(--sw2-green);}
 .sw2-hint.sw2-bad{color:var(--sw2-red);}
-.sw2-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
-.sw2-btn{padding:9px 18px;border-radius:8px;border:1px solid var(--sw2-line);background:var(--sw2-card-2);color:var(--sw2-text);font-size:13.5px;cursor:pointer;font-family:inherit;}
-.sw2-btn:hover{border-color:var(--sw2-text-faint);}
-.sw2-btn.sw2-primary{background:var(--sw2-amber);border-color:var(--sw2-amber);color:#141006;font-weight:700;}
-.sw2-btn.sw2-primary:hover{filter:brightness(1.06);}
-.sw2-btn.sw2-danger{border-color:rgba(223,108,98,.5);color:var(--sw2-red);}
-.sw2-btn.sw2-danger:hover{background:rgba(223,108,98,.1);}
+.sw2-actions{display:flex;gap:var(--sw2-sp-2);flex-wrap:wrap;margin-top:var(--sw2-sp-3);}
+/* ★leg166：按钮按演示收成"紧凑"（`padding:5px 12px` / 圆角 6px / 13px）。
+   ★★`sw2-primary` 从**琥珀**改成**理性蓝**：演示里"主按钮"就是那一支强调色
+     （`background:--accent` ＋ 白字），而琥珀在本仓是语义色（"还开着/在暗处"）。
+   ★三处**一个字不许动**（`test/style-cues-layout.test.js` SCue①）：`:disabled` 那一条、
+     以及压 hover 的那三条 `:disabled:hover`，且它们必须排在各自 hover **之后**（本段顺序照旧）。 */
+.sw2-btn{padding:5px var(--sw2-sp-3);border-radius:var(--sw2-r-md);border:1px solid var(--sw2-line);background:var(--sw2-card-2);color:var(--sw2-text-body);font-size:var(--sw2-fs-md);cursor:pointer;font-family:inherit;line-height:1.5;}
+.sw2-btn:hover{background:var(--sw2-active);color:var(--sw2-text);}
+.sw2-btn.sw2-primary{background:var(--sw2-blue);border-color:var(--sw2-blue);color:#fff;font-weight:600;}
+.sw2-btn.sw2-primary:hover{background:#7ba3f5;border-color:#7ba3f5;filter:none;}
+.sw2-btn.sw2-danger{border-color:rgba(var(--sw2-red-rgb),.5);color:var(--sw2-red);background:transparent;}
+.sw2-btn.sw2-danger:hover{background:rgba(var(--sw2-red-rgb),.1);}
 /* ★★★leg104（样式一批 · **不能点的按钮必须看得出来**）：全仓此前**零 `:disabled` 规则**（grep 实测），
    而 `src/render.js` 真的在产出 disabled 按钮（参数页「撤销改写」`:693` · 编年分页器 `:1252/:1254` ·
    实体分页器 `:1560/:1562`）⇒ 翻不动的「‹ 上一页 / 下一页 ›」带着**手型鼠标**、hover **还变色**，
@@ -688,59 +1200,81 @@
 .sw2-btn:disabled:hover{border-color:var(--sw2-line);}
 .sw2-btn.sw2-primary:disabled:hover{filter:none;}
 .sw2-btn.sw2-danger:disabled:hover{background:var(--sw2-card-2);}
-.sw2-cold-mgmt{font-size:13px;color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:7px;}
-.sw2-cold-mgmt .sw2-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+.sw2-cold-mgmt{font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);display:flex;flex-direction:column;gap:var(--sw2-sp-2);}
+.sw2-cold-mgmt .sw2-row{display:flex;justify-content:space-between;gap:var(--sw2-sp-3);align-items:baseline;}
 .sw2-cold-mgmt b{color:var(--sw2-text);font-family:"Cascadia Mono",Consolas,monospace;font-weight:600;}
-.sw2-cold-mgmt em{font-style:normal;font-size:11px;color:var(--sw2-text-faint);}
+.sw2-cold-mgmt em{font-style:normal;font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);}
 .sw2-cold-mgmt .sw2-thr{color:var(--sw2-amber);}
 
-/* ---------- 页脚 ---------- */
-.sw2-footer{padding:10px 18px;border-top:1px solid var(--sw2-line-soft);font-size:11.5px;color:var(--sw2-text-faint);}
+/* ★★★leg166：快照页那四格**此前一条规则都没有**（全仓零声明，实测只落在 `.sw2-row` 的默认样式上）
+   ⇒ 四样东西（编号 / 触发词·轮次 / 种类·体积 / 时刻）连成一段灰字，而末尾那枚「回到此步」按钮
+   与它们同基线挤在一起——"每一步都能退回去"这一页最该一眼看清的正是**哪一步是哪一步**。
+   本笔补上这一族（照演示的列表行语言：定宽格 ＋ 等宽只给**编号**，其余走正文色分层）：
+     · 编号 `s12` 是 id ⇒ **等宽**、定宽 44px、正文色（它是这一行的"名字"）；
+     · 触发词·轮次吃余宽（长句截断，别把按钮顶走）；
+     · 种类·体积 与 时刻 定宽靠右、`tabular-nums`（数字对齐才读得快）；
+     · 按钮 `margin-left:auto` ⇒ 永远钉在行尾（同 `.sw2-pan-badge` / `.sw2-pan-brg` 那条口径）。 */
+.sw2-snap-id{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);color:var(--sw2-text);flex:none;width:44px;}
+.sw2-snap-tick{font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sw2-snap-kind{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:none;font-variant-numeric:tabular-nums;}
+.sw2-snap-at{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:none;font-variant-numeric:tabular-nums;}
+.sw2-row[data-snap] .sw2-btn{margin-left:auto;flex:none;}
 
-/* ---------- K41：编年五筛 + 链入口 + 珠链视图（链视图细案 A-15/A-16 渲染面；视觉=chain-view-mockup v3） ---------- */
-.sw2-ch-filter{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px;}
-.sw2-fchip{font-size:12px;padding:3px 13px;border-radius:999px;border:1px solid var(--sw2-line);background:var(--sw2-panel);color:var(--sw2-text-dim);cursor:pointer;user-select:none;font-family:inherit;}
-.sw2-fchip:hover{border-color:var(--sw2-text-faint);}
-.sw2-fchip.on{background:var(--sw2-card-2);color:var(--sw2-text);border-color:var(--sw2-amber-dim);box-shadow:inset 0 0 0 1px var(--sw2-amber-dim);}
-.sw2-fchip[data-filter="all"]{color:var(--sw2-amber);}
+/* ---------- 页脚 ---------- */
+.sw2-footer{padding:var(--sw2-sp-2) var(--sw2-sp-4);border-top:1px solid var(--sw2-line);font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
+
+/* ---------- K41：编年五筛 + 链入口 + 珠链视图（链视图细案 A-15/A-16 渲染面；视觉=chain-view-mockup v3） ----------
+   ★★★leg166「其余七页落演示版面」：这一族（五筛 ＋ 珠链视图）是**琥珀 ＋ 999px 胶囊**最集中的一段。
+   演示的判据逐条：① 圆角只有 4/6/8 三档，**没有 999px 胶囊**；② 强调色只有一支（理性蓝），
+   琥珀留给语义（"还开着/在暗处"）；③ 发光/渐变是 leg164 点名要去掉的那一族装饰。
+   ⇒ 本笔：筛片与徽从胶囊改 **6px**、"选中"由琥珀改**理性蓝**、珠子的**光晕撤掉**（连它的令牌一起）。 */
+.sw2-ch-filter{display:flex;align-items:center;gap:var(--sw2-sp-2);flex-wrap:wrap;margin-bottom:var(--sw2-sp-2);}
+.sw2-fchip{font-size:var(--sw2-fs-sm);padding:3px var(--sw2-sp-3);border-radius:var(--sw2-r-md);border:1px solid var(--sw2-line);background:var(--sw2-card-2);color:var(--sw2-text-dim);cursor:pointer;user-select:none;font-family:inherit;}
+.sw2-fchip:hover{background:var(--sw2-active);color:var(--sw2-text-body);}
+.sw2-fchip.on{background:var(--sw2-blue-soft);color:var(--sw2-text);border-color:var(--sw2-blue-line);box-shadow:none;}
+.sw2-fchip[data-filter="all"]{color:var(--sw2-text-body);}
 .sw2-legacy-note{margin-left:auto;font-size:11px;color:var(--sw2-text-faint);font-style:normal;}
-.sw2-chainbtn{flex:none;font-size:10.5px;color:var(--sw2-blue);border:1px solid var(--sw2-line);background:var(--sw2-card);border-radius:6px;padding:0 7px;cursor:pointer;font-family:inherit;}
-.sw2-chainbtn:hover{border-color:var(--sw2-blue);background:var(--sw2-card-2);}
+.sw2-chainbtn{flex:none;font-size:10.5px;color:var(--sw2-blue);border:1px solid var(--sw2-line);background:var(--sw2-card);border-radius:var(--sw2-r-sm);padding:0 7px;cursor:pointer;font-family:inherit;}
+.sw2-chainbtn:hover{border-color:var(--sw2-blue-line);background:var(--sw2-blue-soft);}
 /* 珠链视图 */
-.sw2-cv{margin:0 0 12px;border:1px solid var(--sw2-line);border-radius:10px;background:var(--sw2-panel);overflow:hidden;}
-.sw2-cv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 15px;border-bottom:1px solid var(--sw2-line-soft);background:var(--sw2-card);}
-.sw2-cv-t{font-size:14px;font-weight:700;flex:1;min-width:180px;}
-.sw2-cv-close{font-size:11.5px;padding:3px 12px;}
-.sw2-cv-col{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:3px;margin:11px 2px 2px;display:flex;align-items:center;gap:8px;}
+.sw2-cv{margin:0 0 var(--sw2-sp-3);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-panel);overflow:hidden;}
+.sw2-cv-head{display:flex;align-items:center;gap:var(--sw2-sp-3);flex-wrap:wrap;padding:var(--sw2-sp-2) var(--sw2-sp-4);border-bottom:1px solid var(--sw2-line-soft);background:var(--sw2-card);}
+.sw2-cv-t{font-size:var(--sw2-fs-lg);font-weight:600;flex:1;min-width:180px;letter-spacing:-.01em;}
+.sw2-cv-close{font-size:var(--sw2-fs-sm);padding:3px var(--sw2-sp-3);}
+.sw2-cv-col{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:.07em;margin:var(--sw2-sp-3) 2px 2px;display:flex;align-items:center;gap:var(--sw2-sp-2);}
 .sw2-cv-col::after{content:"";flex:1;height:1px;background:var(--sw2-line-soft);}
-.sw2-cv-axis{width:2px;height:12px;margin:4px auto;background:var(--sw2-line);}
+.sw2-cv-axis{width:2px;height:12px;margin:var(--sw2-sp-1) auto;background:var(--sw2-line);}
 .sw2-cv-rail{position:relative;padding-left:32px;margin:2px 0;}
 .sw2-cv-rail::before{content:"";position:absolute;left:14px;top:4px;bottom:4px;width:2px;background:var(--sw2-line);}
-.sw2-cv-bead{position:relative;display:flex;gap:10px;align-items:flex-start;margin:7px 0;}
+.sw2-cv-bead{position:relative;display:flex;gap:var(--sw2-sp-3);align-items:flex-start;margin:var(--sw2-sp-2) 0;}
 .sw2-cv-bead::before{content:"";position:absolute;left:-18px;top:13px;width:15px;height:2px;background:var(--sw2-line);}
-.sw2-cv-bk{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--sw2-panel);border:1.5px solid;letter-spacing:0;}
-.sw2-cv-bead.ev .sw2-cv-bk{color:var(--sw2-blue);border-color:rgba(121,167,214,.6);}
-.sw2-cv-bead.ag .sw2-cv-bk{color:var(--sw2-amber);border-color:rgba(227,173,85,.6);}
-.sw2-cv-bead.ag.dark .sw2-cv-bk{color:#c98a82;border-color:rgba(223,108,98,.6);}
-.sw2-cv-bead.ms .sw2-cv-bk{color:var(--sw2-green);border-color:rgba(143,191,143,.55);}
+.sw2-cv-bk{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:var(--sw2-fs-sm);font-weight:600;background:var(--sw2-panel);border:1.5px solid;letter-spacing:0;}
+.sw2-cv-bead.ev .sw2-cv-bk{color:var(--sw2-blue);border-color:rgba(var(--sw2-blue-rgb),.6);}
+.sw2-cv-bead.ag .sw2-cv-bk{color:var(--sw2-amber);border-color:rgba(var(--sw2-amber-rgb),.6);}
+.sw2-cv-bead.ag.dark .sw2-cv-bk{color:var(--sw2-red-soft-fg);border-color:rgba(var(--sw2-red-rgb),.6);}
+.sw2-cv-bead.ms .sw2-cv-bk{color:var(--sw2-green);border-color:rgba(var(--sw2-green-rgb),.55);}
 .sw2-cv-bead.term .sw2-cv-bk{color:var(--sw2-text-faint);border-color:var(--sw2-line);}
 .sw2-cv-bead.gap .sw2-cv-bk{color:var(--sw2-text-faint);border-color:var(--sw2-text-faint);border-style:dashed;}
-.sw2-cv-bead.leaf .sw2-cv-bk{color:var(--sw2-green);border-color:rgba(143,191,143,.45);border-style:dotted;}
+.sw2-cv-bead.leaf .sw2-cv-bk{color:var(--sw2-green);border-color:rgba(var(--sw2-green-rgb),.45);border-style:dotted;}
 .sw2-cv-bt{flex:1;min-width:0;padding:1px 0;}
-.sw2-cv-nm{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-.sw2-cv-src{font-size:11px;color:var(--sw2-text-faint);font-weight:400;}
-.sw2-cv-meta{font-size:11.5px;color:var(--sw2-text-dim);margin-top:2px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.sw2-cv-nm{font-size:var(--sw2-fs-md);font-weight:600;display:flex;align-items:center;gap:var(--sw2-sp-2);flex-wrap:wrap;}
+.sw2-cv-src{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);font-weight:400;}
+.sw2-cv-meta{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);margin-top:2px;display:flex;align-items:center;gap:var(--sw2-sp-2);flex-wrap:wrap;}
 .sw2-cv-meta.dim{color:var(--sw2-text-faint);}
 .sw2-cv-meta.blk{color:var(--sw2-red);}
 .sw2-cv-dots{display:inline-flex;gap:3px;vertical-align:1px;}
-.sw2-cv-dots i{width:6px;height:6px;border-radius:50%;background:var(--sw2-card-2);display:inline-block;}
+.sw2-cv-dots i{width:6px;height:6px;border-radius:50%;background:var(--sw2-text-faint);display:inline-block;}
 .sw2-cv-dots i.on{background:var(--sw2-amber);}
-.sw2-cv-verdict{font-size:10px;padding:0 8px;border-radius:999px;border:1px solid var(--sw2-line);color:var(--sw2-text-dim);}
+/* ★leg166：判定徽/暗处徽/卷徽从 **999px 胶囊**改 **4px 方角**（演示的圆角只有 4/6/8 三档）。
+   ★`.sw2-cv-dots i` 的灭态同时改 `--sw2-text-faint`——与 `.sw2-dotstep` / `.sw2-gearbar i` 同一把尺
+     （`--sw2-card-2` 压在面板底上只有 1.1:1，等于没画；`test/style-cues-layout.test.js` SCue③ 咬的是那两处，
+     这一处是同一族的第三处，本笔顺手对齐）。 */
+.sw2-cv-verdict{font-size:10px;padding:0 var(--sw2-sp-2);border-radius:var(--sw2-r-sm);border:1px solid var(--sw2-line);color:var(--sw2-text-dim);}
 .sw2-cv-verdict.open{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);}
-.sw2-cv-verdict.done{color:var(--sw2-green);border-color:rgba(143,191,143,.4);}
-.sw2-cv-verdict.stop{color:var(--sw2-red);border-color:rgba(223,108,98,.4);}
-.sw2-cv-chip{font-size:11px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:999px;padding:1px 9px;background:var(--sw2-panel);}
-.sw2-cv-chip.dark{border-color:rgba(223,108,98,.45);color:#c98a82;}
+.sw2-cv-verdict.done{color:var(--sw2-green);border-color:rgba(var(--sw2-green-rgb),.4);}
+.sw2-cv-verdict.stop{color:var(--sw2-red);border-color:rgba(var(--sw2-red-rgb),.4);}
+.sw2-cv-chip{font-size:11px;color:var(--sw2-text-dim);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-sm);padding:1px var(--sw2-sp-2);background:var(--sw2-panel);}
+.sw2-cv-chip.dark{border-color:rgba(var(--sw2-red-rgb),.45);color:var(--sw2-red-soft-fg);}
 .sw2-cv-roll{margin-top:4px;}
 .sw2-cv-roll summary{font-size:11px;color:var(--sw2-text-dim);cursor:pointer;user-select:none;}
 .sw2-cv-roll summary:hover{color:var(--sw2-text);}
@@ -754,13 +1288,19 @@
 .sw2-cv-branch::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--sw2-line);}
 .sw2-cv-branch::after{content:"";position:absolute;left:0;top:13px;width:18px;height:2px;background:var(--sw2-line);}
 .sw2-cv-branch .sw2-cv-bead::before{content:none;}
-.sw2-cv-hero{display:flex;align-items:center;gap:14px;padding:9px 16px;margin:2px 0;background:linear-gradient(120deg,#272e3c,#20252f);border:1px solid var(--sw2-line);border-left:4px solid var(--sw2-amber);border-radius:10px;}
-.sw2-cv-hx{width:44px;height:44px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:var(--sw2-amber);border:2px solid var(--sw2-amber);background:linear-gradient(140deg,#2b2d22,#20252f);box-shadow:0 0 20px rgba(227,173,85,.28);}
-.sw2-cv-hn{font-size:15.5px;font-weight:700;line-height:1.45;}
-.sw2-cv-hm{margin-top:3px;font-size:11.5px;color:var(--sw2-text-dim);display:flex;gap:12px;flex-wrap:wrap;}
+/* ★leg166：链头那颗珠子（`.sw2-cv-hx`）按演示去装饰——
+   ① **光晕撤掉**（`box-shadow:0 0 20px var(--sw2-amber-glow)` 是 leg164 点名要去的那一族"发光"）；
+   ② 渐变底撤掉（演示的层次靠叠层，不靠渐变）；
+   ③ 圆角 10→6、字重 800→600、字号 15.5→15px（收紧）。
+   ★"这一颗是链头"仍看得出来——靠**琥珀描边 ＋ 44px 的尺寸**（尺寸本身就是最强的层级信号），
+     不靠一圈光。 */
+.sw2-cv-hero{display:flex;align-items:center;gap:var(--sw2-sp-3);padding:var(--sw2-sp-2) var(--sw2-sp-4);margin:2px 0;background:var(--sw2-card);border:1px solid var(--sw2-line);border-left:2px solid var(--sw2-amber);border-radius:var(--sw2-r-md);}
+.sw2-cv-hx{width:44px;height:44px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:var(--sw2-fs-lg);font-weight:600;color:var(--sw2-amber);border:2px solid var(--sw2-amber);background:var(--sw2-card-2);}
+.sw2-cv-hn{font-size:var(--sw2-fs-lg);font-weight:600;line-height:1.45;letter-spacing:-.01em;}
+.sw2-cv-hm{margin-top:3px;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);display:flex;gap:var(--sw2-sp-3);flex-wrap:wrap;}
 .sw2-cv-hm b{color:var(--sw2-amber);font-weight:600;}
-.sw2-cv-foot{padding:8px 15px;font-size:10.5px;color:var(--sw2-text-faint);border-top:1px solid var(--sw2-line-soft);}
-.sw2-cv-def{padding:14px 16px;font-size:12.5px;color:var(--sw2-text-faint);}
+.sw2-cv-foot{padding:var(--sw2-sp-2) var(--sw2-sp-4);font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);border-top:1px solid var(--sw2-line-soft);}
+.sw2-cv-def{padding:var(--sw2-sp-4);font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
 
 /* ---------- ★leg93c：事件链弹窗（用户令「点击后不要放在编年页了，直接弹出一个小窗口」） ----------
    病：`bus['open-chain']` 把链视图**硬插进 `#sw2_view_chronicle`** ⇒ 在大事纪·旧卷页点「链」，
@@ -773,15 +1313,15 @@
 .sw2-cv-mask{
   position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
   z-index:51000;display:flex;align-items:center;justify-content:center;
-  padding:24px;box-sizing:border-box;background:rgba(13,16,21,.62);
+  padding:24px;box-sizing:border-box;background:rgba(var(--sw2-scrim-rgb),.62);
   font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
   color:var(--sw2-text);font-size:14px;line-height:1.6;
 }
 .sw2-cv-box{
   width:820px;max-width:100%;max-height:86%;overflow:auto;box-sizing:border-box;
-  padding:14px 16px 4px;background:var(--sw2-panel);
-  border:1px solid var(--sw2-line);border-radius:12px;
-  box-shadow:0 20px 70px rgba(0,0,0,.6);
+  padding:var(--sw2-sp-3) var(--sw2-sp-4) var(--sw2-sp-1);background:var(--sw2-panel);
+  border:1px solid var(--sw2-line);border-radius:var(--sw2-r-lg);
+  box-shadow:0 20px 70px rgba(var(--sw2-black-rgb),.6);
 }
 /* 弹窗里那条链的圆角与边距收一收（它本来是嵌在页签里的，外边距会顶出多余空隙） */
 .sw2-cv-box > .sw2-cv{margin:0;border:none;background:transparent;border-radius:0;}
@@ -816,49 +1356,51 @@
 .sw2-entity-row[data-action]{cursor:pointer;}
 .sw2-ew-body{flex:1 1 auto;min-height:0;overflow:auto;padding:4px 18px 20px;}
 /* 头：复用 `.sw2-header/.sw2-badge/.sw2-title-block/.sw2-close`，只把徽换成蓝色（与"棋"那枚区分开） */
-.sw2-ew-badge{background:linear-gradient(135deg,var(--sw2-blue),#4a6f96);color:#0b1219;font-size:15px;}
-.sw2-ew-name{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:16.5px;}
+/* ★leg166：实体观览窗那枚徽与面板页头那枚**同一把尺**（中性单色，不再靠渐变区分）——
+   ★区分两个窗口的活儿交给**那个字本身**（"棋" / "观"）与标题，不交给第二支颜色。 */
+.sw2-ew-badge{background:var(--sw2-card-2);border:1px solid var(--sw2-line);color:var(--sw2-text-dim);font-size:var(--sw2-fs-sm);}
+.sw2-ew-name{display:flex;align-items:baseline;gap:var(--sw2-sp-2);flex-wrap:wrap;font-size:var(--sw2-fs-lg);font-weight:600;letter-spacing:-.01em;}
 .sw2-ew-you{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-size:11px;letter-spacing:0;}
-.sw2-ew-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:1.5px;font-weight:400;}
-.sw2-ew-sub{display:flex;gap:14px;flex-wrap:wrap;margin-top:3px;}
+.sw2-ew-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}
+.sw2-ew-sub{display:flex;gap:var(--sw2-sp-3);flex-wrap:wrap;margin-top:3px;}
 .sw2-ew-sub b{color:var(--sw2-text-dim);font-weight:400;}
 /* 每一格的标题：复用 `.sw2-list-head`（它自带那条横线），只补那一格的计数。
    ★★leg141：`.sw2-ew-hint`（标题后那半句括号说明）**整条删掉** —— 用户令
    「**把（账上「涟漪」头一个是他；正文给的也在这一格里）这种文字给删了**」。
    撤了它这条规则就零消费者（本仓不留死码），而且格名已经改成自解释的
    （「事迹 · 他做的」/「事迹 · 涉及到他的」）⇒ 那半句本来就在替名字干活。 */
-.sw2-ew-sech{margin-top:14px;}
-.sw2-ew-n{margin-left:auto;font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);}
+.sw2-ew-sech{margin-top:var(--sw2-sp-4);}
+.sw2-ew-n{margin-left:auto;font-family:var(--sw2-mono);font-size:11px;color:var(--sw2-text-faint);font-variant-numeric:tabular-nums;}
 /* ① 来历与身份：标签 + 值 两栏 */
-.sw2-ew-kv{display:grid;grid-template-columns:78px minmax(0,1fr);gap:3px 12px;font-size:13px;padding:2px 0;margin:0;}
-.sw2-ew-kv dt{color:var(--sw2-text-faint);font-size:12px;}
+.sw2-ew-kv{display:grid;grid-template-columns:78px minmax(0,1fr);gap:3px var(--sw2-sp-3);font-size:var(--sw2-fs-md);padding:2px 0;margin:0;}
+.sw2-ew-kv dt{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
 .sw2-ew-kv dd{color:var(--sw2-text);min-width:0;margin:0;}
-.sw2-ew-src{font-size:11px;color:var(--sw2-text-faint);margin-left:7px;}
-.sw2-ew-note{font-size:11.5px;color:var(--sw2-text-faint);margin-top:7px;line-height:1.7;}
+.sw2-ew-src{font-size:11px;color:var(--sw2-text-faint);margin-left:var(--sw2-sp-1);}
+.sw2-ew-note{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);margin-top:var(--sw2-sp-2);line-height:1.7;}
 .sw2-ew-note b{color:var(--sw2-text-dim);font-weight:400;}
 /* ② 变过的格 */
-.sw2-ew-chg{padding:7px 0;border-top:1px dashed var(--sw2-line-soft);font-size:13px;}
+.sw2-ew-chg{padding:var(--sw2-sp-2) 0;border-top:1px solid var(--sw2-line-soft);font-size:var(--sw2-fs-md);}
 .sw2-ew-chg:first-of-type{border-top:none;}
-.sw2-ew-cf{color:var(--sw2-text-faint);font-size:12px;}
-.sw2-ew-arrow{font-family:var(--sw2-mono);color:var(--sw2-text-faint);margin:0 7px;}
+.sw2-ew-cf{color:var(--sw2-text-faint);font-size:var(--sw2-fs-sm);}
+.sw2-ew-arrow{font-family:var(--sw2-mono);color:var(--sw2-text-faint);margin:0 var(--sw2-sp-1);}
 .sw2-ew-old{color:var(--sw2-text-faint);text-decoration:line-through;}
-.sw2-ew-new{color:var(--sw2-amber);font-weight:600;}
-.sw2-ew-cmeta{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;}
+.sw2-ew-new{color:var(--sw2-text);font-weight:600;}
+.sw2-ew-cmeta{display:flex;gap:var(--sw2-sp-3);flex-wrap:wrap;font-size:11.5px;color:var(--sw2-text-faint);margin-top:3px;}
 .sw2-ew-sep{color:var(--sw2-line);}
 /* ③④ 事迹 · 他做的 / 事迹 · 涉及到他的：一件一行，复用 `.sw2-entry`（编年那张卡的语言——同一件事只许一种印法） */
-.sw2-ew-deed{padding:9px 12px 8px;}
-.sw2-ew-dtitle{font-size:13.5px;line-height:1.55;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
-.sw2-ew-kindchip{font-size:10.5px;letter-spacing:1px;padding:1px 8px;}
-.sw2-ew-quote{margin-top:5px;padding:5px 10px;border-left:2px solid var(--sw2-line);background:var(--sw2-panel);border-radius:0 6px 6px 0;font-size:12px;color:var(--sw2-text-dim);line-height:1.7;}
+.sw2-ew-deed{padding:var(--sw2-sp-2) var(--sw2-sp-3);}
+.sw2-ew-dtitle{font-size:var(--sw2-fs-md);line-height:1.55;display:flex;align-items:baseline;gap:var(--sw2-sp-2);flex-wrap:wrap;}
+.sw2-ew-kindchip{font-size:10.5px;letter-spacing:0;padding:1px var(--sw2-sp-2);}
+.sw2-ew-quote{margin-top:var(--sw2-sp-1);padding:var(--sw2-sp-1) var(--sw2-sp-2);border-left:2px solid var(--sw2-line);background:var(--sw2-panel);border-radius:0 var(--sw2-r-sm) var(--sw2-r-sm) 0;font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);line-height:1.7;}
 .sw2-ew-when{font-family:var(--sw2-mono);color:var(--sw2-text-dim);}
 /* ⑤ 他手上的事 */
-.sw2-ew-ag{background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:7px;}
+.sw2-ew-ag{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);padding:var(--sw2-sp-2) var(--sw2-sp-3);font-size:var(--sw2-fs-md);margin-bottom:var(--sw2-sp-2);}
 .sw2-ew-aggoal{color:var(--sw2-text);}
-.sw2-ew-hush{color:var(--sw2-red);border:1px solid rgba(223,108,98,.4);border-radius:999px;padding:1px 8px;font-size:10.5px;}
+.sw2-ew-hush{color:var(--sw2-red);border:1px solid rgba(var(--sw2-red-rgb),.4);border-radius:var(--sw2-r-sm);padding:1px var(--sw2-sp-2);font-size:10.5px;}
 /* ⑥ 关系网（leg141b：**一张网**——层级 ＋ 账上的边）。
    ★层级行给一个淡一点的底，让"骨架"与"动态"一眼分得开（**不是分家**：同一张表、同一把尺，
      只是层级那些行是书里给的骨架、开局就在）。 */
-.sw2-ew-rel{padding:6px 0;border-top:1px dashed var(--sw2-line-soft);font-size:13px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.sw2-ew-rel{padding:var(--sw2-sp-2) 0;border-top:1px solid var(--sw2-line-soft);font-size:var(--sw2-fs-md);display:flex;align-items:baseline;gap:var(--sw2-sp-2);flex-wrap:wrap;}
 .sw2-ew-rel:first-of-type{border-top:none;}
 .sw2-ew-rel b{color:var(--sw2-text);}
 .sw2-ew-hier b{color:var(--sw2-text-dim);}
@@ -871,122 +1413,237 @@
    次要格（关系）一句人话就够。★照红线 2「空着就是空着」：不填占位值，但要说清是哪一种空。 */
 .sw2-ew-empty{padding:9px 0 3px;font-size:12.5px;color:var(--sw2-text-dim);line-height:1.75;}
 
-/* K38：拒签可见（世界的重力，动态流顶部裁定条） */
-.sw2-verdict{margin:0 0 6px;padding:6px 10px;border-left:3px solid var(--sw2-amber);background:linear-gradient(120deg,rgba(227,173,85,.10),transparent);font-size:12px;color:#e7cf95;line-height:1.6;word-break:break-all;}
-.sw2-verdict-tag{font-weight:700;margin-right:8px;white-space:nowrap;}
+/* K38：拒签可见（世界的重力，动态流顶部裁定条）
+   ★leg166：左杠 3→**2px**、渐变底改成 `--sw2-red-soft`（演示的层次靠叠层；而且"裁定被拒"与
+   "暗处"同属提醒一族，用同一支红的浅底比一条琥珀渐变更少一层视觉重音）。 */
+.sw2-verdict{margin:0 0 var(--sw2-sp-2);padding:var(--sw2-sp-2) var(--sw2-sp-3);border-left:2px solid var(--sw2-amber);background:var(--sw2-red-soft);font-size:var(--sw2-fs-sm);color:var(--sw2-amber-pale);line-height:1.6;word-break:break-all;}
+.sw2-verdict-tag{font-weight:600;margin-right:var(--sw2-sp-2);white-space:nowrap;}
 /* leg21: baseline hint (pre-evolution values) */
-.sw2-baseline-hint{font-size:10.5px;font-weight:400;opacity:.6;margin-left:6px;}
+.sw2-baseline-hint{font-size:var(--sw2-fs-label);font-weight:400;opacity:.6;margin-left:var(--sw2-sp-1);}
 
 /* ============ leg94 · 「说书」视图（用户令：「我看不懂，还要你给我讲解」） ============
    为什么另起一格而不是塞进编年：编年是**底层账本**（引擎流水账，逐行、可查、可导出），
    说书是**给人读的重排**（按因果线成段）——两种东西挤在一格里，用户已经说过"看不懂"。
-   版面口径：默认只展开**还开着的线**（收场的折叠），每条线一段：起头 / 一步步怎么走的 / 代价 / 还开着什么。 */
-.sw2-pan-head{font-size:13px;font-weight:600;color:var(--sw2-text);margin:2px 0 8px;}
-.sw2-pan-stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
-.sw2-pan-stat{font-size:11.5px;color:var(--sw2-text-dim);background:var(--sw2-card);border:1px solid var(--sw2-line-soft);border-radius:7px;padding:2px 9px;}
-.sw2-pan-stat b{color:var(--sw2-text);}
-.sw2-pan-stat.live{border-color:var(--sw2-amber-dim);}
-.sw2-pan-stat.live b{color:var(--sw2-amber);}
-.sw2-pan-hint{font-size:11.5px;color:var(--sw2-text-faint);line-height:1.7;border-left:2px solid var(--sw2-line);padding-left:9px;margin-bottom:10px;}
+   版面口径：默认只展开**还开着的线**（收场的折叠），每条线一段：起头 / 一步步怎么走的 / 代价 / 还开着什么。
+
+   ★★★leg165：**这一段整族按演示重写**（F:/deepseek/tmp/leg162-ui/panorama-redesign.html）。
+   为什么非重写不可（用户 2026-10-01 实机验收的原话）：「**给我的感觉就像是只换了底色，和演示的样式有很大区别**」
+   —— 他说对了：leg164 只换了 :root 里的**色值**，这一段**一条版面规则都没动**
+   （面卡仍是 10px 圆角＋实线框、线头仍是**金色左竖杠**＋发光圆点、面头仍是上下两行、列表仍是圆点 <ul>）
+   ⇒ 出来的是"旧版面 ＋ 新配色"。演示那几条改法（大势降成引用块 · 面卡成为主结构 · 去装饰 ·
+   状态徽统一成一套词 · 层级立起来）在真页面上**一条都没发生**。
+
+   ★★纪律（改这里之前先读）——**演示是样张，不是样式表**，它缺三处**真实页面必需的机器**，
+     而那三处**全是用户自己的令**，一处都不许丢（判据 test/panorama.test.js 两头咬着）：
+       ① 两栏各自的 `overflow-y:auto` ＋ `height:100%`  ⇒ 「两列都能独自滑动」（leg99）
+       ② `.sw2-merged-grid` 的**定高**（由 flex 分配）            ⇒ 「顺便把下拉的bug解决了」（leg157）
+       ③ 线头那一栏**自己的实色底**（不许 `transparent`）          ⇒ 「是改这一栏的颜色不是标题文字」（leg98）
+     ★③ 与演示有一处**有意的不一致**：演示用"上边一条细分线"分栏、**不给底**，
+       而那正是 leg98 用户指着说要改掉的那个观感（两边亮度差 0）⇒ 这里取演示的**视觉语言**
+       （无框、无圆角、细分线），但**保留它自己的底**（leg165 当时是 `--sw2-inset`；
+       ★leg167 改成实色 `#282f3c`、leg168 把 `--sw2-inset` 整格撤掉——见下面线头那一段的长注）。
+     ★另外两处**判据逐字咬着的正文格式**（`test/panorama.test.js`）一个字不许改：
+       面头那句 `N 条线到过这里（N 条落脚在此 · N 条路过）· N 件事发生在此`、`卡上 N 条故事`、
+       自证闸那句 `自证：线 N 条 = 面内 N ＋ 单独一栏 N ＋ 单线地点 N ＋ 散落 N`、
+       以及 `各处散落` / `只有一件事` 两个栏名 —— 本笔**只动样式，不动一个字**。 */
+.sw2-pan-head{font-size:var(--sw2-fs-label);font-weight:600;color:var(--sw2-text-faint);letter-spacing:.07em;margin:2px 0 var(--sw2-sp-3);}
+/* — 汇总带：原来"此刻句 ＋ 4 枚 chips"两块同义重复 ⇒ 合成一行（leg164 落的，本笔只调视觉） — */
+.sw2-pan-sum{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sw2-sp-1) var(--sw2-sp-4);padding:var(--sw2-sp-3) 0;margin-bottom:var(--sw2-sp-4);border-top:1px solid var(--sw2-line-soft);border-bottom:1px solid var(--sw2-line-soft);}
+.sw2-pan-sum .sw2-sum-kv{display:flex;align-items:baseline;gap:5px;font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);}
+.sw2-pan-sum .sw2-sum-kv b{font-size:var(--sw2-fs-lg);font-weight:600;color:var(--sw2-text);font-variant-numeric:tabular-nums;}
+.sw2-pan-sum .sw2-sum-kv.live b{color:var(--sw2-amber);}
+.sw2-pan-sum .sw2-sum-sep{color:var(--sw2-text-faint);opacity:.45;}
+/* ★★★leg164：「这一页怎么读」那一折（原来是不折的六行设计解释）。 */
+.sw2-pan-fold{margin:0 0 var(--sw2-sp-4);font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);line-height:1.7;}
+.sw2-pan-fold > summary{cursor:pointer;user-select:none;color:var(--sw2-text-dim);padding:var(--sw2-sp-1) 0;}
+.sw2-pan-fold > summary:hover{color:var(--sw2-text);}
+.sw2-pan-fold b{color:var(--sw2-text-dim);font-weight:500;}
+/* ★★★leg164：`.sw2-pan-hint`（"大势是书里写定的何故、面是账上算出来的何处…"那 6 行**设计解释**）
+   随汇总带一起撤走 ⇒ **零生产者**，规则同批删（本仓纪律：零生产者的规则不留）。
+   ★那两句话本身**没丢**：搬进了 `src/panorama.js` 的 `bridgeHtml` 头注（用户令「事实一条没删，
+   只把"我们的理由"搬回注释」）。 */
 /* ★leg97：「面」这一层不再用区块标题（`.sw2-pan-sec` 那条规则随旧版式撤下——零生产点的死规则，
    与 leg94 撤 `.sw2-ch-roll` 同一条纪律：**删死规则不算"样式变了"**）。 */
+/* 次要标签（"· 那些地方只有这一条线路过"那一族）：安静，不抢主标题 */
 .sw2-pan-secn{font-weight:400;color:var(--sw2-text-faint);margin-left:6px;}
 .sw2-pan-empty{padding:14px;font-size:12.5px;color:var(--sw2-text-faint);background:var(--sw2-card);border:1px dashed var(--sw2-line);border-radius:9px;}
-.sw2-pan-thread{margin:6px 0;border:1px solid var(--sw2-line-soft);border-radius:9px;background:var(--sw2-card);}
-.sw2-pan-thread.live{border-color:var(--sw2-amber-dim);}
-.sw2-pan-thread > summary{display:flex;align-items:baseline;gap:9px;padding:8px 12px;cursor:pointer;user-select:none;list-style:none;}
+
+/* ── 线（一段故事）：★演示的机器是"**无框、无圆角，只用上边一条细分线分栏**"（一张卡里的几段） ── */
+.sw2-pan-thread{border:1px solid #55627a;border-radius:6px;margin:10px 0;overflow:hidden;}
+.sw2-pan-thread > summary{display:grid;grid-template-columns:14px minmax(0,1fr) auto;align-items:start;gap:6px 10px;padding:14px 16px;cursor:pointer;user-select:none;list-style:none;}
+.sw2-pan-thread > summary::before{content:"";width:6px;height:6px;border-right:2px solid var(--sw2-text-dim);border-bottom:2px solid var(--sw2-text-dim);transform:rotate(-45deg);margin-top:7px;grid-column:1;grid-row:1;}
+.sw2-pan-thread[open] > summary::before{transform:rotate(45deg);}
+.sw2-pan-thread[open] > summary{background:#303b4d;}
 .sw2-pan-thread > summary::-webkit-details-marker{display:none;}
-.sw2-pan-thread > summary:hover{background:var(--sw2-card-2);border-radius:9px;}
-.sw2-pan-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--sw2-text-faint);}
-.sw2-pan-dot.live{background:var(--sw2-amber);box-shadow:0 0 7px var(--sw2-amber-dim);}
-.sw2-pan-name{font-size:13.5px;font-weight:600;color:var(--sw2-text);}
-.sw2-pan-span{font-size:11px;color:var(--sw2-text-faint);}
-.sw2-pan-badge{margin-left:auto;flex:none;font-size:10.5px;border-radius:6px;padding:1px 8px;}
-.sw2-pan-badge.live{color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);}
+.sw2-pan-thread > summary:hover{background:var(--sw2-card-2);}
+/* ★★★leg165：`.sw2-pan-dot`（线名前面那颗发光圆点）**整族撤掉**——用户令「emoji 不要了」，
+   而它就是演示点名要去的那件装饰（"去掉装饰：发光圆点、金色左杠"）。
+   ★它是**零生产者**：本笔同批把 `src/panorama.js` 里那颗 `<span class="sw2-pan-dot">` 删了。 */
+.sw2-pan-name{font-size:var(--sw2-fs-md);font-weight:500;color:var(--sw2-text);flex:1;min-width:0;overflow-wrap:anywhere;}
+.sw2-pan-thread > summary > .sw2-pan-name{grid-column:2;grid-row:1;font-size:15px;font-weight:600;}
+.sw2-pan-thread > summary > .sw2-pan-span{grid-column:2/4;grid-row:2;color:var(--sw2-text-dim);}
+.sw2-pan-thread > summary > .sw2-pan-badge{grid-column:3;grid-row:1;}
+.sw2-pan-span{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:none;font-variant-numeric:tabular-nums;}
+.sw2-pan-badge{margin-left:auto;flex:none;font-size:var(--sw2-fs-label);border-radius:var(--sw2-r-sm);padding:1px 7px;white-space:nowrap;}
 /* ★leg95 第二刀：线头那枚徽分三态（用户令「开没开着不应该挂在事件上」⇒ 状态只在线头说一次）。
    实线=还在往下长（火烧眉毛）· 虚线但有色=挂着没了结（没人接着写了）· 灰虚线=已收场。 */
+.sw2-pan-badge.live{color:var(--sw2-amber);border:1px solid var(--sw2-amber-dim);}
 .sw2-pan-badge.stale{color:var(--sw2-text-dim);border:1px dashed var(--sw2-amber-dim);}
 .sw2-pan-badge.done{color:var(--sw2-text-faint);border:1px dashed var(--sw2-line);}
-.sw2-pan-body{padding:2px 12px 10px;}
-.sw2-pan-rule{font-size:12.5px;color:var(--sw2-text-dim);line-height:1.75;border-left:2px solid var(--sw2-amber-dim);padding-left:9px;margin:4px 0 8px;}
-.sw2-pan-sub{font-size:11.5px;font-weight:600;color:var(--sw2-text-dim);margin:9px 0 3px;}
-.sw2-pan-events,.sw2-pan-steps,.sw2-pan-costs,.sw2-pan-left{margin:0;padding-left:18px;}
-.sw2-pan-events li,.sw2-pan-steps li,.sw2-pan-costs li,.sw2-pan-left li{font-size:12.5px;line-height:1.8;color:var(--sw2-text);}
-.sw2-pan-costs li{color:#e7cf95;}
+.sw2-pan-body{padding:12px 20px 20px 40px;background:#232b37;border-top:1px solid #55627a;overflow-wrap:anywhere;}
+.sw2-pan-body .sw2-pan-rule,.sw2-pan-event-text{font-size:14px;line-height:1.8;}
+.sw2-pan-rule{font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);line-height:1.6;padding:var(--sw2-sp-2) 0 var(--sw2-sp-3);}
+/* 小标题（"他一步步是怎么做的"那一族）：演示把它们做成**大写小标签**（安静，不跟正文抢） */
+.sw2-pan-sub{font-size:var(--sw2-fs-label);font-weight:600;color:var(--sw2-text-faint);letter-spacing:.07em;margin:var(--sw2-sp-4) 0 var(--sw2-sp-2);}
+/* ★★★leg167（用户令「**把之前的信息组织度还回来**」＋「**图的左边界就是插件的边界，
+   也就是说字和边界几乎没距离**」＋「**不要再自己设计了，直接照抄网络上任何口碑好的设计**」）：
+   这三栏（各处散落 / 只有一件事 / 这一处另有单线地点）改**一行一件事 ＋ 定宽列**。
+   ── 为什么（两次打回都留档，别再翻回去）──
+    · leg163 的样子：五样东西挤在一条 flex 行里，**没有任何列结构**；
+    · leg166c 的样子：改成**两行**（事名一行、元信息一行）——治的是"事名一折行、后面几段各自落在不同的行"，
+      但两行版**列与列之间一条竖线都没有** ⇒ 十几行读下来是一片散字。
+    · ★用户两次的原话合起来才是完整口径：「从来没有过这么零散」（＝要密度）＋
+      「字和边界几乎没距离」（＝要留白）。**密度与留白不冲突，缺的是列。**
+   ── 改法（照演示 `F:/deepseek/tmp/leg162-ui/panorama-redesign.html` 的 `.pan-row`）──
+    一行一件事；事名吃余宽（`flex:1 1 auto`，它是每一行唯一变长的那一格）、
+    地点与轮次**定宽**（跨行对齐 —— 这就是"组织度"的来源）、徽钉在行尾（`margin-left:auto`）。
+   ★规则落点：这一族**必须写在下面那条合并规则之后**（同特异性下后写的赢）——
+     第一版写在前面被 `.sw2-pan-events li,…,.sw2-pan-oneshot li{…align-items:baseline}` 静默盖掉过。
+   ★`.sw2-pan-oneshot` 是本文件里**唯一**同时服务三处的列表，改一处三处同时正。 */
+/* ★★★leg165：点层列表**照演示重排**——原来是无序列表（浏览器圆点），演示是"**没有圆点的行**"：
+   轮次那一格等宽字体、固定宽、靠右，行与行之间一条细分线。 */
+.sw2-pan-events,.sw2-pan-steps,.sw2-pan-costs,.sw2-pan-left,.sw2-pan-oneshot{list-style:none;margin:0;padding:0;}
+.sw2-pan-events li,.sw2-pan-steps li,.sw2-pan-costs li,.sw2-pan-left li,.sw2-pan-oneshot li{font-size:var(--sw2-fs-md);line-height:1.55;color:var(--sw2-text-body);padding:var(--sw2-sp-2) 0;display:flex;gap:var(--sw2-sp-3);align-items:baseline;}
+.sw2-pan-events li + li,.sw2-pan-steps li + li,.sw2-pan-costs li + li,.sw2-pan-left li + li,.sw2-pan-oneshot li + li{border-top:1px solid var(--sw2-line-soft);}
+.sw2-pan-events li{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:14px 0;align-items:start;}
+.sw2-pan-events li + li{border-top-color:#44536a;}
+.sw2-pan-events .sw2-pan-t{width:auto;text-align:left;color:var(--sw2-text-dim);}
+.sw2-pan-event-text{min-width:0;line-height:1.8;}
+.sw2-pan-event-meta{display:flex;flex-wrap:wrap;gap:4px 16px;line-height:1.8;margin-top:4px;}
+.sw2-pan-event-meta:empty{display:none;}
+.sw2-pan-event-meta .sw2-pan-at,.sw2-pan-event-meta .sw2-pan-why,.sw2-pan-event-meta .sw2-pan-who{color:var(--sw2-text-dim);}
+.sw2-pan-events li b,.sw2-pan-steps li b,.sw2-pan-oneshot li b{color:var(--sw2-text);font-weight:500;}
+.sw2-pan-costs li{color:var(--sw2-amber-pale);}
 .sw2-pan-left li{color:var(--sw2-text-dim);}
-.sw2-pan-t{font-size:11px;color:var(--sw2-text-faint);margin-right:4px;white-space:nowrap;}
-.sw2-pan-why{font-size:11.5px;color:var(--sw2-text-faint);}
-.sw2-pan-at{font-size:11.5px;color:var(--sw2-blue);}
-.sw2-pan-who{font-size:11.5px;color:var(--sw2-text-dim);}
-.sw2-pan-done{font-size:11px;color:var(--sw2-text-faint);}
-.sw2-pan-open{font-size:11px;color:var(--sw2-amber);}
+/* 轮次那一格：★`width` 由 50px 提到 **56px**——演示是英文短标签，这里是「第 41 轮」五个字符，
+   50px 装不下会折行（"第 41" / "轮"）⇒ 这是**为中文调的那一格**，不是照抄。 */
+.sw2-pan-t{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:none;width:56px;text-align:right;font-variant-numeric:tabular-nums;}
+/* ★★★leg167：**一行一件事 ＋ 定宽列**（落点在合并规则**之后**，理由见上面那段落点留档）。
+   行高 9px ＋ 一条发丝分隔线 ⇒ 比 leg166c 的两行版**矮掉约四成**，而信息一格没少。 */
+.sw2-pan-oneshot li{padding:9px 0;gap:var(--sw2-sp-3);}
+/* 事名那一格：每一行唯一变长的一格（`flex:1`）——它缩，别的都不缩 ⇒ 右边的列因此对齐 */
+.sw2-pan-rn{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:var(--sw2-sp-2);}
+.sw2-pan-rn b{color:var(--sw2-text);font-weight:500;min-width:0;}
+.sw2-pan-rn .sw2-pan-why{flex:0 1 auto;min-width:0;}
+/* 地点与轮次：**定宽**（这两格定住，十几行的竖线才立得起来）；地点过长省略号，不许把行撑破 */
+.sw2-pan-oneshot li > .sw2-pan-at{flex:0 0 112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sw2-pan-oneshot li > .sw2-pan-t{flex:0 0 72px;width:auto;text-align:right;}
+.sw2-pan-oneshot li > .sw2-pan-span{flex:0 1 auto;min-width:0;}
+.sw2-pan-oneshot li > .sw2-pan-badge{margin-left:auto;flex:none;}
+.sw2-pan-oneshot li:hover{background:var(--sw2-hover);}
+/* 两栏（各处散落 / 只有一件事）的行左右各留 16px（与栏名那条表头对齐）；
+   面卡里那一段（单线地点）的左右留白归 `.sw2-pan-lonebox` 自己管。 */
+.sw2-pan-other .sw2-pan-oneshot li,.sw2-pan-loose .sw2-pan-oneshot li{padding-left:var(--sw2-sp-4);padding-right:var(--sw2-sp-4);}
+.sw2-pan-why{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
+.sw2-pan-at{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
+.sw2-pan-who{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
+.sw2-pan-done{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);}
+.sw2-pan-open{font-size:var(--sw2-fs-label);color:var(--sw2-amber);}
 /* ★leg95：点层**不再印状态标**（用户令「开没开着不应该挂在事件上」）——这一格留给线头那枚徽，
    它自己的三态见上面 `.sw2-pan-badge.live / .stale / .done`。 */
-.sw2-pan-foot{font-size:11px;color:var(--sw2-text-faint);margin-top:9px;border-top:1px dashed var(--sw2-line-soft);padding-top:6px;}
+/* 卡末免责句：★必须留（它是这一页的诚实声明），但降到最小字、不再每张卡都抢眼 */
+.sw2-pan-foot{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);padding-top:var(--sw2-sp-3);margin-top:var(--sw2-sp-3);border-top:1px solid var(--sw2-line-soft);}
 .sw2-rawid-note{font-size:11px;color:var(--sw2-text-faint);margin-top:4px;}
 .sw2-rawid-num{color:var(--sw2-text-faint);}
-/* 零散的事：单件事一行（不进主线名单，但找得到） */
-.sw2-pan-oneshot{margin:0;padding-left:18px;}
-.sw2-pan-oneshot li{font-size:12.5px;line-height:1.9;color:var(--sw2-text);}
 
 /* ============ leg97 · 「面」四层（用户令：「以人物为切口感觉就不像面了」⇒ 面是空间上的一个地方） ============
    版式照用户看过的演示页（`F:/deepseek/tmp/prototypes/leg96-face-view-B.html`，用户说「我看了，不错」）：
    大势（一句前提）→ 此刻（活数）→ 面（一个地方一段卡）→ 线（一段故事）→ 点（一件事）。
    ★"块"降为**面与面之间的关系**，印在面头上的"与别处相连"那一行（不是一层）。 */
-/* 大势：书里写定的一句（原文措辞）——它是**前提**，与面是"对读"关系，不去统领面 */
-.sw2-pan-dashi{border:1px solid var(--sw2-line);border-radius:10px;background:var(--sw2-card);padding:11px 14px;margin:0 0 9px;}
-.sw2-pan-dashilab{font-size:11.5px;color:var(--sw2-blue);letter-spacing:.06em;}
-.sw2-pan-dashitxt{font-size:14.5px;color:var(--sw2-text);line-height:1.75;margin:4px 0 0;}
+/* 大势：书里写定的一句（原文措辞）——它是**前提**，与面是"对读"关系，不去统领面。
+   ★leg165：改**引用块**（左杠从"实心金/蓝"降为演示那条**半透明蓝**）——
+   演示的诊断是"原来是一张和面卡同样重的边框卡 ⇒ 分不出主次"，故这里只留一条杠、**不再给底、不给框**。 */
+.sw2-pan-dashi{border-left:2px solid var(--sw2-blue-line);padding:var(--sw2-sp-1) 0 var(--sw2-sp-1) var(--sw2-sp-4);margin:0 0 var(--sw2-sp-4);}
+.sw2-pan-dashilab{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);letter-spacing:.05em;margin-bottom:var(--sw2-sp-2);}
+.sw2-pan-dashitxt{font-size:var(--sw2-fs-lg);color:var(--sw2-text);line-height:1.6;}
 /* 此刻：活数那一行（机械算出来的，与"书里写定的"大势分得清清楚楚） */
-.sw2-pan-now{font-size:12.5px;color:var(--sw2-text-dim);border-top:1px dashed var(--sw2-line);padding-top:7px;margin-bottom:8px;}
-.sw2-pan-now b{color:var(--sw2-text);}
-/* 面：一个地方一张卡 */
-.sw2-pan-face{border:1px solid var(--sw2-line);border-radius:10px;margin:0 0 14px;background:var(--sw2-card);overflow:hidden;}
-.sw2-pan-fh{padding:10px 13px;background:var(--sw2-card-2);border-bottom:1px solid var(--sw2-line-soft);}
-.sw2-pan-fhl{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
-.sw2-pan-fhn{font-size:15.5px;font-weight:600;color:var(--sw2-text);}
-.sw2-pan-fhs{font-size:12px;color:var(--sw2-text-dim);}
-.sw2-pan-fhs b{color:var(--sw2-text);}
-/* 桥（原"块"）：面头上那一行"与别处相连：某某 → 哪几处" */
-.sw2-pan-brg{font-size:11.5px;color:var(--sw2-blue);margin-top:4px;line-height:1.75;}
-.sw2-pan-brg b{color:var(--sw2-text);}
-.sw2-pan-fb{padding:9px 13px 13px;}
+/* ★★★leg164：`.sw2-pan-now`（「此刻：N 处有事发生…」那一句）与 `.sw2-pan-stats`（4–6 枚 chips）
+   与上面那条 `.sw2-pan-hint` **说的是同一批数** ⇒ 三块合成顶端**一条汇总带**（`.sw2-pan-sum`）。
+   ⇒ 这三族**零生产者**，规则同批删。 */
+/* 面：一个地方一张卡 —— ★leg165：圆角 10px→6px、框降到最淡那档（照演示），
+   它是**主结构**，靠"面头 ＋ 一段段线"组织，不靠更粗的框。 */
+.sw2-pan-face{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);margin:0 0 var(--sw2-sp-3);overflow:hidden;}
+/* ★★★leg167（用户令「**把之前的信息组织度还回来**」）：**卡上一条故事都没有的面，不许再画成一个空盒子**。
+   病（用户整窗截图里量到的）：面头写着「卡上 0 条故事」，而它下面是一整片空白 —— 那一张卡
+   在真机上高 **82px / 51px**（leg166 装置实测），用户那本账上更高；它占着与"有故事的面"同样的框，
+   读起来像"这里坏了"。
+   ★改法：**去掉卡的一切装饰**（底／框／圆角／外边距），只留上边一条发丝线 ⇒ 它变成列表里的一行，
+   与下面真正有故事的面卡形成"次级／主级"的层次。★DOM 一个字没动（只在 `src/panorama.js`
+   给这一类多挂了一个 `sw2-pan-face-flat`），面头那句正文（判据逐字咬着）原样照印。 */
+.sw2-pan-face-flat{background:transparent;border:0;border-top:1px solid var(--sw2-line-soft);border-radius:0;margin:0;}
+.sw2-pan-face-flat .sw2-pan-fh{padding:10px 0;border-bottom:0;}
+.sw2-pan-face-flat .sw2-pan-fhn{font-size:var(--sw2-fs-md);font-weight:500;color:var(--sw2-text-body);}
+/* 面头：★leg165 从"上下两行"改成**一行**（桥靠右）——演示那条 `.pan-brg{margin-left:auto}` */
+.sw2-pan-fh{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:18px 20px;border-bottom:1px solid #44536a;}
+.sw2-pan-fhl{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;}
+.sw2-pan-fhn{font-size:var(--sw2-fs-lg);font-weight:600;color:var(--sw2-text);letter-spacing:-.01em;max-width:100%;overflow-wrap:anywhere;}
+.sw2-pan-fhs{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);font-variant-numeric:tabular-nums;line-height:1.8;}
+.sw2-pan-fhs b{color:var(--sw2-text-dim);font-weight:500;}
+/* 桥（原"块"）：面头上那一行"与别处相连：某某 → 哪几处"
+   ★leg165：靠右（`margin-left:auto`）＋ 降到**安静灰**——演示的判读是"面与面的关系是旁注，不是主标题"；
+   原来它是**蓝色**（`--sw2-blue`），在一行里跟面名抢注意力。 */
+.sw2-pan-brg{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;line-height:1.75;min-width:0;overflow-wrap:anywhere;}
+.sw2-pan-bridge{min-width:0;max-width:100%;}
+.sw2-pan-brg b{color:var(--sw2-text-body);font-weight:500;}
+.sw2-pan-fb{padding:0;}
 /* 线：面里那一段（本身是可折叠的一整条故事）
    ★★leg98（用户令「**是改这一栏的颜色**不是标题文字」——指着线头那一栏）：
      原来这里是 `background:transparent` ⇒ **透出的就是面卡的底**，实测两边**亮度差 0**
-     （`--sw2-card` #20252f 对 #20252f），整条栏只靠一条 2px 竖线划分，而那条竖线
-     （`--sw2-line` #2c3342）与面卡底的对比只有 **1.21:1** ⇒ 栏目和面卡糊成一片，这就是"没对比度"。
-     ⇒ 给**这一栏自己一个底**（`#282f3c`，对面卡 **1.14:1**、对悬停底 1.04:1）——
-       与本仓既有的台面阶梯同源（`--sw2-card` #20252f → `--sw2-card-2` #262c38），只多走半档；
-     竖线跟着提亮到 `--sw2-line` 的下一档（`#3a4356`，对栏底 1.35:1），让它真的像"栏的边"。
-     ★为什么不用 `--sw2-card-2`（现成的变量）：那样**悬停时就看不出来了**（悬停换的正是它）。
-     ★为什么不动标题文字的颜色：标题本来就 12.76:1（WCAG AAA 只要 7）——**文字没问题，是"这一栏"没有面**。
-     ★量过的候选全在 `F:/deepseek/tmp/prototypes/leg98-rowbg.mjs`（不靠眼睛猜）。 */
-.sw2-pan-face .sw2-pan-thread{margin:0 0 10px;background:#282f3c;border:none;border-left:2px solid #3a4356;border-radius:0 7px 7px 0;}
-.sw2-pan-face .sw2-pan-thread.live{border-left-color:var(--sw2-amber);}
-/* ★leg98：悬停再亮一档（原来是 `--sw2-card-2`，现在栏底已经比它亮 ⇒ 换 `--sw2-line` #2c3342） */
-.sw2-pan-face .sw2-pan-thread > summary:hover{background:#2c3342;}
+     ⇒ 整条栏只靠一条 2px 竖线划分，栏目和面卡糊成一片，这就是"没对比度"。
+   ★★★leg165：**这一条是"演示 vs 用户令"唯一一处真冲突，取用户令**——
+     演示把它写成"无框、只用上边一条细分线分栏、**不给底**"，而那正是 leg98 指着说要改掉的那个观感
+     （两边亮度差 0）。⇒ 取演示的**视觉语言**（去掉金色左竖杠、去掉圆角、去掉自己的框），
+     **保留它自己的底**（当时写的是 `--sw2-inset` `#0a0b0d`，对面卡底 `--sw2-card` `#141518` 实测 **1.147:1**，
+     判据要求 ≥1.08）。★为什么当时用 `--sw2-inset`：它的语义正是"比窗口底再深一档"，
+     而面卡底比窗口底**亮**一档 ⇒ 那个令牌恰好就是"再深一档"那一格，**不新立令牌**。
+     ★★**这一格 leg167 已改成实色 `#282f3c`**（蓝灰板下方向反了，见下面那一段长注）。
+     ★原来那条金色左竖杠（`.sw2-pan-thread.live{border-left-color:var(--sw2-amber)}`）**撤掉**：
+     演示点名"去掉装饰：发光圆点、金色左杠"；"还开着"这件事由**线头那枚徽**说（三态），
+     不必再拿一条杠说第二遍。 */
+/* ★★★leg167：**底改回 leg163 那一档的亮面**（`#282f3c`）。
+   为什么不是 `--sw2-inset`：那个令牌是 leg164/165 那一套**近黑中性板**下的产物（"比窗口底再深一档"），
+   而本笔把配色退回了 **leg163 的蓝灰板** —— 同一格在新板下**方向反了**：
+   面卡底 `#20252f` 是"比窗口底 `#1b1f28` 亮一档"，线头那一栏却取一个**更黑**的 `#050607`
+   ⇒ 出图是"卡里挖了几个黑洞"（本笔量到的实测：`threadBg rgb(5, 6, 7)` 对面卡 `rgb(32, 37, 47)`）。
+   ★leg163 的原值是 `#282f3c`（比面卡**亮**一档，实测 **1.143:1**，判据要 ≥1.08；对琥珀 **6.64:1**，
+     仍稳稳在暗色台面族里）。
+   ★★★leg168 勘正上一行那句话：那个令牌**没能"一个字不动"**——它的其余消费者全是**表单控件**
+     （输入框/下拉/搜索框/文本域），用户在实机上正是指着那几个框说「太黑了跟旁边格格不入」
+     ⇒ 本笔把那七处**整批退回 leg163 的原令牌**，`--sw2-inset` 那一格**同批撤掉**（零消费者不留）。
+     来路与逐处对照见 `:root` 里那一段长注与 `.sw2-param-select` 头上那一段。 */
+.sw2-pan-face .sw2-pan-thread{margin:10px 14px;background:#282f3c;border:1px solid #55627a;}
+.sw2-pan-face .sw2-pan-thread > summary:hover{background:var(--sw2-card-2);}
 /* 线伸到哪儿去了（面与面之间的对读）· 与这一处别的线共享谁 */
-.sw2-pan-else{font-size:11.5px;color:var(--sw2-text-dim);margin:2px 0 1px;}
-.sw2-pan-share{font-size:11.5px;color:var(--sw2-blue);margin:1px 0 2px;}
-.sw2-pan-share b{color:var(--sw2-text);}
-/* 单线地点：只被一条线到达的那些地方（挂在它那条线的落脚面里 · 地名照印） */
-.sw2-pan-lonebox{margin-top:11px;border-top:1px dashed var(--sw2-line-soft);padding-top:8px;}
-/* 「各处散落」：一个地方只有一条线路过的那一批（用户裁的名字，不是「其他」、不是「位置未明」） */
-.sw2-pan-other{border:1px dashed var(--sw2-line);border-radius:10px;background:var(--sw2-panel);padding:10px 13px;margin-bottom:14px;}
-.sw2-pan-otherh{font-size:12.5px;color:var(--sw2-text-dim);margin-bottom:5px;}
+.sw2-pan-else{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);margin:2px 0 1px;}
+.sw2-pan-share{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);margin:1px 0 2px;}
+.sw2-pan-share b{color:var(--sw2-text-body);font-weight:500;}
+/* 单线地点：只被一条线到达的那些地方（挂在它那条线的落脚面里 · 地名照印）
+   ★leg167：左右留白改由**这一格**给（它的行不再自带左右内距，见上面那条），
+   这样面卡里那一段与卡内的线头、事件行左右对齐在同一条竖线上。 */
+.sw2-pan-lonebox{margin-top:11px;border-top:1px solid var(--sw2-line-soft);padding:var(--sw2-sp-2) var(--sw2-sp-4) var(--sw2-sp-3);}
+/* 「各处散落」与「只有一件事」：★leg165 照演示改成**实线卡 ＋ 卡底**（原来是虚线/实线框 ＋ 面板底）——
+   两栏都收零散的事，靠**栏名与内容**分开，不再靠框的虚实（演示把那两条框线去掉了）。 */
+.sw2-pan-other,.sw2-pan-loose{background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);overflow:hidden;margin:0 0 var(--sw2-sp-3);}
+.sw2-pan-otherh{display:flex;align-items:baseline;gap:var(--sw2-sp-2);font-size:var(--sw2-fs-label);font-weight:600;color:var(--sw2-text-faint);letter-spacing:.07em;padding:var(--sw2-sp-3) var(--sw2-sp-4);border-bottom:1px solid var(--sw2-line-soft);margin:0;}
 /* ★★★leg160：**「时间段那一行」那两条规则整块撤掉**（`.sw2-pan-range` / `.sw2-pan-rangebtns`）——
    那一族（分段钮 /「整本账」/ 再往前一段 / 往后一段）随用户 2026-10-01 那条令整族撤掉：
    「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」
    ⇒ 这一页画多少由账上那一格「往回看轮数」决定，**页面上没有控件**（来路见 `src/panorama.js` 文件头）。
    ★留档：那两条规则当时**同批升过 `CSS_VERSION`**（leg159b）；撤它们也**真动了样式** ⇒ 本次同样升。
    ★别再请回来：那一族带来的两条病都还在原地（方向错 ＋ 长度随局无限长，实测整本账 48 屏）。 */
-/* 「只有一件事」那一栏（用户拍的那条）：与「各处散落」同一族的台面，但边框实线、颜色更淡——
-   两栏都收零散的事，靠**框的虚实**分开（虚线＝跟别的事没连成一场；实线＝只有一件事、后面没人接）。 */
-.sw2-pan-loose{border:1px solid var(--sw2-line-soft);border-radius:10px;background:var(--sw2-panel);padding:10px 13px;margin-bottom:14px;}
-/* ★自证闸（本棒最值钱的一处）：总数对不对得上，印在页脚——与编年页那条同源 */
-.sw2-pan-selfcheck{font-size:11.5px;color:var(--sw2-text-faint);margin-top:16px;border-top:1px dashed var(--sw2-line);padding-top:8px;line-height:1.8;}
-.sw2-pan-selfcheck b{color:var(--sw2-text-dim);}
+/* ★自证闸（本仓最值钱的一处）：总数对不对得上，印在页脚——与编年页那条同源 */
+.sw2-pan-selfcheck{font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);margin-top:var(--sw2-sp-4);border-top:1px solid var(--sw2-line-soft);padding-top:var(--sw2-sp-3);line-height:1.7;font-variant-numeric:tabular-nums;}
+.sw2-pan-selfcheck b{color:var(--sw2-text-dim);font-weight:500;}
 .sw2-pan-selfcheck.bad{color:var(--sw2-red);border-top-color:var(--sw2-red);}
 .sw2-pan-selfcheck.bad b{color:var(--sw2-red);}
 
@@ -1002,9 +1659,210 @@
     手机三档（360/390/414）的读数对照写在当棒交接文档 §3。
    ============================================================================ */
 
+/* 页面充分使用窗口宽度；正文、标签、说明按重要性区分。 */
+.sw2-window{line-height:1.7;}
+.sw2-view{padding:28px 32px 36px;scrollbar-width:thin;scrollbar-color:var(--sw2-line) var(--sw2-panel);}
+.sw2-view > *{width:100%;box-sizing:border-box;}
+.sw2-view .sw2-sv-head{margin-bottom:20px;gap:16px;align-items:center;}
+.sw2-view .sw2-sv-title{font-size:22px;line-height:1.4;font-weight:650;letter-spacing:0;}
+.sw2-view .sw2-sv-sub{font-size:13px;color:var(--sw2-text-dim);line-height:1.8;margin-top:8px;}
+.sw2-view .sw2-set-card{padding:20px 22px;border-radius:8px;min-width:0;box-sizing:border-box;}
+.sw2-view .sw2-set-card > h4{font-size:16px;font-weight:600;color:var(--sw2-text);letter-spacing:0;margin:0 0 18px;line-height:1.5;}
+.sw2-view .sw2-set-card > h4::after{display:none;}
+.sw2-view .sw2-hint{font-size:12px;line-height:1.8;color:var(--sw2-text-dim);}
+.sw2-view .sw2-group-h{font-size:13px;font-weight:600;letter-spacing:0;margin:22px 0 12px;flex-wrap:wrap;gap:4px 10px;}
+.sw2-view .sw2-group-h > em{font-weight:400;color:var(--sw2-text-dim);}
+.sw2-view .sw2-group-h:first-child{margin-top:0;}
+.sw2-view .sw2-fold{margin-top:10px;}
+.sw2-view .sw2-fold > summary{color:var(--sw2-text-dim);padding:4px 0;line-height:1.7;}
+.sw2-view .sw2-fold-body{padding:12px 16px;margin-top:8px;line-height:1.85;}
+.sw2-view .sw2-input{box-sizing:border-box;min-height:38px;padding:9px 12px;font-size:13px;font-weight:400;}
+.sw2-view .sw2-btn{padding:7px 12px;line-height:1.6;}
+.sw2-view .sw2-btn:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:3px;}
+.sw2-settings{gap:24px;}
+.sw2-settings-column,.sw2-params-column{display:flex;flex-direction:column;gap:20px;min-width:0;}
+.sw2-settings .sw2-field.sw2-field-inline{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;margin-top:14px;align-items:start;}
+.sw2-settings .sw2-field.sw2-field-inline > label{width:auto;font-size:13px;padding-top:8px;color:var(--sw2-text-body);}
+.sw2-settings .sw2-field.sw2-field-inline > .sw2-input{width:100%;max-width:none;}
+.sw2-settings .sw2-field.sw2-field-inline > .sw2-input[type="number"]{width:112px;text-align:left;}
+.sw2-settings .sw2-field.sw2-field-inline:has(> input[type="number"]){grid-template-columns:minmax(0,184px) 112px;}
+.sw2-settings .sw2-ctl-row{flex-wrap:wrap;gap:8px;}
+.sw2-settings .sw2-ctl-row > .sw2-input{flex:1 1 100%;width:100%;min-width:0;}
+.sw2-settings .sw2-group-h{padding-top:18px;border-top:1px solid var(--sw2-line);}
+.sw2-settings .sw2-group-h:first-of-type{padding-top:0;border-top:0;}
+.sw2-settings .sw2-source-line{padding:14px 16px;gap:8px;border:0;}
+.sw2-settings .sw2-source-note{color:var(--sw2-text-dim);line-height:1.8;}
+.sw2-settings > .sw2-settings-column > .sw2-settings-source{margin:0;padding:0 4px;}
+.sw2-settings-storage .sw2-row{flex-wrap:wrap;gap:4px 12px;padding:12px 0;}
+.sw2-settings-storage .sw2-row > em{flex:1 1 100%;}
+.sw2-settings-storage .sw2-cold-row{flex-wrap:wrap;gap:6px 12px;padding:12px 0;}
+.sw2-settings-storage .sw2-volinfo{min-width:0;}
+.sw2-settings-storage .sw2-actions{flex-wrap:wrap;margin-top:18px;}
+.sw2-param-tools{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;border-top:1px solid var(--sw2-line);padding-top:16px;}
+.sw2-param-tools > .sw2-actions,.sw2-param-tools > .sw2-fold{margin:0;}
+.sw2-params-grid{gap:24px;}
+.sw2-subtabs-page{flex:none;min-width:0;}
+.sw2-subtabs{display:flex;gap:8px;overflow-x:auto;padding:0 0 16px;margin-bottom:20px;border-bottom:1px solid var(--sw2-line);scrollbar-width:thin;}
+.sw2-subtab{flex:none;min-height:38px;padding:8px 16px;border:1px solid transparent;border-radius:var(--sw2-r-md);background:transparent;color:var(--sw2-text-dim);font:inherit;cursor:pointer;white-space:nowrap;}
+.sw2-subtab:hover{background:var(--sw2-hover);color:var(--sw2-text);}
+.sw2-subtab[aria-selected="true"]{background:var(--sw2-blue-soft);border-color:var(--sw2-blue);color:var(--sw2-text);}
+.sw2-subtab:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:2px;}
+.sw2-subpanel{max-width:1120px;min-width:0;width:100%;box-sizing:border-box;}
+.sw2-subpanel[hidden]{display:none;}
+.sw2-subpanel .sw2-settings{display:block;}
+.sw2-subpanel .sw2-params-grid{display:flex;flex-direction:column;gap:20px;}
+.sw2-setting-actions{display:flex;flex-wrap:wrap;gap:0 24px;flex:none;margin-bottom:20px;padding:4px 16px;background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);}
+.sw2-setting-actions > .sw2-row2{flex:1 1 400px;min-width:0;border-top:0;}
+.sw2-params-grid .sw2-master-switch{padding:20px 24px;border-left:3px solid var(--sw2-amber);gap:10px;}
+.sw2-params-grid .sw2-master-switch > h4{font-size:15px;flex:1;}
+.sw2-params-grid .sw2-master-switch > em{font-size:13px;font-style:normal;color:var(--sw2-text-body);line-height:1.8;}
+.sw2-params-grid .sw2-tgl{padding:13px 0;border-radius:0;}
+.sw2-params-grid .sw2-tgl h4{font-size:14px;font-weight:500;}
+.sw2-params-grid .sw2-tgl .sw2-actions{gap:0;border:1px solid var(--sw2-line);border-radius:6px;overflow:hidden;}
+.sw2-params-grid .sw2-tgl .sw2-actions .sw2-btn{border:0;border-radius:0;min-width:38px;padding:5px 10px;}
+.sw2-params-grid .sw2-tgl .sw2-param-val{display:none;}
+.sw2-params-grid .sw2-inject-box{gap:0;}
+/* ★★★（2026-10-05）表格行那一份：**框宽 96px**（照 leg169 的读数），而"说明"仍由上面那条基本规则
+   落在 `.sw2-field-head` 的下一行。★grid 那两列只作用于 `.sw2-field-head`（旧写法直接写在
+   `.sw2-field` 上 ⇒ 说明成了"第三行"，那正是用户截图里那一百多像素空档）。 */
+.sw2-params-grid .sw2-inject-box > .sw2-field{display:block;margin-top:12px;}
+.sw2-params-grid .sw2-inject-box > .sw2-field > .sw2-field-head{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:center;}
+.sw2-params-grid .sw2-inject-box > .sw2-field > .sw2-field-head > label{width:auto;font-size:13px;color:var(--sw2-text-body);}
+.sw2-params-grid .sw2-inject-box > .sw2-field .sw2-input{width:96px;text-align:left;}
+/* ★★★（2026-10-05 · 用户令「**把图片的第一段话中的关键信息抽取出来展示在参数页**」）：
+   **上一次注入的经过**那一行（哪几段、各多少字、往事怎么找回来的）。★形状是"小格流"——
+   一格一个"哪一段 多少字"，读的人一眼扫过去，不用读一整句（旧形状是一整条长句）。
+   措辞与数据住 `web/inject-readout.js`，这里只管怎么摆。 */
+.sw2-inject-facts{margin-top:var(--sw2-sp-3);}
+.sw2-inject-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px var(--sw2-sp-3);}
+.sw2-inject-row-wide{margin-top:var(--sw2-sp-1);}
+.sw2-inject-item{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);white-space:nowrap;}
+.sw2-inject-item > b{margin-right:6px;font-weight:500;color:var(--sw2-text-faint);}
+.sw2-inject-lead{color:var(--sw2-text-body);}
+.sw2-inject-sub{color:var(--sw2-text-dim);}
+.sw2-params-grid .sw2-atmo-card .sw2-row{padding:12px 0;}
+.sw2-params-grid .sw2-atmo-card .sw2-param-name{padding-bottom:4px;}
+.sw2-params-grid .sw2-atmo-card .sw2-row > em{color:var(--sw2-text-dim);}
+.sw2-cap-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:40px;margin:18px 0;}
+.sw2-cap-fields .sw2-row{display:grid;grid-template-columns:minmax(0,1fr) 104px;align-items:center;gap:4px 16px;padding:14px 0;border-top:1px solid var(--sw2-line);}
+.sw2-cap-fields .sw2-row > span:first-child{min-width:0;font-size:14px;}
+.sw2-cap-fields .sw2-param-input{box-sizing:border-box;width:104px;min-height:36px;text-align:left;}
+.sw2-cap-fields .sw2-limit-suggest{grid-column:1/-1;color:var(--sw2-text-dim);}
+.sw2-cap-fields .sw2-limit-group{grid-column:1/-1;display:flex;padding:20px 0 8px;border-top:0;margin-top:0;}
+.sw2-cap-fields .sw2-limit-group > b{font-size:15px;}
+.sw2-setting-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 24px;}
+.sw2-setting-tools .sw2-row2{padding:14px 0;border-top:1px solid var(--sw2-line);border-bottom:1px solid var(--sw2-line);}
+.sw2-setting-tools .sw2-row2-main{gap:4px;}
+.sw2-setting-tools .sw2-row2-main > b{font-size:14px;}
+.sw2-setting-tools .sw2-row2-main > span{color:var(--sw2-text-dim);line-height:1.7;}
+.sw2-setting-live-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px 36px;}
+.sw2-setting-live{border-bottom:1px solid var(--sw2-line);padding:0 4px 12px;}
+.sw2-setting-live > summary{font-size:13px;color:var(--sw2-text-body);cursor:pointer;}
+.sw2-setting-live > summary > span{font-size:12px;color:var(--sw2-text-dim);margin-left:12px;}
+.sw2-setting-live[open] > summary{margin-bottom:20px;}
+.sw2-setting-env{border-left:1px solid var(--sw2-line);padding-left:28px;}
+.sw2-setting-live .sw2-clash-main{font-size:17px;line-height:1.7;font-weight:500;}
+.sw2-setting-live .sw2-clash-sub{color:var(--sw2-text-dim);font-size:13px;margin-top:8px;}
+.sw2-setting-live .sw2-env-row{padding:4px 0;margin:0;gap:16px;grid-template-columns:32px 120px max-content;}
+.sw2-setting-live .sw2-env-name,.sw2-setting-live .sw2-env-val{font-size:13px;}
+.sw2-setting-tides{border-top:1px solid var(--sw2-line);padding-top:10px;}
+.sw2-setting-tides .sw2-fold-body > div:last-child{color:var(--sw2-text-body)!important;font-size:14px!important;line-height:1.9!important;}
+.sw2-setting-scales > .sw2-fold{border-top:1px solid var(--sw2-line);padding:10px 0;margin:0;}
+.sw2-setting-scales > .sw2-fold > summary{display:flex;flex-wrap:wrap;gap:8px;font-size:14px;color:var(--sw2-text-body);}
+.sw2-setting-scales .sw2-fold > summary::before{display:none;}
+.sw2-setting-scales .sw2-fold > summary{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;}
+.sw2-setting-scales .sw2-fold > summary > b{min-width:0;overflow-wrap:anywhere;}
+.sw2-setting-scales .sw2-fold > summary::after{content:'展开';margin-left:auto;font-size:12px;color:var(--sw2-blue);}
+.sw2-setting-scales .sw2-fold[open] > summary::after{content:'收起';}
+.sw2-setting-scales .sw2-fold .sw2-fold{border-top:1px solid var(--sw2-line);padding-top:10px;}
+.sw2-setting-scales .sw2-sv-row{line-height:1.85;gap:20px;padding:12px 0;}
+.sw2-setting-scales .sw2-sv-row > b{width:140px;overflow-wrap:anywhere;}
+.sw2-setting-scales .sw2-sv-row > span{min-width:0;color:var(--sw2-text-body);}
+.sw2-setting-reader{margin-top:24px;}
+.sw2-setting-searchbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;margin-bottom:14px;}
+.sw2-setting-search{display:flex;align-items:center;gap:14px;flex:0 1 640px;min-width:0;font-size:13px;color:var(--sw2-text-dim);}
+.sw2-setting-search > span{flex:none;}
+.sw2-setting-search > input{flex:1;min-width:0;width:100%;}
+.sw2-setting-search input::-webkit-search-cancel-button{display:none;}
+.sw2-setting-results{font-size:12px;color:var(--sw2-text-dim);}
+.sw2-setting-section{border-bottom:1px solid var(--sw2-line);}
+.sw2-setting-section:first-of-type{border-top:1px solid var(--sw2-line);}
+.sw2-setting-section > summary{list-style:none;display:flex;align-items:center;gap:16px;padding:16px 4px;cursor:pointer;font-size:15px;color:var(--sw2-text-body);}
+.sw2-setting-section > summary::-webkit-details-marker{display:none;}
+.sw2-setting-section > summary > span{font-weight:500;}
+.sw2-setting-section > summary > em{font-size:12px;font-style:normal;font-weight:400;color:var(--sw2-text-dim);margin-left:auto;}
+.sw2-setting-section > summary::after{content:'';width:7px;height:7px;border-right:1px solid var(--sw2-text-dim);border-bottom:1px solid var(--sw2-text-dim);transform:rotate(-45deg);margin:0 8px;flex:none;}
+.sw2-setting-section[open] > summary::after{transform:rotate(45deg);}
+.sw2-setting-section[open] > summary{color:var(--sw2-text);}
+.sw2-setting-section > summary:hover{background:var(--sw2-card);}
+.sw2-setting-section > summary:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:-2px;}
+.sw2-setting-section-body{padding:4px 20px 24px;}
+.sw2-setting-section-body > .sw2-set-card{background:none;border:0;padding:0;}
+.sw2-setting-section-body .sw2-sv-para{font-size:14px;line-height:1.95;color:var(--sw2-text-body);max-width:88ch;margin:8px 0;white-space:pre-wrap;}
+.sw2-setting-section-body .sw2-sv-row{padding:12px 0;font-size:14px;line-height:1.85;border-bottom:1px solid var(--sw2-line);}
+.sw2-setting-section-body .sw2-sv-hist{font-size:14px;line-height:1.95;padding:14px 0;max-width:94ch;}
+.sw2-setting-maintenance{margin-top:18px!important;}
+.sw2-setting-maintenance > .sw2-fold-body{background:none;padding:14px 0;}
+.sw2-setting-audit{margin:16px 0;}
+.sw2-setting-audit > h4{font-size:13px;color:var(--sw2-text-body);margin:0 0 6px;}
+.sw2-setting-warning{color:var(--sw2-amber);font-size:13px;border-left:2px solid var(--sw2-amber);padding:8px 12px;margin-bottom:16px;}
+.sw2-setting-reader [hidden]{display:none!important;}
+.sw2-view .sw2-pan-brg{line-height:1.75;font-weight:400;}
+.sw2-view .sw2-pan-brg > b:first-child{font-weight:400;}
+.sw2-view .sw2-pan-head,.sw2-view .sw2-pan-sub{font-size:13px;font-weight:500;letter-spacing:0;color:var(--sw2-text-dim);}
+.sw2-view .sw2-ch-line{padding-top:16px;padding-bottom:16px;}
+.sw2-view .sw2-milestone h5{font-size:15px;line-height:1.8;margin:16px 0;}
+.sw2-view .sw2-row[data-snap]{padding:16px 0;}
+.sw2-view .sw2-pan-fhn{font-size:16px;}
+.sw2-view .sw2-pan-thread > summary{padding-top:14px;padding-bottom:14px;}
+
+/* 观棋阅读工具与辅助区：只改变显示，不参与世界演化。 */
+.sw2-pan-overview{flex:none;margin-bottom:12px;border:1px solid #44536a;border-radius:6px;background:var(--sw2-card);}
+.sw2-pan-overview > summary{display:flex;align-items:center;gap:16px;padding:11px 16px;cursor:pointer;list-style:none;}
+.sw2-pan-overview > summary::-webkit-details-marker{display:none;}
+.sw2-pan-overview-title{font-size:13px;font-weight:600;white-space:nowrap;}
+.sw2-pan-overview-values{display:flex;flex-wrap:wrap;gap:6px 24px;flex:1;min-width:0;font-size:13px;color:var(--sw2-text-dim);}
+.sw2-pan-overview-values b{color:var(--sw2-text-body);font-weight:500;}
+.sw2-pan-overview-hint{font-size:12px;color:var(--sw2-blue);white-space:nowrap;}
+.sw2-pan-overview[open] > summary{border-bottom:1px solid #44536a;}
+.sw2-pan-overview .sw2-infoband{margin:0;border:0;border-radius:0;}
+.sw2-pan-tools{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px;}
+.sw2-pan-tools .sw2-input{min-width:0;max-width:100%;width:auto;}
+.sw2-pan-tools .sw2-pan-search{flex:1 1 220px;max-width:420px;}
+.sw2-pan-tools select{flex:0 1 200px;}
+.sw2-pan-filter{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;color:var(--sw2-text-body);cursor:pointer;}
+.sw2-pan-filter input{accent-color:var(--sw2-blue);}
+.sw2-pan-results{font-size:12px;color:var(--sw2-text-dim);}
+.sw2-pan-reading-actions{display:flex;gap:8px;margin-left:auto;}
+#sw2_view_panorama.sw2-pan-side-hidden .sw2-merged-grid{grid-template-columns:minmax(0,1fr);}
+#sw2_view_panorama [hidden]{display:none!important;}
+.sw2-pan-tools .sw2-btn:focus-visible,.sw2-pan-thread > summary:focus-visible,.sw2-pan-overview > summary:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:-2px;}
+
 @media (max-width:620px){
   /* ★leg104 原文照搬（这一条**现在才真的生效**——见文件前半那处指路注释）。 */
   .sw2-entity-row{grid-template-columns:minmax(0,1fr);gap:4px;}
+  .sw2-roster-head{gap:6px;padding-bottom:14px;}
+  .sw2-roster-head h2{font-size:20px;}
+  .sw2-roster-columns{display:none;}
+  .sw2-roster .sw2-ents-g-q{flex:1 1 100%;}
+  .sw2-roster .sw2-ents-tools-row>.sw2-ents-g:not(.sw2-ents-g-q){border-left:0;padding-left:0;}
+  .sw2-roster .sw2-agcell:empty,.sw2-roster .sw2-relone:empty{display:none;}
+  .sw2-roster .sw2-ents-pager{gap:10px;}
+  .sw2-roster .sw2-ents-hit{order:-1;flex-basis:100%;text-align:center;margin:0;}
+  .sw2-pan-overview > summary{align-items:flex-start;flex-wrap:wrap;gap:6px 12px;padding:10px 12px;}
+  .sw2-pan-overview-values{order:3;flex-basis:100%;gap:4px 16px;}
+  .sw2-pan-overview-hint{margin-left:auto;}
+  .sw2-pan-tools{gap:10px 8px;margin-bottom:12px;}
+  .sw2-pan-tools .sw2-pan-search{flex-basis:100%;max-width:none;}
+  .sw2-pan-tools select{flex:1 1 140px;}
+  .sw2-pan-reading-actions{margin-left:0;}
+  .sw2-pan-fh{padding:14px;}
+  .sw2-pan-face .sw2-pan-thread{margin:10px;}
+  .sw2-pan-thread > summary{grid-template-columns:10px minmax(0,1fr);gap:6px 8px;padding:12px;}
+  .sw2-pan-thread > summary > .sw2-pan-badge{grid-column:2;grid-row:3;margin-left:0;justify-self:start;}
+  .sw2-pan-thread > summary > .sw2-pan-span{grid-column:2;}
+  .sw2-pan-body{padding:8px 12px 16px 24px;}
+  .sw2-pan-events li{grid-template-columns:48px minmax(0,1fr);gap:8px;}
 
   /* ① 视口高与遮罩留边。
      ★病：`100vh` 在手机上等于"**地址栏收起时**"的高度（大视口）⇒ 面板比看得见的区域高，
@@ -1025,11 +1883,16 @@
   /* ② 页签：8 个页签在手机上折 **3–4 行**（实测 390 宽 = 130.8px、360 宽 = 172.4px，等于吃掉五分之一屏）
      ⇒ 改**一行横滑**（用户当场选的"一行横滑"）。
      ★`.sw2-tab{flex:none}` 必须有：不写的话一行里的页签会被压扁（flex 默认许缩），"横滑"就变成"挤成一团"。
-     ★`.sw2-tabs{flex:none}` 也必须有，而且**踩过一次**：`overflow-x:auto` 会让 `overflow-y` 跟着算成
-       `auto`（规范如此）⇒ 这一条自己成了**滚动容器** ⇒ 它在外壳那个定高 flex 列里的"自动最小高度"
-       变成 0 ⇒ **可以一直被压扁**（实测：页签行 12px、单枚 16px，整行几乎看不见）。
-       写 `flex:none` 就是"这一行按内容高，谁也不许压它"。 */
-  .sw2-tabs{flex:none;flex-wrap:nowrap;overflow-x:auto;padding:8px 10px 0;scrollbar-width:none;}
+     ★★「别把这一行压扁」那道防护住 **`.sw2-navrow{flex:none}`**（本段 ⑤ 那一条，leg162 立的）——
+       这一行（`.sw2-navrow`）才是外壳那个定高 flex 列的**直接子元素**；`overflow-x:auto` 会让
+       `overflow-y` 跟着算成 `auto`（规范如此）⇒ 谁带 `overflow` 谁就得自己写 `flex:none`，
+       否则它的"自动最小高度"算成 0 ⇒ **可以一直被压扁**（实测：页签行 12px、单枚 16px，整行几乎看不见）。
+     ★★★leg162（**实测改**）：这一条原来写的是 `.sw2-tabs{flex:none;…}`——**那个 `flex:none` 现在有害**：
+       leg162 把动作条并进同一行之后，`flex:none` 让页签按**内容宽**撑开（实测手机 390：页签 780px）
+       ⇒ 把右端那两枚按钮**顶到屏幕外**（实测按钮右边缘 1043px，而窗口只有 384）。
+       ⇒ 改成"**缩得下去 ＋ 自己横滑**"（`flex:1 1 0` ＋ `min-width:0` ＋ `overflow-x:auto`）：
+       页签装不下就横滑，两枚按钮永远钉在窗口内。 */
+  .sw2-tabs{flex:1 1 0;min-width:0;flex-wrap:nowrap;overflow-x:auto;padding:8px 10px 0;scrollbar-width:none;}
   .sw2-tabs::-webkit-scrollbar{display:none;}
   .sw2-tab{flex:none;}
   /* ★横滑那条**不留滚动条**：手机浏览器本来就是浮层滚动条（不占位），而桌面窄窗里它会占掉 15px、
@@ -1059,6 +1922,13 @@
        （本笔对用户的承诺是"桌面一个像素不动"）。 */
   .sw2-input,.sw2-ch-q,.sw2-ents-q,.sw2-param-input,.sw2-param-select,.sw2-field textarea{box-sizing:border-box;}
 
+  /* ③b ★Task 2：来源页在窄屏按"**列表 → 正文**"的顺序单列展开（批准设计 §4.2）。
+     桌面那一档是两栏 grid（左列表、右原文/选段），手机上把正文那一栏放到列表**下面**，
+     并且让"这一行是从哪本书来的"这类标记许折行——窄屏一行放不下"题名＋状态＋读法＋按钮"。 */
+  [data-source-columns],[data-source-columns][data-source-detail-open]{grid-template-columns:minmax(0,1fr);}
+  [data-source-detail-pane]{position:static;}
+  [data-source-original]{max-height:40vh;}
+
   /* ④ 壳与页的留白收一收（手机上一行只有四十来个字，两侧各 18px 太贵）。 */
   .sw2-header{flex-wrap:wrap;padding:10px 12px;gap:8px;}
   /* ★标题块在手机上给一个**小的折行基准**（120px）＋ 让它缩（`min-width:0`）。
@@ -1070,6 +1940,17 @@
   /* ★关窗那枚 ✕ **永远贴右**：320 宽时页头会折行，折下去的那一行若不给 `margin-left:auto`，
      ✕ 会落在**左边**（实测截图），跟它"关窗"的身份对不上。 */
   .sw2-close{margin-left:auto;}
+  /* ★leg162：那一行导航在手机上**只横滑页签那一半**（按钮钉在右端）——
+     故 `.sw2-navrow` 也要 `flex:none`（同 `.sw2-tabs` 那条：带 overflow 的一层不写它会被压扁），
+     而右端那格状态让位给宽度（窄屏只留两枚按钮）。 */
+  .sw2-navrow{flex:none;}
+  .sw2-actionbar{padding:0 10px 0 0;}
+  .sw2-window{position:relative;}
+  .sw2-operation-toggle{display:flex;align-items:center;justify-content:center;}
+  #sw2_world_chip{display:none;}
+  .sw2-actionbar{display:none;position:absolute;z-index:15;right:10px;top:64px;padding:8px;flex-direction:column;align-items:stretch;min-width:170px;background:var(--sw2-card);border:1px solid var(--sw2-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);}
+  .sw2-menu-open .sw2-actionbar{display:flex;}
+  .sw2-actionbar-state{display:none;}
   .sw2-statusbar{padding:6px 12px;}
   .sw2-view{padding:12px 12px 16px;}
   .sw2-footer{padding:9px 12px;}
@@ -1084,6 +1965,7 @@
        层级全压平：小字会跟父级一样大，信息带的"副角安静"就没了）。
      ★唯一的连带调整：折叠问号那个圈 `13px → 15px`（不换的话 12px 的字会撑破圈）。 */
   .sw2-subtitle,.sw2-col-head,.sw2-ref,.sw2-band-label,.sw2-readrow .sw2-readkey,
+  .sw2-actionbar-state,
   .sw2-env-row .sw2-env-name,.sw2-env-row .sw2-env-val,.sw2-env-row.sw2-nodata .sw2-env-val,
   .sw2-clash-sub,.sw2-num-sub,.sw2-agenda-card .sw2-astage,.sw2-agenda-card .sw2-asteps,.sw2-visible,
   .sw2-entry .sw2-cmeta,.sw2-now,.sw2-entity-kind,.sw2-ev-mark,.sw2-nodata-text,.sw2-nodata-tag,
@@ -1097,8 +1979,8 @@
   .sw2-cv-close,.sw2-cv-col,.sw2-cv-src,.sw2-cv-meta,.sw2-cv-verdict,.sw2-cv-chip,.sw2-cv-roll summary,
   .sw2-cv-in,.sw2-cv-hm,.sw2-cv-foot,.sw2-cv-hint,.sw2-ew-you,.sw2-ew-kind,.sw2-ew-n,.sw2-ew-src,
   .sw2-ew-note,.sw2-ew-cmeta,.sw2-ew-kindchip,.sw2-ew-hush,
-  .sw2-baseline-hint,.sw2-pan-stat,.sw2-pan-hint,.sw2-pan-span,.sw2-pan-badge,.sw2-pan-sub,.sw2-pan-t,
-  .sw2-pan-why,.sw2-pan-at,.sw2-pan-who,.sw2-pan-done,.sw2-pan-open,.sw2-pan-foot,.sw2-rawid-note,
+  .sw2-baseline-hint,.sw2-pan-span,.sw2-pan-badge,.sw2-pan-sub,.sw2-pan-t,
+  .sw2-pan-why,.sw2-pan-at,.sw2-pan-who,.sw2-pan-foot,.sw2-rawid-note,
   .sw2-pan-dashilab,.sw2-pan-brg,.sw2-pan-else,.sw2-pan-share,.sw2-pan-selfcheck,
   /* ★leg159b：观棋页新加那两块里的小字**并进上面这份名单**——不许另起一条 `{font-size:12px;}`
      （`test/mobile-layout.test.js` M7 那条棘轮取的是**第一条**整批规则的选择器表，另起一条等于
@@ -1107,8 +1989,38 @@
   /* ★★★leg160：`.sw2-pan-range` 与 `.sw2-pan-rangebtns .sw2-btn` **已随那一族撤掉** ⇒ 名单里
      这两格一并删（死选择器留在名单里，等于这份名单自己在说谎）。留下的 `.sw2-pan-loose` 是
      leg159b 的另一半（「只有一件事的线」那一栏），用户没撤它。 */
+  /* ★★★leg165：本笔按**新表**重抄观棋那一族（这一份名单是"本表里 <12px 的那一批"照全表逐条抄的，
+     `test/mobile-layout.test.js` 有一条**棘轮**咬着：谁再加一个小字类而没进名单，当场红）：
+       · **删**四格零生产者：`.sw2-pan-stat` / `.sw2-pan-hint`（leg164 已随汇总带撤掉产品）
+         / `.sw2-pan-done` / `.sw2-pan-open`（leg95 起就没生产者，规则随本笔重写一并撤）；
+       · **增**两格新进小字族的：`.sw2-pan-otherh` / `.sw2-pan-secn`
+         （演示把栏名与次要标签都做成 11px 大写小标签，它们现在真的 <12px）。 */
+  .sw2-pan-otherh,.sw2-pan-secn,
   .sw2-pan-loose{font-size:12px;}
   .sw2-fold > summary::before{width:15px;height:15px;}
+  .sw2-view .sw2-sv-head{margin-bottom:20px;align-items:flex-start;}
+  .sw2-view .sw2-sv-title{font-size:20px;}
+  .sw2-view .sw2-sv-cards{margin-left:0;}
+  .sw2-view .sw2-set-card{padding:18px 16px;}
+  .sw2-view .sw2-set-card > h4{font-size:16px;}
+  .sw2-settings,.sw2-params-grid{gap:16px;}
+  .sw2-settings-column,.sw2-params-column{gap:16px;}
+  .sw2-params-grid .sw2-master-switch > h4{flex:1 1 100%;}
+  .sw2-params-grid .sw2-master-switch > .sw2-param-val{margin-left:auto;}
+  .sw2-settings .sw2-field.sw2-field-inline{grid-template-columns:minmax(0,1fr);gap:6px;}
+  .sw2-settings .sw2-field.sw2-field-inline:has(> input[type="number"]){grid-template-columns:minmax(0,1fr) 112px;align-items:center;}
+  .sw2-settings .sw2-field.sw2-field-inline > label{padding-top:0;}
+  .sw2-settings .sw2-field.sw2-field-inline > .sw2-input[type="number"]{width:100%;}
+  .sw2-cap-fields{grid-template-columns:minmax(0,1fr);column-gap:0;}
+  .sw2-setting-tools{grid-template-columns:minmax(0,1fr);gap:16px;}
+  .sw2-setting-tools .sw2-row2{flex-wrap:wrap;gap:12px;}
+  .sw2-setting-env{border-left:0;padding-left:0;border-top:1px solid var(--sw2-line);padding-top:16px;}
+  .sw2-setting-live > .sw2-row2{flex-wrap:wrap;gap:12px;}
+  .sw2-setting-live > .sw2-row2 > .sw2-row2-main{flex-basis:100%;}
+  .sw2-setting-scales > .sw2-fold{padding:12px 14px;}
+  .sw2-setting-scales .sw2-sv-row{flex-direction:column;gap:4px;}
+  .sw2-setting-scales .sw2-sv-row > b{width:auto;}
+  .sw2-setting-scales .sw2-fold-body{padding:8px 0 8px 10px;}
 }
 
 /* ★★★leg145 · 触摸设备的手感（用户 2026-09-27 点头的那一档数字）。
@@ -1118,6 +2030,8 @@
      折叠问号 **20.4px** —— 手指点不中（误触的代价是"以为插件坏了"）。
    ★`display:inline-flex` 是给 `min-height` 用的：`.sw2-chip` 是 `<span>`（行内盒不吃 min-height）。 */
 @media (pointer:coarse){
+  .sw2-pan-filter,.sw2-pan-overview > summary{min-height:44px;box-sizing:border-box;}
+  .sw2-view .sw2-input,.sw2-view .sw2-param-input,.sw2-view .sw2-param-select{font-size:16px;}
   /* ★`box-sizing:border-box` 是为了让下面那些 `min-height` 真的等于"**总高**"：
      默认是 `content-box` ⇒ `min-height:44px` 加上内边距会变成 60px（实测页签就是这样）。
      这一档要的是"手指点得中"这个**结果尺寸**，不是"内容区 44px"。 */
@@ -1135,3 +2049,138 @@
   /* 手机上点按钮常被当成"双击放大"⇒ 这一族控件上把双击缩放关掉（滚动与单击不受影响）。 */
   .sw2-btn,.sw2-tab,.sw2-chip,.sw2-fchip,.sw2-model,.sw2-chainbtn,.sw2-close,.sw2-volact,.sw2-goto{touch-action:manipulation;}
 }
+
+/* leg175b: use the available reading width and highlight known people and places. */
+#sw2_view_panorama{padding:14px 22px 20px;}
+.sw2-story-app{position:relative;display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;container-type:inline-size;container-name:sw2-story;}
+.sw2-story-app button,.sw2-story-app input{font:inherit;box-sizing:border-box;}
+.sw2-story-app button{color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation;}
+.sw2-story-app button:focus-visible,.sw2-story-app input:focus-visible,.sw2-story-app summary:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:3px;}
+.sw2-story-app svg{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;pointer-events:none;}
+.sw2-story-nav{display:flex;align-items:center;gap:20px;flex:none;border-bottom:1px solid var(--sw2-line);padding:0 2px 6px;color:var(--sw2-text-dim);font-size:12px;}
+.sw2-story-nav button{min-height:32px;padding:5px 0;color:var(--sw2-text-dim);}
+.sw2-story-nav [aria-current="page"]{color:var(--sw2-text);border-bottom:2px solid var(--sw2-amber);}
+.sw2-story-nav [data-story-world]{margin-left:auto;}
+.sw2-story-world{color:var(--sw2-text-body);overflow-wrap:anywhere;}
+.sw2-story-scroll.sw2-merged-main{height:auto;min-height:0;flex:1 1 0;overflow:auto;overscroll-behavior:contain;padding:0 4px 0 0;scrollbar-gutter:stable;}
+[data-story-home-panel]{width:100%;margin:0;padding:10px 4px 16px;box-sizing:border-box;}
+.sw2-story-home-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 22px;}
+.sw2-story-home-head h1{font-size:20px!important;line-height:1.4!important;margin:0!important;}
+.sw2-story-home-head .sw2-story-intro{margin:0;}
+.sw2-story-app h1{font-weight:500;font-size:25px;line-height:1.55;letter-spacing:.015em;margin:0 0 8px;color:var(--sw2-text);overflow-wrap:anywhere;}
+.sw2-story-app h2{font-weight:500;font-size:17px;line-height:1.7;color:var(--sw2-text);overflow-wrap:anywhere;}
+.sw2-story-intro,.sw2-story-caption,.sw2-story-source,.sw2-story-results{font-size:12px;color:var(--sw2-text-dim);line-height:1.8;}
+[data-story-background]{margin:8px 0 0;padding:0 0 5px;border-bottom:1px solid var(--sw2-line-soft);color:var(--sw2-text-body);font-size:13px;line-height:1.8;}
+[data-story-background] p{margin:4px 0 0;}
+[data-story-background] summary{font-size:12px;color:var(--sw2-text-dim);cursor:pointer;}
+.sw2-story-tools{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin:8px 0 4px;}
+.sw2-story-views{display:flex;gap:23px;}
+[data-story-view]{padding:5px 0;min-height:34px;color:var(--sw2-text-dim)!important;font-size:14px!important;}
+[data-story-view][aria-selected="true"]{color:var(--sw2-text)!important;border-bottom:2px solid var(--sw2-amber);}
+[data-story-search-toggle]{min-height:32px;font-size:12px!important;color:var(--sw2-text-dim)!important;}
+[data-story-search-box]{display:flex;gap:10px;align-items:center;margin:12px 0;padding:7px 12px;border:1px solid var(--sw2-line);border-radius:var(--sw2-r-sm);}
+[data-story-search-input]{width:100%;min-width:0;color:var(--sw2-text);background:var(--sw2-panel);border:0;padding:5px 0;font-size:14px!important;}
+[data-story-clear]{flex:none;padding:4px;color:var(--sw2-text-dim)!important;font-size:12px!important;}
+[data-story-results]{display:block;color:var(--sw2-text-dim);font-size:12px;line-height:1.8;}
+[data-story-results]:empty{display:none;}
+[data-story-round]{font-size:12px;color:var(--sw2-text-dim);margin:6px 0 2px;line-height:1.8;}
+[data-story-row]{width:100%;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) auto 15px;gap:4px 18px;align-items:center;padding:8px 4px!important;border-bottom:1px solid var(--sw2-line-soft)!important;border-radius:0;transition:background .15s;}
+[data-story-row]:hover{background:var(--sw2-hover);}
+.sw2-story-row-main{min-width:0;}
+.sw2-story-change{display:block;color:var(--sw2-text);font-size:15px;line-height:1.65;font-weight:500;overflow-wrap:anywhere;}
+.sw2-story-row-meta{display:flex;flex-wrap:wrap;gap:2px 12px;color:var(--sw2-text-dim);font-size:12px;margin-top:2px;line-height:1.65;overflow-wrap:anywhere;}
+.sw2-story-state{color:var(--sw2-amber);font-size:12px;white-space:nowrap;font-weight:400;}
+[data-story-live="false"] .sw2-story-state{color:var(--sw2-text-dim);}
+.sw2-story-arrow{font-size:19px;color:var(--sw2-text-dim);width:15px;text-align:center;}
+[data-story-no-results]{padding:28px 4px;color:var(--sw2-text-dim);font-size:13px;line-height:1.9;}
+[data-story-detail]{width:100%;margin:0;padding:12px 4px 20px;box-sizing:border-box;}
+[data-story-back]{display:inline-flex;align-items:center;gap:8px;padding:4px 0;margin-bottom:8px;min-height:30px;color:var(--sw2-text-dim)!important;font-size:12px!important;}
+.sw2-story-detail-meta,.sw2-story-reader-meta{display:flex;flex-wrap:wrap;gap:7px 17px;font-size:12px;color:var(--sw2-text-dim);line-height:1.8;}
+.sw2-story-context-links{display:flex;flex-wrap:wrap;align-items:center;gap:7px 14px;margin:14px 0;font-size:12px;color:var(--sw2-text-dim);}
+[data-story-context]{padding:2px 0;font-size:12px!important;color:var(--sw2-blue)!important;overflow-wrap:anywhere;}
+.sw2-story-app .sw2-story-mention{font:inherit!important;color:var(--sw2-blue)!important;text-decoration:none;}
+.sw2-story-app .sw2-story-mention[data-story-kind="地点"]{color:var(--sw2-amber)!important;}
+.sw2-story-app button.sw2-story-mention{display:inline;padding:0;border:0!important;border-radius:0;vertical-align:baseline;text-align:inherit;}
+.sw2-story-chapter-links,.sw2-story-jumps{display:flex;gap:18px;flex-wrap:wrap;border-top:1px solid var(--sw2-line);border-bottom:1px solid var(--sw2-line);padding:6px 0;margin:12px 0 16px;}
+[data-story-jump]{padding:3px 0;color:var(--sw2-text-body)!important;font-size:12px!important;min-height:28px;}
+[data-story-jump]:last-child{color:var(--sw2-amber)!important;}
+/* 左侧轮次对齐成列，右侧每条记录用独立边框和底色区分。 */
+[data-story-detail] .sw2-story-round{display:grid;grid-template-columns:66px minmax(0,1fr);gap:20px;max-width:90ch;margin:0 0 20px;}
+[data-story-detail] .sw2-story-round-head{font-size:12px;font-weight:500;line-height:1.8;color:var(--sw2-text-dim);margin:0;padding:12px 10px 0 0;border-right:1px solid var(--sw2-line);}
+[data-story-detail] .sw2-story-round-body{min-width:0;}
+[data-story-detail] .sw2-story-chapter{display:block;box-sizing:border-box;margin:0 0 12px;padding:12px 16px;border:1px solid var(--sw2-line);border-radius:var(--sw2-r-sm);background:var(--sw2-panel);scroll-margin-top:16px;}
+[data-story-detail] .sw2-story-chapter:last-child{margin-bottom:0;}
+[data-story-detail] .sw2-story-chapter h2{font-size:16px;line-height:1.75;margin:0 0 6px;}
+[data-story-detail] .sw2-story-chapter p{font-size:15px;line-height:1.95;color:var(--sw2-text-body);margin:0 0 8px;overflow-wrap:anywhere;white-space:pre-line;}
+/* 人物、地点和来路提示作为次要信息。 */
+[data-story-detail] .sw2-story-chapter > .sw2-story-caption,
+[data-story-detail] .sw2-story-chapter > .sw2-story-chapter-time,
+[data-story-detail] .sw2-story-chapter > .sw2-story-chapter-where,
+[data-story-detail] .sw2-story-chapter > .sw2-story-chapter-note{font-size:12px;line-height:1.85;color:var(--sw2-text-dim);margin:0 0 5px;}
+[data-story-detail] .sw2-story-chapter > .sw2-story-closure-mark{font-size:12px;line-height:1.85;color:var(--sw2-amber);margin:0 0 4px;}
+[data-story-detail] .sw2-story-chapter .sw2-story-trace{margin:0 0 8px;}
+[data-story-detail] .sw2-story-chapter .sw2-story-trace > summary{font-size:12px;color:var(--sw2-text-dim);cursor:pointer;line-height:1.9;}
+[data-story-detail] .sw2-story-chapter .sw2-story-trace p{font-size:13px;line-height:1.9;color:var(--sw2-text-dim);margin:5px 0 0;padding-left:12px;border-left:1px solid var(--sw2-line-soft);}
+.sw2-story-source{border-top:1px solid var(--sw2-line-soft);padding-top:12px;margin-top:22px;}
+.sw2-story-drawer{position:absolute;z-index:2;inset:0 0 0 auto;width:min(460px,94%);max-height:100%;overflow:auto;overscroll-behavior:contain;padding:18px 22px;box-sizing:border-box;background:var(--sw2-card);border-left:1px solid var(--sw2-line);box-shadow:-16px 0 60px rgba(0,0,0,.28);}
+.sw2-story-context-open::after{content:"";position:absolute;z-index:1;inset:0;background:rgba(10,15,24,.64);}
+.sw2-story-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid var(--sw2-line);padding-bottom:12px;color:var(--sw2-text-dim);font-size:12px;}
+[data-story-close-context]{display:block;margin-left:auto;padding:5px;min-height:32px;color:var(--sw2-text-dim)!important;font-size:12px!important;}
+.sw2-story-drawer h2{font-size:23px;margin:20px 0 8px;}
+.sw2-story-drawer h3{font-size:13px;font-weight:500;color:var(--sw2-text-dim);margin:22px 0 9px;}
+.sw2-story-drawer p,.sw2-story-drawer dl{font-size:13px;color:var(--sw2-text-body);line-height:1.9;overflow-wrap:anywhere;}
+.sw2-story-drawer dt{color:var(--sw2-text-dim);font-size:12px;margin-top:10px;}
+.sw2-story-drawer dd{margin:0;}
+.sw2-story-drawer [data-story-open]{width:100%;padding:11px 0;text-align:left;border-bottom:1px solid var(--sw2-line-soft);color:var(--sw2-blue);font-size:13px;line-height:1.8;overflow-wrap:anywhere;}
+.sw2-story-world-index{display:grid;grid-template-columns:minmax(0,1fr);margin:12px 0 22px;}
+.sw2-story-drawer [data-story-world-entry]{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;min-height:44px;padding:10px 0;border-bottom:1px solid var(--sw2-line-soft)!important;font-size:13px!important;}
+[data-story-world-entry] small{font-size:12px;color:var(--sw2-text-dim);white-space:nowrap;}
+[data-story-world-input]{width:100%;padding:10px 12px;background:var(--sw2-panel);border:1px solid var(--sw2-line);border-radius:var(--sw2-r-sm);font-size:14px!important;color:var(--sw2-text);}
+.sw2-story-world-facts{margin:15px 0 22px;font-size:13px;color:var(--sw2-text-body);}
+.sw2-story-world-facts > summary{cursor:pointer;line-height:1.8;}
+.sw2-story-drawer [data-story-world]{font-size:12px;color:var(--sw2-text-dim);padding:8px 0;}
+.sw2-story-drawer .sw2-infoband{flex-direction:column;gap:12px;padding:14px;margin:18px 0;}
+.sw2-story-drawer .sw2-band-block{flex:1 1 auto!important;min-width:0;}
+.sw2-story-drawer .sw2-agenda-strip{margin:18px 0;}
+.sw2-story-drawer .sw2-side{grid-template-columns:minmax(0,1fr);}
+@container sw2-story (max-width:640px){
+  .sw2-story-nav{gap:12px;font-size:12px;}
+  [data-story-home-panel]{padding:12px 2px 18px;}
+  .sw2-story-app h1{font-size:22px;}
+  [data-story-row]{grid-template-columns:minmax(0,1fr) 15px;column-gap:8px;padding:9px 0!important;}
+  .sw2-story-state{grid-column:1;grid-row:2;}
+  .sw2-story-arrow{grid-column:2;grid-row:1 / 3;}
+  .sw2-story-change{font-size:14px;}
+  .sw2-story-row-meta{font-size:12px;gap:3px 9px;}
+  [data-story-detail]{padding:15px 2px 22px;}
+  [data-story-detail] .sw2-story-round{grid-template-columns:56px minmax(0,1fr);gap:10px;margin-bottom:16px;}
+  [data-story-detail] .sw2-story-round-head{padding:10px 6px 0 0;}
+  [data-story-detail] .sw2-story-chapter{padding:10px 12px;}
+  [data-story-detail] .sw2-story-chapter h2{font-size:15px;}
+  .sw2-story-drawer{width:100%;padding:16px;}
+}
+@media (max-width:620px){
+  #sw2_view_panorama{padding:12px 12px 18px;}
+}
+@media (pointer:coarse){
+  .sw2-subtab{min-height:44px;}
+  .sw2-story-app button,.sw2-story-app summary{min-height:36px;}
+  .sw2-story-nav button,[data-story-search-toggle],[data-story-view],[data-story-close-context]{min-height:44px;}
+  [data-story-search-input],[data-story-world-input]{font-size:16px!important;}
+}
+@media (prefers-reduced-motion:reduce){
+  .sw2-story-app *{scroll-behavior:auto!important;transition:none!important;}
+}
+/* Map popup lives on body, outside the redrawable panel. */
+.sw2-map-mask{position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.66);display:flex;align-items:center;justify-content:center;padding:18px;color:#e7e2d7;font:14px/1.5 sans-serif}
+.sw2-map-mask .sw2-map-box{box-sizing:border-box;background:#232528;border:1px solid #777164;border-radius:12px;width:min(1100px,100%);max-height:calc(100dvh - 36px);overflow:auto;padding:20px;box-shadow:0 12px 60px #0008}
+.sw2-map-mask .sw2-map-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sw2-map-mask h2{margin:0 auto 0 0}.sw2-map-mask h3{margin-top:12px}
+.sw2-map-mask .sw2-btn{color:inherit;background:#393b3e;border:1px solid #777164;border-radius:5px;padding:7px 12px;cursor:pointer;min-height:36px}
+.sw2-map-mask .sw2-map-search{display:block;margin-top:16px}.sw2-map-mask input{box-sizing:border-box;width:100%;color:inherit;background:#191b1e;border:1px solid #777164;padding:9px;font-size:16px}
+.sw2-map-mask .sw2-map-columns{display:grid;grid-template-columns:minmax(150px,1fr) minmax(250px,2fr) minmax(170px,1fr);gap:20px}
+.sw2-map-mask nav .sw2-btn{display:block;margin-bottom:7px;width:100%;text-align:left}
+.sw2-map-mask .sw2-map-record{padding:9px 0;border-bottom:1px solid #777164}.sw2-map-mask summary{cursor:pointer;min-height:32px}
+.sw2-map-mask .sw2-map-graph{width:100%;height:auto;max-height:420px}.sw2-map-mask svg line{stroke:#aaa;stroke-width:2}.sw2-map-mask svg text{fill:currentColor;font-size:14px}.sw2-map-mask .sw2-map-edge-passage{stroke:#d9b978;stroke-dasharray:5 3}.sw2-map-mask .sw2-map-edge-adjacent{stroke:#7da7bb}
+.sw2-map-entry{display:flex;align-items:center;gap:12px}.sw2-map-mask button:focus-visible,.sw2-map-mask summary:focus-visible,.sw2-map-mask input:focus-visible{outline:2px solid #dfba74;outline-offset:3px}
+@media(max-width:620px){.sw2-map-mask{padding:6px;align-items:stretch}.sw2-map-mask .sw2-map-box{max-height:calc(100dvh - 12px);padding:12px}.sw2-map-mask .sw2-map-columns{grid-template-columns:1fr}.sw2-map-mask .sw2-btn,.sw2-map-mask summary{min-height:44px}}

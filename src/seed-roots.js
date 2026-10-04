@@ -20,6 +20,19 @@
 //   · **失败零阻塞**：调用方拿到 `{ ok:false }` 就照常跑世界（与检索注入同一条规矩）。
 //   · **不碰世界进度**：只往 `events` 追加事件 + 写 `meta.seedRoots`；不写 tick/盘算/编年/权重。
 import { normalizePosition } from './position.js';
+import { ABSTRACT_FACT_RULES } from './abstract-shape.js';
+// ★★★Task 4（integration boundaries）：当事人的名号解析改用**全仓唯一那把尺子**（正名优先 + 别名并集后判唯一）。
+//   旧法 `byName` 是"正名精确 Map、先到先得"：①**已确认别名一律认不出**（复审红：`青衣客` 被丢）；
+//   ②两个实体同名（跨类别）时**最后写入的那个赢**（复审红：`甲` 记到了 faction 头上）——
+//   而设计 §6.2/§6.3 要求"不同身份的同名项不被强行合并""相关实体解析使用相同的身份信息"。
+import { resolveEntityIdentityWithCanon } from './entity-identity.js';
+// ★★★Task 4（integration boundaries）：起根的**来源身份 + 原话**协议（与属性/关系/设定同一条尺子）。
+//   为什么必须共用 `abstract-evidence.js`（而不是在这里再写一遍字符串查找）：
+//     · 发射端的 `allowedBlocks` 是"本次真正交出去的材料"，`freezeAllowedSources` 给出编号与逐字文本；
+//     · `scopeForRows`/`verifyQuote` 把"编号"绑到**这一次调用真正展示的那一段**上——
+//       同句出现在别的条目里时不许冒领（`task-3-evidence-boundary-red` 那条病）。
+//   ⇒ 起根此前是严格面上唯一**没有编号**的一格（复审 F1：提示词形状里根本没有 `ev`），这里补齐。
+import { freezeAllowedSources, evidenceDictionary, verifyQuote, presenceIn, scopeForRows, materialRowsOf } from './abstract-evidence.js';
 // ★★★leg144：起根这一遍也**并发发出去、按块号收回来**（同一个机制、同一把尺子：
 //   `src/abstract.js` 的 `EXTRACT_CONCURRENCY` 头注写了为什么是 3、以及"失败即退回串行"）。
 //   ★它读的是**同一本书**、打的是**同一条网关**——所以并发度由调用方传**同一个数**，不另立一个。
@@ -83,11 +96,24 @@ export const SEED_ROOT_ITEM_SHAPE = {
 };
 
 /**
+ * ★★★Task 4：**严格道下根那一格的出处形状**（`ev:{s,q}`）——**一处定义、两处展开**。
+ *   与属性/关系/设定同一条纪律（设计 §6.1：模型输出附相应来源条目及原文依据）。
+ *   没有允许来源（legacy）时**一个字都不加** ⇒ 旧固定响应/旧账零扰动。
+ */
+export const SEED_ROOT_EV_SHAPE = { s: '来源编号（见下方「来源清单」）', q: '该来源里逐字照抄的原文依据' };
+
+/** 根那一格的形状（`evidence=true` 时并上 `ev`；legacy 时逐字等于旧形状）。 */
+export function seedRootsShape({ evidence = false } = {}) {
+    return [{ ...SEED_ROOT_ITEM_SHAPE, ...(evidence ? { ev: SEED_ROOT_EV_SHAPE } : {}) }];
+}
+
+/**
  * ★★★leg150：**"起根"这一问的正文**（四道判据 ＋ 不许发明 ＋ 那份候选名单）——**唯一一份**。
- * @param {object} [opts] `{ candidates }` = 候选名单（账上"还没上过台"的人与势力名，可为空）
+ * @param {object} [opts] `{ candidates, evidence }` = 候选名单（账上"还没上过台"的人与势力名，可为空）
+ *   ＋ `evidence`（严格道：多三条"每条根都要带 `ev`"的引用纪律；legacy 时一行不加）
  * @returns {string[]} 提示词里的那几行（调用方负责加"这件事叫什么"与输出形状）
  */
-export function seedRootsBrief({ candidates = [] } = {}) {
+export function seedRootsBrief({ candidates = [], evidence = false } = {}) {
     const names = (Array.isArray(candidates) ? candidates : [])
         .map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, SEED_CANDIDATES_TOP);
     const listBlock = names.length
@@ -108,6 +134,12 @@ export function seedRootsBrief({ candidates = [] } = {}) {
         '',
         '**不要发明**：每条都要能指回书里的原话。书里没写地点就不写地点；书里没写谁在办就不要编一个人出来。',
         '宁可少给（4 条扎实的，胜过 8 条含糊的）。',
+        ...(evidence ? [
+            '',
+            '★★**每条根都要带 `ev`（出处）**：`ev.s` = 下面「来源清单」里的编号，`ev.q` = 该编号来源里**逐字照抄**的那句原文；',
+            '  `quote`（书里那句话）必须能在自己的 `ev.q` 里**逐字找到**——找不到的根一律不收（引擎逐字核，核不过就丢）。',
+            '  编号只能引**本次这一块**列出的来源；引别的条目、或编一句原文，都会被拒。',
+        ] : []),
         ...listBlock,
     ];
 }
@@ -125,7 +157,7 @@ export function seedRootsBrief({ candidates = [] } = {}) {
  *       这正是"另起一条根"要的；而且**对得上就能落账**（对不上的名字仍会被 `applySeedRoots` 丢掉）。
  *   ★不传候选池时行为与旧版逐字一致（老调用方零扰动）。
  */
-export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = SEED_CHUNK_CHAR } = {}) {
+export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = SEED_CHUNK_CHAR, sources = null, scope = null } = {}) {
     // ★★leg60（用户实机报"起根一直是 0 条"时顺手查出来的相邻 bug）：**二次截断**。
     //   本函数一直硬切 `.slice(0, SEED_CHUNK_CHAR)`，而 `seedRootsChunked` 早就把块按
     //   `chunkBookText(src, chunkChars)` 切好了（实测块 ≈31,447 字符 > 30,000）⇒
@@ -134,14 +166,19 @@ export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = S
     //   ⇒ 口径与注释对齐：`maxChars` 可注入，**单发路径保持 30000**（老调用方零扰动），
     //     分块路径传 `Infinity`（块的大小由调用方决定，这里不再动刀）。
     const src = maxChars === Number.POSITIVE_INFINITY ? String(sourceText ?? '') : String(sourceText ?? '').slice(0, maxChars);
+    // ★★★Task 4：严格道 = 调用方给了本次允许来源（发射端 `allowedBlocks`）⇒ 起根也走"编号 + 原话"。
+    //   没给 ⇒ **逐字等于旧提示词**（旧调用方/固定响应零扰动）。
+    const evidence = Boolean(sources && Array.isArray(sources.list) && sources.list.length);
     return [
         '你在读一部小说的设定与正文。请只做一件事：**把其中"正在发生的事"挑出来**。',
+        ...ABSTRACT_FACT_RULES,
         '',
         // ★leg150：判据与候选名单**一处定义**（另一处展开在 `buildAttrsOnlyPrompt` 的 roots 那一支）
-        ...seedRootsBrief({ candidates }),
+        ...seedRootsBrief({ candidates, evidence }),
+        ...(evidence ? ['', evidenceDictionary(sources, { scope })] : []),
         '',
         '输出**只输出 JSON**（不要解释、不要 Markdown 围栏），形状如下：',
-        JSON.stringify({ roots: [SEED_ROOT_ITEM_SHAPE] }, null, 2),
+        JSON.stringify({ roots: seedRootsShape({ evidence }) }, null, 2),
         '',
         '—— 以下是书文 ——',
         src,
@@ -153,16 +190,24 @@ export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = S
  * ★它**不判**"这条够不够好"（那是提示词的事，也是抽取者的事）——只判"形状是否可用"，
  *   与 `sanitizeCanon`/`sanitizeBookFields` 同一治法（净化坏项、如实上报，不静默）。
  * @param {object} raw 模型给的 `{roots:[…]}`（或直接一个数组）
- * @param {object} [opts] `{ max, sourceText }`——★`sourceText` = **这一块的书文**：
- *   给了就核"书里原话真的在书里"（见 `SEED_QUOTE_MIN_RUN`）；不给 ⇒ 这一条**核不了**，
- *   如实记一条警告（**不许静默降级**：旧调用方零扰动，但"没核"这件事必须看得见）。
+ * @param {object} [opts] `{ max, sourceText, frozen, scope, spanText }`
+ *   · `sourceText` = **这一块的书文**（legacy 口径）：给了就核"书里原话真的在书里"
+ *     （见 `SEED_QUOTE_MIN_RUN`）；不给 ⇒ 这一条**核不了**，如实记一条警告
+ *     （**不许静默降级**：旧调用方零扰动，但"没核"这件事必须看得见）。
+ *   · ★★★Task 4（严格道）：`frozen` = 本次允许来源（`freezeAllowedSources` 的产物）——
+ *     给了它就**只认**"`ev.s` 在本次展示的来源里 + `ev.q` 在本次展示的片段里 + `quote` 在自己的 `ev.q` 里"，
+ *     与属性/关系/设定**同一把尺子**（`verifyQuote`）。`scope`/`spanText` 二者给一个即可
+ *     （`scope` 更精确：由调用方按**这一次调用真正展示的行号**算出；`spanText` 由 `verifyQuote` 反推）。
+ *     严格道下**不再**退回"块内存在性"：算不出作用域 ⇒ 拒收（missing scope 不许当 legacy）。
  */
-export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '' } = {}) {
+export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '', frozen = null, scope = null, spanText = null } = {}) {
     const warnings = [];
     const list = Array.isArray(raw?.roots) ? raw.roots : (Array.isArray(raw) ? raw : []);
     if (!list.length) return { roots: [], warnings: ['起根结果为空（无 roots 数组或数组为空）'] };
-    const bookText = normalizeForQuoteMatch(sourceText);
-    if (!bookText) warnings.push('没有书文可比 ⇒ 本次**没有核对**"原话是否真在书里"（调用方要传 sourceText）');
+    // ★严格道 = 有允许来源；此时出处闸由 `verifyQuote` 全权负责（见下），不再用"块内跑长"那条粗尺。
+    const strict = Boolean(frozen && Array.isArray(frozen.list) && frozen.list.length);
+    const bookText = strict ? '' : normalizeForQuoteMatch(sourceText);
+    if (!strict && !bookText) warnings.push('没有书文可比 ⇒ 本次**没有核对**"原话是否真在书里"（调用方要传 sourceText）');
     const seen = new Set();
     const roots = [];
     for (const [i, r] of list.entries()) {
@@ -177,8 +222,19 @@ export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '' }
             .slice(0, 3);
         const quote = String(r.quote ?? '').trim().slice(0, 120);
         if (!quote) { warnings.push(`roots[${i}]: 没有书里原话（quote 空）⇒ 指不回书里，丢`); continue; }
-        // ★★★本笔新立：**"指回书里"必须真的核**（此前只判"非空" ⇒ 模型写什么句子都算数）
-        if (bookText) {
+        if (strict) {
+            // ★★★Task 4：**严格道的出处闸**（与关系边/属性值同一条）——编号必须在**本次展示的**来源里，
+            //   原话必须在**本次展示的片段**里；`quote` 还必须能在自己的 `ev.q` 里逐字找到
+            //   （"书里那句话"与被引的那句必须是同一处材料，不许借别处）。
+            const ev = (r.ev && typeof r.ev === 'object' && !Array.isArray(r.ev)) ? r.ev : null;
+            const v = verifyQuote(frozen, { ev, scope: scope || null, spanText: spanText ?? null, cls: 'root', subject: title });
+            if (!v.ok) { warnings.push(`roots[${i}]: ${v.why} ⇒ 丢（严格道：起根也要来源编号 + 原话）`); continue; }
+            if (!presenceIn(v.quote, quote)) {
+                warnings.push(`roots[${i}]: "书里那句话"不在所引原话里（${v.ref}）⇒ 丢`);
+                continue;
+            }
+        } else if (bookText) {
+            // ★★★本笔新立：**"指回书里"必须真的核**（此前只判"非空" ⇒ 模型写什么句子都算数）
             const run = longestBookRun(quote, sourceText);
             const need = Math.min(normalizeForQuoteMatch(quote).length, SEED_QUOTE_MIN_RUN);
             if (run < need) {
@@ -188,6 +244,8 @@ export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '' }
         }
         if (!parties.length) { warnings.push(`roots[${i}]: 没有当事人（parties 空）⇒ 没人办的事起不了根，丢`); continue; }
         seen.add(title);
+        // ★落账形状**一个字不改**：`{title, position, parties, quote, why}`——原始凭证（`ev`/来源编号）
+        //   是过程材料，核完即弃（与关系边的 `_swVerified` 同一条：**不进世界账、不进缓存**）。
         roots.push({ title, position, parties, quote, why: String(r.why ?? '').trim().slice(0, 80) });
         if (roots.length >= Math.min(max, SEED_ROOTS_MAX)) break;
     }
@@ -203,20 +261,23 @@ export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '' }
  */
 export function applySeedRoots(ssot, roots, { fingerprint = '', at = '', tick = null } = {}) {
     const events = Array.isArray(ssot.events) ? ssot.events : (ssot.events = []);
-    const byName = new Map();
-    for (const e of ssot.entities || []) if (e?.name) byName.set(String(e.name), e.id);
+    // ★★★Task 4：账上实体 + 书名录（旧世界别名只住在名册里，见 `resolveEntityIdentityWithCanon` 的兜底档）
+    //   ——两样都交给**共用解析器**；本函数不再自己建"正名 Map"。
+    const entities = (ssot.entities || []).filter((e) => e && typeof e === 'object');
+    const canon = ssot.context?.setting?.frozen?.canon?.bookEntities || [];
     const taken = new Set(events.map((e) => e.id));
     const tickNow = Number.isFinite(tick) ? tick : (ssot.meta?.tick ?? 0);
     const skippedParties = [];
     const ids = [];
     for (const r of roots) {
-        // 当事人必须是**账上真有**的实体（名字精确匹配）——对不上的丢，不新建（"宁缺勿造"）
+        // 当事人必须是**账上真有**的实体（唯一命中才算：正名优先、别名并集后判唯一）——
+        //   未命中/歧义一律丢并如实进 `skippedParties`，**不新建实体、不猜**（"宁缺勿造"）。
         const ripples = [];
         for (const name of r.parties) {
-            const id = byName.get(String(name));
-            if (!id) { skippedParties.push(String(name)); continue; }
-            if (id === ssot.context?.playerId) continue;      // 红线 1：玩家不当代言人
-            if (!ripples.includes(id)) ripples.push(id);
+            const who = resolveEntityIdentityWithCanon(entities, canon, name);
+            if (who.status !== 'ok' || !who.id) { skippedParties.push(String(name)); continue; }
+            if (who.id === ssot.context?.playerId) continue;      // 红线 1：玩家不当代言人
+            if (!ripples.includes(who.id)) ripples.push(who.id);
         }
         if (!ripples.length) continue;                        // 一个当事人都对不上 ⇒ 这条根起不了（不猜）
         let n = 1;
@@ -375,17 +436,24 @@ export async function seedRoots({ ssot, sourceText, extract, fingerprint = '', a
 }
 
 /** 把书文按行切成块（**与名册抽取的 `chunkRows` 同一治法**；起根与名册用同一把尺子）。 */
-export function chunkBookText(text, maxChar = SEED_CHUNK_CHAR) {
+// ★★★Task 4：**带行号**的版本是唯一实现——`chunkBookText` 只是它的薄壳。
+//   为什么：严格道要把"这一块展示了哪些行"交回来源块（`scopeForRows`），
+//   而分块与作用域**必须是同一把尺子**（与 `src/abstract.js` 的 `chunkRowsWithRanges` 同一条纪律）。
+export function chunkBookTextWithRanges(text, maxChar = SEED_CHUNK_CHAR) {
     const rows = String(text ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
     const chunks = [];
-    let cur = []; let len = 0;
-    for (const r of rows) {
-        const l = Array.from(r).length;
-        if (cur.length && len + l > maxChar) { chunks.push(cur.join('\n')); cur = []; len = 0; }
-        cur.push(r); len += l;
+    let cur = []; let len = 0; let from = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+        const l = Array.from(rows[i]).length;
+        if (cur.length && len + l > maxChar) { chunks.push({ text: cur.join('\n'), from, to: i - 1 }); cur = []; len = 0; from = i; }
+        cur.push(rows[i]); len += l;
     }
-    if (cur.length) chunks.push(cur.join('\n'));
+    if (cur.length) chunks.push({ text: cur.join('\n'), from, to: rows.length - 1 });
     return chunks;
+}
+
+export function chunkBookText(text, maxChar = SEED_CHUNK_CHAR) {
+    return chunkBookTextWithRanges(text, maxChar).map((c) => c.text);
 }
 
 /**
@@ -457,10 +525,36 @@ export function seedRootsFromPass(ssot, { perChunk = [], fingerprint = '', at = 
 export async function seedRootsChunked({
     ssot, chunks = [], extract, fingerprint = '', at = '', candidates = [], seedChunkChar = SEED_CHUNK_CHAR,
     maxPerChunk = Math.ceil(SEED_ROOTS_MAX / 2), onProgress = null, mergeExisting = true, concurrency = 1,
+    sourceText = '', allowedSources = null, evidencePolicy = null,
 } = {}) {
     if (!ssot?.meta) return { ok: false, errors: ['无世界账（ssot.meta 缺失）'] };
     if (typeof extract !== 'function') return { ok: false, errors: ['未提供抽取调用（extract 注入缺失）'] };
-    const list = (Array.isArray(chunks) ? chunks : []).map((c) => String(c ?? '')).filter((c) => c.trim());
+    // ★★★Task 4（integration boundaries）：**起根的严格道**——与 `extractWorldSetting` 同一条政策口径：
+    //   · 给了允许来源（发射端 `allowedBlocks`）⇒ strict：每条根要"编号 + 原话"；
+    //   · 显式 `evidencePolicy:'legacy'` ⇒ 旧固定响应那条路（逐字旧行为）；
+    //   · **显式要 strict 却没给允许来源 ⇒ 明确拒绝**，不许静默回落 legacy（"没材料"≠"不需要材料"）。
+    const frozen = freezeAllowedSources(allowedSources);
+    const policy = evidencePolicy === 'legacy' ? 'legacy' : (evidencePolicy === 'strict' ? 'strict' : (frozen ? 'strict' : 'legacy'));
+    if (policy === 'strict' && !frozen) {
+        return { ok: false, errors: ['起根依据: 本次要求 strict（来源编号 + 原话）但调用方没有提供「允许来源」清单 ⇒ 拒绝按未核实入账（不许自动回落 legacy）'], chunks: [] };
+    }
+    const strict = policy === 'strict' && Boolean(frozen);
+    // 每块的**本次展示片段**：块带行号（`chunkBookTextWithRanges`）且给了整份正文 ⇒ 用行号算（精确）；
+    //   否则交给 `verifyQuote` 的 `spanText` 兼容入口反推（重复正文取交集，更严）。
+    const material = strict ? String(sourceText ?? '') : '';
+    const materialRowList = strict && material ? materialRowsOf(material) : null;
+    const scopeOfChunk = (c) => {
+        if (!strict || !materialRowList) return null;
+        const from = Number.isInteger(c?.from) ? c.from : null;
+        const to = Number.isInteger(c?.to) ? c.to : null;
+        if (from === null || to === null || to < from) return null;
+        const indexes = [];
+        for (let i = from; i <= to && i < materialRowList.length; i += 1) indexes.push(i);
+        return scopeForRows(frozen, { text: material, rows: materialRowList, indexes });
+    };
+    const list = (Array.isArray(chunks) ? chunks : [])
+        .map((c) => (typeof c === 'string' ? { text: String(c) } : (c && typeof c === 'object' ? c : null)))
+        .filter((c) => c && String(c.text ?? '').trim());
     if (!list.length) return { ok: false, errors: ['书文为空（没有可分块的内容）'] };
     if (mergeExisting) {
         // ★只查**幂等**（同一本书不重种），**不查"线头够不够"**——
@@ -496,18 +590,26 @@ export async function seedRootsChunked({
     //     那两条属"改失败分诊"，用户 2026-09-27 明说「**先只做设置**」⇒ 留作活儿单。
     let degraded = false;
     const concurrencyNow = () => (degraded ? 1 : concurrency);
-    const results = await runParallel(list, concurrencyNow, async (src, i) => {
-        const sliced = String(src);
+    const results = await runParallel(list, concurrencyNow, async (chunk, i) => {
+        const sliced = String(chunk.text);
+        const scope = scopeOfChunk(chunk);
         const chars = Array.from(sliced).length;
         let roots = [];
         let warnings = [];
         let err = null;
         try {
             // ★leg60：**传 Infinity**——块已经由 `chunkBookText` 切好，这里不许再切（见 buildSeedRootsPrompt 头注）
-            const raw = await extract(buildSeedRootsPrompt(sliced, { candidates, maxChars: Number.POSITIVE_INFINITY }));
+            const raw = await extract(buildSeedRootsPrompt(sliced, {
+                candidates, maxChars: Number.POSITIVE_INFINITY,
+                ...(strict ? { sources: frozen, scope } : {}),     // ★Task 4：来源清单 = 这一块真正见到的那几条
+            }));
             const parsed = typeof raw === 'string' ? safeJson(raw) : raw;
             if (!parsed) throw new Error('返回的不是合法 JSON');
-            const clean = sanitizeSeedRoots(parsed, { max: maxPerChunk, sourceText: sliced });
+            // ★Task 4：严格道把"编号 + 原话"核到**这一块真正展示的片段**上（legacy 逐字旧行为）。
+            const clean = sanitizeSeedRoots(parsed, {
+                max: maxPerChunk, sourceText: sliced,
+                ...(strict ? { frozen, scope, spanText: sliced } : {}),
+            });
             roots = clean.roots;
             warnings = clean.warnings;
         } catch (e) {

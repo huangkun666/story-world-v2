@@ -7,6 +7,8 @@
 //   同一 DB 里**另开一张表** `snapshots`（与 volumes 分开的键空间，键 = `${chatId}:${snapshotId}`）。
 //   为什么不放热账：热账在 `chat_metadata` 里，而 ST 保存是**整份重写聊天**（实测首行 3.1 MB）
 //   ⇒ 保留 15 份 full 会把首行撑到 5.6 MB+，且每步一次 saveChat 的写放大不可接受。
+import { diagnostics } from '../src/diagnostics.js';
+
 const DB_NAME = 'story-world-v2';
 const DB_VERSION = 3;                 // v1 → v2：新增 snapshots 表；★v2 → v3：新增 vectors 表（leg152，按需建，老库平滑升）
 const STORE_NAME = 'volumes';
@@ -45,8 +47,8 @@ function txDone(db, store, mode, fn) {
         const tx = db.transaction(store, mode);
         const s = tx.objectStore(store);
         const req = fn(s);
-        tx.oncomplete = () => { db.close(); resolve(req?.result); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
+        tx.oncomplete = () => { if (mode === 'readwrite') diagnostics.record('存储', 'info', '本地写入完成', { store }); db.close(); resolve(req?.result); };
+        tx.onerror = () => { diagnostics.record('存储', 'error', '本地事务失败', { store, error: tx.error }); db.close(); reject(tx.error); };
         tx.onabort = () => { db.close(); reject(tx.error); };
     });
 }
@@ -131,10 +133,49 @@ export function createIdbSnapshotStore(chatId) {
     };
 }
 
-// ★★★leg156：`createIdbVectorStore`（向量索引的本地存储）**整条撤走**——用户令「稳定版不带
-//   没验过的功能」（记忆层在真机上一次都没验过）。它唯一的消费者 `web/index.js` 的装配已随之删除。
-//
-//   ★★但**上面那两个常量不许退**：`DB_VERSION` 保持 **3**、`vectors` 表照旧按需建。
+/**
+ * ★★★leg161：`createIdbVectorStore(chatId)` → `{load, save, drop}`——**向量索引**的本地存储。
+ *
+ * 【它的来路（一段历史，别只读一半）】
+ *   · leg152 立（向量记忆层）⇒ leg156 用户令「稳定版不带没验过的功能」**整族撤走**（连带本函数）；
+ *   · ★★★leg161 **接回来**：用户 2026-10-01 定案「**向量记忆就是rp内标准的解决失忆方案**」
+ *     ＋「**那就让聊天侧也接上向量检索呗**」⇒ 聊天侧那一段要用它。
+ *   ★撤走时**特意留下**的两样，正是为今天这一步铺的路（下面那段"不许退"的理由照旧管用）。
+ *
+ * 【为什么它必须单独一张表、而不能塞进热账】
+ *   热账在 `chat_metadata` 里，而 ST 保存是**整份重写聊天**（本文件顶上那笔账：实测首行 3.1 MB）。
+ *   索引随账一起长（一件事一条向量）⇒ 塞进去就是每步一次"整份重写"的写放大。
+ *   ⇒ **住 IndexedDB、按聊天分键**；★**它丢了账照样答**（退回关键词那条糙路）——
+ *     这条纪律决定了本层**只做存储、不做判断**：形状对不对、要不要重嵌，全归 `src/vector-store.js`。
+ *
+ * 【分工】
+ *   · `src/vector-store.js`：形状 / 编解码 / 合并 / 何时写盘（纯函数，Node 里可穷举真跑）；
+ *   · **本函数**：把那份形状放进 IDB、再原样取回来（**一个字节都不改**）。
+ */
+export function createIdbVectorStore(chatId) {
+    const key = `${chatId}:index`;
+    return {
+        /** @returns {Promise<object|null>} 没有就 null（**不抛**：没有索引是正常状态） */
+        async load() {
+            const db = await openDb();
+            const row = await txDone(db, VEC_STORE, 'readonly', (s) => s.get(key));
+            if (!row || !row.payload) return null;
+            try { return JSON.parse(row.payload); } catch { return null; }   // 坏掉 ⇒ 当没有（绝不半读）
+        },
+        /** @param {object} indexJson `encodeStore()` 的产物（或任何可 JSON 化的形状） */
+        async save(indexJson) {
+            const db = await openDb();
+            await txDone(db, VEC_STORE, 'readwrite', (s) => s.put({ key, savedAt: new Date().toISOString(), payload: JSON.stringify(indexJson) }));
+        },
+        /** 面板「清掉索引」/ 换模型重嵌 用 */
+        async drop() {
+            const db = await openDb();
+            await txDone(db, VEC_STORE, 'readwrite', (s) => s.delete(key));
+        },
+    };
+}
+
+//   ★★**上面那两个常量不许退**：`DB_VERSION` 保持 **3**、`vectors` 表照旧按需建。
 //     为什么（这条要紧，别照"清理干净"的直觉去动它）：
 //       IndexedDB **不许降级**——库一旦是 3，再拿 2 去开就会当场报
 //       「The requested version (2) is less than the existing version (3)」、整条存储路不可读。

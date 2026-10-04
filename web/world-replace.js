@@ -59,7 +59,7 @@ export function initWorldOverwriteNotice(brief) {
     const old = brief && typeof brief === 'object' ? brief : null;
     if (!old || !old.name) return '';
     const lines = [
-        `「✨ 开始新世界」会**换掉**当前这个世界「${old.name}」。`,
+        `「开始新世界」会**换掉**当前这个世界「${old.name}」。`,
         '',
         '将被换掉（世界账）：',
         `· 已推进 ${old.tick == null ? '?' : old.tick} 轮${old.entities ? ` · 记着 ${old.entities} 条名号` : ''}`,
@@ -87,12 +87,12 @@ export function importOverwriteNotice(brief) {
     const old = brief && typeof brief === 'object' ? brief : null;
     if (!old || !old.name) return '';
     const lines = [
-        `「⬆ 导入恢复」会用文件里那份世界**换掉**当前这个世界「${old.name}」。`,
+        `「导入恢复」会用文件里那份世界**换掉**当前这个世界「${old.name}」。`,
         '',
         '将被换掉（世界账）：',
         `· 已推进 ${old.tick == null ? '?' : old.tick} 轮${old.entities ? ` · 记着 ${old.entities} 条名号` : ''}`,
         '· 这个世界的进度、事件、盘算都会被文件里那份取代（它背后的对话记录不受影响）',
-        '· 它**不会**替你先拍快照 —— 要留退路，请先按「📷 拍一份快照」再导入',
+        '· 它**不会**替你先拍快照 —— 要留退路，请先按「拍一份快照」再导入',
         '',
         '点「确定」= 换成文件里那份；点「取消」= 什么都不做（世界一个字节不动，也不会发生任何调用）。',
     ];

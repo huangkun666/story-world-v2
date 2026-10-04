@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "story_world_v2",
   "display_name": "观棋窗口 (Story World v2)",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "观棋窗口 · 世界的眼睛：一个跑在 SillyTavern 里的活世界引擎。各方势力与角色按自己的处境与在办之事行动，事件从行动里长出来、带因果；没有「主角」——只有一枚由你控制的棋子，它的轻重由客观状态算出。八页面板：观棋 / 编年 / 大事纪·旧卷 / 角色与势力 / 设定 / 参数 / 快照 / 设置。引擎零依赖、无构建步骤；不裁胜负、不算战力、不发明事实。装好后请在「设置」页填写模型通道，按「开始新世界」开局。",
   "author": "huangkun",
   "auto_update": true,

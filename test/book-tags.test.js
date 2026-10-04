@@ -145,10 +145,11 @@ test('照书办③：标签里的上级是角色（统治者）→ 名号独立�
     }
 });
 
-test('leg25 g（P3）：势力名的别名写在**书条目 key** 里时，成员行也要接得上（虞昭华→大虞）', async () => {
-    // 用户 2026-09-11 定论「虞昭华是大虞的」，而真账挂不上。根因（实测）：
-    //   canon 势力 `大虞` 与书条目名 `人族皇朝` **字面毫无关系**（key 第一项才是 `大虞`），
-    //   `resolveCanonName` 的双向子串对这类无解 ⇒ 正文取不到 ⇒ 成员行进不了名册。
+test('Task3：书条目 key 里的势力名不再当成员行（名单形态不建立归属）', async () => {
+    // ★★★Task 3 口径变更（依据：已批准设计 §6.2「成员行正则和关键词命中只用于定位，
+    //   不直接新增关系」；先有失败证据：旧断言在改后实测 虞昭华.parent 由 '大虞' 变 undefined）。
+    //   旧锁要的正是"key 命中势力名 + 像花名册 ⇒ 反推归属"（第二十五棒 e P3）——那条路已按设计移除。
+    //   现在要写归属，只能由模型给依据（严格道核来源与原话）或作者标签声明。
     const { seedBookEntities } = await import('../src/abstract.js');
     const mk = (book) => ({ context: { tension: 0.5, positions: ['未明'], setting: { frozen: { canon: { bookEntities: book } } } }, entities: [], weights: {} });
     const BOOK = [
@@ -163,35 +164,16 @@ test('leg25 g（P3）：势力名的别名写在**书条目 key** 里时，成�
         content: '势力所在地：中天神洲·中州。\n代表人物:\n- 虞昭华（女，T8大乘中期）：大虞女帝。\n- 秦红袖（女，T7合体后期）：供奉。\n',
     }];
     const w = mk(BOOK);
-    const r = seedBookEntities(w, { entries });
-    assert.equal(w.entities.find((e) => e.name === '虞昭华').parent, '大虞', '★虞昭华 → 大虞（key 别名接上）');
-    assert.equal(w.entities.find((e) => e.name === '秦红袖').parent, '大虞', '同条目里的其他成员同样接上');
-    assert.equal(w.entities.find((e) => e.name === '虞昭华').parentSource, '结构推导', '来源如实标「结构推导」');
-    assert.equal(w.entities.find((e) => e.name === '虞昭华').parentSourceFrom, '成员行@大虞', '证据可审计');
-    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, undefined, '不在成员行里的角色不许被牵连');
-
-    // ★闸锁①：key 命中了、但那个条目**不像花名册**（不足 2 条成员行）⇒ 不许当名册。
-    //   注意：这条闸是**必要不充分**——实测确有"设定段落恰好含 ≥2 条成员形态行"的碰撞
-    //   （真账里 `人族` 会靠 `[寿元]` 拿到散文碎片）。真正把炸点收住的是"出发点是 canon 势力 + key 精确匹配"，
-    //   这一闸只是再挡一层。所以这里只锁"明显不像名册的不认"。
-    const thin = [{ comment: '世界总设定', key: ['大虞'], content: '这一节概述大虞这个势力的来历与疆域。\n- 虞昭华（女）：只是顺带提一句。\n' }];
-    const w2 = mk(BOOK);
-    seedBookEntities(w2, { entries: thin });
-    assert.equal(w2.entities.find((e) => e.name === '虞昭华').parent, undefined,
-        '★只提一句的段落在 key 命中时也不许当名册（否则实测会炸：三国 735 条假关系、大荒 10087 条）');
-
-    // ★闸锁②：key 必须**精确等于**势力名（不做模糊/子串）
-    const fuzzy = [{ comment: '人族皇朝', key: ['大虞皇朝'], content: '- 虞昭华（女）：女帝。\n- 秦红袖（女）：供奉。\n' }];
-    const w3 = mk(BOOK);
-    seedBookEntities(w3, { entries: fuzzy });
-    assert.equal(w3.entities.find((e) => e.name === '虞昭华').parent, undefined,
-        '★key 是「大虞皇朝」不许当成「大虞」（精确匹配，不模糊）');
-
-    // ★明述优先：账上已有 parent 的不覆盖
-    const w4 = mk(BOOK);
-    w4.entities.push({ id: 'e_x', kind: 'character', name: '虞昭华', parent: '已有归属' });
-    seedBookEntities(w4, { entries });
-    assert.equal(w4.entities.find((e) => e.name === '虞昭华').parent, '已有归属', '★已有归属不被覆盖（明述优先）');
+    seedBookEntities(w, { entries });
+    assert.equal(w.entities.find((e) => e.name === '虞昭华').parent, undefined, '★key 命中不再反推归属');
+    assert.equal(w.entities.find((e) => e.name === '秦红袖').parent, undefined, '同条目里的其他成员同样不反推');
+    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, undefined, '不在成员行里的角色更不许被牵连');
+    // 模型主张的归属照常落账（这是唯一合法的来源）
+    const BOOK2 = [{ name: '大虞', kind: 'faction' }, { name: '虞昭华', kind: 'character', parent: '大虞' }];
+    const w2 = mk(BOOK2);
+    seedBookEntities(w2, { entries });
+    assert.equal(w2.entities.find((e) => e.name === '虞昭华').parent, '大虞', '模型主张照常落账');
+    assert.equal(w2.entities.find((e) => e.name === '虞昭华').parentSourceFrom, 'model-claim');
 });
 
 test('照书办③：上级是地名 → 仍弃（诚实底线：地名不是上级）；判词按原因分措辞（片1 修正）', async () => {

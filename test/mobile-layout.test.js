@@ -24,6 +24,10 @@ const cut = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ');
 const CSS_RAW = read('web/style.css');
 const CSS = cut(CSS_RAW);
 const INDEX = read('web/index.js');
+// ★★★leg161：那条内联 id 规则**随"窗口壳"那一族搬进了 `web/window-shell.js`**
+//   （`web/index.js` 有 `<3100` 行硬锁 ⇒ 要加东西先搬一族；本族只碰窗口壳，不碰账）。
+//   ⇒ 这一条判据咬的对象跟着搬（**它咬的关系一个字没变**：那条规则仍是 id 特异性、仍排在最前）。
+const SHELL = read('web/window-shell.js');
 
 /** 取某条媒体查询的整块（到列首那个 `}` 为止）——样式表里同一条查询只许有一处。 */
 function mediaBlock(css, query) {
@@ -101,8 +105,9 @@ test('★★leg145·M2：620 断点排在它覆盖的 `.sw2-entity-row` 基础�
 // ─────────────────── ③ 遮罩那两条必须压得过 modalBoost 的内联 id 规则 ───────────────────
 test('★★leg145·M3：手机改遮罩留边/视口高，写了"压得过 id"的选择器（modalBoost 的内联规则在后）', () => {
     // 前置（机理）：`modalBoost()` 真的往页头插了一条 id 规则，且带 padding 与 height
-    const boost = /style\.textContent = [\s\S]*?;\n/.exec(INDEX);
-    assert.ok(boost, '前置：`web/index.js` 里必须有那条内联规则（取不到 ⇒ 下面全是空绿）');
+    // ★leg161：那条规则的家搬到了 `web/window-shell.js`（见文件顶那一段留档）
+    const boost = /style\.textContent = [\s\S]*?;\n/.exec(SHELL);
+    assert.ok(boost, '前置：`web/window-shell.js` 里必须有那条内联规则（取不到 ⇒ 下面全是空绿）');
     assert.match(boost[0], /\$\{WINDOW_ID\}\{position:fixed/, '前置：它是按 id 拼出来的（这就是"特异性＝id"的来源）');
     assert.match(boost[0], /padding:20px/, '前置：它真的写了 `padding:20px`（手机要盖的就是这一条）');
     assert.match(boost[0], /height:100%/, '前置：它真的写了 `height:100%`（dvh 那一条要盖的也是它）');
@@ -120,15 +125,27 @@ test('★★leg145·M3：手机改遮罩留边/视口高，写了"压得过 id"�
 });
 
 // ─────────────────── ④ 页签：一行横滑（两件事缺一不可） ───────────────────
-test('★leg145·M4：页签一行横滑——`nowrap` ＋ 自己 `flex:none` ＋ 页签 `flex:none`（三条缺一条就露馅）', () => {
+test('★leg145·M4（leg162 换锚点）：页签一行横滑——`nowrap` ＋ **navrow** `flex:none` ＋ 页签 `flex:none`', () => {
     const tabs = ruleOf(MQ620, '.sw2-tabs');
     assert.ok(tabs, '★手机那一档必须有 `.sw2-tabs{…}`');
     assert.match(tabs, /flex-wrap:nowrap/, '★页签行不折行（改前实测折 3–4 行占 130–172px 竖高）');
-    assert.match(tabs, /flex:none/,
-        '★★`.sw2-tabs` 自己也要 `flex:none`——`overflow-x:auto` 会让 `overflow-y` 跟着算成 auto'
-        + '（规范如此）⇒ 它成了滚动容器 ⇒ 在外壳那个定高 flex 列里的"自动最小高度"变成 0 ⇒ **会被压扁**'
-        + '（本笔实测过：页签行 12px、单枚 16px，整行几乎看不见）');
+    // ★★★leg162（**实测改** · 锚点上移，防护一条没撤）：原来这里断言 `.sw2-tabs` 自己带 `flex:none`，
+    //   理由是"带 `overflow` 的那一层会被压扁"（下面那段注释记的就是那次实测）。leg162 把那两枚
+    //   动作按钮并进**同一行**之后，那个 `flex:none` 变成**有害**：页签按**内容宽**撑开
+    //   （实测手机 390：页签行 780px）⇒ 把右端按钮**顶到屏幕外**（实测按钮右边缘 1043px，窗口只有 384）。
+    //   ⇒ 病根没变（"带 `overflow` 的那一层会被压扁"），但**中招的那一层换了人**：
+    //     现在带 `overflow` 的是 `.sw2-tabs`，而它是 `.sw2-navrow` 里的一个 flex 项
+    //     ⇒ 真正要防压扁的是 **`.sw2-navrow`**（它才是外壳那个定高 flex 列的直接子元素）。
+    //     判据跟着上移锚点：**防护强度一个字没降**（谁带 overflow，谁那一层就得有人 `flex:none`）。
+    assert.match(ruleOf(MQ620, '.sw2-navrow'), /flex:none/,
+        '★★`.sw2-navrow` 必须 `flex:none`——它是外壳定高 flex 列的直接子元素，'
+        + '里面那层带 `overflow-x:auto` ⇒ 不写它"自动最小高度"算成 0 ⇒ **会被压扁**'
+        + '（leg145 实测过：页签行 12px、单枚 16px，整行几乎看不见）');
     assert.match(tabs, /overflow-x:auto/, '★横滑');
+    // ★leg162：页签那一半必须**缩得下去**（`flex:1 1 0` ＋ `min-width:0`），否则它按内容宽撑开、
+    //   把右端那两枚按钮顶出屏幕——这是本笔真机实测出来的那一条（读数见上面那段注释）。
+    assert.match(tabs, /flex:1 1 0/, '★页签那一半要缩得下去（不许按内容宽撑开）');
+    assert.match(tabs, /min-width:0/, '★`min-width:0` 是"缩得下去"的前提');
     assert.match(ruleOf(MQ620, '.sw2-tab'), /flex:none/,
         '★页签自己不许被压扁（flex 默认许缩 ⇒ 不写这条，"横滑"会变成"挤成一团"）');
 });
@@ -178,7 +195,13 @@ test('★★leg145·M6：手指那一档的四组数（44 / 36 / 32 / 16px）都
 // ─────────────────── ⑦ 字号：<12px 的一律抬到 12px（**棘轮**） ───────────────────
 test('★★leg145·M7：手机上 <12px 的小字整批抬到 12px——**名单带棘轮**（新加一个小字类而没进名单 ⇒ 当场红）', () => {
     const small = smallFontSelectors(CSS);
-    assert.ok(small.size >= 50, `前置：基础规则里 <12px 的选择器应当有一大批（实测 ${small.size} 条）——取不到 ⇒ 下面是空绿`);
+    // ★★★leg166（其余七页落演示版面）：门槛 **50 → 30**（实测现为 **41** 条）。
+    //   为什么必须动：这一条是**防空绿的守卫**（"取不到 ⇒ 下面全是空绿"），它数的是**基础规则里的字面量**；
+    //   而本笔把一批 <12px 的字号从字面量换成了 `var(--sw2-fs-*)` 令牌（演示那套"字号收敛到 5 档"）
+    //   ⇒ 字面量条数**合理地**少了。★下面那条**真棘轮**（`missing.length === 0`）**口径一个字没放宽**：
+    //   它仍是"凡基础规则里 <12px 的选择器，必须在手机那份名单里"，本笔实测 **missing = 0**。
+    //   ★门槛只保留"提取器没坏"这个意思（41 与 30 之间留了余量，将来再收几档也不会假红）。
+    assert.ok(small.size >= 30, `前置：基础规则里 <12px 的选择器应当有一批（实测 ${small.size} 条）——取不到 ⇒ 下面是空绿`);
     // 手机那一档里那条"整批抬字号"的规则
     const at = MQ620.indexOf('{font-size:12px;}');
     assert.ok(at > 0, '★手机那一档必须有那条"整批抬到 12px"的规则');

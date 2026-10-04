@@ -113,18 +113,21 @@ test('★★leg80 丙-web②：新模块只许 import `../src/init-source.js`，
     //     ⇒ **每个玩家一开面板都被判"书换了"**（假警报，而且看起来完全像真的）。
     //     ★边界一条没放宽：它仍**不含 `window`/`document`**，仍是真叶子（`src/macros.js` 零 import）。
     const WANT = [
-        "import { normalizeEntryKey, composeInitSource } from '../src/init-source.js';",
+        "import { composeInitSource } from '../src/init-source.js';",
         "import { bookFingerprint } from '../src/fp-hash.js';",
         "import { checkBookSource } from '../src/book-check.js';",
         "import { macroNamesFromCtx } from '../src/macros.js';",
+        "import { entrySelectionId } from '../src/abstract-selection.js';",
+        // 已确认别名也参与查书定位；复用纯身份函数，DOM 与循环依赖边界保持原判据。
+        "import { entityKeysOf } from '../src/entity-identity.js';",
     ];
     assert.equal(imports.length, WANT.length,
         `★\`web/book-source.js\` 的 import 面共 ${WANT.length} 条（逐条登记在案）；实际 ${imports.length} 条：${imports.join(' | ')}`);
     for (const w of WANT) {
         assert.ok(imports.includes(w), `★登记在案的 import 必须逐字在位：${w}`);
     }
-    assert.match(imports[0], /^import \{ normalizeEntryKey, composeInitSource \} from '\.\.\/src\/init-source\.js';/,
-        '★第一条仍是"条目指纹的键归一"（与起根同一份契约）＋ 合订（换书检测要与抽取同一条口径）');
+    assert.match(imports[0], /^import \{ composeInitSource \} from '\.\.\/src\/init-source\.js';/,
+        '统一合订是补查、起根、继承和指纹的唯一取料入口；不再另行过滤或技术清理');
     assert.ok(!/from\s*'\.\/index\.js'/.test(code), '★不许反向 import 接线层（那就是循环依赖）');
     assert.ok(!/from\s*'\.\/idb-backend\.js'/.test(code), '★不许 import 浏览器侧适配层（本模块要能在 Node 里直接导入）');
     // ★★★本族特有的形态：不吃 `window`，ctx 一律当形参收（唯一例外见下一条）
@@ -203,7 +206,7 @@ test('★★leg80 丙-web⑤：三段搬过来的代码**逐字节**在新家（
         // 取书失败的三态返回（不是 `return []`）
         '        console.warn(\'[story-world-v2] 查书：取书失败（**不是"书里没有"**，不写任何痕迹，下轮再试）\', String(err?.message || err));',
         // 三条来源合并里那句"卡内置书先收"
-        '    for (const e of characterBookEntries(character)) addEntry(e);   // 卡内置书：不花 loadWorldInfo，先收',
+        '    for (const e of characterBookEntries(character)) addEntry({ ...e, _sw2Source: `character:${character?.name || \'\'}` });',
     ];
     for (const L of MUST_BE_BYTE_IDENTICAL) {
         assert.ok(bs.includes(L), `★这一行必须在新家里**逐字节**存在：${L.slice(0, 70)}`);
@@ -248,7 +251,14 @@ test('★★★leg80 丙-web⑥：真跑一遍——三态语义成立（读不�
         ],
     };
     const character = { name: '大荒z', data: { extensions: { world: '大荒' }, character_book: cardBook }, character_book: cardBook };
-    const ctx = { character, characters: [character], characterId: 0, extensionSettings: {}, chatMetadata: {} };
+    // ★★（Task 1 复查整改）：这张卡**点名挂了一本世界书**（`data.extensions.world = '大荒'`）——
+    //   夹具必须让它**真读得到**（读到零条也是"读到了"）。此前这里没有 `loadWorldInfo`，
+    //   于是那本书是"挂载了但没读到"，下游拿它当"书里没有"＝复查重要项 3 治的那个病：
+    //   未读全 ⇒ 查无此人只能是**未定**（`ok:false`），不能是"书里没有"。本用例要验的是
+    //   "书读到了、只是没有该名号"，所以这里补上"真读到"的来源；"挂载了没读到"那一态
+    //   由 `test/abstract-selection-wiring.test.js` 的部分失败回归单独钉住。
+    const ctx = { character, characters: [character], characterId: 0, extensionSettings: {}, chatMetadata: {},
+        loadWorldInfo: async () => ({ entries: [] }) };
     bookSource.resetBookCache();
     const hit = await bookSource.bookTextForEntity({ name: '清玄真人' }, ctx);
     assert.equal(hit.ok, true, '★书读到了 ⇒ `ok: true`（"书里没有"是 ok 为真、entries 为空，**另一态**）');
@@ -281,7 +291,7 @@ test('★★★leg80 丙-web⑥：真跑一遍——三态语义成立（读不�
         chatMetadata: {},
         loadWorldInfo: async () => ({ entries: [{ key: ['昆仑道宫'], comment: '昆仑道宫', content: '- 清玄真人 (男, T7合体中期): 掌教。' }] }),
     }, character);
-    assert.equal(dup.entries.length, 3, `★卡内置书 3 条 + 同名书 1 条（与卡那条同指纹）⇒ 去重后仍是 3（实际 ${dup.entries.length}）`);
+    assert.equal(dup.entries.length, 4, '卡内置书与挂载世界书来源不同，同文也保留独立身份');
     assert.equal(dup.readable, true, '★读到书 ⇒ readable 为真');
 
     // ⑤ 三档定位：line > snippet > none（纯函数，无 ctx）

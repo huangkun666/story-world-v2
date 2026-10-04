@@ -8,7 +8,7 @@
 // 三组判据（对应三层修复）：
 //   ① 甲：同轮引用**算存在**（世界账 ∪ 本轮新建；`entityFates` 仍只认世界账，那是刻意设的闸）
 //   ② 丙-2：降级重试——丢掉写歪的那几条，这一轮**照常落账**
-//   ③ 丙-3：世界安静一步——连丢都救不回来时，**tick 必须前进**（"卡轮"不再等于"永久停摆"）
+//   ③ leg187：非法提议全坏时失败且不推进；合法安静步骤仍可前进。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -74,16 +74,16 @@ test('死锁甲：newEntities 也能"因本轮新建的事"入局（ripple 那�
 test('死锁甲：★净化路径即使模型**没写事件 id**，同轮引用也能被按位次认出来（否则会误丢合法盘算）', () => {
     const w = world({ tick: 3 });
     const step = stepWith({
-        // 第一条合法、第二条缺 position（会被丢）⇒ 位次会变 ⇒ 正是"净化路径要按引擎的号解析"的场景
+        // 第一条合法、第二条缺 source（会被丢）；缺位置本身不再构成非法提议。
         newEvents: [
             { title: '第一件', source: { type: 'state' }, position: '大营', ripples: ['e_a'] },   // 无 id
-            { title: '缺位置', source: { type: 'state' }, ripples: ['e_b'] },                      // 无 position ⇒ 丢
+            { title: '缺事件源', ripples: ['e_b'] },                                           // 无 source ⇒ 丢
         ],
         // 模型按"它以为的下一轮号"引第一件：tick 3 ⇒ ev_4_1
         newAgendas: [newAgenda({ source: { type: 'event', ref: 'ev_4_1' } })],
     });
     const clean = dropInvalidProposals(step, w);
-    assert.deepEqual(clean.dropped.map((d) => d.family), ['newEvents'], '只该丢那条缺位置的事件');
+    assert.deepEqual(clean.dropped.map((d) => d.family), ['newEvents'], '只该丢那条缺事件源的事件');
     assert.equal(clean.step.newAgendas.length, 1, '★引第一件事的盘算**不许被误丢**（第一版就栽在这里）');
     assert.equal(checkWorldStep(clean.step, w).ok, true, '净化后必须过校验');
 });
@@ -142,30 +142,30 @@ test('死锁甲：★★复现 wide 臂那次真实停摆——模型写 `ev_5_3
 });
 
 // ---------- ② 丙-2：降级重试 ----------
-test('死锁丙-2：newEvents 缺 position（只有模型能补）⇒ 丢掉那一条，这一轮**照常落账**', () => {
+test('新事件缺 position 仍正常落账，不需要降级重试或丢弃', () => {
     const w = world({ tick: 3 });
     const good = newEvent({ title: '写得对的事' });
-    const bad = { title: '缺位置的事', source: { type: 'state' }, ripples: ['e_b'] };   // 无 position
+    const noPosition = { title: '缺位置的事', source: { type: 'state' }, ripples: ['e_b'] };
     const step = stepWith({
-        newEvents: [good, bad],
+        newEvents: [good, noPosition],
         newAgendas: [newAgenda()],
     });
-    assert.equal(checkWorldStep(step, w).ok, false, '先证红：原样过不了校验（这就是停摆的入口）');
+    assert.equal(checkWorldStep(step, w).ok, true, '缺位置不是拒收理由');
     const r = settleWithHealing({ ssot: w, step });
-    assert.equal(r.ok, true, `必须自愈成功，实际：${(r.stage?.warnings || []).join('; ')}`);
-    assert.equal(r.healed.used, true, '走了自愈路径');
-    assert.equal(r.healed.fallback, false, '停在"降级重试"这一层（没到世界安静一步）');
+    assert.equal(r.ok, true, (r.stage?.warnings || []).join('; '));
+    assert.equal(r.healed.used, false, '合法提议不需要自愈');
+    assert.deepEqual(r.healed.dropped, []);
     assert.equal(r.ssot.meta.tick, 4, '★tick 前进了（停摆治好的机械判据）');
     const titles = r.ssot.events.filter((e) => (e.id || '').startsWith('ev_4_')).map((e) => e.title);
     assert.ok(titles.includes('写得对的事'), `对的那条照常落账（实际 ${titles.join('/')}）`);
-    assert.ok(!titles.includes('缺位置的事'), '写歪的那条没落账');
-    assert.ok((r.stage.warnings || []).some((x) => x.startsWith('提议丢弃') && x.includes('缺位置的事')), '★丢了谁、为什么，必须留痕（不是静默丢）');
+    assert.ok(titles.includes('缺位置的事'), '缺位置的合法事件也落账');
+    assert.equal(Object.hasOwn(r.ssot.events.find(e => e.title === '缺位置的事'), 'position'), false);
 });
 
 test('死锁丙-2：一条事件被丢 ⇒ 引它的盘算也留不住（连锁），但不影响同轮其它提议', () => {
     const w = world({ tick: 3 });
     const step = stepWith({
-        newEvents: [{ title: '缺位置', source: { type: 'state' }, ripples: ['e_a'] }],   // 会被丢
+        newEvents: [{ title: '缺事件源', ripples: ['e_a'] }],                         // 无 source，会被丢
         newAgendas: [newAgenda({ source: { type: 'event', ref: 'ev_4_1' } })],            // 引的就是它 ⇒ 连锁丢
         actions: [{ entity: 'e_b', verb: '观望', position: '大营' }],                      // 与它无关 ⇒ 该活下来
     });
@@ -179,7 +179,7 @@ test('死锁丙-2：一条事件被丢 ⇒ 引它的盘算也留不住（连锁�
     assert.ok(droppedFamilies.includes('newAgendas'), '盘算被连锁丢');
 });
 
-test('死锁丙-2：净化后仍过不了校验的（涉及面超限这类丢不干净的）⇒ 落到世界安静一步，tick 仍然前进', () => {
+test('全坏提议净化后为空：回执失败，tick 不增加，允许重试', () => {
     const w = world({ tick: 3 });
     // 造一条"净化器治不了"的：newAgendas 缺 visibility / goal（schema 必填，净化器只做减法、不给它编内容）
     const step = stepWith({ newAgendas: [{ entity: 'e_a', source: { type: 'state' } }] });
@@ -188,8 +188,8 @@ test('死锁丙-2：净化后仍过不了校验的（涉及面超限这类丢不
     assert.equal(checkWorldStep(clean.step, w).ok, true,
         '★这一格其实能被净化救回来（缺目标 ⇒ 丢掉那条盘算）——这条锁住"净化确实管用"');
     const r = settleWithHealing({ ssot: w, step });
-    assert.equal(r.ok, true, (r.stage?.warnings || []).join('; '));
-    assert.equal(r.ssot.meta.tick, 4, 'tick 前进');
+    assert.equal(r.ok, false, (r.stage?.warnings || []).join('; '));
+    assert.equal(r.ssot.meta.tick, 3, '全坏提议不再用空步虚增轮数');
     assert.equal((r.ssot.agendas || []).length, 0, '那条残缺的盘算没落账');
 });
 
@@ -229,16 +229,16 @@ test('死锁丙-3：最后一步（世界安静一步）本身必须走得通—
     assert.equal((r.ssot.events || []).filter((e) => String(e.id).startsWith('ev_4_')).length, 0, '零新事件');
 });
 
-test('死锁丙-3：降级路径的回执必须进 stage.warnings（面板裁定条 + simLog 都读它，不许静默）', () => {
+test('全坏提议的失败回执保留 stage.warnings 和原始拒因，不许静默', () => {
     const w = world({ tick: 3 });
     const step = stepWith({
-        newEvents: [{ title: '缺位置', source: { type: 'state' }, ripples: ['e_a'] }],   // 会被丢
+        newEvents: [{ title: '缺事件源', ripples: ['e_a'] }],                         // 无 source，会被丢
     });
     const r = settleWithHealing({ ssot: w, step });
-    assert.equal(r.ok, true, (r.stage?.warnings || []).join('; '));
+    assert.equal(r.ok, false, (r.stage?.warnings || []).join('; '));
     const txt = (r.stage.warnings || []).join(' | ');
     assert.match(txt, /提议丢弃/, '★"丢了哪一条"要写在告警里（`提议丢弃:` 前缀 ⇒ 计入拒签分子）');
-    assert.match(txt, /缺位置/, '要写清为什么丢');
+    assert.match(txt, /缺事件源/, '要写清为什么丢');
     assert.ok(r.healed.errors.length > 0, '原始拒因也要留在 healed.errors 里（可查）');
 });
 
@@ -246,7 +246,7 @@ test('死锁丙-3：降级路径的回执必须进 stage.warnings（面板裁定
 test('死锁修复的边界：净化的每一步都不许"改写"模型的提议（只做减法）', () => {
     const w = world({ tick: 3 });
     const step = stepWith({
-        newEvents: [newEvent({ title: '这事写得很好' }), { title: '缺位置', source: { type: 'state' }, ripples: ['e_b'] }],
+        newEvents: [newEvent({ title: '这事写得很好' }), { title: '缺事件源', ripples: ['e_b'] }],
         newEntities: [{ name: '新面孔', location: '大营', entity: 'e_a', source: { type: 'entity', ref: 'e_b' } }],
     });
     const { step: clean } = dropInvalidProposals(step, w);
@@ -260,7 +260,7 @@ test('死锁修复的边界：净化的每一步都不许"改写"模型的提议
 
 test('死锁修复的边界：selfHeal=false 时保持旧行为（校验拒绝 ⇒ 世界原样不动）', () => {
     const w = world({ tick: 3 });
-    const step = stepWith({ newEvents: [{ title: '缺位置', source: { type: 'state' }, ripples: ['e_b'] }] });
+    const step = stepWith({ newEvents: [{ title: '缺事件源', ripples: ['e_b'] }] });
     const r = settleWithHealing({ ssot: w, step, selfHeal: false });
     assert.equal(r.ok, false, '关掉自愈 ⇒ 退回"拒整步"的旧语义');
     assert.equal(r.ssot.meta.tick, 3, '世界原样不动');

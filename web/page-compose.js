@@ -43,6 +43,30 @@ const PAN_HEAD_RE = /^<div class="sw2-pan-head">[\s\S]*?<\/div>/;
 // 自证闸那一行（它是四层的**最后一块** ⇒ 拿它当"正文到此为止"的界碑）
 const PAN_SELFCHECK = '<div class="sw2-pan-selfcheck';
 
+// Read the existing rendered values; do not calculate a second set of world facts.
+function overviewHtml(band) {
+    if (!band) return '';
+    const env = [...band.matchAll(/<span class="sw2-env-name">([^<]*)<\/span>[\s\S]*?<span class="sw2-env-val">([^<]*)/g)]
+        .map((m) => `<span>${m[1]} <b>${m[2]}</b></span>`).join('');
+    const agendas = /<span class="sw2-big-num">(\d+)/.exec(band)?.[1];
+    return '<details class="sw2-pan-overview" data-pan-key="overview" data-pan-overview>'
+        + `<summary><span class="sw2-pan-overview-title">世界现状</span><span class="sw2-pan-overview-values">${env}${agendas != null ? `<span>盘算 <b>${agendas}</b></span>` : ''}</span><span class="sw2-pan-overview-hint">详情</span></summary>`
+        + band + '</details>';
+}
+
+function readerToolbarHtml(pan) {
+    const places = [...new Set([...pan.matchAll(/data-pan-place="([^"]+)"/g)].map((m) => m[1]))];
+    return '<div class="sw2-pan-tools" role="search" aria-label="故事检索">'
+        + '<input class="sw2-input sw2-pan-search" type="search" data-pan-search aria-label="搜索故事" placeholder="搜索地点、故事、角色…">'
+        + '<select class="sw2-input" data-pan-location aria-label="定位地点"><option value="">全部地点</option>'
+        + places.map((p) => `<option value="${p}">${p}</option>`).join('') + '</select>'
+        + '<label class="sw2-pan-filter"><input type="checkbox" data-pan-unresolved>只看未结</label>'
+        + '<button type="button" class="sw2-btn" data-pan-clear hidden>重置筛选</button>'
+        + '<span class="sw2-pan-results" data-pan-results role="status" aria-live="polite"></span>'
+        + '<div class="sw2-pan-reading-actions"><button type="button" class="sw2-btn" data-pan-side aria-expanded="true">收起盘算</button>'
+        + '<button type="button" class="sw2-btn" data-pan-focus aria-pressed="false">专注阅读</button></div></div>';
+}
+
 /**
  * 并页那一页的**唯一一处组合**：页头 ＋ 信息带（整宽）＋ 两栏。
  * 形状：
@@ -60,15 +84,19 @@ export function mergedMainHtml(out) {
     const pan = String(out?.panorama || '');
     const board = out?.board;
     const tail = boardBlocksHtml(board);
+    // The story reader owns its page layout; supporting world data lives in its drawer.
+    if (pan.includes('data-story-app') && pan.includes('<!-- STORY_WORLD_ATTACH -->')) return pan.replace('<!-- STORY_WORLD_ATTACH -->', () => tail);
     if (!board || typeof board === 'string') return pan + tail;
     const head = PAN_HEAD_RE.exec(pan)?.[0] || '';
     const at = pan.indexOf(PAN_SELFCHECK);
-    // ★认不出形状（空态 / 老账 / 版面改了）⇒ **原样拼**：宁可长，也不许丢内容。
-    if (!head || at <= head.length) return pan + tail;
+    // Known empty worlds use the same reading controls and identity as populated worlds.
+    // Unrecognized or old markup still falls back without losing any content.
+    if (!head || (at <= head.length && !pan.includes('class="sw2-pan-empty" data-pan-world='))) return pan + tail;
     // ★★★leg99：`pan.slice(head.length, at) + pan.slice(at)` 原本中间夹着 `board.feed`（动态流），
     //   现已撤掉 ⇒ 左栏就是**四层整段**（自证闸是它的最后一块，天然收尾）。
     return head
-        + (board.infoband || '')
+        + overviewHtml(board.infoband || '')
+        + readerToolbarHtml(pan)
         + '<div class="sw2-merged-grid"><div class="sw2-merged-main">'
         + pan.slice(head.length)
         + '</div><div class="sw2-merged-side">'

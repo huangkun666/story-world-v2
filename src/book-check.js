@@ -55,7 +55,7 @@ export function checkBookSource({ stored = '', fresh = '', sourceOk = true } = {
  *   所以你会看到两边对不上；然后给出**两条出路**（换回来 / 按现在这本算）。
  */
 export function bookChangedStatus({ fresh = '', stored = '' } = {}) {
-    return `📖 书换了：账本还是按原来那本书建的（${String(stored)}），现在挂的是另一本（${String(fresh)}）`
+    return `书换了：账本还是按原来那本书建的（${String(stored)}），现在挂的是另一本（${String(fresh)}）`
         + `——你看到的世界账与正文可能对不上。要么把书换回去，要么按设定页那颗「${REBASELINE_LABEL}」把账本改成按现在这本算`;
 }
 
@@ -64,7 +64,7 @@ export function bookChangedStatus({ fresh = '', stored = '' } = {}) {
  * ★必须写明**没有重抽**：否则玩家会以为设定已经跟着新书更新了（那是假的）。
  */
 export function rebaselinedStatus({ fresh = '' } = {}) {
-    return `✔ 已按现在这本书记下新的来路（${String(fresh)}）——设定一个字没重抽，要重抽请按「只重抽设定」`;
+    return `已按现在这本书记下新的来路（${String(fresh)}）——设定一个字没重抽，要重抽请按「只重抽设定」`;
 }
 
 /**
@@ -75,7 +75,7 @@ export function rebaselinedStatus({ fresh = '' } = {}) {
  */
 export function bookChangedBannerHtml(result, escapeHtml = (s) => String(s)) {
     if (!result?.changed) return '';
-    return `<div class="sw2-hint" style="margin-top:6px">⚠ 账本按<b>原来那本书</b>建的（${escapeHtml(result.stored)}），`
+    return `<div class="sw2-hint" style="margin-top:6px">注意：账本按<b>原来那本书</b>建的（${escapeHtml(result.stored)}），`
         + `现在挂的是另一本（${escapeHtml(result.fresh)}）——`
         + `<button class="sw2-btn" data-action="${REBASELINE_ACTION}">${REBASELINE_LABEL}</button>`
         + `（设定不会重抽；只是以后不再拿这件事提醒你）</div>`;

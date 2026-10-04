@@ -107,12 +107,14 @@ test('K43: 角色 parent 解析——合法所属写实体.parent；非法弃关
 });
 
 // ============ 第二十五棒 e：照 v1 把「势力↔角色」在初始化就建好（用户实机：parent 0/623）============
-// 设计依据（八本真实世界书泛用性审计 + 细案 docs/spec-parent-affiliation.md §2/§4）：
-//   模型负责**语义判别**（哪行是花名册），结构负责**验伪**（书里有没有这条关系的书面依据）。
-//   三态语义：有正面证据→认；有花名册但列不出该名号→**反驳**（弃关系）；根本没有花名册→**未验证**（落账但如实标注）。
-//   ——最后一态是硬规矩要求的：**绝不用空值反推"没有"**。
+// ★★★Task 3 口径变更（依据：已批准设计 §6.2，先有失败证据 task-3 报告 §红灯）：
+//   **成员行/关键词名单只作定位，不建立也不否定关系**。
+//   旧三态（'member-line' 正面证据 / 'refuted' 缺席即反驳）**两条都删**；留下的是
+//   ① 模型主张（本次抽取已在严格道核过来源与原话，落账时如实记 `model-claim`）
+//   ② 作者标签声明（'tag'，照书办）。
+//   ⇒ 本节断言的**行为**（正确归属保留、不许用名单缺席否定）不变，变的只是"证据类型"这一格的取值。
 
-test('leg25 e：角色「所属」从成员行落到 parent（真书形态：势力条目正文列成员行）', () => {
+test('leg25 e：角色「所属」落到 parent（模型主张；成员行只作定位）', () => {
     const book = [
         {
             name: '混乱之地·万妖盟',
@@ -121,37 +123,39 @@ test('leg25 e：角色「所属」从成员行落到 parent（真书形态：势
             content: '混乱之地·万妖盟\n- 吞天妖王 (男, T8大乘中期): 现任盟主(饕餮蛟龙混血)。\n- 混元妖圣 (男, T9渡劫初期): 前任盟主。',
             fields: { 规模: '万妖之众' },
         },
-        { name: '吞天妖王', kind: 'character', fields: { 所属: '混乱之地·万妖盟', 实力: 'T8大乘中期' } },
-        { name: '混元妖圣', kind: 'character', fields: { 所属: '混乱之地·万妖盟', 实力: 'T9渡劫初期' } },
+        { name: '吞天妖王', kind: 'character', parent: '混乱之地·万妖盟', fields: { 所属: '混乱之地·万妖盟', 实力: 'T8大乘中期' } },
+        { name: '混元妖圣', kind: 'character', parent: '混乱之地·万妖盟', fields: { 所属: '混乱之地·万妖盟', 实力: 'T9渡劫初期' } },
     ];
     const w = mkWorld(book);
     const r = seedBookEntities(w);
     const yao = w.entities.find((e) => e.name === '吞天妖王');
     assert.equal(yao.parent, '混乱之地·万妖盟', '★所属写进实体.parent（v1 的 affiliation 效果）');
     assert.equal(yao['实力'], 'T8大乘中期', '★档位原话照抄成文本（引擎不换算成数）');
-    assert.equal(yao.parentSourceFrom, 'member-line', '证据来源可审计：命中该组织的成员行');
+    assert.equal(yao.parentSourceFrom, 'model-claim', '证据类型：模型主张（名单形态不再充当证据）');
     assert.equal(w.entities.find((e) => e.name === '混元妖圣').parent, '混乱之地·万妖盟');
     assert.equal(w.entities.find((e) => e.name === '混乱之地·万妖盟')['规模'], '万妖之众', '势力规模原话照抄（≠角色档位）');
     assert.equal(r.parentVerified, 2);
     assert.equal(r.fieldsAttached >= 3, true, `字段落账计数可见：${r.fieldsAttached}`);
 });
 
-test('leg25 e 变异锁：模型声称的所属若被书里证据**反驳**（有花名册却列不出他）→ 弃关系 + 警告', () => {
+test('Task3：名单缺席不构成反驳；成员行也不再自行建立归属', () => {
     const book = [
         { name: '昆仑道宫', kind: 'faction', content: '- 清玄真人 (男, T7合体中期): 掌教。', key: ['昆仑道宫'] },
         { name: '清玄真人', kind: 'character' },
-        // 模型编的：他并不在这份花名册里
+        // 模型给的归属：他并不在这份花名册里 —— 但**名单缺席不是反证**（设计 §6.2）
         { name: '散修甲', kind: 'character', parent: '昆仑道宫' },
     ];
     const w = mkWorld(book);
     const r = seedBookEntities(w);
-    assert.equal(w.entities.find((e) => e.name === '清玄真人').parent, '昆仑道宫', '花名册里有的照常认');
-    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, undefined, '★被反驳的归属必须弃掉（不许错填）');
-    assert.equal(r.parentDemoted, 1);
-    assert.ok(r.warnings.some((x) => /被书里证据反驳/.test(x)), `弃关系要留痕：${r.warnings.join('|')}`);
+    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, '昆仑道宫', '★名单缺席不得反驳模型主张');
+    assert.equal(w.entities.find((e) => e.name === '散修甲').parentSourceFrom, 'model-claim');
+    assert.equal(w.entities.find((e) => e.name === '清玄真人').parent, undefined,
+        '★成员行只作定位：模型没主张的归属不由成员行自行建立');
+    assert.equal(r.parentDemoted ?? 0, 0, '没有任何归属因名单而弃');
+    assert.equal(r.warnings.some((x) => /被书里证据反驳/.test(x)), false, '不许再出现"被反驳"这条理由');
 });
 
-test('leg25 e：组织条目**没有花名册**时不许反推"不属于"——落账但如实标成未验证', () => {
+test('leg25 e：模型主张的归属照常落账，如实记「模型抽取」（未冒充书里明述）', () => {
     const book = [
         { name: '万法阁', kind: 'faction' },                       // 光杆条目：无成员行、无 key
         { name: '清玄真人', kind: 'character', parent: '万法阁' },
@@ -160,21 +164,21 @@ test('leg25 e：组织条目**没有花名册**时不许反推"不属于"——�
     const r = seedBookEntities(w);
     const e = w.entities.find((x) => x.name === '清玄真人');
     assert.equal(e.parent, '万法阁', '无册 ≠ 不存在（硬规矩：不许用空值反推）');
-    assert.equal(e.parentSource, '模型抽取(未验证)', '但要如实标注"未验证"，不冒充书里明述');
-    assert.equal(e.parentSourceFrom, 'unverifiable');
+    assert.equal(e.parentSource, '模型抽取', '来源记「模型抽取」——这一格不声称已核实');
+    assert.equal(e.parentSourceFrom, 'model-claim');
     assert.equal(r.parentDemoted ?? 0, 0, '这一态不弃关系');
 });
 
-test('leg25 e：属性只收文本——数字/数组/空串一律不收（书里的说法不许换算成数）', () => {
+test('属性落账：数字与数组转文本保留，空描述不生成字段', () => {
     const book = [
         { name: '甲', kind: 'character', fields: { 实力: 123, 身份: '', 定位: ['一方诸侯'], 所属: '  乙  ' } },
     ];
     const w = mkWorld(book);
     seedBookEntities(w);
     const e = w.entities.find((x) => x.name === '甲');
-    assert.equal(e['实力'], undefined, '数字不进账（实力只能是书里的文本原话）');
+    assert.equal(e['实力'], '123', '数字转文本保留，不进行数值换算');
     assert.equal(e['身份'], undefined, '空串不入账');
-    assert.equal(e['定位'], undefined, '数组不入账');
+    assert.equal(e['定位'], '["一方诸侯"]', '列表转 JSON 文本保留');
 });
 
 test('leg25 e：零 token 档位兜底 powerFromNameContext——只认紧贴名号的标签、词表用本书自己的档位名', () => {
@@ -185,18 +189,18 @@ test('leg25 e：零 token 档位兜底 powerFromNameContext——只认紧贴名
     assert.equal(powerFromNameContext(text, '路人甲', ['合体']), '', '没有标签就空着');
 });
 
-test('leg25 e 变异锁①：验伪闸真的在**分辨**——同一份书里，有证据的进、被反驳的挡', () => {
+test('Task3：成员行索引仍可用于**定位**，但不再建立/否定关系（验伪闸口径重写）', () => {
     // 这份夹具只用**真导出函数**（不许自带被测逻辑的复制品——否则摘掉闸测试照样绿，等于没测）。
     const entry = { name: '混乱之地·万妖盟', comment: '混乱之地·万妖盟', key: ['万妖盟'], content: '- 吞天妖王 (男, T8大乘中期): 现任盟主。' };
     const map = buildOrgRosterMap([entry]);
-    assert.equal(map.get('混乱之地·万妖盟').has('吞天妖王'), true, '成员行确实被索引到');
+    assert.equal(map.get('混乱之地·万妖盟').has('吞天妖王'), true, '成员行仍能被索引到（定位用）');
     assert.equal(map.get('混乱之地·万妖盟').has('清玄真人'), false, '不在花名册的人不在索引里');
-    // 有册：在册 → 认；不在册 → **反驳**（这是弃关系的唯一合法理由）
-    assert.equal(verifyClaimedParent({ name: '吞天妖王', claimed: '混乱之地·万妖盟', orgRosterMap: map, memberEntry: entry }), 'member-line');
-    assert.equal(verifyClaimedParent({ name: '清玄真人', claimed: '混乱之地·万妖盟', orgRosterMap: map, memberEntry: entry }), 'refuted');
-    // 无册：既不是认也不是反驳 → 未验证（硬规矩：不许用空值反推）
+    // ★Task 3：名单**既不建立也不否定** —— 在册/不在册都只是 'unverifiable'
+    assert.equal(verifyClaimedParent({ name: '吞天妖王', claimed: '混乱之地·万妖盟', orgRosterMap: map, memberEntry: entry }), 'unverifiable');
+    assert.equal(verifyClaimedParent({ name: '清玄真人', claimed: '混乱之地·万妖盟', orgRosterMap: map, memberEntry: entry }), 'unverifiable', '缺席不是反驳');
     assert.equal(verifyClaimedParent({ name: '清玄真人', claimed: '光杆门派', orgRosterMap: map, memberEntry: { name: '光杆门派', comment: '光杆门派', content: '' } }), 'unverifiable');
-    // 书标签声明的上级：标签本身就是书的明述 → 'tag'（不因无花名册被反驳）
+    // 作者在自己条目里明写 + 书标签声明：仍然可用（合法作者声明）
+    assert.equal(verifyClaimedParent({ name: '清玄真人', claimed: '昆仑道宫', ownEntry: { content: '清玄真人，所属势力：昆仑道宫。' } }), 'explicit');
     assert.equal(verifyClaimedParent({ name: '界渊长城', claimed: '渡虚帝', orgRosterMap: map, memberEntry: { name: '渡虚帝', comment: '渡虚帝' }, bookDeclared: true }), 'tag');
 });
 
@@ -213,7 +217,7 @@ test('leg25 e 契约锁：照书抄的字段与关联落到实体上后**仍过 
     //   这条锁把它钉死——以后再加来源键，必须同步登记契约（"删字段只删一半最危险"的同款纪律）。
     const book = [
         { name: '混乱之地·万妖盟', kind: 'faction', content: '- 吞天妖王 (男, T8大乘中期): 盟主。', fields: { 规模: '混乱绞肉机', 性质: '妖修大本营' } },
-        { name: '吞天妖王', kind: 'character', fields: { 所属: '混乱之地·万妖盟', 实力: 'T8大乘中期', 身份: '现任盟主' } },
+        { name: '吞天妖王', kind: 'character', parent: '混乱之地·万妖盟', fields: { 所属: '混乱之地·万妖盟', 实力: 'T8大乘中期', 身份: '现任盟主' } },
     ];
     const w = mkWorld(book);
     seedBookEntities(w);
@@ -226,8 +230,8 @@ test('leg25 e 契约锁：照书抄的字段与关联落到实体上后**仍过 
     // 更强的路先接住：角色自己条目里的 `所属`（模型抽取）**过了验伪闸** ⇒ 来源记「模型抽取」而非「结构推导」
     //   （明述优先：自己条目明述 > 从别人条目结构推）。来源分账正是为了让这个区别可见。
     assert.equal(yao.parentSource, '模型抽取');
-    assert.equal(yao.parentSourceFrom, 'member-line', '证据类型：该组织成员行里确实列了他');
-    assert.equal(yao.fieldSource['实力'], '书里原话');
+    assert.equal(yao.parentSourceFrom, 'model-claim', '证据类型：模型主张（成员行不再充当证据）');
+    assert.equal(yao.fieldSource['实力'], '模型抽取');
 });
 
 test('K43: 初始分量预填——weights 全覆盖且与 computeWeight 同口径（context.tension）', () => {

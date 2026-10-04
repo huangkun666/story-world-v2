@@ -20,7 +20,7 @@ function walk(value, schema, path, errors) {
                 if (!(k in value)) errors.push(`${path}.${k}: 必填缺失`);
             }
             for (const [k, v] of Object.entries(value)) {
-                const sub = schema.props?.[k];
+                const sub = schema.props && Object.hasOwn(schema.props, k) ? schema.props[k] : null;
                 if (!sub) {
                     // ★leg34：`denied` = **显式拒收的已退休字段**（与 `additional` 配合用）。
                     //   为什么需要它：放开额外字段（`additional: true`）会把**删掉的旧字段一起放回来**——

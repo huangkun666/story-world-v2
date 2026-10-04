@@ -220,7 +220,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
             const e = writeTrace[writeTrace.length - 1];
             if (e.lost.length) {
                 // ★丢键是重大事件：不但留痕，还要当场出声（含栈）——八轮里缺的就是这一行
-                log(`⚠ 写入时键变少了：丢了 ${e.lost.join('、')}（现在 ${e.keys.join('、') || '（空）'}）· 调用栈 ${e.stack}`);
+                log(`注意：写入时键变少了：丢了 ${e.lost.join('、')}（现在 ${e.keys.join('、') || '（空）'}）· 调用栈 ${e.stack}`);
             }
         } catch (_) { /* 审计永不阻塞写 */ }
     }
@@ -443,7 +443,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
         //     在**正常读/写**这条路上它一个字都不许影响。删掉这几行，`resurrected` 只作为读数上报。
         const vanished = mine ? [...mine.keys()].filter((k) => !(k in env)) : [];
         if (vanished.length) {
-            const line = `⚠ 本会话写进「${worldName}」的档位不见了：${vanished.join('、')}`
+            const line = `注意：本会话写进「${worldName}」的档位不见了：${vanished.join('、')}`
                 + `（现在只剩 ${Object.keys(env).join('、') || '（空）'}）——有别的代码在写这一格`;
             log(line);
             try { noteWrite(Object.keys(env), { note: `读桶时发现被外部改过（丢了 ${vanished.join('、')}）` }); } catch (_) {}
@@ -647,7 +647,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
             worldName: world ? worldNameArg(world) : null, env: {}, managed: [], stored: {},
             mirror: { world: null, ok: false, changed: false },
             store: { ok: false, stored: null, reason, note: null },
-            humanLine: `⚠ ${reason}`, diag: {},
+            humanLine: `注意：${reason}`, diag: {},
         });
         // ★★★leg48：**这里不再有"世界没到就不许写"那道闸**（见文件头那段）——
         //   它是这条症状真正的心脏：世界对象拿不到 ⇒ 玩家的档位连写都走不到，而界面上看不出任何异常。
@@ -713,7 +713,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
                 reason: store.reason || '没能把参数存下来', worldName: tx.worldName,
                 env: authoritative, managed: managedList,
                 stored: store.stored, mirror: { world: null, ok: false, changed: false }, store,
-                humanLine: `${label} → ${countWord(k, after)} · ⚠ 没能存下来（${store.reason || '未知原因'}）`
+                humanLine: `${label} → ${countWord(k, after)} · 注意：没能存下来（${store.reason || '未知原因'}）`
                     + `${store.note ? ` · ${store.note}` : ''}——刷新会丢，请把这一句告诉维护者`,
                 diag: diag(world, tx),
             };
@@ -750,7 +750,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
             humanLine: `${label} → ${countWord(k, after)}（${storeWord(store.stored)}`
                 + `${m.changed && m.ok ? ' · 已同步给引擎' : ''}`
                 + `${m.pending ? ' · 引擎那一步等世界载入后补' : ''}`
-                + `${mirrorNote ? ` · ⚠ ${mirrorNote}` : ''}`
+                + `${mirrorNote ? ` · 注意：${mirrorNote}` : ''}`
                 + `${store.note ? ` · ${store.note}` : ''} · 撤销可回退）`,
             diag: diag(world, tx),
         };
@@ -796,7 +796,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
             worldName: world ? worldNameArg(world) : null, env: {}, managed: [], stored: {},
             mirror: { world: null, ok: false, changed: false },
             store: { ok: false, stored: null, reason, note: null },
-            humanLine: `⚠ ${reason}`, diag: {},
+            humanLine: `注意：${reason}`, diag: {},
         });
         if (!isParamStoreKey(k)) return bad(`未知参数键：${k || '（空）'}`);
         const tx = begin(world);
@@ -823,7 +823,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
                 reason: store.reason || '没能把清空存下来', worldName: tx.worldName,
                 env: { ...next }, managed: managedList,
                 stored: store.stored, mirror: { world: null, ok: false, changed: false }, store,
-                humanLine: `${label} → 未定 · ⚠ 没能存下来（${store.reason || '未知原因'}）——刷新会回来`,
+                humanLine: `${label} → 未定 · 注意：没能存下来（${store.reason || '未知原因'}）——刷新会回来`,
                 diag: diag(world, tx),
             };
         }
@@ -840,7 +840,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
             stored: store.stored, mirror: { world: m.world, ok: m.ok, changed: m.changed, pending: m.pending },
             store,
             humanLine: `${label} → 未定（已清空 · ${storeWord(store.stored)}`
-                + `${m.pending ? ' · 引擎那一步等世界载入后补' : (m.ok ? ' · 已同步给引擎' : ' · ⚠ 镜像没写全')}`
+                + `${m.pending ? ' · 引擎那一步等世界载入后补' : (m.ok ? ' · 已同步给引擎' : ' · 注意：镜像没写全')}`
                 + ' · 撤销可回退）',
             diag: diag(world, tx),
         };
@@ -907,7 +907,7 @@ export function createParamHub({ storage = null, settings = null, saveSettings =
         if (changed) {
             log(`[参数真源] 载入接纳：世界「${tx.worldName}」真源 ${Object.keys(effective).join('、') || '（空）'}`
                 + `${blocked.length ? ` · 已挡住 ${blocked.length} 个"玩家删过"的旧值回填（${blocked.join('、')}）` : ''}`
-                + `${store?.ok ? '' : ` · ⚠ 接纳没能存下来（${store?.reason}）`}`);
+                + `${store?.ok ? '' : ` · 注意：接纳没能存下来（${store?.reason}）`}`);
         }
         return {
             world: m.world || world, env: effective, adopted: changed, mirrorOk: m.ok, mirrorChanged: m.changed,

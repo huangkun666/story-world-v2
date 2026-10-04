@@ -12,25 +12,50 @@
       </div>
       <span class="sw2-chip" id="sw2_world_chip">世界：—</span>
       <span class="sw2-chip sw2-tick" id="sw2_tick_chip">—</span>
-      <div class="sw2-close" id="sw2_window_close" title="关闭（Esc）">&#10005;</div>
+      <button class="sw2-btn sw2-operation-toggle" type="button" data-window-menu aria-controls="sw2_actionbar" aria-expanded="false">操作</button>
+      <div class="sw2-close" id="sw2_window_close" title="关闭（Esc）">关闭</div>
     </header>
-    <div class="sw2-statusbar">
+    <!-- ★★★leg162（用户令「**上移就是独立于设置页了，不是只有在设置页显示，而是整个窗口的上方**」
+         ＋ 随后第二句「**把这两个放在右边和页签同一行要不然太丑了太突兀了**」）：
+         **动作条与页签行合并成一行**——按钮钉在右端，八页常驻。
+         ★为什么是这个形状（三个形状都试过，只有它三条都成立）：
+           ① **曾经那一版**（动作条自己占一整行、住在状态条上面）⇒ 用户当场否掉："太丑了太突兀了"；
+           ② **并进 `.sw2-tabs` 里面**不行：手机档 `.sw2-tabs` 是 `overflow-x:auto` 的**横滑**容器
+              （见 `web/style.css` 手机档②），按钮放进去会**被滚走**；
+           ③ ⇒ 定稿：**外面包一行**（`.sw2-navrow`）。页签那一侧照旧横滑、右端钉住按钮，
+              两者是 flex 兄弟 ⇒ `margin-left:auto` 把按钮推到最右。
+         ★仍然住外壳（八页常驻）——这一点没变：它不在任何 `#sw2_view_*` 里，页体整块替换碰不到它。
+         ★交互零改动：`data-action` 委托挂在 window 容器上（`web/index.js` 的 `bindActions`）⇒ 按钮放哪都通。
+         ★右端那一格是**状态**不是解释：它随「插件总闸」真值变（开着＝世界随对话自动推进 / 关着＝已暂停），
+           由 `web/index.js` 从参数真源写进去——**不许在这里写死一句话**（写死就是第二份真相）。 -->
+    <div class="sw2-statusbar" role="status" style="display:none">
       <span class="sw2-dot"></span>
-      <span class="sw2-main" id="sw2_status_text">观棋窗口就绪 · 世界随对话自动推进</span>
+      <span class="sw2-main" id="sw2_status_text"></span>
     </div>
-    <nav class="sw2-tabs" id="sw2_tabs">
-      <!-- ★leg97 并页（用户令「观棋和说书其实是一个东西吧，不如就合并成一页也简洁些」）：
-           原来的「观棋」与「说书」两个页签**并成一页**——主层是四层（大势→面→线→点），
-           底下接着观棋原来的信息带/盘算总览/动态流/位置速览。⇒ 页签从九个减到八个。 -->
-      <div class="sw2-tab sw2-active" data-view="panorama">&#9820; 观棋 &#183; 说书</div>
-      <div class="sw2-tab" data-view="chronicle">&#128220; 编年</div>
-      <div class="sw2-tab" data-view="archive">&#127963; 大事纪&#183;旧卷</div>
-      <div class="sw2-tab" data-view="entities">&#128101; 角色与势力</div>
-      <div class="sw2-tab" data-view="setting">&#128214; 设定</div>
-      <div class="sw2-tab" data-view="params">&#127899; 参数</div>
-      <div class="sw2-tab" data-view="snapshots">&#128190; 快照</div>
-      <div class="sw2-tab" data-view="settings">&#9881; 设置</div>
-    </nav>
+    <div class="sw2-navrow">
+      <nav class="sw2-tabs" id="sw2_tabs">
+        <!-- ★leg97 并页（用户令「观棋和说书其实是一个东西吧，不如就合并成一页也简洁些」）：
+             原来的「观棋」与「说书」两个页签**并成一页**——主层是四层（大势→面→线→点），
+             底下接着观棋原来的信息带/盘算总览/动态流/位置速览。⇒ 页签从九个减到八个。 -->
+        <!-- ★★★leg165：八个页签与两枚动作按钮上的 **emoji 全部撤掉**（用户令「emoji 不要了」）。
+             撤掉的是：♜ 📜 🏛 👥 📖 🎛 💾 ⚙（页签）＋ ✨ ▶（两枚按钮）。
+             ★判据咬的是 `data-view` 与 `data-action` 两个属性（`test/action-router.test.js` 等），
+               没有一个字咬页签上的图标 ⇒ 这里只删字、不动结构。 -->
+        <div class="sw2-tab sw2-active" data-view="panorama">观棋</div>
+        <div class="sw2-tab" data-view="chronicle">编年</div>
+        <div class="sw2-tab" data-view="archive">大事纪&#183;旧卷</div>
+        <div class="sw2-tab" data-view="entities">角色与势力</div>
+        <div class="sw2-tab" data-view="setting">设定</div>
+        <div class="sw2-tab" data-view="params">参数</div>
+        <div class="sw2-tab" data-view="snapshots">快照</div>
+        <div class="sw2-tab" data-view="settings">设置</div>
+      </nav>
+      <div class="sw2-actionbar" id="sw2_actionbar">
+        <button class="sw2-btn sw2-primary" data-action="init-world">开始新世界</button>
+        <button class="sw2-btn" data-action="advance-world">推进一轮</button>
+        <span class="sw2-actionbar-state" id="sw2_advance_state"></span>
+      </div>
+    </div>
     <section id="sw2_view_panorama" class="sw2-view sw2-active"><div class="sw2-placeholder">观棋 &#183; 说书（大势 → 面 → 线 → 点；底下接信息带 / 盘算总览 / 动态流 / 位置速览）——已接入，打开即渲染</div></section>
     <section id="sw2_view_chronicle" class="sw2-view"><div class="sw2-placeholder">编年 · 史卷（五筛 + 因果链珠链视图）——已接入</div></section>
     <section id="sw2_view_archive" class="sw2-view"><div class="sw2-placeholder">大事纪&#183;旧卷（里程碑 / 阅卷）——已接入</div></section>

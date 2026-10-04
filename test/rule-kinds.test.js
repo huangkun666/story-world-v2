@@ -58,7 +58,7 @@ function stripCommentsForCount(src) {
     return out;
 }
 import { RULE_CLASS_GUIDE } from '../src/abstract-shape.js';
-import { buildRuleAnchor, buildScaleAnchor, buildScaleCatalog, buildEvolutionPack, SCALE_TABLE_TOP_PACK } from '../src/pack.js';
+import { buildRuleAnchor, buildScaleAnchor, buildEvolutionPack } from '../src/pack.js';
 import { renderSettingHtml } from '../src/render.js';
 
 // ───────── 夹具：**自造**的五类法则（术语全部与真书无关） ─────────
@@ -328,63 +328,16 @@ test('★★leg64 面板：老账如实报"一条都没进包"，并指出出路
     assert.ok(!html.includes('**'), '★老账那一支同样不许有星号');
 });
 
-// ═══════════ ⑧ 刻度目录（leg64 第三轮：用户问「这么多模型怎么检索，难道直接全塞吗」） ═══════════
-test('★★leg64 刻度目录：只列**没进包**的表名（不带档位内容），给模型一份"书里还有什么"', () => {
-    // 真账实景：64 张表 / 28,764 字符 = 预算 32%（全塞不进）；进包只 4 张 ⇒ 60 张模型不知道存在。
-    // ★★★leg135：表数 **40 → `SCALE_TABLE_TOP_PACK + 6`**。旧值 40 是照旧上限 16 配的；
-    //   上限抬到 **64**（用户令「全塞」）之后 40 张**一张都不截** ⇒ 目录为空、这条用例当场失效（实测当场红）。
-    const N_TABLES = SCALE_TABLE_TOP_PACK + 6;
-    const canon = {
-        powerScale: [], dims: [], rules: [],
-        刻度: Array.from({ length: N_TABLES }, (_, i) => ({
-            名: `表${i}`, 源: '条目甲',
-            档位: Array.from({ length: 3 }, (_, j) => ({ 档: `X${j}`, 注: '说明' })),
-        })),
-    };
-    const packed = buildScaleAnchor(canon) || [];
-    const cat = buildScaleCatalog(canon, new Set(packed.map((t) => t.表))) || [];
-    assert.ok(packed.length > 0 && packed.length < N_TABLES, `夹具确实发生了截断（进包 ${packed.length} / ${N_TABLES}）`);
-    assert.equal(cat.length, N_TABLES - packed.length, '★目录 = 账上 - 已进包（不重复列已经给过的）');
-    assert.ok(cat.every((s) => !s.includes('X0')), '★目录里**不许带档位名**（它只是目录，带内容就变第二份真相）');
-    assert.ok(cat.every((s) => /（\d+ 档）$/.test(s)), '目录形状：`表名（N 档）`');
-    const chars = cat.reduce((a, s) => a + s.length, 0);
-    assert.ok(chars < N_TABLES * 12, `★目录必须极便宜（实测 60 张 = 753 字符；夹具 ${cat.length} 张 = ${chars} 字符）`);
-});
-
-test('★leg64 刻度目录：空着就是空着（没有表 / 全都进了包 ⇒ 键不出现）', () => {
-    assert.equal(buildScaleCatalog(undefined, new Set()), null);
-    assert.equal(buildScaleCatalog({ powerScale: [], dims: [] }, new Set()), null);
-    // 全进包 ⇒ 目录没东西可列
-    const canon = { powerScale: [], dims: [], rules: [], 刻度: [{ 名: '唯一表', 档位: [{ 档: 'X1', 注: '一' }] }] };
-    assert.equal(buildScaleCatalog(canon, new Set(['唯一表'])), null, '★全进了包 ⇒ 目录为 null（不留空栏）');
-});
-
-test('★★leg64 刻度目录真接线：`buildEvolutionPack` 的 `setting.刻度目录` 真的出现', () => {
-    // ★★★leg135：表数 **30 → `SCALE_TABLE_TOP_PACK + 6`**（同上一条：30 张在新上限 64 下一张不截 ⇒ 目录空）。
-    const canon = {
-        powerScale: [], dims: [], rules: [],
-        刻度: Array.from({ length: SCALE_TABLE_TOP_PACK + 6 }, (_, i) => ({ 名: `表${i}`, 源: '甲', 档位: [{ 档: `X${i}`, 注: '一' }] })),
-    };
-    const ssot = {
-        context: { world: '测试世界', setting: { frozen: { canon }, dynamic: { tension: { polarity: '甲/乙', intensity: 0.5 }, env: {} } } },
-        entities: [], agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 1 },
-    };
-    const built = buildEvolutionPack(ssot, null);
-    assert.ok(Array.isArray(built.pack.setting.刻度目录), '★目录真的进了每轮包');
-    assert.ok(built.pack.setting.刻度目录.length > 0);
-    assert.ok(built.pack.setting.刻度, '刻度块仍在（目录不是替代它）');
-    // 键序锁：`刻度目录` 紧跟在 `刻度` 之后（面板与调试者按这个序读；也防"目录跑到 setting 外面去"）
-    const keys = Object.keys(built.pack.setting);
-    assert.equal(keys[keys.indexOf('刻度') + 1], '刻度目录', '★键序：刻度 → 刻度目录');
-    // 三块齐全时（有判据 + 有表 + 有目录）的顺序
-    const c2 = { ...canon, rules: ['跨甲境: 跨一阶→DC17'], ruleKinds: { '跨甲境: 跨一阶→DC17': '判断依据' } };
-    const s2 = { ...ssot, context: { ...ssot.context, setting: { frozen: { canon: c2 }, dynamic: ssot.context.setting.dynamic } } };
-    // ★leg69（A1）：本夹具的 30 张表 / 30 档**真的顶到了块级预算**（表 ≤16）⇒ 多出 `刻度裁掉` 这个读数键。
-    //   它**缀在末尾**（加法，不动既有键的相对位置）⇒ 既有键序 `刻度 → 刻度目录 → 法则` 原样保留。
-    //   ⚠这条锁的纪律照旧：**新键只许缀尾**，插在中间会动到面板与调试者按序读的那份次序。
-    assert.deepEqual(Object.keys(buildEvolutionPack(s2, null).pack.setting), ['tension', 'env', '刻度', '刻度目录', '法则', '刻度裁掉'],
-        '★三块齐全时的键序：刻度 → 刻度目录 → 法则 →（真丢东西时才有的）刻度裁掉');
-});
+// ═══════════ ⑧ 刻度目录（leg64 第三轮）—— ★★★leg163：**整族撤走** ═══════════
+// 这里原有三条判据（目录只列没进包的表名 / 空着就是空着 / 真接线与键序）。
+// ★撤走的理由（用户令「既然是全塞了就不需要点名表了所以删了这个功能即可」）：
+//   目录当初的唯一用途是"叫模型去点名要"（leg64 的递目录 + 按需查），而点名那个口
+//   （`lookupScales`）与它**同批撤走** ⇒ 留一份"叫你去点名、却点不了"的目录 =
+//   本仓最忌的"提示词替机制承诺一个它做不到的事"。
+// ★真账实测（本笔）：leg135「全塞」之后**目录本来就是空的**——
+//   大荒真账 1/1 张全进；`real-world-dh`（新账形状）45 张表 / 293 档 ⇒ **45/45 全进**。
+//   ⇒ 它进包时压根不挂键，撤走对真账**零字节影响**（所以那三条判据的"前提"在新上限下
+//     只能靠**把夹具撑到 70 张表**来人工维持——那本身就是"这条闸已经咬不到真账"的证据）。
 
 
 // ═══════════════ ⑨ 源码锁：分类只有一处实现（面板与进包不许各写一遍） ═══════════════

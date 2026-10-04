@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "b3086713-d7b6c977",
+  "fingerprint": "88325e33-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "b3086713",
+  "sourceFingerprint": "88325e33",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -115,7 +115,21 @@
     "docs/session-handoff-2026-09-30-leg159b-pan-range.md",
     "docs/session-handoff-2026-09-30-leg159c-fp-hash-rename.md",
     "docs/session-handoff-2026-10-01-leg160-panel-window.md",
+    "docs/session-handoff-2026-10-01-leg161-chat-vector.md",
+    "docs/session-handoff-2026-10-01-leg162-window-actionbar.md",
+    "docs/session-handoff-2026-10-01-leg163-nocaps.md",
+    "docs/session-handoff-2026-10-01-leg164-panorama.md",
+    "docs/session-handoff-2026-10-02-leg165-demo-parity.md",
+    "docs/session-handoff-2026-10-02-leg166-pages-demo-parity.md",
+    "docs/session-handoff-2026-10-02-leg167-panorama-cols.md",
+    "docs/session-handoff-2026-10-02-leg168-line-window.md",
+    "docs/session-handoff-2026-10-02-leg169-five-pages.md",
+    "docs/session-handoff-2026-10-02-leg170-layout-refresh.md",
+    "docs/session-handoff-2026-10-02-leg171-setting-reader.md",
+    "docs/session-handoff-2026-10-02-leg172-memory-models.md",
+    "docs/session-handoff-2026-10-02-leg173-panorama-reader.md",
     "docs/spec-abstract-passes.md",
+    "docs/spec-abstraction-input-cleanup.md",
     "docs/spec-b2-chronicle-via-recall.md",
     "docs/spec-chat-ledger-conflict.md",
     "docs/spec-chronicle-in-pack.md",
@@ -126,36 +140,37 @@
     "docs/spec-entity-section-encoding.md",
     "docs/spec-faction-member-title-prefix.md",
     "docs/spec-failure-verdict-and-visibility.md",
+    "docs/spec-leg162-window-actionbar.md",
     "docs/spec-long-memory-theory.md",
     "docs/spec-lookup-batch-refresh.md",
     "docs/spec-memory-engine.md",
     "docs/spec-novelist-clause.md",
+    "docs/spec-old-events-unreachable.md",
     "docs/spec-pack-budget-knob.md",
+    "docs/spec-panorama-reader.md",
     "docs/spec-parent-affiliation.md",
     "docs/spec-prose-into-ledger.md",
     "docs/spec-relationship-network.md",
     "docs/spec-retrieval-layer-interface.md",
     "docs/spec-snapshot-fault-tolerance.md",
+    "docs/spec-story-reader.md",
     "docs/spec-tag-granularity.md",
     "docs/spec-tagged-actions-extraction.md",
+    "docs/spec-ui-layout-refresh.md",
     "docs/spec-volume-summary.md",
     "docs/spec-volumes-into-recall.md",
     "docs/spec-world-model-widening.md",
     "docs/spec-world-widening.md",
     "docs/work-current.md",
-    "kb/00-index.md",
-    "kb/01-overview.md",
-    "kb/02-architecture.md",
-    "kb/03-ledger-ssot.md",
-    "kb/04-source-map.md",
-    "kb/05-web-panel.md",
-    "kb/06-parameters.md",
-    "kb/07-decisions.md",
-    "kb/08-testing-tooling.md",
-    "kb/09-glossary.md",
-    "kb/kb-index.json",
     "scripts/publish-release.mjs",
+    "src/abstract-evidence.js",
+    "src/abstract-fields.js",
+    "src/abstract-input.js",
+    "src/abstract-limits.js",
+    "src/abstract-selection.js",
+    "src/abstract-setting-report.js",
     "src/abstract-shape.js",
+    "src/abstract-source.js",
     "src/abstract-tier.js",
     "src/abstract.js",
     "src/async-tick.js",
@@ -163,16 +178,25 @@
     "src/chain.js",
     "src/check-step.js",
     "src/chronicle-brief.js",
+    "src/diagnostics.js",
+    "src/embed-client.js",
+    "src/embed-orchestration.js",
+    "src/entity-identity.js",
     "src/entity-lookup.js",
     "src/entropy.js",
     "src/extract.js",
     "src/fp-hash.js",
     "src/gate.js",
+    "src/geography-extract.js",
+    "src/geography-fit.js",
+    "src/geography.js",
     "src/init-source.js",
     "src/ledger-recall.js",
+    "src/ledger-vector.js",
     "src/limits.js",
     "src/lines.js",
     "src/macros.js",
+    "src/map-view.js",
     "src/observatory.js",
     "src/pack.js",
     "src/panorama.js",
@@ -184,6 +208,7 @@
     "src/prompts.js",
     "src/ref-rules.js",
     "src/render-base.js",
+    "src/render-subtabs.js",
     "src/render.js",
     "src/sanitize-step.js",
     "src/schema.js",
@@ -194,6 +219,7 @@
     "src/snapshot.js",
     "src/st-preset.js",
     "src/storage.js",
+    "src/story-reader.js",
     "src/streams.js",
     "src/tag-extract.js",
     "src/tick.js",
@@ -201,69 +227,89 @@
     "src/transport-http.js",
     "src/undo-stack.js",
     "src/unrest.js",
+    "src/vector-history.js",
+    "src/vector-store.js",
     "src/weight.js",
     "src/worldstep.js",
+    "web/abstract-selection.js",
+    "web/abstract-source-editor.js",
     "web/action-router.js",
     "web/book-rebaseline.js",
     "web/book-source.js",
+    "web/debug-console.js",
+    "web/diagnostic-transport.js",
+    "web/embed-channel.js",
+    "web/embed-runtime.js",
     "web/entity-window.js",
+    "web/geography-wiring.js",
     "web/hot-ledger.js",
     "web/idb-backend.js",
     "web/index.js",
+    "web/inject-readout.js",
     "web/inject.js",
     "web/long-task.js",
+    "web/map-reader.js",
     "web/model-channel.js",
     "web/page-compose.js",
+    "web/page-subtabs.js",
+    "web/panel-tools.js",
+    "web/panorama-reader.js",
     "web/param-panel.js",
     "web/scroll-keep.js",
+    "web/seed-diagnostics.js",
+    "web/seed-roots-wiring.js",
+    "web/setting-reader.js",
+    "web/settings-channels.js",
     "web/snapshot-store.js",
     "web/status-bar.js",
+    "web/story-reader.js",
     "web/view-state.js",
     "web/volume-popup.js",
+    "web/window-actions.js",
+    "web/window-shell.js",
     "web/world-entity-migration.js",
     "web/world-replace.js"
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg160-panel-window",
-    "mainPromptV": "v2-agenda-t1-31",
-    "cssVersion": "20261001-leg160-panel-window",
-    "version": "1.0.1",
-    "srcModules": 48,
-    "webModules": 19,
-    "tests": 120,
+    "panelBuild": "leg194-original-line-gone",
+    "mainPromptV": "v2-agenda-t1-34",
+    "cssVersion": "20261005-leg193-inject-readout",
+    "version": "1.1.0",
+    "srcModules": 68,
+    "webModules": 38,
+    "tests": 167,
     "demos": 76,
-    "docs": 179,
-    "latestHandoff": "session-handoff-2026-10-01-leg160-panel-window.md",
+    "docs": 201,
+    "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
-      "f245dc6 leg160：说书页那一族撤掉，画多少改成玩家自己填",
-      "da564bd story-world-v2 leg159c 收尾：用户裁定「这也太他妈丑了吧…让下一任改吧」——停手，把活儿交接出去",
-      "5546594 story-world-v2 leg159c 续：默认那一屏补上入口（用户实机报「我的构建号是这样但是没看到你说的效果」）",
-      "22f12a7 story-world-v2 勘正：面板构建号**不在「设置」页**（在「参数」页最上面那行 ＋「角色与势力」页表头）",
-      "d3625c3 story-world-v2 leg159c 改名 src/fingerprint.js -> src/fp-hash.js（公共过滤列表误杀插件模块；用户拍「治本：改名」）",
-      "7dd6696 story-world-v2 leg159b 修：说书页自证闸那四格各数各的⇒ 同一条线被数两遍（真账当场报对不上）",
-      "0b542f0 story-world-v2 leg159b 说书页不再只讲最近这一段（用户拍甲：分时间段 + 补读归档来路；零散线单独收一栏）",
-      "0073ba4 story-world-v2 leg159 跨轮空转不许落账（用户拍甲：值没变就不落账）——引擎层一道跨轮的闸 ＋ 读数行两笔分开报 ＋ 真账上量出差 3 件",
-      "1f966a0 story-world-v2 leg158 补：本地预览装法（甲案）落进 dev-process §10.0——只装本地克隆、不推远端",
-      "f37e75c story-world-v2 leg158 补：用户立「以后更新了先不推，让我本地看到效果验证完后再推」（dev-process §10.0）＋ leg158 他答「先不发」",
-      "117b491 story-world-v2 leg158 观棋页立卡门槛加一条（乙1：≥2 条线 或 此处 ≥2 件事）＋ 读那份真账把「DeepSeek 质量不行」量成四件事 ＋ 发布 leg157（f748203）",
-      "55b3f79 story-world-v2 leg157 补充：真酒馆里补量一次（注入生效、几何对得上；那一局没世界 ⇒ 两栏仍未在真酒馆量到）"
+      "0b2d4ef leg194: drop the raw inject readout line from the params card",
+      "f7104c0 leg193: inject readout row and a char budget that never cuts an event",
+      "be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)",
+      "f8584f0 leg192: make the three retrieval knobs take effect, and rename them (local preview)",
+      "46158df leg192 map popup: geography facts into the round, map as a popup (local preview)",
+      "81e0ef0 docs: design geography facts and map integration",
+      "b137360 fix: allow new events to omit their location",
+      "a3c20f3 docs: hand off attribute retention and align cache metadata",
+      "b66c2ac Preserve extracted descriptive attributes and merge supplements",
+      "af634e9 Align strict setting evidence and reject empty replacements",
+      "503afd5 fix: reject unusable rounds without advancing and preserve valid proposals",
+      "1ccfd47 fix: hide filtered source rows and allow closing source details"
     ]
   },
   "counts": {
-    "cards": 279,
+    "cards": 327,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
       "待拍板": 4,
       "缺口": 19,
-      "交接": 109,
-      "细案": 27,
+      "交接": 122,
+      "细案": 33,
       "索引": 2,
-      "知识库": 11,
-      "当前值": 18,
+      "当前值": 19,
       "怎么跑": 2,
-      "代码地图": 68
+      "代码地图": 107
     }
   },
   "cards": [
@@ -294,7 +340,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -326,7 +372,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -336,7 +382,7 @@
       "title": "STATE.md · 1.  当前权威读数（唯一出处）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 39,
+      "line": 40,
       "where": "> 这一节是**全仓唯一的当前值出处**。别处引用一律写\"见 `STATE.md` §1\"。",
       "keys": [
         "STATE",
@@ -358,7 +404,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -368,7 +414,7 @@
       "title": "STATE.md · 2. 红线与规矩（逐字搬家，不许改写）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 72,
+      "line": 74,
       "where": "> **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。**",
       "keys": [
         "STATE",
@@ -390,7 +436,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -400,7 +446,7 @@
       "title": "STATE.md · 3.  未决事项（唯一一份活儿清单）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 134,
+      "line": 136,
       "where": "> 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写\"已办结（哪棒）\"。",
       "keys": [
         "STATE",
@@ -422,23 +468,23 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
     },
     {
-      "id": "state#4. 上一棒",
-      "title": "STATE.md · 4. 上一棒",
+      "id": "state#4. 当前工",
+      "title": "STATE.md · 4. 当前工作",
       "kind": "入口/规矩",
       "src": "STATE.md",
       "line": 176,
-      "where": "- **本次**（2026-10-01 · ★★★**说书页那一族撤掉，改成\"画多少由玩家自己填\"**，用户令「**还是把这个删了吧，",
+      "where": "参数页那一卡底下两句原始读数撤掉已办结（用户 2026-10-05 第二道令：「第二段话可以删了，这是用来调试的」＋「那句我让你抽出重点的话也删了，毕竟已经抽出来了」）：① `标签注入：…（position=0…）` 与 ② `注入跑过 N",
       "keys": [
         "STATE",
         "入口",
         "接手",
-        "4. 上一棒",
+        "4. 当前工作",
         "STATE.md",
         "STATE · story-world v2 现状（接手第一入口）",
         "0. 三十秒版：这台东西是什么",
@@ -463,8 +509,8 @@
       "title": "STATE.md · 5. 现场（本机）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 190,
-      "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（仓库根是 `F:\\deepseek\\plugins`；分支 **`leg151-prefetch`**）",
+      "line": 182,
+      "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（仓库根是 `F:\\deepseek\\plugins`；分支 **`leg151-prefetch`**；",
       "keys": [
         "STATE",
         "入口",
@@ -485,7 +531,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5.1 发布流程"
       ]
     },
@@ -515,7 +561,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 892,
+      "line": 1264,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -5225,8 +5271,375 @@
         "3.3 四个号",
         "4.  为什么撤（用户当场点的两条，逐字留档）",
         "5.  下一任做什么（活儿单）",
+        "5.1  发布之后他当场问的那一件事（口径已定，不改代码）",
         "6. 别做的事",
         "7. 如实登记（本笔的边界）"
+      ]
+    },
+    {
+      "id": "handoff#161",
+      "title": "交接 leg161（2026-10-01）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-01-leg161-chat-vector.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付：五件 ／ 1.1 三个号 ／ 3.  实测：为什么\"接上了\"不等于\"进得去\" ／ 3.1  如实登记：这一格没有在真账上量出效果 ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事 ／ 7. 如实登记（本笔的边界）",
+      "keys": [
+        "交接",
+        "leg161",
+        "2026-10-01",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-01-leg161-chat-vector.md",
+        "0. 一句话",
+        "1.  交付：五件",
+        "1.1 三个号",
+        "2.  用户定的口径（逐字留档 · 全是\"否掉我原来提法\"的那种）",
+        "3.  实测：为什么\"接上了\"不等于\"进得去\"",
+        "3.1  如实登记：这一格没有在真账上量出效果",
+        "4.  撤回一条旧结论（这一节最要紧，免得下一任继续照它推）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本笔的边界）",
+        "8. 硬读数"
+      ]
+    },
+    {
+      "id": "handoff#162",
+      "title": "交接 leg162（2026-10-01）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-01-leg162-window-actionbar.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付：三件 ／ 1.1 三个号 ／ 2.  用户定的口径（逐字留档） ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事 ／ 7. 如实登记（本棒的边界） ／ 8. 硬读数",
+      "keys": [
+        "交接",
+        "leg162",
+        "2026-10-01",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-01-leg162-window-actionbar.md",
+        "0. 一句话",
+        "1.  交付：三件",
+        "1.1 三个号",
+        "1.2 腾行数（本仓纪律：要往接线层加东西，先把一族搬出去）",
+        "2.  用户定的口径（逐字留档）",
+        "3.  实测：两处\"看图看不出来\"的错（本棒最值钱的一节）",
+        "4.  判据：新增 4 条 ＋ 两条旧锁换锚点（如实登记）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本棒的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#163",
+      "title": "交接 leg163（2026-10-01）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-01-leg163-nocaps.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付：四件 ／ 1.1 四个号 ／ 2.  用户定的口径（逐字留档） ／ 3.2 而它在真账上已经开始咬 ／ 3.4 契约缺口（先证红，不是推理） ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事",
+      "keys": [
+        "交接",
+        "leg163",
+        "2026-10-01",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-01-leg163-nocaps.md",
+        "0. 一句话",
+        "1.  交付：四件",
+        "1.1 四个号",
+        "2.  用户定的口径（逐字留档）",
+        "3.  实测：那些闸到底有没有意义（本棒最值钱的一节）",
+        "3.1 三道上限不在保护预算（这是\"删闸\"的根据）",
+        "3.2 而它在真账上已经开始咬",
+        "3.3 抽取质量不是问题（用户猜的那条路，实测否掉）",
+        "3.4 契约缺口（先证红，不是推理）",
+        "4.  判据：撤 13 条、增 1 条、改 5 条（如实登记）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本棒的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#164",
+      "title": "交接 leg164（2026-10-01）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-01-leg164-panorama.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付：两件 ／ 1.1 两个号 ／ 2.  用户定的口径（逐字留档） ／ 3.2 判据⑭ vs \"删掉整段设计解释\" ／ 3.3 判据⑲的尺子过期了（用户拍板改） ／ 3.4 令牌层撞到的两条机械约束（下一任会再撞） ／ 5.  下一任做什么（活儿单）",
+      "keys": [
+        "交接",
+        "leg164",
+        "2026-10-01",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-01-leg164-panorama.md",
+        "交接 · 第一百六十四棒（leg164）——观棋页重构 ＋ 全站换色",
+        "0. 一句话",
+        "1.  交付：两件",
+        "1.1 两个号",
+        "2.  用户定的口径（逐字留档）",
+        "3.  三处\"演示 vs 判据\"的真冲突（本棒最值钱的一节）",
+        "3.1 演示缺三处版面机器（不是它要删，是样张里没有）",
+        "3.2 判据⑭ vs \"删掉整段设计解释\"",
+        "3.3 判据⑲的尺子过期了（用户拍板改）",
+        "3.4 令牌层撞到的两条机械约束（下一任会再撞）",
+        "4.  判据：改 2 条、增 0 条、撤 0 条（如实登记）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本棒的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#165",
+      "title": "交接 leg165（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg165-demo-parity.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付：两件 ／ 1.1 两个号 ／ 2.  用户定的口径（逐字留档） ／ 3.1 逐处对照（左＝上一棒真在跑的，右＝演示） ／ 3.2 唯一一处有意不照演示：线头那一栏的底 ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事",
+      "keys": [
+        "交接",
+        "leg165",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg165-demo-parity.md",
+        "0. 一句话",
+        "1.  交付：两件",
+        "1.1 两个号",
+        "2.  用户定的口径（逐字留档）",
+        "3.  三处\"演示 vs 真页面\"的真冲突（本棒最值钱的一节）",
+        "3.1 逐处对照（左＝上一棒真在跑的，右＝演示）",
+        "3.2 唯一一处有意不照演示：线头那一栏的底",
+        "3.3 三处版面机器一处没丢（它们全是用户自己的令）",
+        "4.  判据：改 10 条、增 0 条、撤 0 条（如实登记）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本棒的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#166",
+      "title": "交接 leg166（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg166-pages-demo-parity.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.2 四个号 ／ 2.  逐处对照（左＝本笔之前，右＝演示） ／ 3.  三处\"演示 vs 本仓既有口径\"的真冲突 ／ 3.2 两处有意不照抄演示（取本仓既有的语义） ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事 ／ 7. 如实登记（本笔的边界）",
+      "keys": [
+        "交接",
+        "leg166",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg166-pages-demo-parity.md",
+        "交接 · 第一百六十六棒（leg166）——外壳 ＋ 其余七页整批落演示版面",
+        "＋ leg166b/166c：用户两次打回来之后，把\"只改了色\"那一版推倒重来",
+        "0. 一句话",
+        "1.0  leg166b/166c：用户打回来之后补上的那一半（版式，不是颜色）",
+        "1.1 leg166 那一半（样式语言，仍然有效）",
+        "1.2 四个号",
+        "2.  逐处对照（左＝本笔之前，右＝演示）",
+        "3.  三处\"演示 vs 本仓既有口径\"的真冲突",
+        "3.1 演示缺的三处版面机器——一处都没丢（它们全是用户自己的令）",
+        "3.2 两处有意不照抄演示（取本仓既有的语义）",
+        "4.  判据：改 5 条、增 0 条、撤 0 条（如实登记）",
+        "4.1 第 4 条要单独说清（这是本笔唯一一处放宽）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本笔的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#167",
+      "title": "交接 leg167（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg167-panorama-cols.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付：三件 ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事 ／ 7. 如实登记（本笔的边界） ／ 8. 硬读数 ／ 9. 仓外装置（不进版本库）",
+      "keys": [
+        "交接",
+        "leg167",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg167-panorama-cols.md",
+        "＋ 用户令「回退」之后：配色退回 leg163 · 结构退回 leg158",
+        "0. 一句话",
+        "1.  交付：三件",
+        "1.1 配色退回 leg163 那一套（用户令⑤「那时候不是黑色打底」）",
+        "1.2 结构退回 leg158（用户令④「结构绝对有变化…以前没有这么多零散」）",
+        "1.3 并线补第三条边（用户令④末句「现在这个连盘算都放进去了」）",
+        "2.  那三张截图上的东西到底是什么（用户问过三次，这里一次说清）",
+        "3.  逐版对照（同一个世界 · 用户那本真账 大荒z · 35 件事）",
+        "4.  仍未做：窗口那条口径（用户早就问过，代码从来没做到）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本笔的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#168",
+      "title": "交接 leg168（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg168-line-window.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 1.  交付 ／ 1.1 窗口按线裁（用户令①） ／ 3.  量出来的代价（如实登记，不许当理由翻案） ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事 ／ 7. 如实登记（本笔的边界） ／ 8. 硬读数",
+      "keys": [
+        "交接",
+        "leg168",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg168-line-window.md",
+        "0. 一句话",
+        "1.  交付",
+        "1.1 窗口按线裁（用户令①）",
+        "1.2 表单控件的底色退回 leg163（用户令②）",
+        "2.  判据怎么改的（说书㉓/㉔：三条咬着\"按事件裁\"的断言）",
+        "3.  量出来的代价（如实登记，不许当理由翻案）",
+        "4.  用户那张截图上的东西是什么（这一棒的说清）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本笔的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#169",
+      "title": "交接 leg169（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg169-five-pages.md",
+      "line": 1,
+      "where": "0. 一句话 ／ 3.  五页逐页交付 ／ 3.6  顺手修掉的一处（直接坑用户） ／ 5.  下一任做什么（活儿单） ／ 6.  别做的事 ／ 7. 如实登记（本笔的边界） ／ 8. 硬读数 ／ 9. 仓外装置（不进版本库）",
+      "keys": [
+        "交接",
+        "leg169",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg169-five-pages.md",
+        "0. 一句话",
+        "1.  三句前人记下来的话——逐条回代码里核，三句都不准",
+        "2.  \"字太多\"怎么量（口径 · 读数 · 治完的数）",
+        "3.  五页逐页交付",
+        "3.1 参数页（renderParamsHtml）",
+        "3.2 快照页（renderSnapshotsHtml）",
+        "3.3 大事纪页（renderArchiveHtml）",
+        "3.4 设置页（renderSettingsHtml）子代理做，主代理合并并复验",
+        "3.5 设定页（renderSettingHtml）子代理做，主代理合并并复验",
+        "3.6  顺手修掉的一处（直接坑用户）",
+        "4.  立起来的跨页版式语言（下一任直接复用，别再各页各写一套）",
+        "5.  下一任做什么（活儿单）",
+        "6.  别做的事",
+        "7. 如实登记（本笔的边界）",
+        "8. 硬读数",
+        "9. 仓外装置（不进版本库）"
+      ]
+    },
+    {
+      "id": "handoff#170",
+      "title": "交接 leg170（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg170-layout-refresh.md",
+      "line": 1,
+      "where": "页面布局改版交接 ／ 已实施 ／ 验证 ／ 文件与现场",
+      "keys": [
+        "交接",
+        "leg170",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg170-layout-refresh.md",
+        "页面布局改版交接",
+        "已实施",
+        "验证",
+        "文件与现场"
+      ]
+    },
+    {
+      "id": "handoff#171",
+      "title": "交接 leg171（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg171-setting-reader.md",
+      "line": 1,
+      "where": "UI 预览后的细化交接 ／ 用户授权 ／ 实现 ／ 验证 ／ 本机预览",
+      "keys": [
+        "交接",
+        "leg171",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg171-setting-reader.md",
+        "UI 预览后的细化交接",
+        "用户授权",
+        "实现",
+        "验证",
+        "本机预览"
+      ]
+    },
+    {
+      "id": "handoff#172",
+      "title": "交接 leg172（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg172-memory-models.md",
+      "line": 1,
+      "where": "记忆模型列表与窗口修复交接 ／ 交付行为 ／ 验证与代理分工 ／ 真跑尚未验收 ／ 本机 agent 调度配置",
+      "keys": [
+        "交接",
+        "leg172",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg172-memory-models.md",
+        "记忆模型列表与窗口修复交接",
+        "交付行为",
+        "验证与代理分工",
+        "真跑尚未验收",
+        "本机 agent 调度配置"
+      ]
+    },
+    {
+      "id": "handoff#173",
+      "title": "交接 leg173（2026-10-02）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-02-leg173-panorama-reader.md",
+      "line": 1,
+      "where": "观棋阅读布局交接 ／ 页面行为 ／ 验证与复现 ／ 文档归档与本机预览",
+      "keys": [
+        "交接",
+        "leg173",
+        "2026-10-02",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-02-leg173-panorama-reader.md",
+        "观棋阅读布局交接",
+        "页面行为",
+        "验证与复现",
+        "文档归档与本机预览"
       ]
     },
     {
@@ -5256,6 +5669,28 @@
         "7. 检验三问（ANCHOR.md §7）",
         "8. 如实登记（边界与风险）",
         "9. 实施记录（2026-09-29 leg150）"
+      ]
+    },
+    {
+      "id": "spec#abstraction-input-cleanup",
+      "title": "细案 abstraction-input-cleanup",
+      "kind": "细案",
+      "src": "docs/spec-abstraction-input-cleanup.md",
+      "line": 1,
+      "where": "抽象输入优化设计（2026-10-03，已批准）",
+      "keys": [
+        "细案",
+        "设计",
+        "spec",
+        "abstraction-input-cleanup",
+        "docs",
+        "spec-abstraction-input-cleanup.md",
+        "抽象输入优化设计（2026-10-03，已批准）",
+        "已确认的问题",
+        "三种做法",
+        "推荐方案的明确规则",
+        "文件与分工",
+        "验证与交付"
       ]
     },
     {
@@ -5627,6 +6062,31 @@
       ]
     },
     {
+      "id": "spec#leg162-window-actionbar",
+      "title": "细案 leg162-window-actionbar",
+      "kind": "细案",
+      "src": "docs/spec-leg162-window-actionbar.md",
+      "line": 1,
+      "where": "细案 · 动作条升到窗口顶部（leg162）",
+      "keys": [
+        "细案",
+        "设计",
+        "spec",
+        "leg162-window-actionbar",
+        "docs",
+        "spec-leg162-window-actionbar.md",
+        "细案 · 动作条升到窗口顶部（leg162）",
+        "1. 病（用户截图 + 原话）",
+        "2. 定案：动作条住窗口外壳，并与页签同一行",
+        "为什么住外壳而不是\"每页各画一份\"",
+        "3. 逐文件改动（六处代码 ＋ 三处判据）",
+        "外壳那一段长什么样（形状定稿）",
+        "4. 判据怎么改（这一节必须如实登记，不许偷偷绕过）",
+        "5. 不做什么（边界）",
+        "6. 验收（谁能验什么）"
+      ]
+    },
+    {
       "id": "spec#long-memory-theory",
       "title": "细案 long-memory-theory",
       "kind": "细案",
@@ -5791,6 +6251,52 @@
       ]
     },
     {
+      "id": "spec#old-events-unreachable",
+      "title": "细案 old-events-unreachable",
+      "kind": "细案",
+      "src": "docs/spec-old-events-unreachable.md",
+      "line": 1,
+      "where": "细案 · 「旧事动不了」——为什么世界模型想不起旧事，以及松开那道闸要付什么",
+      "keys": [
+        "细案",
+        "设计",
+        "spec",
+        "old-events-unreachable",
+        "docs",
+        "spec-old-events-unreachable.md",
+        "细案 · 「旧事动不了」——为什么世界模型想不起旧事，以及松开那道闸要付什么",
+        "0. 一句话（人话版）",
+        "1. 机理（每一步都有源码，逐条可核）",
+        "2.  撤回一条旧结论（这一节最要紧）",
+        "3.  真账上量出来的数（零模型调用 · 只读副本）",
+        "3.2 你现在正在玩的那一局（大荒z - 2026-09-01，第 3 轮）",
+        "3.3 量不出来的那一格（如实登记）",
+        "4.  松开这道闸要付什么（下游后果，逐条核过源码）",
+        "4.1  会当场炸（真 TypeError ⇒ 整步被拒 ⇒ 世界白停一轮）",
+        "4.2  两条\"沿因果往上走\"的链会在归档处断掉",
+        "4.3  归档闸自己会判错",
+        "4.5.1 那份 59 轮的账",
+        "4.5.2  两条边界（不许外推）",
+        "4.6.1 那份 59 轮的账",
+        "4.6.2  三条结论（每一条都改变判断）",
+        "4.6.4 接回向量层的代价与六条不许改的设计",
+        "4.7.1 装置与口径",
+        "4.7.2 读数",
+        "4.7.3  病根：不是预算小，是\"最新的在前\"把预算吃干了",
+        "4.7.4 三个候选（按\"值不值\"排 · 都没做，等用户拍）",
+        "4.7.5  用户当场纠正的一条（写进来，免得下一任搞错本笔的期望值）",
+        "4.8  聊天侧接向量：用户当场定的口径（2026-10-01）",
+        "4.8.1  后端：外部嵌入 API，本地 webllm 否掉",
+        "4.8.2  参数：只留三个，维度与批量不许写成旋钮",
+        "4.8.4  一条不许再讨论的（用户当场堵回来的）",
+        "5. 所以细案是几件事（不是一个开关）",
+        "6.  要用户拍的两件事",
+        "7. 怎么复量",
+        "真账上\"接不上的旧线\"有几条（零模型调用 · 只读）",
+        "全量判据（无参，必须在插件目录内）"
+      ]
+    },
+    {
       "id": "spec#pack-budget-knob",
       "title": "细案 pack-budget-knob",
       "kind": "细案",
@@ -5819,6 +6325,26 @@
         "5. 判据（每条真跑）",
         "6. 本笔不做的",
         "7. 待用户拍板"
+      ]
+    },
+    {
+      "id": "spec#panorama-reader",
+      "title": "细案 panorama-reader",
+      "kind": "细案",
+      "src": "docs/spec-panorama-reader.md",
+      "line": 1,
+      "where": "观棋阅读布局",
+      "keys": [
+        "细案",
+        "设计",
+        "spec",
+        "panorama-reader",
+        "docs",
+        "spec-panorama-reader.md",
+        "观棋阅读布局",
+        "已确认的设计",
+        "实现边界",
+        "验收"
       ]
     },
     {
@@ -5993,6 +6519,26 @@
       ]
     },
     {
+      "id": "spec#story-reader",
+      "title": "细案 story-reader",
+      "kind": "细案",
+      "src": "docs/spec-story-reader.md",
+      "line": 1,
+      "where": "世界近况与故事阅读",
+      "keys": [
+        "细案",
+        "设计",
+        "spec",
+        "story-reader",
+        "docs",
+        "spec-story-reader.md",
+        "世界近况与故事阅读",
+        "页面",
+        "归属与边界",
+        "验收"
+      ]
+    },
+    {
       "id": "spec#tag-granularity",
       "title": "细案 tag-granularity",
       "kind": "细案",
@@ -6083,6 +6629,25 @@
         "14.8  那个开关：六版才通（真机验证过：通了）——整条沿革留档",
         "14.9  ③世界动向：我第一版根本没做（用户当场骂出来，现已接上）",
         "14.10 本笔实测读数（自证）"
+      ]
+    },
+    {
+      "id": "spec#ui-layout-refresh",
+      "title": "细案 ui-layout-refresh",
+      "kind": "细案",
+      "src": "docs/spec-ui-layout-refresh.md",
+      "line": 1,
+      "where": "页面布局与排版改版",
+      "keys": [
+        "细案",
+        "设计",
+        "spec",
+        "ui-layout-refresh",
+        "docs",
+        "spec-ui-layout-refresh.md",
+        "页面布局与排版改版",
+        "实现边界",
+        "验证与交付"
       ]
     },
     {
@@ -6232,7 +6797,7 @@
     },
     {
       "id": "dir#docs/superpowers/specs",
-      "title": "docs/superpowers/specs/（4 份旧档）",
+      "title": "docs/superpowers/specs/（10 份旧档）",
       "kind": "索引",
       "src": "docs/superpowers/specs",
       "line": 1,
@@ -6264,221 +6829,12 @@
       ]
     },
     {
-      "id": "kb#00-index",
-      "title": "知识库 00-index · 总目录与问题路由",
-      "kind": "知识库",
-      "src": "kb/00-index.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "00-index",
-        "00-index.md",
-        "00 · 总目录与问题路由",
-        "页面导航",
-        "常见问题  去哪看",
-        "仓库地图（对应 KB 哪篇）"
-      ]
-    },
-    {
-      "id": "kb#01-overview",
-      "title": "知识库 01-overview · 概览与理念",
-      "kind": "知识库",
-      "src": "kb/01-overview.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "01-overview",
-        "01-overview.md",
-        "01 · 概览与理念",
-        "立身之本：世界有一本账",
-        "没有\"主角\"",
-        "三者分工这堵墙（别越界）",
-        "权威阶梯（双作者模型）",
-        "引擎\"不做什么\"（诚实交代，这是设计纪律不是免责声明）",
-        "现状（速览，数字只认 STATE.md §1）"
-      ]
-    },
-    {
-      "id": "kb#02-architecture",
-      "title": "知识库 02-architecture · 架构与数据流",
-      "kind": "知识库",
-      "src": "kb/02-architecture.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "02-architecture",
-        "02-architecture.md",
-        "02 · 架构与数据流",
-        "A. 抽取流（一次性 / 换书时触发）",
-        "B. 每轮 tick 流（每收一条 RP 回复推进一轮）",
-        "C. 阶段之间流动的是什么"
-      ]
-    },
-    {
-      "id": "kb#03-ledger-ssot",
-      "title": "知识库 03-ledger-ssot · 世界账（SSOT）模型",
-      "kind": "知识库",
-      "src": "kb/03-ledger-ssot.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "03-ledger-ssot",
-        "03-ledger-ssot.md",
-        "03 · 世界账（SSOT）模型",
-        "顶层表",
-        "「必带因」——这一笔的脊梁",
-        "世界步（模型被契约强制产出的\"一步\"）"
-      ]
-    },
-    {
-      "id": "kb#04-source-map",
-      "title": "知识库 04-source-map · 源码地图（src/）",
-      "kind": "知识库",
-      "src": "kb/04-source-map.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "04-source-map",
-        "04-source-map.md",
-        "04 · 源码地图（src/）",
-        "逐文件表",
-        "关键机制详解"
-      ]
-    },
-    {
-      "id": "kb#05-web-panel",
-      "title": "知识库 05-web-panel · 面板与注入（web/）",
-      "kind": "知识库",
-      "src": "kb/05-web-panel.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "05-web-panel",
-        "05-web-panel.md",
-        "05 · 面板与注入（web/）",
-        "面板怎么打开",
-        "八页（SECTIONS web/index.js:181）",
-        "编排与依赖注入",
-        "各 web 叶子",
-        "⭐ 注入耦合：RP 那一侧到底被动了多少",
-        "两条硬约束（元测试锁着）"
-      ]
-    },
-    {
-      "id": "kb#06-parameters",
-      "title": "知识库 06-parameters · 世界参数与旋钮",
-      "kind": "知识库",
-      "src": "kb/06-parameters.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "06-parameters",
-        "06-parameters.md",
-        "06 · 世界参数与旋钮",
-        "世界参数（档位）",
-        "世界尺度：7 个旋钮（无上限白名单，填 ≥1 整数即可）",
-        "两个\"多少轮\"的旋钮（leg160 立，别混）",
-        "开关",
-        "一句话记忆"
-      ]
-    },
-    {
-      "id": "kb#07-decisions",
-      "title": "知识库 07-decisions · 决策与红线",
-      "kind": "知识库",
-      "src": "kb/07-decisions.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "07-decisions",
-        "07-decisions.md",
-        "07 · 决策与红线",
-        "最高准则：没命令，不准动一个字节（用户 2026-09-11 立）",
-        "四条不可越的线",
-        "泛用性三条判据 + 禁用清单（ANCHOR.md §4.8）",
-        "提取纪律四条（measure-leg61 §四条不可违）",
-        "说人话、不许自创术语（用户 2026-09-22 立）",
-        "待办纪律（STATE.md §2.4）",
-        "动手前的规矩：六条",
-        "关键设计决策（ADR 式）",
-        "一句话给要改代码的人"
-      ]
-    },
-    {
-      "id": "kb#08-testing-tooling",
-      "title": "知识库 08-testing-tooling · 测试与工具链",
-      "kind": "知识库",
-      "src": "kb/08-testing-tooling.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "08-testing-tooling",
-        "08-testing-tooling.md",
-        "08 · 测试与工具链",
-        "跑验证（全部在插件目录内、零 token、不需密钥）",
-        "测试套件地图（105 个 test/.test.js）",
-        "四个版本号与升格时机",
-        "scripts/ 工具链",
-        "demo/ 探针分类（86 个）",
-        "现场速记（STATE.md §5）"
-      ]
-    },
-    {
-      "id": "kb#09-glossary",
-      "title": "知识库 09-glossary · 术语表",
-      "kind": "知识库",
-      "src": "kb/09-glossary.md",
-      "line": 1,
-      "where": "（★快照：冲突时以代码为准；当前值只看 STATE.md §1）",
-      "keys": [
-        "知识库",
-        "kb",
-        "09-glossary",
-        "09-glossary.md",
-        "09 · 术语表"
-      ]
-    },
-    {
-      "id": "kb#machine",
-      "title": "知识库机器可读索引（kb-index.json）",
-      "kind": "知识库",
-      "src": "kb/kb-index.json",
-      "line": 1,
-      "where": "文件 / 符号 / 术语 / 决策 / 红线 / 流水线阶段（★快照，会过期）",
-      "keys": [
-        "知识库",
-        "索引",
-        "术语",
-        "符号",
-        "kb",
-        "kb-index.json"
-      ]
-    },
-    {
       "id": "value#判据",
       "title": "当前值 · 判据",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 46,
-      "where": "**1466 / 1466 · fail 0 · skipped 0 · todo 0**（★leg159b/leg159 各 **+3/+4**；leg156 **−80**——记忆层整族撤走） ｜ 复量：`node --test`（**无参，必须在插件目录内**）",
+      "line": 47,
+      "where": "**2038 / 2038 · fail 0 · skipped 0 · todo 0**（含地点关系契约与查询、地理抽取与来源核验、地图弹窗开关、当轮地理输入与预算裁剪、导出回档、「往事怎么找」各格现读设置，以及字数额度/整条进不截半条/ ｜ 复量：`node --test`（无参，在插件目录内）",
       "keys": [
         "当前值",
         "读数",
@@ -6500,7 +6856,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6510,7 +6866,7 @@
       "title": "当前值 · 冒烟",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 47,
+      "line": 48,
       "where": "**PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js`",
       "keys": [
         "当前值",
@@ -6534,7 +6890,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6544,8 +6900,8 @@
       "title": "当前值 · PANEL_BUILD",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 48,
-      "where": "**`leg160-panel-window`** ｜ 复量：`src/render-base.js`（★leg160：说书页顶上那一行横带**整族撤掉**；这一页画多少改由账上那一格「**往回看轮数**」决定——起因是用",
+      "line": 49,
+      "where": "**`leg194-original-line-gone`** ｜ 复量：`src/render-base.js`；参数页那一卡底下**两句原始读数整行撤掉**（用户 2026-10-05：「第二段话可以删了，这是用来调试的」＋「那句",
       "keys": [
         "当前值",
         "读数",
@@ -6568,7 +6924,41 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
+        "5. 现场（本机）",
+        "5.1 发布流程"
+      ]
+    },
+    {
+      "id": "value#★「往事注入多少",
+      "title": "当前值 · ★「往事注入多少字」出厂值",
+      "kind": "当前值",
+      "src": "STATE.md",
+      "line": 50,
+      "where": "**1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路合起来吃它）；★** ｜ 复量：`src/limits.js` · `web/inject.js`（`liveRetrievalParams`）",
+      "keys": [
+        "当前值",
+        "读数",
+        "判据",
+        "构建号",
+        "行数",
+        "★「往事注入多少字」",
+        "STATE.md",
+        "STATE · story-world v2 现状（接手第一入口）",
+        "0. 三十秒版：这台东西是什么",
+        "0.5  活儿在哪（接手第一件事）",
+        "1.  当前权威读数（唯一出处）",
+        "2. 红线与规矩（逐字搬家，不许改写）",
+        "2.1 最高准则：没命令，不准动一个字节（用户 2026-09-11 立）",
+        "2.2 四条不可越的线",
+        "2.3 动手前的规矩（六条）",
+        "2.4 待办纪律（leg106 立，治\"任务堆积\"）",
+        "3.  未决事项（唯一一份活儿清单）",
+        "等你拍板的（2 条）",
+        "下一笔：待你点头（都是待选项、不是命令）",
+        "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
+        "新立的活儿（2026-09-30 用户点头「立项治」）",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6578,7 +6968,7 @@
       "title": "当前值 · ★主调用输出上限（出厂值）",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 49,
+      "line": 51,
       "where": "**`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** ⇒ 16,384  ｜ 复量：`src/transport-http.js`",
       "keys": [
         "当前值",
@@ -6602,7 +6992,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6612,7 +7002,7 @@
       "title": "当前值 · ★模型容量怎么来的",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 50,
+      "line": 52,
       "where": "取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** ｜ 复量：`src/transport-http.js` · `web/model-channel.js`",
       "keys": [
         "当前值",
@@ -6636,7 +7026,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6646,7 +7036,7 @@
       "title": "当前值 · ★手机端",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 51,
+      "line": 53,
       "where": "页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12px 小字**抬到  ｜ 复量：`web/style.css` 末尾两条",
       "keys": [
         "当前值",
@@ -6670,7 +7060,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6680,7 +7070,7 @@
       "title": "当前值 · ★抽取并发度",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 52,
+      "line": 54,
       "where": "**缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 1 路** ｜ 复量：`web/model-channel.js` · `src/parallel-run.js`",
       "keys": [
         "当前值",
@@ -6704,7 +7094,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6714,7 +7104,7 @@
       "title": "当前值 · 包预算 出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 53,
+      "line": 55,
       "where": "**50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js`",
       "keys": [
         "当前值",
@@ -6738,7 +7128,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6748,8 +7138,8 @@
       "title": "当前值 · ★往回看轮数 出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 54,
-      "where": "**50**（leg160 新立的第十格：**说书页往回画多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。★它与 `往事轮数`（给模型看的那个窗口，出厂也 50）是**两个旋钮两件事**，不许互相顶替 ｜ 复量：`src/limits.js`（★`PANEL_WINDOW_TURNS`）",
+      "line": 56,
+      "where": "**50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两件事** ｜ 复量：`src/limits.js`（★`PANEL_WINDOW_TURNS`）",
       "keys": [
         "当前值",
         "读数",
@@ -6772,7 +7162,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6782,7 +7172,7 @@
       "title": "当前值 · ★leg136–leg156 各笔",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 55,
+      "line": 57,
       "where": "⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/done-archive.md`",
       "keys": [
         "当前值",
@@ -6806,7 +7196,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6816,8 +7206,8 @@
       "title": "当前值 · CSS_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 56,
-      "where": "**`20261001-leg160-panel-window`** ｜ 复量：`web/index.js`",
+      "line": 58,
+      "where": "**`20261005-leg193-inject-readout`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。leg193 加了注入卡那一族的行形规则（`.sw2-field-head`）与读数行（",
       "keys": [
         "当前值",
         "读数",
@@ -6840,7 +7230,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6850,8 +7240,8 @@
       "title": "当前值 · MAIN_PROMPT_V",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 57,
-      "where": "**`v2-agenda-t1-31`** ｜ 复量：`src/prompts.js`（★leg153：第 9 条补\"按意思找回的旧事\"怎么读）",
+      "line": 59,
+      "where": "**`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne",
       "keys": [
         "当前值",
         "读数",
@@ -6874,7 +7264,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6884,8 +7274,8 @@
       "title": "当前值 · web/index.js 行数",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 58,
-      "where": "**3097 / 3100**（硬锁 `<3100`，`test/web-view-state-layout.test.js:341`） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**）",
+      "line": 60,
+      "where": "**3097 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行）",
       "keys": [
         "当前值",
         "读数",
@@ -6908,7 +7298,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6918,8 +7308,8 @@
       "title": "当前值 · CACHE_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 59,
-      "where": "**4**（leg150 **3 → 4**：抽取的**问法**变了——不抬就会命中旧缓存） ｜ 复量：`src/fp-hash.js`（★leg159c 改名）",
+      "line": 61,
+      "where": "**`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充\"已有地图\"，旧缓存一并失效） ｜ 复量：`src/fp-hash.js`",
       "keys": [
         "当前值",
         "读数",
@@ -6942,7 +7332,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6952,8 +7342,8 @@
       "title": "当前值 · 发布仓 main",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 60,
-      "where": "**`f748203`** · 构建号 **`leg157-merged-scroll`** · 版本号 **`1.0.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main  ｜ 复量：`node scripts/verify-release.mjs`",
+      "line": 62,
+      "where": "**`88bd80e`** · 构建号 **`leg160-panel-window`** · 版本号 **`1.0.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖 ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",
@@ -6976,7 +7366,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -6986,7 +7376,7 @@
       "title": "当前值 · release tag",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 61,
+      "line": 63,
       "where": "**`v1.0.1` → `ec5416d`**（leg149 · 修错版）· 旧三个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
       "keys": [
         "当前值",
@@ -7010,7 +7400,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -7020,7 +7410,7 @@
       "title": "当前值 · 发布点读数的语义（leg124 立）",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 62,
+      "line": 64,
       "where": "**\"已发布到哪一版\"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8",
       "keys": [
         "当前值",
@@ -7044,7 +7434,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -7054,8 +7444,8 @@
       "title": "当前值 · 版本号",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 63,
-      "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.0.1`**（两处，判据锁着第二处）。★**leg156 未升**（新旧版本号相同 ⇒ 用户**看不出自己更新没更新**） ｜ 复量：`test/browser-compat.test.js`",
+      "line": 65,
+      "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 下令发布，原话「我 ｜ 复量：`test/browser-compat.test.js`",
       "keys": [
         "当前值",
         "读数",
@@ -7078,7 +7468,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -7088,7 +7478,7 @@
       "title": "怎么验证（三条命令，都在插件目录内跑）",
       "kind": "怎么跑",
       "src": "STATE.md",
-      "line": 46,
+      "line": 47,
       "where": "node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门）",
       "keys": [
         "怎么跑",
@@ -7112,7 +7502,7 @@
         "下一笔：待你点头（都是待选项、不是命令）",
         "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
         "新立的活儿（2026-09-30 用户点头「立项治」）",
-        "4. 上一棒",
+        "4. 当前工作",
         "5. 现场（本机）",
         "5.1 发布流程"
       ]
@@ -7135,6 +7525,96 @@
       ]
     },
     {
+      "id": "file#src/abstract-evidence.js",
+      "title": "src/abstract-evidence.js",
+      "kind": "代码地图",
+      "src": "src/abstract-evidence.js",
+      "line": 1,
+      "where": "story-world-v2/src/abstract-evidence.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-evidence",
+        "abstract-evidence.js"
+      ]
+    },
+    {
+      "id": "file#src/abstract-fields.js",
+      "title": "src/abstract-fields.js",
+      "kind": "代码地图",
+      "src": "src/abstract-fields.js",
+      "line": 1,
+      "where": "描述属性保留模型内容；统一格式与合并，不裁决语义、不设长度或数量上限。",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-fields",
+        "abstract-fields.js"
+      ]
+    },
+    {
+      "id": "file#src/abstract-input.js",
+      "title": "src/abstract-input.js",
+      "kind": "代码地图",
+      "src": "src/abstract-input.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-input",
+        "abstract-input.js"
+      ]
+    },
+    {
+      "id": "file#src/abstract-limits.js",
+      "title": "src/abstract-limits.js",
+      "kind": "代码地图",
+      "src": "src/abstract-limits.js",
+      "line": 1,
+      "where": "原有设定抽取分块尺寸；主抽取与补抽地图共用，数值不变。",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-limits",
+        "abstract-limits.js"
+      ]
+    },
+    {
+      "id": "file#src/abstract-selection.js",
+      "title": "src/abstract-selection.js",
+      "kind": "代码地图",
+      "src": "src/abstract-selection.js",
+      "line": 1,
+      "where": "story-world-v2/src/abstract-selection.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-selection",
+        "abstract-selection.js"
+      ]
+    },
+    {
+      "id": "file#src/abstract-setting-report.js",
+      "title": "src/abstract-setting-report.js",
+      "kind": "代码地图",
+      "src": "src/abstract-setting-report.js",
+      "line": 1,
+      "where": "抽取过程读数：不保存原文、不进入世界账或抽取缓存。",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-setting-report",
+        "abstract-setting-report.js"
+      ]
+    },
+    {
       "id": "file#src/abstract-shape.js",
       "title": "src/abstract-shape.js",
       "kind": "代码地图",
@@ -7147,6 +7627,21 @@
         "src",
         "abstract-shape",
         "abstract-shape.js"
+      ]
+    },
+    {
+      "id": "file#src/abstract-source.js",
+      "title": "src/abstract-source.js",
+      "kind": "代码地图",
+      "src": "src/abstract-source.js",
+      "line": 1,
+      "where": "只处理送给抽象模型的副本；原书与取件声明仍由调用方保留。",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "abstract-source",
+        "abstract-source.js"
       ]
     },
     {
@@ -7255,6 +7750,66 @@
       ]
     },
     {
+      "id": "file#src/diagnostics.js",
+      "title": "src/diagnostics.js",
+      "kind": "代码地图",
+      "src": "src/diagnostics.js",
+      "line": 1,
+      "where": "story-world-v2/src/diagnostics.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "diagnostics",
+        "diagnostics.js"
+      ]
+    },
+    {
+      "id": "file#src/embed-client.js",
+      "title": "src/embed-client.js",
+      "kind": "代码地图",
+      "src": "src/embed-client.js",
+      "line": 1,
+      "where": "story-world-v2/src/embed-client.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "embed-client",
+        "embed-client.js"
+      ]
+    },
+    {
+      "id": "file#src/embed-orchestration.js",
+      "title": "src/embed-orchestration.js",
+      "kind": "代码地图",
+      "src": "src/embed-orchestration.js",
+      "line": 1,
+      "where": "story-world-v2/src/embed-orchestration.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "embed-orchestration",
+        "embed-orchestration.js"
+      ]
+    },
+    {
+      "id": "file#src/entity-identity.js",
+      "title": "src/entity-identity.js",
+      "kind": "代码地图",
+      "src": "src/entity-identity.js",
+      "line": 1,
+      "where": "story-world-v2/src/entity-identity.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "entity-identity",
+        "entity-identity.js"
+      ]
+    },
+    {
       "id": "file#src/entity-lookup.js",
       "title": "src/entity-lookup.js",
       "kind": "代码地图",
@@ -7330,6 +7885,51 @@
       ]
     },
     {
+      "id": "file#src/geography-extract.js",
+      "title": "src/geography-extract.js",
+      "kind": "代码地图",
+      "src": "src/geography-extract.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "geography-extract",
+        "geography-extract.js"
+      ]
+    },
+    {
+      "id": "file#src/geography-fit.js",
+      "title": "src/geography-fit.js",
+      "kind": "代码地图",
+      "src": "src/geography-fit.js",
+      "line": 1,
+      "where": "地理资料只使用主资料装好后的余量；包含链整组装入。",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "geography-fit",
+        "geography-fit.js"
+      ]
+    },
+    {
+      "id": "file#src/geography.js",
+      "title": "src/geography.js",
+      "kind": "代码地图",
+      "src": "src/geography.js",
+      "line": 1,
+      "where": "Pure read projections: source geography and free-text observations stay separate.",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "geography",
+        "geography.js"
+      ]
+    },
+    {
       "id": "file#src/init-source.js",
       "title": "src/init-source.js",
       "kind": "代码地图",
@@ -7357,6 +7957,21 @@
         "src",
         "ledger-recall",
         "ledger-recall.js"
+      ]
+    },
+    {
+      "id": "file#src/ledger-vector.js",
+      "title": "src/ledger-vector.js",
+      "kind": "代码地图",
+      "src": "src/ledger-vector.js",
+      "line": 1,
+      "where": "story-world-v2/src/ledger-vector.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "ledger-vector",
+        "ledger-vector.js"
       ]
     },
     {
@@ -7402,6 +8017,21 @@
         "src",
         "macros",
         "macros.js"
+      ]
+    },
+    {
+      "id": "file#src/map-view.js",
+      "title": "src/map-view.js",
+      "kind": "代码地图",
+      "src": "src/map-view.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "map-view",
+        "map-view.js"
       ]
     },
     {
@@ -7570,6 +8200,21 @@
       ]
     },
     {
+      "id": "file#src/render-subtabs.js",
+      "title": "src/render-subtabs.js",
+      "kind": "代码地图",
+      "src": "src/render-subtabs.js",
+      "line": 1,
+      "where": "View-only sections. Every control is rendered once; switching only changes visibility.",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "render-subtabs",
+        "render-subtabs.js"
+      ]
+    },
+    {
       "id": "file#src/render.js",
       "title": "src/render.js",
       "kind": "代码地图",
@@ -7720,6 +8365,21 @@
       ]
     },
     {
+      "id": "file#src/story-reader.js",
+      "title": "src/story-reader.js",
+      "kind": "代码地图",
+      "src": "src/story-reader.js",
+      "line": 1,
+      "where": "Reading projections only: grouping and viewing windows remain in panorama.js.",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "story-reader",
+        "story-reader.js"
+      ]
+    },
+    {
       "id": "file#src/streams.js",
       "title": "src/streams.js",
       "kind": "代码地图",
@@ -7825,6 +8485,36 @@
       ]
     },
     {
+      "id": "file#src/vector-history.js",
+      "title": "src/vector-history.js",
+      "kind": "代码地图",
+      "src": "src/vector-history.js",
+      "line": 1,
+      "where": "向量只是当前历史的索引；来源变化后不得复用旧向量。",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "vector-history",
+        "vector-history.js"
+      ]
+    },
+    {
+      "id": "file#src/vector-store.js",
+      "title": "src/vector-store.js",
+      "kind": "代码地图",
+      "src": "src/vector-store.js",
+      "line": 1,
+      "where": "story-world-v2/src/vector-store.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "vector-store",
+        "vector-store.js"
+      ]
+    },
+    {
       "id": "file#src/weight.js",
       "title": "src/weight.js",
       "kind": "代码地图",
@@ -7852,6 +8542,36 @@
         "src",
         "worldstep",
         "worldstep.js"
+      ]
+    },
+    {
+      "id": "file#web/abstract-selection.js",
+      "title": "web/abstract-selection.js",
+      "kind": "代码地图",
+      "src": "web/abstract-selection.js",
+      "line": 1,
+      "where": "story-world-v2/web/abstract-selection.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "abstract-selection",
+        "abstract-selection.js"
+      ]
+    },
+    {
+      "id": "file#web/abstract-source-editor.js",
+      "title": "web/abstract-source-editor.js",
+      "kind": "代码地图",
+      "src": "web/abstract-source-editor.js",
+      "line": 1,
+      "where": "story-world-v2/web/abstract-source-editor.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "abstract-source-editor",
+        "abstract-source-editor.js"
       ]
     },
     {
@@ -7900,6 +8620,66 @@
       ]
     },
     {
+      "id": "file#web/debug-console.js",
+      "title": "web/debug-console.js",
+      "kind": "代码地图",
+      "src": "web/debug-console.js",
+      "line": 1,
+      "where": "story-world-v2/web/debug-console.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "debug-console",
+        "debug-console.js"
+      ]
+    },
+    {
+      "id": "file#web/diagnostic-transport.js",
+      "title": "web/diagnostic-transport.js",
+      "kind": "代码地图",
+      "src": "web/diagnostic-transport.js",
+      "line": 1,
+      "where": "story-world-v2/web/diagnostic-transport.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "diagnostic-transport",
+        "diagnostic-transport.js"
+      ]
+    },
+    {
+      "id": "file#web/embed-channel.js",
+      "title": "web/embed-channel.js",
+      "kind": "代码地图",
+      "src": "web/embed-channel.js",
+      "line": 1,
+      "where": "story-world-v2/web/embed-channel.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "embed-channel",
+        "embed-channel.js"
+      ]
+    },
+    {
+      "id": "file#web/embed-runtime.js",
+      "title": "web/embed-runtime.js",
+      "kind": "代码地图",
+      "src": "web/embed-runtime.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "embed-runtime",
+        "embed-runtime.js"
+      ]
+    },
+    {
       "id": "file#web/entity-window.js",
       "title": "web/entity-window.js",
       "kind": "代码地图",
@@ -7912,6 +8692,21 @@
         "web",
         "entity-window",
         "entity-window.js"
+      ]
+    },
+    {
+      "id": "file#web/geography-wiring.js",
+      "title": "web/geography-wiring.js",
+      "kind": "代码地图",
+      "src": "web/geography-wiring.js",
+      "line": 1,
+      "where": "用户触发的地图补抽：仍是同一份世界、来源和进度才写回。",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "geography-wiring",
+        "geography-wiring.js"
       ]
     },
     {
@@ -7960,6 +8755,21 @@
       ]
     },
     {
+      "id": "file#web/inject-readout.js",
+      "title": "web/inject-readout.js",
+      "kind": "代码地图",
+      "src": "web/inject-readout.js",
+      "line": 1,
+      "where": "story-world-v2/web/inject-readout.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "inject-readout",
+        "inject-readout.js"
+      ]
+    },
+    {
       "id": "file#web/inject.js",
       "title": "web/inject.js",
       "kind": "代码地图",
@@ -7987,6 +8797,21 @@
         "web",
         "long-task",
         "long-task.js"
+      ]
+    },
+    {
+      "id": "file#web/map-reader.js",
+      "title": "web/map-reader.js",
+      "kind": "代码地图",
+      "src": "web/map-reader.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "map-reader",
+        "map-reader.js"
       ]
     },
     {
@@ -8020,6 +8845,51 @@
       ]
     },
     {
+      "id": "file#web/page-subtabs.js",
+      "title": "web/page-subtabs.js",
+      "kind": "代码地图",
+      "src": "web/page-subtabs.js",
+      "line": 1,
+      "where": "Page navigation only: never writes settings or replaces controls.",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "page-subtabs",
+        "page-subtabs.js"
+      ]
+    },
+    {
+      "id": "file#web/panel-tools.js",
+      "title": "web/panel-tools.js",
+      "kind": "代码地图",
+      "src": "web/panel-tools.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "panel-tools",
+        "panel-tools.js"
+      ]
+    },
+    {
+      "id": "file#web/panorama-reader.js",
+      "title": "web/panorama-reader.js",
+      "kind": "代码地图",
+      "src": "web/panorama-reader.js",
+      "line": 1,
+      "where": "Temporary reading state only. No world, configuration, or model writes.",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "panorama-reader",
+        "panorama-reader.js"
+      ]
+    },
+    {
       "id": "file#web/param-panel.js",
       "title": "web/param-panel.js",
       "kind": "代码地图",
@@ -8047,6 +8917,66 @@
         "web",
         "scroll-keep",
         "scroll-keep.js"
+      ]
+    },
+    {
+      "id": "file#web/seed-diagnostics.js",
+      "title": "web/seed-diagnostics.js",
+      "kind": "代码地图",
+      "src": "web/seed-diagnostics.js",
+      "line": 1,
+      "where": "story-world-v2/web/seed-diagnostics.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "seed-diagnostics",
+        "seed-diagnostics.js"
+      ]
+    },
+    {
+      "id": "file#web/seed-roots-wiring.js",
+      "title": "web/seed-roots-wiring.js",
+      "kind": "代码地图",
+      "src": "web/seed-roots-wiring.js",
+      "line": 1,
+      "where": "story-world-v2/web/seed-roots-wiring.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "seed-roots-wiring",
+        "seed-roots-wiring.js"
+      ]
+    },
+    {
+      "id": "file#web/setting-reader.js",
+      "title": "web/setting-reader.js",
+      "kind": "代码地图",
+      "src": "web/setting-reader.js",
+      "line": 1,
+      "where": "View-only directory search. No ledger, config, model, or HTML writes.",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "setting-reader",
+        "setting-reader.js"
+      ]
+    },
+    {
+      "id": "file#web/settings-channels.js",
+      "title": "web/settings-channels.js",
+      "kind": "代码地图",
+      "src": "web/settings-channels.js",
+      "line": 1,
+      "where": "story-world-v2/web/settings-channels.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "settings-channels",
+        "settings-channels.js"
       ]
     },
     {
@@ -8080,6 +9010,21 @@
       ]
     },
     {
+      "id": "file#web/story-reader.js",
+      "title": "web/story-reader.js",
+      "kind": "代码地图",
+      "src": "web/story-reader.js",
+      "line": 1,
+      "where": "Ephemeral reading state. Navigation never changes the world ledger or settings.",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "story-reader",
+        "story-reader.js"
+      ]
+    },
+    {
       "id": "file#web/view-state.js",
       "title": "web/view-state.js",
       "kind": "代码地图",
@@ -8107,6 +9052,36 @@
         "web",
         "volume-popup",
         "volume-popup.js"
+      ]
+    },
+    {
+      "id": "file#web/window-actions.js",
+      "title": "web/window-actions.js",
+      "kind": "代码地图",
+      "src": "web/window-actions.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "window-actions",
+        "window-actions.js"
+      ]
+    },
+    {
+      "id": "file#web/window-shell.js",
+      "title": "web/window-shell.js",
+      "kind": "代码地图",
+      "src": "web/window-shell.js",
+      "line": 1,
+      "where": "story-world-v2/web/window-shell.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "window-shell",
+        "window-shell.js"
       ]
     },
     {
@@ -8141,7 +9116,7 @@
     },
     {
       "id": "test#all",
-      "title": "判据在哪（test/ 共 120 个 *.test.js）",
+      "title": "判据在哪（test/ 共 167 个 *.test.js）",
       "kind": "代码地图",
       "src": "test",
       "line": 1,
@@ -8151,9 +9126,20 @@
         "判据",
         "test",
         "abstract-chunk",
+        "abstract-confirmation",
+        "abstract-evidence-wiring",
         "abstract-fields",
+        "abstract-input",
         "abstract-passes",
+        "abstract-review-fixes",
+        "abstract-review-fixes2",
+        "abstract-selection-wiring",
+        "abstract-selection",
+        "abstract-source-editor",
+        "abstract-source-page",
+        "abstract-source-ui-wiring",
         "abstract",
+        "abstraction-input",
         "action-router",
         "adopt-scale-draft",
         "archive",
@@ -8169,11 +9155,21 @@
         "cancel",
         "cause",
         "chain",
+        "chat-vector-window",
         "chronicle-brief",
         "chronicle-page",
         "context-chain",
         "deadlock-heal",
         "decay",
+        "diagnostics-console",
+        "embed-channel",
+        "embed-client",
+        "embed-opt-in",
+        "embed-orchestration",
+        "embed-runtime-chronicle",
+        "embed-runtime",
+        "embed-window-defaults",
+        "empty-setting-diagnostics",
         "entity-governance",
         "entity-lookup",
         "entity-window",
@@ -8184,15 +9180,22 @@
         "fingerprint",
         "full-roster-smoke",
         "gate",
+        "geography-extract",
+        "geography-integration",
+        "geography",
         "golden-slice",
         "init-overwrite-guard",
         "init-source-dedup",
         "init-source-wiring",
         "init-source",
+        "integration-boundary-aliases",
+        "integration-boundary-lookup",
+        "integration-boundary-roots",
         "lazy-card",
         "ledger-divergence",
         "ledger-recall",
         "ledger-shape",
+        "ledger-vector",
         "lens",
         "limits",
         "lines",
@@ -8201,13 +9204,18 @@
         "long-task",
         "lookup-batch",
         "macro-placeholder",
+        "map-popup",
+        "memory-lifecycle",
         "mobile-layout",
         "model-catalog",
         "model-channel",
         "module-layout",
         "observatory",
+        "optional-event-position",
         "pack-budget",
         "pack-fit",
+        "page-subtabs",
+        "panorama-reader",
         "panorama",
         "parallel-run",
         "param-hub",
@@ -8218,55 +9226,22 @@
         "positions",
         "prompt-required-fields",
         "prompts",
+        "recall-query",
         "recent-window",
         "ref-rules",
+        "rejected-round",
         "related-recall",
         "relations",
         "render",
+        "retain-extracted-attributes",
         "retired-controls",
+        "retrieval-params-live",
         "roster-merge",
+        "roster-toolbar",
         "rule-kinds",
-        "scale-ondemand",
         "scales-concept-table",
         "scales-reextract",
-        "schema",
-        "seed-full",
-        "seed-pool",
-        "seed-roots",
-        "set-param-persist",
-        "setting-guard",
-        "setting",
-        "settle-order",
-        "settle",
-        "shade",
-        "smoke",
-        "snapshot-chain-anchor",
-        "snapshot-current",
-        "snapshot-replay",
-        "snapshot-restore-migration",
-        "snapshot",
-        "spawn-cap",
-        "status-bar-error-scope",
-        "storage-rotation-persist",
-        "storage",
-        "streams",
-        "style-cues-layout",
-        "tag-extract",
-        "tag-granularity",
-        "transport-channel",
-        "transport-config",
-        "transport-http",
-        "tree-smoke",
-        "unrest",
-        "verdict",
-        "web-book-source-layout",
-        "web-hot-ledger-layout",
-        "web-param-panel-layout",
-        "web-scroll-keep-layout",
-        "web-snapshot-layout",
-        "web-view-state-layout",
-        "web-volume-popup-layout",
-        "weight-smoke"
+        "schema"
       ]
     }
   ]

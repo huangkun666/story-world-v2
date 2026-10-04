@@ -210,8 +210,8 @@ test('★★leg73 丙-web④：新模块**不许反向 import** 接线层；且�
     //     ★加这一条的**口径没有放宽**：它仍是"向下取纯逻辑"（`src/settle.js` 是叶子侧的模块），
     //       不是"反向 import 接线层"；而且与第 4 条同族（`params.js` 也是引擎常量）。
     assert.deepEqual(back.slice().sort(), [
-        '../src/params.js', '../src/param-store.js', '../src/settle.js', '../src/snapshot.js', './idb-backend.js',
-    ].sort(), '★新模块的 import 只许有这五条（叶子形态：只向下取纯逻辑与存储适配）');
+        '../src/params.js', '../src/param-store.js', '../src/settle.js', '../src/snapshot.js', './idb-backend.js', '../src/diagnostics.js',
+    ].sort(), '登记依赖：纯逻辑、存储适配与脱敏记录器，继续禁止反向依赖');
     // ★块内**不许**再出现块外那几个符号的裸引用（它们现在只能经注入形参/取数函数拿到）
     const storeCode = stripComments(store);
     for (const outer of ['sw2LastWorld', 'LISTED_VOLUMES']) {
@@ -275,7 +275,7 @@ test('★leg73 丙-web⑤：接线层**真的变薄**了（新模块存在、旧
     for (const impl of [
         '快照链已对齐：盘上',                       // ensureSnapshotChain 的日志
         '快照链对齐失败（本次按新链处理）',           // 同上（catch 分支）
-        'planRetention({ snapshots: metas })',      // 保留窗口那一处
+        'planRetention({ snapshots: metas, keepId })', // 保留窗口且保护恢复目标
         '只有参数档位变了（世界本体逐字节没变）',      // 参数闸的日志（leg41/leg53）
         '快照不可读：',                             // snapshotList 的兜底文案
         '快照失败（不影响世界推进）',                 // requestSnapshot 的零阻塞兜底

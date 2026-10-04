@@ -271,7 +271,8 @@ test('leg24 片1 停抄书：抽取输出只留 name/kind/parent——attrs/race
     const r = await extractWorldSetting({ sourceText: rawBook, extract: fakeExtract(withExtras) });
     assert.equal(r.ok, true);
     const es = r.setting.frozen.canon.bookEntities;
-    for (const name of ['万法阁', '白小娥', '无据客']) {
+    assert.ok(!es.some((b) => b.name === '无据客'), '小书也拒绝原文没有的名号');
+    for (const name of ['万法阁', '白小娥']) {
         const item = es.find((b) => b.name === name);
         assert.ok(item, `${name} 名号仍入册（身份是主键，不随停抄书而丢）`);
         assert.equal(item.attrs, undefined, `${name}: 不再抄书里的四维属性`);

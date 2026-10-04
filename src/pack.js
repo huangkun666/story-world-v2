@@ -4,6 +4,8 @@
 // ★leg32g：门控的"久未出手"阈值**直接读门控真源**（`gate.js` 的 `QUIET_TICKS`），不在这里另抄一个数
 //   ——"待启用名单"的筛选口径必须与门控的静默判据**同一把尺子**，否则会出现"引擎说他不静默、名单里却当他冷门"。
 import { QUIET_TICKS } from './gate.js';
+import { geographyPack } from './geography.js';
+import { fitGeography } from './geography-fit.js';
 // ★leg62：刻度块要按**概念表**分组 ⇒ 读那一份"概念表唯一读取口"（新账读 `刻度`、旧账纯函数推导）。
 //   为什么不在本文件自己从 powerScale/dims 推一遍：面板也读它 ⇒ 两处各推一次迟早漂移成
 //   "面板分了两张表、包里还是一栏"（本仓最贵的那类 bug，见 abstract.js 的 resolveScales 头注）。
@@ -374,7 +376,9 @@ export function parseEntityTableBlock(block) {
 // ★面向模型的**唯一**序列化口径：只有实体段换行式块，其余九段逐字节不变；
 //   未带 entities 的值走原样 —— 故 `lensList` 对**单行**量体（无 entities 键）零扰动。
 export function packTextOf(pack) {
-    return JSON.stringify(pack, (key, value) => (key === 'entities' ? entityTableBlock(value) : value));
+    return JSON.stringify(pack, function (key, value) {
+        return key === 'entities' && this === pack ? entityTableBlock(value) : value;
+    });
 }
 
 /**
@@ -495,44 +499,53 @@ export function membersOf(world, faction) {
 //   （社会格局/力量体系描述/史略）**不进每轮包**——它们留在账里给面板与开局抽取用。
 //   为什么这一小块值得违反 A-8：它是**锚**——模型写实力/属性时有书里的尺子可依（档位名逐字照抄），
 //   而不是各写各的形容词（"万人敌"/"很强"）；且它是**冻结的短表**（编译一次、之后每轮逐字相同）。
-//   体积纪律（上界，实测可复核）：维度 ≤ DIM_TOP 条 · 档位 ≤ TIER_TOP 条 · 每个字符串 ≤ SCALE_STR_MAX 字
+//   体积纪律（★leg163 起：**没有条数上限了**——只有每个字符串 ≤ SCALE_STR_MAX 字这一道长度闸，
+//     与整包那一道 `trimPack`；见下面 leg163 那一段。旧的"维度 ≤ DIM_TOP · 档位 ≤ TIER_TOP"已删）
 //   ⇒ 最坏 ≈ (8+24)×(30+8) ≈ 1,216 字符（对 30,000 token 的包预算是 4% 量级；leg28 实测峰值 19,241）。
 //   键口径：解析不出任何维度/档位 ⇒ 返回 null ⇒ **键不出现**（"空着就是空着"，与 env 同一条纪律）。
-// ★★★leg135（用户令「**全塞直接治了看不到和选不对**」＋「这个已经算是很大的书了」）：
-//   **三道上限整批抬高**——口径从"按预算取前几张"改成"**书里有几张就给几张**"。
-//   为什么要动（本笔真账实测，指得出出处）：
-//     · 真书《大荒-姬元真》抽出来 **41 张表 / 259 档 / 4 维**；旧上限 `24/8/16` 只放得下
-//       **2 张表、24 档** ⇒ 实测丢 **90.7% 的档位**，而模型手里那 39 张**只有表名**（`刻度目录`）。
-//     · 而"全塞"的体积实测只有 **9,495 字符 ≈ 3,165 token**——对 50,000 的包预算是 **6.3%**。
-//       ⇒ `pack.js:596` 当年"不能全塞"那条理由（64 张表 = 28,764 字符 = 30k 预算的 **32%**）
-//         在**今天这组数**上不成立。★那一句是**旧账**，别拿它把这三个数改回去。
-//   取值依据（不是拍脑袋，三条都算过）：
-//     · `TIER_TOP` 300：真账 259 档 ⇒ 留 1.16 倍余量（更大的书也放得下）；
-//     · `DIM_TOP` 16：真账只有 4 维，16 是宽裕的；
-//     · `SCALE_TABLE_TOP_PACK` 64：**必须 ≥ 两组各自需要的表数之和**（见下面那段不变量的推导）
-//       —— 本笔实测踩到：把 `TIER_TOP` 抬到 300 而表数上限不动，**档位组会把表数名额吃光、
-//          维度当场饿死成 0**（`test/backdrop-smoke.test.js` 的 `big` 夹具现场抓出来的）。
-//   体积上界（最坏）：表名 ≤ 64×20=1,280 · 档位 ≤ 300×38=11,400 · 维度 ≤ 16×38=608
-//     ⇒ 最坏 ≈ 13,288 字符 ≈ 4,430 token（对 50,000 预算是 **8.9%**）。
-export const DIM_TOP = 16;
-export const TIER_TOP = 300;
+// ★★★leg163（用户令「**删掉那三道，让预算当唯一的闸**」）：**三道上限整批删除** ——
+//   `SCALE_TABLE_TOP_PACK`(64) / `TIER_TOP`(300) / `DIM_TOP`(16) 三个常量**不再存在**，
+//   刻度块的口径定稿为「**书里有几张尺就给几张**」（这正是 leg135 那条「全塞」令的字面意思）。
+//   为什么删（本笔真账实测，逐条算过，指得出出处）：
+//     · **它们从来不是在保护预算**：刻度块实际只占 **6.94%**（10,417 字符 ≈ 3,472 token / 50,000）；
+//       三道上限**全部吃满**时的最坏体积也只 **8.9%**（≈13,288 字符）；而真账整包只用 **54.4%**、
+//       `trimmed` 是 `null`（预算根本没满）⇒ 闸在关着一扇预算根本没关的门。
+//     · **而它们在真账上已经开始咬**：`real-world-dh` 是 45 张表 / **293 档**，离 `TIER_TOP=300`
+//       只差 **7 档** ⇒ 再加两张小表，排在后面的表就**整张进不去**，而预算还剩 45%。
+//     · **用户这条令下过一次、没落地**：leg136「**不要搞那么多闸了**」那一笔只改了参数页的一行说明文
+//       （见 `render-base.js:432` 留档），**闸原地没动** ⇒ 本笔把那条令真正落地。
+//   ★预算这一侧**本来就是诚实的**：删掉这三道之后，唯一的闸是整包那一道 `trimPack`——
+//     它有固定剪枝序，真裁了就写 `pack.trimmed`（机器可读），压不进还有 `budgetOverrun` 痕迹。
+//   ★★为什么放开刻度不会挤掉别的东西（这条是关键，改回去之前先读）：
+//     **`刻度` 根本不在 `trimPack` 的剪枝序里**——它与 `法则` 同性质，是"书里的锚"，
+//     按设计受保护（`trimPack` 那一段注释写明了剪枝序是 entities → 未决事件 → 盘算 → 纪事 →
+//     相关往事 → recalled，刻度不在其中）。⇒ 放开它的上限**不会**让它在别人之前被裁掉。
+//   ★如实登记的代价：一本表极多、平均档数很高的书，刻度会与「纪事」「相关往事」抢预算——
+//     那时被裁的是**整包级**的 `trimmed`（会如实报出来），而不是像原来那样**悄悄少几张表**。
+//   ★历史留档（别再照它改回去）：leg135 把这三个数从 `24/8/16` 抬到 `300/16/64`，理由是当时
+//     真书 41 张表 / 259 档被旧上限丢掉了 90.7%。**那个判断没错，只是它只走了一半**——
+//     抬上限仍是"猜一个够大的数"，而本笔实测证明：只要还是写死的数，迟早有书撞上它。
 export const SCALE_STR_MAX = 30;
-// ★leg62：概念表按"一把尺"分组进包——**体积纪律照旧**（`TIER_TOP`/`DIM_TOP` 一个都不动），
-//   只是把同样的档位**换了排法与一行的表名**。
+//   ★★★leg163：上面那条"表数上限必须 ≥ 两组各自需要的表数之和"的**不变量连同那三个常量一起作废**——
+//     表数上限、档位上限、维度上限**都不存在了**（`SCALE_TABLE_TOP_PACK` / `TIER_TOP` / `DIM_TOP`
+//     三个名字已从本模块删除）。留档照旧有用：它记的是"为什么当年会踩到维度 0/8"——
+//     那个病的根因是**在一个循环里既排顺序又分名额**，现在没有名额可分了，病根随之消失。
+//     ★下面这段是旧账（leg62/leg135 的口径），**别再照它把三个数加回来**。
+//   ★leg62：概念表按"一把尺"分组进包——只是把同样的档位**换了排法与一行的表名**。
 //   ★表数上限**必须 ≥ (TIER_TOP 与 DIM_TOP 各自需要的表数之和)**，否则会**从结构上**把预算卡死：
 //     旧账推导时"回指不到档位名的维度各自成表"（大荒 65 维里 54 条这种），
 //     退化到极端就是"一档一表 / 一维一表" ⇒ 表数封顶即预算封顶。
 //     实测（夹具：90 个互不相同档位名 + 40 个互不相同维度名）：上限 6 → 维度 0/8；
 //     上限 8 → 档位 7/24、维度 1/8（都填不满）。定 16 ⇒ 档位 24/24、维度 8/8 两条都能压到上限。
 //   体积上界：表名 ≤ 16×20=320 字符，其余与旧口径同尺 ⇒ 最坏 ≈ (8+24)×(30+8)+320 ≈ 1,536 字符（原 1,216，+26%）。
-//   ★★leg135：**这条不变量是硬的，改上面三个数之前先算它**——
-//     实测踩过（本笔）：`TIER_TOP` 24→300 而表数上限留 16 ⇒ 档位组把 16 个名额吃光 ⇒
-//     **维度进包 0/16**（不是"少给"，是"一张都不给"）。表数上限必须同时抬到
-//     `≥ 档位组所需表数 + 维度组所需表数`，否则抬档位预算 = 饿死维度预算。
-export const SCALE_TABLE_TOP_PACK = 64;
+//   ★★leg163：**这条不变量连同那三个常量一起作废**（表数/档位/维度上限都不存在了）——
+//     留档照旧有用：它记的是"为什么当年抬档位上限会饿死维度预算"（同一个循环里既排顺序又分名额）。
 export const SCALE_NAME_MAX_PACK = 20;
 // ★★★leg69（A1）：**块级截断的留痕** —— 病：本函数与 `buildRuleAnchor` 都在"自己的预算"里
-//   **静默 `break`**（档 ≤`TIER_TOP` / 维 ≤`DIM_TOP` / 表 ≤`SCALE_TABLE_TOP_PACK` / 判据 ≤`RULE_PACK_TOP`），
+//   **静默 `break`**（当年：档 ≤`TIER_TOP` / 维 ≤`DIM_TOP` / 表 ≤`SCALE_TABLE_TOP_PACK` / 判据 ≤`RULE_PACK_TOP`），
+//   ★★★leg163：**刻度那一半的截断整批删掉了**（用户令「删掉那三道，让预算当唯一的闸」）⇒
+//     本函数**不再截断任何东西**，`刻度裁掉` 那一格随之永不出现。`法则` 那半边（`RULE_PACK_*`）照旧。
+//     留档照旧有用：它记的是"静默截断"这个病本身（本仓"包里有读数"那条纪律的来路）。
 //   包里没有任何"一共几项、只给了几项"的读数 ⇒ 真账实测「34 张表 214 档 ⇒ 进包 3 张 24 档、丢 88.8%」
 //   只能靠人肉比对（而**整包级**的 `trimPack` 是有痕迹的：`pack.trimmed`）。
 //   治法（用户拍板「新增一个只读键」）：把"口径"抽成**一个内部核心** `scaleAnchorCore(canon) → { anchor, fit }`，
@@ -558,16 +571,16 @@ export function scaleAnchorCore(canon) {
     const scales = [];
     for (const t of tables) {
         const rows = [];
-        let used = 0;
+        // ★★★leg163：这里原有一道**逐表档位上限**（`if (used >= TIER_TOP) break;`）——**删掉**。
+        //   它与末尾那三道上限同批撤走（用户令「删掉那三道，让预算当唯一的闸」）：
+        //   留一道逐表截断，等于"全塞"在单张大表上仍然不成立（350 档的表会被砍成 300 档）。
         for (const x of (Array.isArray(t.档位) ? t.档位 : [])) {
-            if (used >= TIER_TOP) break;                      // 全局档位上限仍在 buildScaleAnchor 末尾统一兜
             const level = cut(x?.档);
             if (!level) continue;
             const item = { 档: level };
             const note = cut(x?.注);
             if (note && note !== level) item.标定 = note;
             rows.push(item);
-            used += 1;
         }
         // 子表现在**不单独进包**（用户拍「当子表」：它的定位是"对上面某个档位的细分"，
         //   进包只会挤掉别的尺；要看得去面板/账本）。★这条是有意为之，不是漏了。
@@ -601,8 +614,10 @@ export function scaleAnchorCore(canon) {
         const allTiers = (Array.isArray(canon.powerScale) ? canon.powerScale : [])
             .map((p) => { const item = { 档: cut(p?.level) }; const note = cut(p?.note); if (note) item.标定 = note; return item; })
             .filter((t) => t.档);
-        const flatDims = allDims.slice(0, DIM_TOP);
-        const flatTiers = allTiers.slice(0, TIER_TOP);
+        // ★★★leg163：这里原有 `slice(0, DIM_TOP)` / `slice(0, TIER_TOP)` 两道截断——**删掉**
+        //   （与那三道上限同批撤走：平铺路是老账的退路，它同样该"书里有几条给几条"）。
+        const flatDims = allDims;
+        const flatTiers = allTiers;
         const flatFit = {
             表: null,                                            // 平铺路没有"表"这一层（旧两列直铺）
             档: { 进包: flatTiers.length, 共: allTiers.length },
@@ -614,7 +629,9 @@ export function scaleAnchorCore(canon) {
         if (flatTiers.length) out.档位 = flatTiers;
         return { anchor: out, fit: flatFit };
     }
-    // 全局上限兜底（与旧口径同尺：维度 ≤ DIM_TOP · 档位 ≤ TIER_TOP，跨表累计）。
+    // ★★★leg163：这里原有"全局上限兜底"（维度 ≤ DIM_TOP · 档位 ≤ TIER_TOP，跨表累计）——**删掉**。
+    //   下面那三条排序纪律是**旧账留档**（它们治的是"在一个循环里既排顺序又分名额"那个病）：
+    //   现在**没有名额可分了**，三条纪律随之作废——但别删这段留档，它记着当年踩过的坑。
     //   ★★三条排序纪律（**三条都是实测踩出来的**，改这段之前逐条读）：
     //     ① **档位表优先**：`resolveScales` 对"range 回指不到任何档位名"的维度会让它**自成一表**
     //        （大荒 65 维里 54 条这种）⇒ 不排一下，名额会被"单维度表"吃光、档位一条进不了包。
@@ -641,23 +658,28 @@ export function scaleAnchorCore(canon) {
     //      （模型标的尺在前），但对**旧账推导**不一定：推导会把"无记号档位"那张表插在
     //      第一把尺前面（实教夹具实测）⇒ 一趟取会让它先占掉表数名额、后面真正的尺进不来。
     //      故：**第一趟取"带档位的表"（内容主体），第二趟才取"只有维度的表"**。
-    let tierBudget = TIER_TOP;
-    let dimBudget = DIM_TOP;
+    // ★★★leg163（用户令「删掉那三道，让预算当唯一的闸」＋ leg135 那条「**全塞**」）：
+    //   **三道上限整批删除**（`SCALE_TABLE_TOP_PACK` / `TIER_TOP` / `DIM_TOP`）——
+    //   口径从"按写死的上界截断"改成"**书里有几张尺就给几张**"。
+    //   为什么删（本笔真账实测，逐条算过）：
+    //     · 刻度块实际只占预算 **6.94%**（10,417 字符 ≈ 3,472 token / 50,000），
+    //       三道上限**全部吃满**时的最坏体积也只 **8.9%**；而真账整包只用 **54.4%**、
+    //       `trimmed` 是 `null`（预算根本没满）⇒ **这三道从来不是在保护预算**。
+    //     · 而它们在**真账上已经开始咬**：`real-world-dh` 是 45 张表 / **293 档**，离 `TIER_TOP=300`
+    //       只差 7 档 ⇒ 再加两张小表，排在后面的表就**整张进不去**，而预算还剩 45%。
+    //     · 用户令「不要搞那么多闸了」早在 leg136 下过一次，而那一笔**只改了面板上的一行字**
+    //       （见 `render-base.js:432` 的留档），**闸原地没动** ⇒ 本笔把那条令真正落地。
+    //   ★预算这一侧**本来就是诚实的**：这三道删掉之后，唯一的闸是整包那一道 `trimPack`——
+    //     它有固定剪枝序、真裁了就写 `pack.trimmed`；压不进时还有 `budgetOverrun` 痕迹。
+    //     （★`刻度` 那块**根本不在 `trimPack` 的剪枝序里**——它与 `法则` 同性质，是"锚"，
+    //      本来就受保护；所以这里放开上限不会让刻度先被裁掉。）
+    //   ★`fit` 照旧算（面板要如实报"几进包/共几"）：**没有截断之后 `进包 === 共`**
+    //     ⇒ 块级那一格 `刻度裁掉` 自然永不出现（"只在真丢了东西时挂键"那条纪律自动成立）。
     const capped = [];
     for (const t of scales) {
-        if (capped.length >= SCALE_TABLE_TOP_PACK) break;
-        if (!tierBudget && !dimBudget) break;
         const row = { 表: t.表 };
-        if (t.档位?.length && tierBudget > 0) {
-            const got = t.档位.slice(0, tierBudget);
-            row.档位 = got;
-            tierBudget -= got.length;
-        }
-        if (t.维度?.length && dimBudget > 0) {
-            const got = t.维度.slice(0, dimBudget);
-            row.维度 = got;
-            dimBudget -= got.length;
-        }
+        if (t.档位?.length) row.档位 = t.档位;
+        if (t.维度?.length) row.维度 = t.维度;
         if (row.档位?.length || row.维度?.length) capped.push(row);
     }
     if (!capped.length) return { anchor: null, fit: null };
@@ -688,43 +710,12 @@ export function buildScaleAnchorWithFit(canon) {
     return scaleAnchorCore(canon);
 }
 
-// ★★★leg64 第三轮（用户问「有这么多模型该怎么检索，难道直接全塞吗？」→ 拍板**递目录 + 按需查**）：
-//   **刻度目录**——把"账上有哪些尺"递到模型眼前，但**不带档位内容**。
-//
-//   病（本棒实测，指得出出处）：重抽后的大荒账有 **64 张尺表 / 28,764 字符**（= 包预算 **32.0%**），
-//   而进包闸只放得下 **4 张 / 24 档** ⇒ **丢 93.8%**，且模型**根本不知道另外 60 张存在**
-//   （leg63 登记过同一个洞：「进包静默截断」，当时也是"包里没有痕迹"）。
-//   ⇒ 后果：模型在需要"量班级分配"那把尺时无尺可依 ⇒ 又回到"自己发明形容词"（本块当初要治的病）。
-//
-//   为什么**不能**靠"全塞"解决（用户那一问的直接答复）：64 张表 = 32% 预算，而每轮真正用得上的
-//   通常只有 3~5 张（尺的索引是**概念**——"这一轮在量什么"；实体表的索引是**身份**——"谁出场"，
-//   所以实体能每轮全递、尺表不能）。
-//
-//   形状（纯字符串数组，与 `法则`/`recalled` 同一种"最省"的排法）：
-//     `刻度目录: ['异金榜（12 档）', '大虞皇朝锁灵机制（3 档 · 2 维）', …]`   ← **只列还没进包的那些**
-//   ★为什么只列"没进包的"：已在 `刻度` 里的表，目录再列一遍是重复占预算；模型需要的是
-//     "**我手里没有、但书里有**"这一份差距清单。全集 = `刻度` ∪ `刻度目录`。
-//   ★与 `刻度` 的分工写在同一条纪律里：**一处按预算取前几张、一处如实报"还有什么"**，
-//     两处都读 `resolveScales`（同一个读取口）⇒ 不会出现"目录里有的、包里没有；包里有的、目录说没有"。
-export const SCALE_CATALOG_TOP = 200;       // 荒谬上界（真账 64 张 ⇒ 留 3 倍余量；它只是**表名**）
-export function buildScaleCatalog(canon, packedNames) {
-    if (!canon || typeof canon !== 'object') return null;
-    const tables = resolveScales(canon);
-    if (!tables.length) return null;
-    const has = packedNames instanceof Set ? packedNames : new Set();
-    const out = [];
-    for (const t of tables) {
-        if (out.length >= SCALE_CATALOG_TOP) break;
-        const nm = cutScaleName(t.名);          // ★与 `buildScaleAnchor`/查表索引**同一把尺**
-        if (!nm || has.has(nm)) continue;          // 已在包里的不重复列
-        const nTier = (Array.isArray(t.档位) ? t.档位 : []).length;
-        const nDim = (Array.isArray(t.维度) ? t.维度 : []).length;
-        // 只有表名（+规模），**不带任何档位内容**——这一块的定位就是"目录"
-        const size = [nTier ? `${nTier} 档` : '', nDim ? `${nDim} 维` : ''].filter(Boolean).join(' · ');
-        out.push(size ? `${nm}（${size}）` : nm);
-    }
-    return out.length ? out : null;
-}
+// ★★★leg163：这里原有 **刻度目录**（`SCALE_CATALOG_TOP` / `buildScaleCatalog`）——**撤走**。
+//   它当初的用途只有一个：把"书里有、包里没有"的表名递给模型，好让模型**点名**去要（leg64 第三轮）。
+//   而点名那个口（`lookupScales`）与它同批撤走 ⇒ 留一份"叫你去点名、却点不了"的目录，
+//   正是本仓最忌的"提示词替机制承诺一个它做不到的事"（目录这一族当初就是为治那个病而生的）。
+//   ★真账实测：leg135「全塞」之后**目录本来就是空的**（大荒 1/1 张全进；`real-world-dh` 45/45 全进）
+//     ⇒ 它进包时压根不挂键（`...(scaleCatalog ? {...} : {})`），撤走对真账**零字节影响**。
 
 // ★★★leg64（用户令「规则会怎么样？规则太多会怎么样？」→ 拍板「只进『判断依据』」）：**法则块**。
 //
@@ -792,111 +783,20 @@ export function buildRuleAnchorWithFit(canon) {
     return ruleAnchorCore(canon);
 }
 
-// ★★★leg64 第四轮（用户令「做吧」）：**按需查表**——模型"点名要"某几张尺的入口。
-//
-//   为什么必须有这一格（上一轮核查出来的缺口，指得出出处）：
-//     · `recall` 那条路按**实体名 + 未决事件标题**发问（`recall.js` 的 `collectRecallQuery`）
-//       ⇒ 表格只能"随它所在的条目碰巧被召回"，**模型无法指定要看哪张尺**；
-//     · `lookup` 那条路（`meta.entityFields`）的索引键是**实体 id** ⇒ **对表格没有入口**。
-//     ⇒ 后果：上一轮交给模型的 `刻度目录` 让它"知道书里有《仙阶法宝品阶》这张表"，
-//       **却没有办法拿到它**——那正是本仓最忌讳的"面板/提示词替机制承诺一个它做不到的事"
-//       （`render.js:126` 那条"永不会兑现的承诺"就是同一个病）。
-//
-//   口径四条：
-//     ① **点名的键 = 表名**（目录里逐字给的那个），因为那是模型手里唯一有的标识；
-//     ② **必须能对回账上的表**（`buildScaleTableIndex`）——对不上的一律**不收也不编**，
-//        并**如实记下被拒的名字**（"无源之物不入局"那条纪律：模型编一个表名 ⇒ 引擎不许替它造）；
-//     ③ **当轮就递**（与 `recalled`/查字段同一条：出包前准备好，投递那一轮可见，零额外调用）；
-//     ④ **生命周期 1 轮**（调用方在新一轮开头清掉请求）——不做跨轮囤积
-//        （`injectWorldBookRecall` 头注里那条"过期内容冒充新检索"的坑就在旁边，别重犯）。
-export const SCALE_ONDEMAND_TOP = 6;              // 一轮最多递几张（防"我全要"）
-// ★★★leg135：**6000 → 20000**。为什么（这条是"全塞"的**连带账**，本笔实测逼出来的）：
-//   `TIER_TOP` 抬到 300 之后，**凡是被进包闸截断过的表，补料都递不出去**了——
-//   实测：一张 350 档的表 ≈ 7,000 字符 > 6,000 ⇒ `buildScaleOnDemand` **整张丢**（它不做"给半张"）。
-//   ⇒ 那会让 `lookupScales` 这条通道**对"大表"永远失效**（而大表正是最需要补料的那些）。
-//   ★取值：20,000（≈ 6,667 token，对 50,000 预算是 **13.3%**）⇒ 容得下 ~3 张 350 档的表，
-//     与 `SCALE_ONDEMAND_TOP=6` 合起来仍是"一轮最多几张、且总量有闸"，纪律没松。
-//   ★注意：这一格管的是**补料**（模型点名那条），与 `刻度` 块的 `TIER_TOP` 是**两件事**——
-//     前者是"整张给"，后者是"按预算取前几档"。
-export const SCALE_ONDEMAND_CHAR_TOP = 20000;     // 一轮补料总字符上限（= 包预算 13.3%）
-/** 表名截断（与 `buildScaleAnchor`/`buildScaleCatalog` **同一把尺**，否则两边认不出是同一张）。 */
-function cutScaleName(s) {
-    const t = String(s ?? '').trim();
-    return t.length > SCALE_NAME_MAX_PACK ? t.slice(0, SCALE_NAME_MAX_PACK) : t;
-}
-/** 表名 → 表（**唯一索引**：`resolveScales` 的账本序；目录与查表读的是同一份分组）。 */
-export function buildScaleTableIndex(canon) {
-    const idx = new Map();
-    for (const t of resolveScales(canon)) {
-        const nm = cutScaleName(t.名);
-        if (nm && !idx.has(nm)) idx.set(nm, t);
-    }
-    return idx;
-}
-/**
- * 净化"模型点名的表名"：只收**账上真有的**，其余落 `missed`（如实留痕，不替它造）。
- * @returns {{ok: string[], missed: string[]}}  —— `ok` 按**点名序**去重（先到先得）
- */
-export function sanitizeScaleRequests(names, index) {
-    const idx = index instanceof Map ? index : new Map();
-    const ok = [];
-    const missed = [];
-    for (const raw of (Array.isArray(names) ? names : [])) {
-        const nm = cutScaleName(raw);
-        if (!nm) continue;
-        if (idx.has(nm)) { if (!ok.includes(nm) && ok.length < SCALE_ONDEMAND_TOP) ok.push(nm); continue; }
-        // 账上没有这张表 ⇒ **拒**（不许"差不多就给它一张"——那是替模型编）
-        if (!missed.includes(nm) && missed.length < SCALE_ONDEMAND_TOP) missed.push(nm);
-    }
-    return { ok, missed };
-}
-/**
- * 按点名**取全那张表**（与 `buildScaleAnchor` 的取舍相反：那边受预算只能给前几档，
- *   这边是"你点名要的，给你整张"——但仍有总字符闸，且**逐张整取、不半张截断**）。
- * @returns {{tables:Array, chars:number, dropped:string[]}|null}  一张都给不出 ⇒ null（键不出现）
- */
-export function buildScaleOnDemand(canon, names) {
-    const idx = buildScaleTableIndex(canon);
-    const { ok } = sanitizeScaleRequests(names, idx);
-    if (!ok.length) return null;
-    const cut = (s) => {
-        const t = String(s ?? '').trim();
-        return t.length > SCALE_STR_MAX ? t.slice(0, SCALE_STR_MAX) : t;
-    };
-    const tables = [];
-    const dropped = [];
-    let chars = 0;
-    for (const nm of ok) {
-        const t = idx.get(nm);
-        const rows = (Array.isArray(t.档位) ? t.档位 : []).map((x) => {
-            const item = { 档: cut(x?.档) };
-            const note = cut(x?.注);
-            if (note && note !== item.档) item.标定 = note;
-            return item;
-        }).filter((x) => x.档);
-        const dims = (Array.isArray(t.维度) ? t.维度 : []).map((d) => {
-            const item = { 名: cut(d?.名) };
-            const range = cut(d?.范围);
-            if (range) item.范围 = range;
-            return item;
-        }).filter((x) => x.名);
-        const subs = (Array.isArray(t.子表) ? t.子表 : []).map((st) => ({
-            名: cutScaleName(st?.名),
-            档位: (Array.isArray(st.档位) ? st.档位 : []).map((y) => ({ 档: cut(y?.档) })).filter((y) => y.档),
-        })).filter((st) => st.名 && st.档位.length);
-        const one = { 表: nm };
-        if (t.用途) one.用途 = cut(t.用途);
-        if (rows.length) one.档位 = rows;
-        if (subs.length) one.子表 = subs;
-        if (dims.length) one.维度 = dims;
-        const size = JSON.stringify(one).length;
-        // 逐张整取：装不下就**整张不要**（不做"给半张"——半张尺比没有更坏：模型会拿残缺的档位当全部）
-        if (chars + size > SCALE_ONDEMAND_CHAR_TOP) { dropped.push(nm); continue; }
-        tables.push(one);
-        chars += size;
-    }
-    return tables.length ? { tables, chars, dropped } : null;
-}
+// ★★★leg163：这里原有 **按需查表** 那一整族（`SCALE_ONDEMAND_TOP` / `SCALE_ONDEMAND_CHAR_TOP` /
+//   `cutScaleName` / `buildScaleTableIndex` / `sanitizeScaleRequests` / `buildScaleOnDemand`）——
+//   **整族撤走**（用户令：「既然是全塞了就不需要点名表了所以删了这个功能即可」）。
+//   为什么成立（真账实测，不是推理）：leg135 那条「全塞」令把进包上限抬到 表 ≤`SCALE_TABLE_TOP_PACK`
+//   / 档 ≤`TIER_TOP` 之后，**真书里的尺已经整本进包**——大荒真账 1/1 张全进；
+//   `real-world-dh`（新账形状）45 张表 / 293 档 ⇒ **45/45 全进、`刻度目录` 为空**。
+//   ⇒ 目录（"我手里没有、但书里有"那份差距清单）是空的 ⇒ 点名这条通道**无表可点**。
+//   ★★撤走时**两样一起撤**（目录与点名是一件事的两半）：只留目录 = 目录叫模型去点名、而点名那个口
+//     已经没了 ⇒ 正是本仓最忌的"提示词替机制承诺一个它做不到的事"（这一族当初就是为治那个病而生的）。
+//   ★留下的边界（如实登记）：**档位预算（`TIER_TOP`）用尽时，排在后面的表整张进不去**
+//     （`scaleAnchorCore` 顺次扣预算）⇒ 此后模型只剩面板的 `刻度裁掉` 读数、没有要回来的路。
+//     真账上没发生过（上面两本都是 0 丢失）；会发生的是"表多且平均档数 ≳7"的大书。
+//   ★`cutScaleName` 也一并撤了——它此前只有目录、索引、补料三处用，三处同去。
+
 /**
  * ★★★leg137：**递给模型的"时间尺子"**——上一件事发生在什么时候 ＋ 此后又过了多久。
  *
@@ -1333,18 +1233,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     //   ★leg69（A1）：改走 `WithFit` 口 —— `anchor` 与原先**同一个东西**，另外拿到块级截断读数（见下 `刻度裁掉`）。
     const scaleFitRes = buildScaleAnchorWithFit(ssot.context?.setting?.frozen?.canon);
     const scale = scaleFitRes.anchor;
-    // ★★★leg64 第三轮：**刻度目录**——"书里还有哪些尺"（用户拍板「递目录 + 按需查」）。
-    //   为什么必须与 `刻度` 同源算：目录排除的正是**已经进包的那几张**（`scale` 的 `表` 名就是
-    //   `buildScaleAnchor` 截断后的名字，目录用同一个 `cutName` ⇒ 两边认得出是同一张）。
-    //   ⇒ 模型看到的是"我手里没的、但书里有的"那一份差距清单。见 `buildScaleCatalog` 头注。
-    const scaleCatalog = buildScaleCatalog(
-        ssot.context?.setting?.frozen?.canon,
-        new Set((scale || []).map((t) => String(t?.表 ?? ''))),
-    );
-    // ★★★leg64 第四轮：**按需查表**——模型上一轮点名要的那几张（`meta.scaleRequests`）。
-    //   与 `recalled` 同一条生命周期口径：**每轮由账上现算**，调用方在新一轮开头清掉请求
-    //   ⇒ 递出去的那一轮可见、之后自然消失（不做跨轮囤积）。见 `buildScaleOnDemand` 头注。
-    const scaleWanted = buildScaleOnDemand(ssot.context?.setting?.frozen?.canon, ssot.meta?.scaleRequests);
+    // ★★★leg163：**刻度目录**与**按需查表**（`刻度补`）两处**同批撤走**——见本文件上面那两段留档。
+    //   用户令：「既然是全塞了就不需要点名表了所以删了这个功能即可」。
+    //   ⇒ `setting` 里那两格（`刻度目录` / `刻度补`）从此不再出现；真账上它们本来就是空的（目录）
+    //     或从没出现过（补料）⇒ 对真账**零字节影响**。
     // ★★★leg64（交接 §3-A「规则进包」）：**法则块**——只取「判断依据」那一类（见 `ruleAnchorCore` 头注）。
     //   与 `刻度` 并列进同一个 `setting` 块：一个是"书里的尺子"，一个是"书里的判定原则"，
     //   都是**冻结的短表**（编译一次、之后每轮逐字相同），都违反 A-8 而那是有意的（它们是锚）。
@@ -1358,9 +1250,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     //     ② 键名与包内其余键同风格（中文短语），内容 = 两个 `WithFit` 的读数（机器可读，模型/调试者都看得见）；
     //     ③ **只报"被块级预算切掉多少"**，不报被 `trimPack` 整包切掉的（那是 `trimmed` 的活，别混）。
     const dropped = {
-        // ★leg135：这句**不许写死数字**（它刚坑过一次：上限从 16/24/8 抬到 64/300/16，
-        //   而这句话还在印旧值 ⇒ 面板/包里那句"原因"变成**假话**）。⇒ 从常量现读。
-        ...(scaleFitRes.fit && Number(scaleFitRes.fit.档?.共) > Number(scaleFitRes.fit.档?.进包) ? { 刻度: { ...scaleFitRes.fit, 原因: `块级预算（表≤${SCALE_TABLE_TOP_PACK}/档≤${TIER_TOP}/维≤${DIM_TOP}）` } } : {}),
+        // ★★★leg163：这里原有 `刻度` 那一支（块级预算切掉多少档/表/维）——**删掉**。
+        //   三道上限整批撤走之后 `scaleAnchorCore` **不再截断刻度** ⇒ `进包 === 共` 恒成立
+        //   ⇒ 那一支**永远不成立**（留着就是一段永远跑不到、还会印假"原因"的死代码）。
+        //   ★刻度块现在的唯一闸是整包那一道 `trimPack`（真裁了写 `pack.trimmed`，见它那段注释）。
         // ★★★leg136：这一句原来**写死了** `条≤160` —— 而 `RULE_PACK_TOP` 已抬到 256（leg135）
         //   ⇒ 包里那句"原因"是**假话**。本笔照 leg135 给 `刻度` 那一句定的口径改成**从常量现读**
         //   （同一条纪律：读数量体不许写死数字，写死就是第二份真相）。
@@ -1437,13 +1330,12 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
         //   `scale` 为空（本书没有成文的维度/档位表）⇒ 键不出现，与本棒之前**逐字节相同**（既有判据与冒烟面零扰动）。
         //   ★leg62：`scale` 现在是**概念表列表**（一把尺一个元素，见 `buildScaleAnchor` 头注），
         //     故这里由调用点写 `刻度` 这个键（改前 `buildScaleAnchor` 自己返回 `{刻度:[…]}` ⇒ 这里会嵌成两层）。
-        setting: (dyn || scale || ruleAnchor || scaleCatalog || scaleWanted || scaleDropped) ? {
+        setting: (dyn || scale || ruleAnchor || scaleDropped) ? {
             ...(dyn ? { tension: dyn.tension, env: dyn.env ?? {} } : {}),
             ...(scale ? { 刻度: scale } : {}),
-            // ★leg64 第三轮：**目录**（只表名 + 规模，不带档位内容）——治"60 张尺模型不知道存在"。
-            ...(scaleCatalog ? { 刻度目录: scaleCatalog } : {}),
-            // ★leg64 第四轮：**点名要来的整张表**（`刻度补` = 补料；空着就是空着）。
-            ...(scaleWanted ? { 刻度补: scaleWanted.tables } : {}),
+            // ★★★leg163：`刻度目录` 与 `刻度补` 两格**同批撤走**（leg64 那条"递目录 + 按需查"整族）——
+            //   见本文件上面那两段留档。★位置纪律照旧：只做减法，**不动其余键的相对位置**
+            //   （`lens.test.js` 那条包内键序锁：撤走的两格真账上本来就不出现 ⇒ 键集合一字不变）。
             ...(ruleAnchor ? { 法则: ruleAnchor } : {}),   // ★leg64：判据进包（老账/无判据 ⇒ 键不出现）
             // ★leg69（A1）：块级截断读数（**只在真丢了东西时出现**）。
             //   ★位置纪律：**缀在它所描述的两块之后**——本仓有"包内键序"的锁（`lens.test.js` 立、
@@ -1688,8 +1580,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     //   ⇒ 故这里先量一次。用的是**同一个量体函数**（`estTokensOf` ⇒ `packTextOf`，"唯一序列化口径"），
     //     不存在第二把尺子；代价是每轮多一次序列化（~40KB，相对一次模型调用是噪声），
     //     换来的是数据流显式——**不用**隐藏属性，也**不改** `trimPack` 的返回形状（它是公开函数，判据在用）。
-    const estBeforeTrim = estTokensOf(pack);
-    const cutByBudget = trimPack(pack, lim?.包预算 ?? EVOLUTION_BUDGET_TOKENS);
+    const geo = geographyPack({...ssot, entities: lens.map(({e}) => e)}, {moveFact});
+    const estBeforeTrim = estTokensOf(geo ? {...pack, geography:geo} : pack);
+    const budget = lim?.包预算 ?? EVOLUTION_BUDGET_TOKENS;
+    const cutByBudget = trimPack(pack, budget);
     // 判据 C（细案 §5）：行式分隔符冲突**出包期机械自检**，不靠"我看过没问题"。
     //   单本实测命中 0，但那是单本读数 ⇒ 一旦某世界书的名字里带 TAB/换行，这里如实上报（并并入 trimmed 痕迹）。
     const anomalies = entityTableAnomalies(pack.entities);
@@ -1708,6 +1602,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
         if (!pack.trimmed) pack.trimmed = [];
         pack.trimmed.push('entities.lens');
     }
+    cutByBudget.push(...fitGeography(pack, geo, budget, estTokensOf));
     const text = packTextOf(pack);   // ★细案 §2.1：唯一序列化口径；estTokensOf 同一个函数 ⇒ 不存在"两把尺子"
     // ★★★leg114：`estBeforeTrim` **只在真裁了的时候才带出去**（没裁 ⇒ `undefined`）。
     //   口径依据：`trimPack` 末尾 `if (cut.length) pack.trimmed = cut;` ⇒ **`cut` 非空 ⟺ 包真被裁过**，

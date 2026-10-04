@@ -2,6 +2,8 @@
 // SSOT（世界状态）JSON Schema —— 一份 JSON：实体 + 分量缓存 + Agenda 池 + 事件链（ANCHOR §3①）。
 // 形状规则对应 ANCHOR §4.2（事件源三类）/§4.5（盘算三必须）。语义校验（位置 ∈ 世界状态等）归引擎。
 
+import {geographySchema} from './geography.schema.js';
+
 export const ssotSchema = {
     kind: 'object',
     additional: false,
@@ -222,6 +224,7 @@ export const ssotSchema = {
                                         society: { kind: 'string' },
                                         techOrMagic: { kind: 'string' },
                                         historyNotes: { kind: 'array', items: { kind: 'string' } },
+                                        geography: geographySchema,
                                         situation: { kind: 'string' },   // leg20 世情路径：当前天下大势一句（原文措辞；可选=旧世界零扰动）
                                         bookEntities: {   // K37 书名录（生通道①：书内名号实体，可选=旧世界零扰动）；第十九棒：kind 增 location（地名不入池）+ parent（书中明述的上级/所属，从属方单存）
                                             kind: 'array',
@@ -317,18 +320,25 @@ export const ssotSchema = {
                                         //   ★**每条都必须带 `quote`**（书里那句原话）：抽取那一刻由引擎逐字核过
                                         //     "这句真在书文里"（`sanitizeBookRelations`，与名册/设定面**同一把尺子**），
                                         //     **核完即弃**——落账时只留边本身，不留那句原话（账上不记出处，见顶层 `relations` 那一段）。
+                                        //   ★★★Task 3 复查第二轮（task-3-fixes-review.md ⑦）：**新账不带 `quote`**——
+                                        //     上一条"核完即弃"当年只写在注释里，实现却把 `quote` 一起写进了 canon
+                                        //     （复审在 `setting.frozen.canon.relations` 上逐字读到了原话）。
+                                        //     现在契约分两种形状，判据在 `abstract.js` 的 `classifyBookEdge`：
+                                        //       · 新账 `{from,to,type}`（已核过，凭证不落账）⇒ `quote` 可省；
+                                        //       · 旧账挂着 `quote`（当年核过的形状）⇒ **照旧合法**（只读兼容，老世界零扰动）。
+                                        //     ⇒ 契约**只放宽为"quote 可选"**，没有让任何旧数据变非法，也没有新增键。
                                         //   ★可选键 ⇒ 旧世界零扰动（老账没有这个键照样过校验）。
                                         relations: {
                                             kind: 'array',
                                             items: {
                                                 kind: 'object',
                                                 additional: false,
-                                                required: ['from', 'to', 'type', 'quote'],
+                                                required: ['from', 'to', 'type'],
                                                 props: {
                                                     from: { kind: 'string', minLength: 1 },   // 谁（**名号**，落账时才解析成 id）
                                                     to: { kind: 'string', minLength: 1 },     // 对谁（名号）
                                                     type: { kind: 'string', minLength: 1 },   // ★书里的原话措辞（自由文本，不预设词表）
-                                                    quote: { kind: 'string', minLength: 1 },  // ★书里那句原话（出处闸核它；核完不落账）
+                                                    quote: { kind: 'string', minLength: 1 },  // ★旧账才有：书里那句原话（新账核完不落账）
                                                 },
                                             },
                                         },
@@ -396,6 +406,13 @@ export const ssotSchema = {
                     //   本就吃掉"字段不存在"，且校验本身不读它 ⇒ 不会因残留而拒。本键**不再接受**，防无声复活
                     //   （实测教训：删字段只删一半最危险——引擎不写、契约仍收，看起来删了其实没有）。
                     race: { kind: 'string', minLength: 1 },   // leg20：种族标签（抽象带入；可选=旧世界零扰动）
+                    // ★★★Task 3：**实体别名**（可选=旧世界零扰动）。设计 §6.3：不同名字的同一实体在
+                    //   名册到实体账的转换中**保留全部已确认叫法**，搜索与实体解析用同一份身份信息。
+                    //   写方只有一处：`seedBookEntities` 的 `mergeEntityAliases`（正名去重、幂等、只加不删）。
+                    //   读方：`tag-extract` 的解析器（③ 别名档）、`entity-lookup` 的名号对齐、
+                    //   `seedBookRelations` 的端点解析（同一个 `entity-identity.js`）。
+                    //   旧账没有这一格 ⇒ 解析只按正名（逐字节旧行为）。
+                    aliases: { kind: 'array', items: { kind: 'string', minLength: 1 } },
                     lastActiveTick: { kind: 'number', int: true, min: 0 },   // K3 静止衰减记账（活跃落账方记当前 tick）
                     // leg25 f（用户拍板「X1 认账简化」）：`hurtWindow` 键**已删除**。
                     //   它是 K15「败露」判据的输入（近 2 tick 负向 δ），而该判据随四维属性失去来源
@@ -419,8 +436,13 @@ export const ssotSchema = {
                     //   但这里挂在实体上——因为它是**初始化就定下来**的账，不随查书步骤改写。
                     //   引擎**不读**它们（不进分量/掩码/裁定/镜头）；只有渲染层/pack 用来标来源。
                     fieldSource: { kind: 'object', additional: true, props: {} },   // 字段名 → '书里原话'（逐字段）
-                    parentSource: { kind: 'string', minLength: 1 },                 // 归属来源：照书办 / 模型抽取 / 模型抽取(未验证) / 结构推导
-                    parentSourceFrom: { kind: 'string', minLength: 1 },             // 证据类型：member-line / key-list / explicit / tag / unverifiable / 成员行@XX
+                    parentSource: { kind: 'string', minLength: 1 },                 // 归属来源：照书办 / 模型抽取（历史值：模型抽取(未验证) / 结构推导 / 名字包含 仍可读）
+                    // ★★★Task 3：**证据类型枚举口径更新**（设计 §6.2：成员行/关键词名单只作定位，不建立也不否定关系）。
+                    //   新账只写：`model-claim`（模型主张，本次抽取已在严格道核过来源与原话）/ `explicit`
+                    //   （作者在自己条目正文里明写）/ `tag`（书标签声明，照书办）/ `unverifiable`（历史遗留）。
+                    //   历史值 `member-line` / `key-list` / `成员行@XX` / `名字包含@XX` **仍合法**——
+                    //   旧账与快照不重建，面板照旧显示它们的出处（自由字符串，不受枚举限制）。
+                    parentSourceFrom: { kind: 'string', minLength: 1 },
                     规模: { kind: 'string', minLength: 1 },   // 势力自己的规模/性质**原话**（书的势力标签/底蕴行；≠ 角色档位）
                     性质: { kind: 'string', minLength: 1 },   // 势力性质原话（如「正道仙门魁首」）——文本，引擎不读
                     倾向: { kind: 'string', minLength: 1 },   // 势力倾向原话——文本，引擎不读
@@ -485,15 +507,9 @@ export const ssotSchema = {
                 kind: 'object',
                 additional: false,
                 required: ['id', 'title', 'source'],
-                // ★★leg155：**`position` 由必填改可选**（用户拍板：「**放宽：位置改成可选**」＋
-                //   「**我记得没有让事件必须带地点**」——复核属实：这一条**不是他下的令**，是"首次纳入
-                //   版本库"那一笔（leg1–leg6）就写在契约里的，`git log -S` 一笔即中）。
-                //   它咬到的是**旧账**：实教那份有 5 条**六月那版引擎**写的起根事件没有这一格；
-                //   而现版引擎**每一件事件都写**（另三份账 94 件逐件核过，`settle.js` 还有兜底位置）。
-                //   ★★**放开的是"账本这一侧"，不是"事件不必说在哪"**：模型提新事那一侧
-                //     （`src/schemas/world-step.schema.js` 的 `newEvents[].position`）**照旧必填、一个字没动**。
-                //     ⇒ 一句话：**老账可以没有位置，新事不许不说位置**。判据在 `test/schema.test.js` 那一族里
-                //       （含反证的反证：世界步缺位置仍须被拒）。
+                // 用户要求「位置改成可选」：leg155 先放宽历史账，leg190 同步放宽新事件提议。
+                // 不知道发生在哪里就省略，不补玩家驻地或「未明」；写了仍须为非空文本。
+                // 回归见 test/schema.test.js 与 test/optional-event-position.test.js。
                 props: {
                     id: { kind: 'string', minLength: 1 },
                     title: { kind: 'string', minLength: 1 },
@@ -772,6 +788,22 @@ export const ssotSchema = {
                 //   ★为什么在契约里登记（本仓血的教训，见上面 `lastInjection` 那条）：
                 //     本块 `additional:false` ⇒ 漏登记就是"引擎偷偷多写字段"，旧账当场过不了自家 schema。
                 linesShown: { kind: 'array', items: { kind: 'string' } },
+                // ★★★leg163：**"模型点名要了什么料"那两格** —— 与上面 `lastInjection`/`linesShown` 同一条病：
+                //   `meta` 这块是 `additional:false` ⇒ **引擎真写的键，尺子上必须有登记**，漏一个整份账就违纪。
+                //   ★这一条是**先证红**验出来的（本笔，跑生产校验器）：一份只有 `tick` 的最小账，
+                //     meta 层 ✔ 过；写进 `lineRequests` 或 `scaleRequests` 之后当场变成
+                //     `$.meta.lineRequests: 未知字段` / `$.meta.scaleRequests: 未知字段`。
+                //   ★为什么这么久没显形：这两个键**只在模型真点过名的那一局**才出现，
+                //     而真账里从没点过（`lookupLines` 三趟真跑 150 轮一次没用过）⇒ 四份真账逐份全过、看不出病。
+                //   ★两格的来路不同，分开记：
+                //     · `lineRequests` —— `check-step.js` **现在仍在写**（leg128 那条"点名要一条故事线的经过"，
+                //       活着的通道）⇒ 这一格是**真的在用的登记**。
+                //     · `scaleRequests` —— 写它的那条通道（leg64 按需查表）**leg163 整族撤走**了
+                //       （用户令「既然是全塞了就不需要点名表了所以删了这个功能即可」）。
+                //       本版引擎**一个字都不写它**；登记它是照 `recalled`/`legacyAttrsMigratedAt` 的先例：
+                //       **老账里已经躺着的那一批不许因此变得不合法**（删登记＝把旧账判死）。
+                lineRequests: { kind: 'array', items: { kind: 'string' } },
+                scaleRequests: { kind: 'array', items: { kind: 'string' } },
                 // ★★leg155：**载入期清旧账的留痕**（leg74 立 · leg75 推广）——`migrateStyleRulesFromCanon`
                 //   把"不算世界"的那几类从法则账里摘掉时写下（`styleRulesPurged` = 摘掉的原话，
                 //   `styleRulesPurgedAt` = 时点）。照 `legacyAttrsPurged` 的先例：**摘掉的东西不许无声消失**。

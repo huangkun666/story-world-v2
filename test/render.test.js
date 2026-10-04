@@ -28,6 +28,7 @@ import { PROPOSED_CALL_LIMITS } from '../src/transport-http.js';
 //   ★判据内容一个字没改：本文件对这一族咬的仍然是**内容与形状**（黑名单里真有那些词、构建号合
 //     `/^leg\d+-/` 且不含禁词），与"它住在哪个文件"无关 ⇒ 换家不改判据，只换取样地址。
 import { escapeHtml, BLACKLIST, PANEL_BUILD } from '../src/render-base.js';
+import { renderMapHtml } from '../src/map-view.js';
 import { AGENDA_CAPS } from '../src/settle.js';
 import { LIMIT_DEFAULTS, LIMIT_GEARS, LIMIT_KEYS, LIMIT_META, LIMIT_KIND_NOTE } from '../src/limits.js';   // ★leg143：＋后两个——「闸 / 尺」分组的**唯一真源**（判据照它验，不许抄字面量）
 // ★leg52：面板的档位白名单＝参数表那两张表本身（从**真源**取，不抄字面量——否则面板造得出引擎不认的值）
@@ -43,6 +44,7 @@ import { PROPOSED_LIMITS } from '../src/storage.js';
 import { expandChain } from '../src/chain.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const withoutStoryMentions = html => html.replace(/<(?:span|button)\b[^>]*class="sw2-story-mention"[^>]*>([\s\S]*?)<\/(?:span|button)>/g, '$1');
 
 // leg26 c 对抗式锁（用户实拍截图逼出，两个错各自钉一条）：
 //   ①**UI 重复**：参数页第一版把当前值渲染了两遍（`当前档位 未定` + 行尾又一个小「未定」chip），
@@ -637,7 +639,7 @@ test('leg20 世情句领大势：situation 进时局句**与说书那四层顶�
     const { digest, infoband } = renderBoardHtml(w);
     const { panorama } = renderAll(w, { config: {} });
     assert.match(digest, /大虞兵压江州，坊市暗流涌动/);
-    assert.match(panorama, /大虞兵压江州，坊市暗流涌动/, '★大势句的新家＝说书四层顶上那一格（原文照印）');
+    assert.match(withoutStoryMentions(panorama), /大虞兵压江州，坊市暗流涌动/, '★大势句的新家＝说书四层顶上那一格（原文照印）');
     assert.ok(!infoband.includes('大虞兵压江州'), '★带里不许再印一次（同一句话不说两遍）');
     assert.match(infoband, /大虞\/万法阁/);   // 张力极性仍在（三件套不丢）
     const bare = { version: 1, context: { world: 'x', tension: 0.5, positions: ['x'] }, entities: [], weights: {}, agendas: [], events: [], chronicle: [], meta: { tick: 0 } };
@@ -647,7 +649,7 @@ test('leg20 世情句领大势：situation 进时局句**与说书那四层顶�
     //     （"还没长出可讲的事"）⇒ 根本走不到四层那儿。所以这里必须**先给一件真事**，
     //     否则这条断言是**空绿**（实测：不给事 ⇒ 断言红，因为空态里当然没有那句话）。
     const wBare = { ...bare, events: [{ id: 'ev_1_1', title: '某处生变', source: { type: 'state' }, position: 'x', ripples: [], links: {}, closed: false }] };
-    assert.match(renderAll(wBare, { config: {} }).panorama, /这本账没留大势句/, '★缺大势句要如实标注（不许编一句）');
+    assert.ok(!renderAll(wBare, { config: {} }).panorama.includes('data-story-background'), '缺背景原话时不造一块背景');
 });
 
 test('K33 观棋·无设定池回退：大势未聚 + 无盘算空态', () => {
@@ -668,65 +670,28 @@ test('K33 观棋·动态流：倒序 + 最新徽 + 引擎 id 只进 title 悬停
     assert.match(feed, /data-view="archive"/);
 });
 
-test('K33/leg24 片5 观棋·各归何处速览：事实标记（在办/据）取代影响力分数条 / 暗徽 / 你的棋子 / 已灭实体过滤', () => {
-    const w = world();
-    w.weights.e_xie = 0.87975;   // 账上仍留着旧的分量缓存——界面**不许再显示它**（那个数引擎已不消费）
-    const side = renderBoardHtml(w).side;
-    // ★leg25 f 版式重做：侧栏由"一实体一卡"改为**按处聚合**（位置当分组键），名号改为组内 chip。
-    assert.match(side, /sw2-locchip[^>]*>薛铁衣</, '名号仍在速览里（改由地点组内的 chip 呈现）');
-    assert.ok(!side.includes('sw2-wval'), '片5：影响力分数条已撤（分数不参与决策，不摆给玩家看）');
-    assert.ok(!side.includes('sw2-weight-row'), '整行影响力组件下架');
-    // leg25 c：原「有据 n/4 / 数值无据」徽章随四维删除——"有几维有据"这个说法已失去所指。
-    //   注：旧版这一行靠 sw2-ev-mark，本轮聚合式改版后该组件不再出现在侧栏（在办改为 chip 上的忙态）。
-    assert.ok(!/有据\s*\d\s*\/\s*4/.test(side) && !side.includes('数值无据'),
-        'leg25 c：「有据 n/4 / 数值无据」不再出现（四维不存在，无从谈"几维有据"）');
-    // ★本次变更核心意图锁：旧的四维属性名不得以任何形式出现在玩家视线面
-    for (const term of ['兵力', '权位', '人脉', '耳目']) {
-        assert.ok(!side.includes(term), `位置速览页不得再出现旧属性名「${term}」`);
-    }
-    assert.match(side, /sw2-locchip-me/, '玩家棋子在自己的地点组里被标出（sw2-locchip-me）');
-    w.entities.push({ id: 'e_dead', kind: 'faction', name: '覆灭阁', location: 'x', status: 'dead' });
-    assert.ok(!renderBoardHtml(w).side.includes('覆灭阁'), '已灭实体不进速览（沿用旧口径）');
-});
-
-test('leg25 f：各归何处速览——**按处聚合**且「位置未载」单列一筐（未载 ≠ 在别处）', () => {
-    // 用户 2026-09-11 定案的交互口径：位置是**呈现**，不是筛选；聚合不许把未载的挤掉。
+test('地图入口仅按钮摘要，位置记录在独立弹窗可查看', () => {
     const w = world();
     w.entities.forEach((e, i) => { e.location = i % 2 === 0 ? '江州' : '未明'; });
     const side = renderBoardHtml(w).side;
-    assert.match(side, /sw2-locgroup-name">江州</, '有处可循的按地点成组');
-    assert.match(side, /江州<[\s\S]{0,120}?sw2-locgroup-n">\d+ 人</, '组头给人数（一眼看出聚落规模）');
-    assert.match(side, /sw2-locgroup-unknown/, '★「位置未载」单列一筐（不被聚合挤掉）');
-    assert.match(side, /位置未载[\s\S]{0,200}?书里没写/, '★并如实说明"书里没写"（未载 ≠ 在别处）');
-    // 未载那批的名号必须真的在里面（不是只画个筐）
-    const unknownBlock = side.split('sw2-locgroup-unknown')[1] || '';
-    assert.ok(unknownBlock.includes('覆灭阁') || unknownBlock.includes('黄坤') || /\d+ 人/.test(unknownBlock),
-        '未载筐里有真内容');
-    assert.ok(!side.includes('<div class="sw2-entity'), '★旧的"一实体一卡"形态已撤（563 张卡 → 按处聚合）');
+    assert.equal((side.match(/data-action="open-map"/g) || []).length, 1);
+    assert.match(side, /sw2-map-title">地图</);
+    assert.match(side, /人有处可循/);
+    assert.match(side, /未载 \d+ 人/);
+    assert.ok(!side.includes('<details') && !side.includes('sw2-locgroup'));
+    const popup = renderMapHtml(w);
+    assert.match(popup, /江州/);
+    assert.match(popup, /位置未载/);
+    assert.match(popup, /未载不代表在别处/);
+    for (const e of w.entities) assert.ok(popup.includes(e.name), e.name);
 });
-
-test('leg25 g：位置展示收成**一个入口「地图」**——默认收起、内容仍在、一屏只占一行', () => {
-    // 用户 2026-09-11 实机复验后拍板：「有是有但是太拥挤了，收缩到一个入口内，就叫地图吧，
-    //   这就是个暂时的展示功能」。上一棒已把 563 张卡压成 21 组，但整片铺开仍占满视线。
-    // 这条锁三件事：①入口存在且叫「地图」；②**默认是收起的**；③折叠≠删除（内容与口径文案都还在）。
-    const w = world();
-    w.entities.forEach((e, i) => { e.location = i % 2 === 0 ? '江州' : '未明'; });
-    const side = renderBoardHtml(w).side;
-    assert.match(side, /<details class="sw2-map-details">/, '★位置展示收进 details（原生折叠，不新增 JS 状态）');
-    assert.equal((side.match(/sw2-map-details/g) || []).length, 1, '★只有一个入口（不许一实体/一地点一个入口）');
-    assert.match(side, /sw2-map-title">地图</, '★入口就叫「地图」（用户原话）');
-    // ② 默认收起：开口标签上不许有 open 属性
-    const openTag = (side.match(/<details class="sw2-map-details"[^>]*>/) || [''])[0];
-    assert.ok(openTag && !/\bopen\b/.test(openTag), '★默认收起（没点开时不铺满侧栏）');
-    // 开口摘要一行报数：不点开也知道有多少处 / 多少人 / 多少未载
-    assert.match(side, /sw2-map-brief">[\s\S]{0,60}?人有处可循/, '开口摘要给"有处可循"人数');
-    assert.match(side, /sw2-map-brief">[\s\S]{0,80}?未载 \d+ 人/, '开口摘要给"未载"人数');
-    // ③ 折叠≠删除：地点组、未载筐、以及「未载 ≠ 在别处」的口径文案都得还在 details 里
-    const inner = side.split('<details class="sw2-map-details">')[1] || '';
-    assert.match(inner, /sw2-locgroup-name">江州</, '地点组仍在 details 内（没被删掉）');
-    assert.match(inner, /sw2-locgroup-unknown/, '未载筐仍在 details 内');
-    assert.match(inner, /位置未载[\s\S]{0,200}?书里没写/, '★「未载 ≠ 在别处」的口径文案随内容一起保留');
-    assert.match(inner, /<\/details>/, 'details 正确闭合');
+test('地图弹窗保留玩家标记和事实记录，不渲染旧数值权重', () => {
+    const w = world(); w.weights.e_xie = 0.87975;
+    const player = w.entities.find(e => e.id === w.context.playerId);
+    const html = renderMapHtml(w, { query: player.name });
+    assert.ok(renderMapHtml(w).includes('薛铁衣'));
+    assert.match(html, / · 你/);
+    assert.ok(!html.includes('0.87975') && !html.includes('sw2-weight-row'));
 });
 
 test('K34 编年页：全量条目 + 旧卷卷行（数据入面）；★leg94：里程碑插行已撤', () => {
@@ -1116,7 +1081,7 @@ test('★leg60 + leg62 设定页：刻度按概念分栏 + 编译完整性读数
     // 顶到体积上限时要显形（三国实测会咬到 50 万上限）
     const over = world();
     over.context.setting.frozen.compile = { entries: 827, enabled: 264, disabled: 563, declared: 554, picked: 180, declaredDropped: 8 };
-    assert.match(renderSettingHtml(over), /⚠顶到体积上限，声明面有 8 条未进料/, '截断不许静默');
+    assert.match(renderSettingHtml(over), /注意：顶到体积上限，声明面有 8 条未进料/, '截断不许静默');
     // 没有读数（旧账）⇒ 那一栏不出现（旧世界零扰动）
     const bare = world();
     assert.ok(!renderSettingHtml(bare).includes('编译完整性'), '旧账没有 compile 读数 ⇒ 不画那一栏');
@@ -1173,7 +1138,7 @@ test('K34/A-6 设定档案页：展示与 setting.frozen 逐字段一致（指�
 
 test('K34 设置页：模型通道/操作按钮/旧卷管理，表单值来自 config', () => {
     const html = renderSettingsHtml(world(), { config: CONFIG });
-    assert.match(html, /来源：角色卡 \+ 世界信息（自动合订）/);
+    assert.ok(!html.includes('sw2-settings-source'), '用户要求移除设置页世界书来源说明');
     // ★★★leg87（用户令「A 删了」）：`<textarea id="sw2_player_desc">` 那条断言**按设计作废**——
     //   整张「你的开档描述」卡已撤（那段字写进 `meta.playerDesc` 后全仓零处读）。
     //   ★口径升级（不是删锁）：从"那个框在原位"改成"**那张卡与那个 id 都不许回来**"。
@@ -1182,8 +1147,20 @@ test('K34 设置页：模型通道/操作按钮/旧卷管理，表单值来自 c
     assert.match(html, /id="sw2_base" value="https:\/\/gcli\.ggchan\.dev\/v1"/);
     assert.match(html, /id="sw2_key" value="••••••••••••••••••••"/);
     assert.match(html, /id="sw2_model" value="gemini-3\.1-pro-preview"/);
-    assert.match(html, /data-action="init-world"/);
-    assert.match(html, /data-action="advance-world"/);
+    // ★★★leg162（用户令「**上移就是独立于设置页了，不是只有在设置页显示，而是整个窗口的上方**」）：
+    //   这两枚按钮**不再由设置页渲染**——它们升进了**窗口外壳的动作条**（`settings.html`，
+    //   八页常驻）。⇒ 本处那两条断言**改指外壳模板**，并**升级成双向锁**：
+    //     ① 外壳里**必须有**这两枚（入口一个不少）；
+    //     ② 渲染层**一枚都不许再画**（画第二枚 = 重复入口，正是 leg52 撤参数页那枚的理由）。
+    //   ★为什么"画在渲染层"是错的（本笔的承重理由）：页体是 `el.innerHTML = out[name]`
+    //     **逐页整块替换**（`web/index.js` 的 `refreshSections`）⇒ 按钮住页里会被反复销毁重建，
+    //     而 `long-task.js` 那套"正在跑…就灰掉这枚按钮"靠的正是那个节点别被换掉。
+    const shell = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+    assert.match(shell, /data-action="init-world"/, '★外壳动作条必须有「开始新世界」');
+    assert.match(shell, /data-action="advance-world"/, '★外壳动作条必须有「推进一轮」');
+    assert.match(shell, /class="sw2-actionbar"/, '★它住在一个叫 sw2-actionbar 的容器里（八页常驻的那一份）');
+    assert.ok(!html.includes('data-action="init-world"'), '★★leg162：设置页不许再画「开始新世界」（外壳那一份是唯一入口）');
+    assert.ok(!html.includes('data-action="advance-world"'), '★★leg162：设置页不许再画「推进一轮」（同上）');
     assert.match(html, /自动入卷阈值/);
     // ★leg55：这一格的值必须**来自 config 现读**（撤掉曾经那个 `?? '500'` 死兜底）。
     //   ★口径（第一版写成 `/777 轮 或 9MB/` 被自己判红逼出来的）：`9MB` 是 `19MB` 的子串
@@ -1205,9 +1182,18 @@ test('K34 设置页：模型通道/操作按钮/旧卷管理，表单值来自 c
     //   `bindSettingsForm` 按 id 绑 input/change 写入，**不经动作总线**。留着它只会让点击时
     //   走 `dispatchAction` 的兜底分支、在状态条闪一句"接线随后续步骤"。判据：不许回潮。
     assert.ok(!html.includes('data-action="player-desc"'), '★textarea 不许挂 data-action（它不经动作总线）');
-    // ★leg40b（体检 · D1）：推进按钮的名字必须与状态栏/参数页同一口径
-    assert.ok(html.includes('▶ 推进一轮'), '推进按钮叫「推进一轮」（与状态栏、与参数页同一口径）');
-    assert.ok(!html.includes('手动推进一步'), '旧名「手动推进一步」不得回潮（状态栏从来不叫这个）');
+    // ★leg40b（体检 · D1）：推进按钮的名字必须与状态栏/参数页同一口径。
+    // ★★★leg162：那枚按钮**已升进窗口外壳的动作条** ⇒ 名字那一半改到**外壳模板**上核
+    //   （本页那条"不许再画它"的锁在上面已经锁过了）；同时**新增**一条"外壳里那个名字对"
+    //   ——名字与位置是两件事：位置搬了，口径不许跟着散。
+    //   ★核的是**渲染后的字**：模板里那个播放记号写成 HTML 实体 `&#9654;`（实体与字符**等价**，
+    //     这里按字符核，免得把"实体写法"误当成"名字变了"）。
+    assert.ok(shell.includes('>推进一轮<'), '外壳动作条那枚按钮叫「推进一轮」（与状态栏、与参数页同一口径）');
+    //   ★★★leg165：原来咬的是 `'&#9654; 推进一轮'`——用户令「emoji 不要了」之后那枚 ▶ 撤掉了。
+    //     口径一个字没放宽：仍然咬"那枚按钮上的字就是「推进一轮」"（改成咬 `>推进一轮<`，
+    //     比原来更严一格：原来只要求"文本里含这个串"，现在要求它**正好是那个标签的正文**）。
+    assert.ok(!shell.includes('手动推进一步'), '旧名「手动推进一步」不得回潮（状态栏从来不叫这个）');
+    assert.ok(!html.includes('手动推进一步'), '旧名「手动推进一步」不得回到设置页（状态栏从来不叫这个）');
 });
 
 // ★★leg40b（体检 · C4）：**四维残文**——设置页那句「世界从中摘你的底子（兵力/权位/人脉/耳目）」
@@ -1387,18 +1373,19 @@ test('K46+leg21 观棋·张力与浪尖各归各格；★★leg98 信息带改**
     //       卡片 = 顶上那一格；释义与缺省标注是说明文，不是卡片。
     //   ★定稿：钉**那一格**在整页恰好一处（用它的**精确标签**，不是词频），且带里那格确实没了。
     const { panorama } = renderAll(mk(), { config: {} });
-    const headCount = (panorama.match(/大势 · 书里写定的局面/g) || []).length;
-    assert.equal(headCount, 1, `★★「大势」那**一格**在整页只许一处（实测 ${headCount} 处）——带里那格与四层顶上那格是同一句话`);
+    const headCount = (panorama.match(/data-story-background/g) || []).length;
+    assert.equal(headCount, 0, '没有背景原话时不渲染背景块');
     assert.ok(!infoband.includes('大势 · 书里写定的局面'), '★带里不许再有那一格（它的家在四层顶上）');
     assert.ok(!infoband.includes('sw2-band-label">大势'), '★带里连那个小标签都不许留');
     // ★另一半：**有**世情时，那句话本身在整页也只许出现一次（这才是"同一句话不说两遍"的字面口径）
     const w2 = mk();
     w2.context.setting.frozen = { canon: { situation: '甲宗兵压江州' } };
     const p2 = renderAll(w2, { config: {} }).panorama;
+    assert.equal((p2.match(/data-story-background/g) || []).length, 1, '有背景原话时只呈现一次');
     const b2 = renderBoardHtml(w2).infoband;
-    const sitCount = (`${p2}${b2}`.match(/甲宗兵压江州/g) || []).length;
+    const sitCount = (withoutStoryMentions(`${p2}${b2}`).match(/甲宗兵压江州/g) || []).length;
     assert.equal(sitCount, 1, `★★那句原文在整页只许出现一次（实测 ${sitCount} 次）：它住四层顶上那一格`);
-    assert.match(p2, /甲宗兵压江州/, '★它确实在四层顶上那格（不是被整句撤掉了）');
+    assert.match(withoutStoryMentions(p2), /甲宗兵压江州/, '★它确实在四层顶上那格（不是被整句撤掉了）');
     assert.match(digest, /参数：乱象动荡、天时大灾、时局紧绷。/, 'leg26+leg53：参数档位在时局句副句如实列出（三格，民生已撤）');
 });
 
@@ -2507,7 +2494,80 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了：`.sw2-pan-range` 那两条规则整块撤掉，
     //     手机档那份小字名单里两格一并删）——下面 `CSS_PIN` 的号与指纹同批换掉。
     //   ★`MAIN_PROMPT_V`/`CACHE_VERSION` **不升**（提示词与抽取问法都没动；本笔零模型调用）。
-    assert.equal(PANEL_BUILD, 'leg160-panel-window');
+    // ★★★leg161 再升一格（用户令「**那就让聊天侧也接上向量检索呗**」＋「**保证相关度最大就不用管时间了**」）
+    //   ⇒ **`leg161-chat-vector`**：★**盘上真的变了**——① 设置页多一张「**记忆通道（向量）**」卡
+    //   （地址/密钥/模型号 ＋ 测试连通 ＋ 量一批几行 ＋ 一行读数）；② 参数页注入卡里多**三格**
+    //   （相似度阈值 0.30 · 最大召回条数 6 · 检索上下文深度 2，名字照用户给的 `yuzuki-Memory` 截图）。
+    //   ★★★leg192（用户 2026-10-05 两次下令）：先是「把这个参数换个说法要不然很容易误解」，
+    //     我把三格改成"语义相似度阈值 / 语义召回上限（条）/ 查询取几条正文"——他当场纠正：
+    //     「我不是让你这样改名字我是想让你改成一眼就能知道这是作用在哪以及作用是什么的名字」，
+    //     随后定案：「**名字恢复到原样，然后在旁边添加一个小问号说明作用即可**」。
+    //   ⇒ 本笔最终形状：**四个名字一个字没改**，各挂一枚小问号（`.sw2-fold-inline`，
+    //     复用现成的 `？` 圆圈 ＋ `<details>`），点开才说"作用在哪、什么时候不生效"。
+    //     ★同批把这三格从"冻结常数"改成**现读设置**（见 `web/inject.js` 的 `liveRetrievalParams`）。
+    //   ★★**维度与"一批几行"故意不画**（用户令：「**至于多少维度还有向量化多少行直接可以从厂商问到
+    //     不用写到参数里懂吗？**」）⇒ 运行时读回。
+    // ★★★leg162 再升一格（用户令「**上移就是独立于设置页了，不是只有在设置页显示，
+    //   而是整个窗口的上方**」）⇒ **`leg162-window-actionbar`**：★**盘上真的变了**——
+    //   ① 八页顶上多一条**动作条**（窗口外壳那一层：「✨ 开始新世界」「▶ 推进一轮」＋ 右端一格状态）；
+    //   ② 设置页那张「操作」卡**整张撤掉**（连同它那 96 字解释）。
+    //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了：新增 `.sw2-actionbar` 一族 ＋ 手机档登记）。
+    // ★★★leg163 再升一格（用户令「**删掉那三道，让预算当唯一的闸**」＋「**之后把19条清理掉**」）
+    //   ⇒ **`leg163-nocaps`**：★**盘上真的变了**——① 参数页与设置页里那些"开发留档"的字
+    //   （「见 leg76 交接」「实测 3 → 每轮 2.25 条」「真账 59 轮」「抽取时已明令不交…」）
+    //   改成说给玩家听的话；② 快照页那处 markdown 的 `**一步到位**` 改成真加粗（** 原来会原样显示）。
+    //   ★为什么该升：改的是**玩家直接读到的句子**，而**没有任何判据会因此变红**
+    //     （判据锁"这个词在不在"，不锁"这句话读不读得懂"）⇒ 构建号是他唯一能自证拿到新版的记号。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 一个字没动）；
+    //     `MAIN_PROMPT_V` **同批升**（`v2-agenda-t1-32`）、`CACHE_VERSION` **不升**（抽取问法没变）。
+    // ★★★leg166：`PANEL_BUILD` **升**（`leg166-pages-demo-parity`）——本笔改的是**其余七页 ＋ 外壳的版面**，
+    //   玩家直接读到的样子真变了（页签/徽章/卡片/列表/表单整批换语言）。
+    //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了）；`MAIN_PROMPT_V`/`CACHE_VERSION` **不升**
+    //     （一个字都没碰提示词与抽取问法）。
+    // ★★★leg167：`PANEL_BUILD` **升**（`leg167-panorama-cols`）——本笔改的是**观棋页的版式**
+    //   （三栏清单改一行一件事＋定宽列 · 空面卡不再留空盒子 · 页留白 16→24px · 浪尖标签不再折三行）
+    //   ＋ **并线多了一条边**（`plot` 事件沿 `盘算.source.ref` 连回它的上一件事）——后者**玩家直接读得到**
+    //   （"只有一件事"那两栏的条数与线名都变了）⇒ 构建号必须升。
+    // ★★★leg168：`PANEL_BUILD` **升**（`leg168-line-window`）——这一笔玩家直接读得到的两件事：
+    //   ① ★★★**窗口改成"按线裁"**（用户令「**窗口要改成按线裁**」）：一条线只要有一件落在
+    //      「往回看轮数」那个窗口里，**它整条都讲**（起头→过程→结果）；整条线一件都不在窗口里才不上这一页。
+    //      ★口径是 leg160 交接 §5.1 白纸黑字、用户当时点过头的，而**代码一直是"按事件裁"** ⇒ 这一页
+    //        印出来的东西真的变了（真账窗口 1 轮那档：件数 13 → 32 · 卡片 2 → 10；长账那档见 §3 的表）。
+    //   ② **表单控件那七条规则的底色退回 leg163**（用户令「**接着你看这个输入框，太黑了跟旁边格格不入**」）
+    //      ＋ `--sw2-inset` 那一格整格撤掉 ⇒ 玩家眼前的输入框、下拉、搜索框不再是一排黑洞。
+    // ★★★leg169：`PANEL_BUILD` **升**（`leg169-five-pages`）——用户两道令
+    //   （「**接下来优化其他页的结构问题**」＋「**还有改掉过多解释文字的毛病**」）⇒ 其余五页
+    //   （设定/参数/快照/设置/大事纪）的版面结构真的重排了，玩家一眼读得到：
+    //   ① 参数页：注入那一卡由"8 个控件一条直线"改成**两组带小标题**；四枚开关由"各自一整张卡"
+    //      （实测一行 84px）压成**紧凑行**；四个数字框由**各宽 1329px** 收到 **132px** 右对齐；
+    //      总闸那一行不再折成三行；**构建号搬到了页头**（三份交接都写"看参数页最上面那行"，而它
+    //      从前住在「世界尺度」卡里 ⇒ 玩家照那句话去看永远看不到）。
+    //   ② 快照页：那段图例由"常驻一段灰字"改成**一句结论 ＋ 可展开的招牌**（灰字 75 → 21 字）；
+    //      "重置快照"从**裸挂在卡外**搬进它管的那张卡。
+    //   ③ 大事纪页：**补页头**（此前整页无标题）；`<h5>` 那句"**4 件事用「、」连成一句话**"
+    //      改成一件事一项；一纪里那几十条由"流式文本 ＋ `break-all`"改成**折行列表**。
+    //   ④ 设置页 / 设定页：同批（灰字 722 / 745 字 ⇒ 折起；通宽输入框收窄；"张力现状"卡补分组）。
+    // ★★★leg172：`PANEL_BUILD` **升**（`leg172-memory-models`）——用户令「**现在需要给记忆通道也添加一个
+    //   获取模型列表**，还有把这个**量一批几行的按钮去掉吧**，我用过这么多记忆插件没见过要用户来量
+    //   一批几行的」⇒ 「记忆通道（向量）」那张卡的控件真的换了：多一枚「**获取模型列表**」与一块
+    //   **可点的模型清单**（点一项只写 `embedModel`），撤掉「**量一批几行**」那枚按钮与它那段说明。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动——清单沿用世界模型那套既有类）。
+    // ★★★leg193（2026-10-05 第二笔 · 用户令四句连着下：「**让说明靠近一点，隔得太远了**」＋
+    //   「**最下面这个'这四枚开关各往对话里塞什么'的问号好像已经过时了可以删了**」＋
+    //   「**字额度切忌把事件截掉**」＋「**把图片的第一段话中的关键信息抽取出来展示在参数页**，
+    //   第二段话可以删了，这是用来调试的」＋「**接下来我要做向量库注入聊天上下文的设置**」）：
+    //   `PANEL_BUILD` **升**（`leg193-inject-readout`）——参数页那一卡玩家看得见的变化有四件：
+    //   ① **"说明"贴到标签下面**（标签与数字框包进同一格 `.sw2-field-head`，旧形状里"说明"被挤到第三行）；
+    //   ② **多第五格「往事注入多少字」**（整段往对话里塞多少字，此前写死 1600）；
+    //   ③ **读数行重画**（由一整句长话改成"哪一段多少字"的小格 ＋ 一句结论，并如实印出往事走哪一路）；
+    //   ④ **删掉那段过时的总说明与"注入器还没跑过…把这条发我"那一行**。
+    //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了：`.sw2-field-head` 那一族 ＋ 读数行四条）。
+    // ★★★leg194（2026-10-05 第三笔 · 用户令「**第二段话可以删了，这是用来调试的**」＋
+    //   「**把那句我让你抽出重点的话也删了，毕竟已经抽出来了**」）：`PANEL_BUILD` **升**
+    //   （`leg194-original-line-gone`）——参数页那一卡底下**少了两行字**（那句原始读数 ＋ 排查那一行），
+    //   玩家看得见。★这一笔 **`web/style.css` 一个字节没动** ⇒ `CSS_VERSION` **不升**
+    //   （仍 `20261005-leg193-inject-readout`）——判据仍是那一条：**动没动样式**。
+    assert.equal(PANEL_BUILD, 'leg194-original-line-gone');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2537,7 +2597,14 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const cssVer = (/const CSS_VERSION = '([^']+)'/.exec(web) || [])[1];
     assert.ok(cssVer, '★`web/index.js` 里必须有一处 `CSS_VERSION`（它是"别让玩家吃旧样式表"的唯一开关）');
-    const CSS_PIN = { ver: '20261001-leg160-panel-window', sha: '5e3650780d51aa167d96907c22b62cbbf756fc4a9575bda2087a6c2a41b3f035' };
+    // ★★★leg169：号与指纹**第五次换**（本笔真动了样式表：新立跨页版式语言——`.sw2-tgl` 紧凑开关行 ·
+    //   `.sw2-group-h` 卡内分组标题 · `.sw2-field-inline` 控件定宽 · `.sw2-row2` 两行层次 ·
+    //   `.sw2-ms-item`/`.sw2-rawids` 大事纪条目 · `.sw2-card-foot` 卡尾行）。
+    //   ★指纹在**全部改动落地之后**现算再填（它是"浏览器吃没吃到旧样式表"的唯一机械闸）。
+    // ★★★leg193：号与指纹**第六次换**（本笔真动了样式表：注入卡那一族行形收拢——`.sw2-field-head`
+    //   把"标签＋框"包成一格、说明紧跟其下 ／ 新增读数行四条 `.sw2-inject-*`）。
+    //   ★指纹在**全部改动落地之后**现算再填（它是"浏览器吃没吃到旧样式表"的唯一机械闸）。
+    const CSS_PIN = { ver: '20261005-leg193-inject-readout', sha: '5f5ee87d9886f0ede3b3991c5a311bcddabd28f55f665dea10e9765694fca6d3' };
     const styleSha = createHash('sha256')
         .update(readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     assert.equal(cssVer, CSS_PIN.ver,
@@ -2561,7 +2628,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '160', '前置：本笔的构建号就是 leg160（锁自己也要能被反向自证咬住；★本条随升位同批改值——leg159c 之前它是 `159c`，再之前是 `159b`，再之前是 `159`，再之前是 `158`，再之前是 `157`，再之前是 `152`。它咬的**不是"号该不该升"**，而是"下面那条比较**真的在比哪两个数**"）');
+    assert.equal(buildLeg, '194', '前置：本笔构建号为 leg194（撤掉那句原始读数的一笔），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);
@@ -2855,9 +2922,21 @@ test('★★leg52·A：**参数页撤「推进」卡**（它是动作不是输�
     const params = renderParamsHtml(w, { config: {} });
     const settings = renderSettingsHtml(w, { config: CONFIG });
     assert.ok(!params.includes('data-action="advance-world"'), '★参数页不许再画「推进一轮」');
-    assert.ok(!params.includes('▶ 推进一轮'), '★参数页连那句话也不许留');
-    assert.ok(settings.includes('data-action="advance-world"'), '★★入口必须仍在设置页（撤一处 ≠ 撤入口）');
-    assert.ok(settings.includes('推进一轮'), '★设置页那枚的名字与状态栏提示同一口径');
+    //   ★★★leg165：原来咬的是 `!params.includes('▶ 推进一轮')`——而那个 ▶ 已随 emoji 令撤掉。
+    //     ★口径一个字没放宽，反而更准：原来那条**咬不住真正的病**——
+    //       参数页**本来就有**「推进一轮」这几个字（总闸卡那句指路：「按窗口顶部的「推进一轮」」，
+    //       见本文件下面那条判据）⇒ 把 ▶ 去掉之后，`!includes('推进一轮')` 会**误伤那句指路**。
+    //       本笔改成咬**那枚按钮本身**（`sw2-btn` ＋ `data-action`），这正是本条要防的东西。
+    assert.ok(!/<button[^>]*data-action="advance-world"/.test(params),
+        '★参数页连那枚按钮本身也不许留（leg165：改咬按钮元素——那句指路文字是**该在**的）');
+    // ★★★leg162（用户令「**上移就是独立于设置页了…整个窗口的上方**」）：入口**又升了一层**——
+    //   从"设置页那张卡"变成"**窗口外壳的动作条**"（`settings.html`，八页常驻）⇒ 本处改指外壳。
+    //   ★实质一字未改：**撤一处 ≠ 撤入口**——入口必须真的存在，只是它的家比"某一页"更高一层。
+    const shell = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+    assert.ok(shell.includes('data-action="advance-world"'), '★★入口必须仍在（现在住窗口外壳的动作条）');
+    assert.ok(shell.includes('推进一轮'), '★那枚的名字与状态栏提示同一口径');
+    assert.ok(!settings.includes('data-action="advance-world"'),
+        '★leg162：设置页里不许再画第二枚（重复入口正是本判据当初撤参数页那枚的理由）');
     // ★旧版那条判据的**实质**要保住：面板说"要推请按「推进一轮」"时，那枚按钮必须真的存在。
     assert.ok(params.includes('「推进一轮」'), '关着总闸时那句指路仍要在（它在总闸卡的后果句里）');
 });
@@ -3224,35 +3303,46 @@ test('★★★leg103·G：BLACKLIST 第二批漏网（引擎/落账/入账/账�
     assert.ok(full.params.length > 1000 && full.settings.length > 1000, '前置：参数页与设置页真渲染了东西');
 });
 
-test('★leg103·H：那四句指路必须指向按钮真正所在的页签（设置页），不许再指参数页/观棋窗口', () => {
+test('★leg103·H（leg162 改指新坐标）：那四句指路必须指向按钮真正所在的地方——现在是「窗口顶部」', () => {
     // 病（用户实机路线）：三处状态栏 + 一处总闸提示都在教玩家"去按「推进一轮」"，
     //   而 leg52 已把那枚按钮从参数页撤走 ⇒ 指路指向一个**没有该按钮**的页签。
     // ★★本判据第一版**自己红了一次**（如实留档）：它拿 `/观棋窗口的「推进一轮」/` 扫整个 `render.js` 源码，
     //   而 `render.js:142` 那段**历史注释**正引用着这句旧话（"状态栏三处说「要推请按观棋窗口的…」"）⇒ 假红。
     //   ⇒ 口径改成**判玩家真会读到的产物**（`textOnly` 之后的面板文本）＋ `web/` 那侧只判**状态栏字符串**。
     //     注释里引用旧话是**留档**，不是回潮；产物里出现旧话才是回潮。
+    // ★★★leg162（用户令「**上移就是独立于设置页了…整个窗口的上方**」）：那枚按钮**又搬了一次家**——
+    //   从设置页底部那张「操作」卡升进**窗口外壳的动作条**（`settings.html`，八页常驻）。
+    //   ⇒ leg103 那条**实质一个字没撤**（指路必须指向按钮真正所在的地方），只是"真正所在"
+    //     从"设置页"变成了"**窗口顶部**"（而"窗口顶部"比"某一页"更稳：八页都看得见它）。
+    //   ★如实登记：这一条判据**换了一次坐标**，不是放宽——反面那两种旧指法照旧锁死，
+    //     并**新增**了"面板可见文本里不许再出现「设置页的「推进一轮」」"（那句话现在也是错的）。
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
+    const shell = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
     const full = renderAll(world(), { config: CONFIG, oldVolumes: VOLUMES });
     const panelText = deepStrings(full).map(textOnly).join('\n');
-    // 反面：玩家可见文本里不许再出现这两种指法
+    // 反面：玩家可见文本里不许再出现这三种指法
     assert.ok(!panelText.includes('参数页的「推进一轮」'), '★面板上不许再指「参数页的「推进一轮」」');
     assert.ok(!panelText.includes('观棋窗口的「推进一轮」'), '★面板上不许再指「观棋窗口的「推进一轮」」（观棋是页签，不是窗口）');
-    // 正面：总闸那句必须指出**设置页**
+    assert.ok(!panelText.includes('设置页的「推进一轮」'),
+        '★★leg162：按钮已升进窗口外壳 ⇒ 「设置页的…」这句话**现在也是错的**（它会把玩家领到一页没有它的地方）');
+    // 正面：总闸那句必须指出**窗口顶部**
     // ★本判据第二版又自己红了一次（如实留档）：`textOnly` 把每个标签折成**换行**，
     //   于是 `按<b>设置页</b>的…` 取出来是 `按\n设置页\n的…` ⇒ 直接 includes 那句会假红。
     //   ⇒ 折白之后再判（判的是"玩家连起来读到的字"，与标签怎么切无关）。
     const flat = panelText.replace(/\s+/g, '');
-    assert.ok(flat.includes('按设置页的「推进一轮」'), '★参数页总闸那句必须指设置页');
+    assert.ok(flat.includes('按窗口顶部的「推进一轮」'), '★参数页总闸那句必须指「窗口顶部」');
     // `web/` 那侧的状态栏是**源码里的字符串**（要真机触发才印出来）⇒ 只能扫源码，但只扫 `setStatus/status(` 那些行
     const statusLines = web.split('\n').filter((l) => /(setStatus|status)\(/.test(l));
     assert.ok(statusLines.length >= 3, `前置：状态栏调用点应当有若干处（实测 ${statusLines.length}）`);
     for (const l of statusLines) {
         assert.ok(!/参数页的「推进一轮」/.test(l), `★状态栏还在指参数页：${l.trim().slice(0, 80)}`);
+        assert.ok(!/设置页的「推进一轮」/.test(l), `★状态栏还在指设置页（按钮已经不在那儿了）：${l.trim().slice(0, 80)}`);
     }
-    assert.ok(statusLines.some((l) => l.includes('设置页的「推进一轮」')), '★状态栏必须指「设置页的「推进一轮」」');
-    // 前置自证：那枚按钮**真的**在设置页（否则"指对页签"是一句空话）
-    assert.ok(full.settings.includes('data-action="advance-world"'), '前置：设置页真有那枚按钮');
-    assert.ok(!full.params.includes('data-action="advance-world"'), '前置：参数页确实没有它（这正是当初指错的原因）');
+    assert.ok(statusLines.some((l) => l.includes('窗口顶部的「推进一轮」')), '★状态栏必须指「窗口顶部的「推进一轮」」');
+    // 前置自证：那枚按钮**真的**在窗口外壳里（否则"指对地方"是一句空话）
+    assert.ok(shell.includes('data-action="advance-world"'), '前置：外壳动作条真有那枚按钮');
+    assert.ok(!full.settings.includes('data-action="advance-world"'), '前置：设置页渲染产物里确实没有它');
+    assert.ok(!full.params.includes('data-action="advance-world"'), '前置：参数页也没有它（这正是当初指错的原因）');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════════
@@ -3456,8 +3546,11 @@ test('★★★leg143·A：「插件对你的对话做了什么」那一卡**搬
     assert.ok(!settings.includes('data-inject-switch'), '★设置页不许残留任何注入开关');
     assert.ok(!settings.includes('id="sw2_tag_max"'), '★设置页不许残留那个条数框');
     // ③ **反向自证**（防上面那三条"不许有"是空绿：设置页真渲染出来了吗）
-    assert.ok(settings.includes('data-action="advance-world"'), '★前置：设置页确实渲染出来了（拿它必有的一枚按钮对照）');
-    assert.ok(settings.includes('id="sw2_model"'), '★前置：设置页那张「模型通道」卡照旧在原位（搬走的只有那一卡）');
+    // ★★★leg162：原先这里拿「操作」卡那枚 `data-action="advance-world"` 当对照——
+    //   那一卡（连同两枚按钮）已整张升进**窗口外壳的动作条** ⇒ 改用**与本笔无关、且必然在**的一格对照
+    //   （「模型通道」卡里的 `id="sw2_model"`，就是下面那条；两条对照不重复）。
+    assert.ok(settings.includes('id="sw2_model"'), '★前置：设置页确实渲染出来了（拿「模型通道」那张卡必有的一格对照）');
+    assert.ok(settings.includes('旧卷与存储'), '★前置：设置页最后那张卡照旧在原位（搬走的只有「操作」那张）');
     assert.ok(params.includes('data-action="param-undo"'), '★前置：参数页确实渲染出来了（撤销那一卡仍在）');
 });
 

@@ -73,12 +73,12 @@ export function createBookRebaselineHub({
     async function handler() {
         const meta = readHotMeta();
         const world = meta ? loadHotAccount(meta) : null;
-        if (!world) { say('⚠ 世界还没载入——先打开一个世界再按这颗'); return; }
+        if (!world) { say('注意：世界还没载入——先打开一个世界再按这颗'); return; }
         const got = await currentBookFingerprint(getCtx());
-        if (!got?.fresh) { say('⚠ 现在没读到书（世界书没挂载/未加载）——一个字节都没改，稍后再试'); return; }
+        if (!got?.fresh) { say('注意：现在没读到书（世界书没挂载/未加载）——一个字节都没改，稍后再试'); return; }
         const before = world.context?.setting?.frozen?.fingerprint ?? '';
         // ★world 存在但账里没有 setting 那一层（半成品档）⇒ 也如实报错、不写（本仓"空着就是空着"）
-        if (!world.context?.setting?.frozen) { say('⚠ 这份世界账里没有设定那一层——按不了这颗（先跑一次初始化或导入一份完整档）'); return; }
+        if (!world.context?.setting?.frozen) { say('注意：这份世界账里没有设定那一层——按不了这颗（先跑一次初始化或导入一份完整档）'); return; }
         const setting = {
             ...(world.context?.setting || {}),
             frozen: { ...(world.context?.setting?.frozen || {}), fingerprint: got.fresh },
@@ -93,8 +93,8 @@ export function createBookRebaselineHub({
         });
         refreshWorld(next);
         refreshSections(['setting']);
-        say(`✔ 已按现在这本书记下新的来路（${got.fresh}）——设定一个字没重抽，要重抽请按「只重抽设定」`
-            + (flushed?.ok ? '' : '（⚠ 落盘没确认，见控制台）'));
+        say(`已按现在这本书记下新的来路（${got.fresh}）——设定一个字没重抽，要重抽请按「只重抽设定」`
+            + (flushed?.ok ? '' : '（注意：落盘没确认，见控制台）'));
     }
 
     // ★闸与"看得见"复用 `web/long-task.js`（与那三个长动作同一把尺）：它**不是**长活儿，

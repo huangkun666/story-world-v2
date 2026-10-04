@@ -100,3 +100,31 @@ test('leg25 e：autoComposeSource 失败路径也要交出形状（不抛、不�
         restore();
     }
 });
+
+test('初始化接线只交出生效原文副本，切聊天时废弃尚未完成的取书', async () => {
+    const ctx = fakeCtx({ book: null });
+    ctx.chatId = 'one';
+    const disabled = { uid: 1, comment: '甲', content: '甲原文', disable: true };
+    ctx.worldInfo = [disabled];
+    ctx.extensionSettings.story_world_v2 = { abstractSelections: { one: { mode: 'custom', selectedIds: ['world-info:1'], reads: { 'world-info:1': { mode: 'full' } } } } };
+    const restore = installCtx(ctx);
+    try {
+        const mod = await import('../web/index.js?initsrc-contract');
+        const actual = await mod.autoComposeSource();
+        assert.deepEqual(actual.worldInfoEntries, actual.effectiveEntries);
+        assert.equal(actual.worldInfoEntries.length, 1);
+        assert.equal(actual.worldInfoEntries[0].disable, false);
+        assert.ok(!actual.text.includes(ctx.characters[0].description));
+        delete ctx.worldInfo;
+        let release;
+        ctx.loadWorldInfo = () => new Promise(resolve => { release = resolve; });
+        const pending = mod.autoComposeSource();
+        await new Promise(resolve => setImmediate(resolve));
+        ctx.chatId = 'two';
+        release({ entries: [{ uid: 1, comment: '旧', content: '旧聊天正文' }] });
+        const stale = await pending;
+        assert.equal(stale.ok, false);
+        assert.deepEqual(stale.worldInfoEntries, []);
+        assert.equal(stale.text, '');
+    } finally { restore(); }
+});

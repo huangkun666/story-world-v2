@@ -691,7 +691,7 @@ test('★leg97 · 说书⑰：**并页**——四层是主层，观棋那四块�
     };
     const out = renderAll(w, {});
     const merged = mergedMainHtml(out);
-    for (const [k, anchor] of [['infoband', 'sw2-infoband'], ['agendaStrip', 'sw2-agenda-strip'], ['side', 'sw2-map-details']]) {
+    for (const [k, anchor] of [['infoband', 'sw2-infoband'], ['agendaStrip', 'sw2-agenda-strip'], ['side', 'sw2-map-entry']]) {
         const n = merged.split(anchor).length - 1;
         assert.equal(n, 1, `★附层那一块「${k}」必须恰出现一次（实得 ${n}）：它漏了就是并页丢东西，多了就是两块各印一遍`);
     }
@@ -703,56 +703,15 @@ test('★leg97 · 说书⑰：**并页**——四层是主层，观棋那四块�
     //   ★反向自证的前置：这一页**得真有左栏**（否则上面两条在"根本没渲染出两栏"时也会绿 —— 空绿）
     assert.ok(merged.includes('sw2-merged-main'), '★前置：这一页必须真的拼出了左栏（不然"动态流不在"是空绿）');
     assert.ok(!merged.includes('sw2-digest'), '★撤掉的时局句不许回流（它与"大势"是同一件事的两种说法）');
-    // ★正向：主层（四层）必须真的在合并产物里，而且**排在信息带之后**（leg98 补四的新口径）
-    assert.ok(merged.includes('sw2-pan-head'), '★主层（四层）要在合并产物里（前置：这一页得真有说书页头）');
-    // ★★★leg98 补四（用户令「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
-    //   ①**信息带升成页头**：它必须在**说书页头之后、四层正文之前**（原来它排在页尾 ⇒ 用户要滚一万多字才看见）；
-    //   ②这一页**分两栏**：左栏＝故事轴（四层 ＋ 自证），右栏＝盘算总览 ＋ 地图。
-    //   ★★★leg99 改口径（同一条令的后半句「**但要注意两列都能独自滑动**」）：
-    //     · 左栏**不再有动态流**（③那条旧断言已按新令重写，不是删掉了事）；
-    //     · 两栏**各自独立滚动** —— 这是**样式层**的事（`web/style.css`），本文件测不到，
-    //       所以那半条在下面的样式判据里咬（★"同一件事两处表达"的反面：各测各的那一层）。
-    const atHead = merged.indexOf('sw2-pan-head'), atBand = merged.indexOf('sw2-infoband');
-    const atGrid = merged.indexOf('sw2-merged-grid'), atMain = merged.indexOf('sw2-merged-main'), atSide = merged.indexOf('sw2-merged-side');
-    assert.ok(atHead >= 0 && atBand > atHead, '★①信息带要排在说书页头**之后**');
-    assert.ok(atBand < atGrid, '★①信息带要在**两栏之前**（升成页头，整宽）');
-    assert.ok(atGrid > 0 && atMain > atGrid && atSide > atMain, '★②两栏容器在位（左栏在右栏之前）');
-    const side = merged.slice(atSide);
-    assert.ok(side.includes('sw2-agenda-strip') && side.includes('sw2-map-details'), '★②右栏＝盘算总览 ＋ 地图');
-    // ★★leg99（本笔在这里连踩四次**同一个病根：锚点错位**，全留档，因为它是本仓判据最常见的错法）：
-    //   ①按 `indexOf('</div>')+6` 猜页头长度 —— 那个偏移只在"裸 panorama"上成立，当场红；
-    //   ②按"完整开标签"的长度切左栏 —— 可 `atMain`/`atSide` 指的是**类名起始**
-    //     （`merged.indexOf('sw2-merged-main')`），所以两个切片都以 `<div class="` **之后**开头、
-    //     也都会把**下一个容器的开标签前半截**带进来（`<div class="`）；
-    //   ③我写锚点常量时顺手把那行**折成两行** ⇒ 常量里多了一个换行，`.length` 与产品差一位；
-    //   ④按"长度相等"困惑了半天 —— 两边都 1325 却仍不等，是**把首个不同位置印出来**才看见真相。
-    //   ⇒ 定稿：**一个长度都不算**，只用产品自己的两个边界（说书页头那条正则 / 右栏那个 `<`）。
-    //   ★纪律：判据里当锚点用的字符串，**形状必须与产品里那一处逐字一致**；红了先问"我的切点对不对"。
-    const sideStart = merged.lastIndexOf('<', atSide);        // 右栏容器真正开始处
-    const main = merged.slice(atMain, sideStart);             // 左栏（含它自己的开标签尾部）
-    // ★③左栏＝故事轴（动态流已按用户令撤走 ⇒ 这里只钉"四层与自证在左栏"）
-    for (const [k, anchor] of [['四层', 'sw2-pan-dashi'], ['自证闸', 'sw2-pan-selfcheck']]) {
-        assert.ok(main.includes(anchor), `★③左栏要有${k}（${anchor}）`);
-    }
-    // ★★leg99 核心：左栏内容必须**恰好**是"四层去掉页头那一段"——
-    //   多一节＝又往里接了别的块（动态流当年就是这么接进来的），少一节＝丢了正文。
-    const pan = String(out.panorama || '');
-    const panHead = /^<div class="sw2-pan-head">[\s\S]*?<\/div>/.exec(pan);
-    assert.ok(panHead, '★前置：panorama 要以说书页头开头（不然下面这条是空绿）');
-    const gt = main.indexOf('>');                             // 左栏开标签在这个切片里到哪儿结束
-    assert.ok(gt > 0 && gt < 60, `★前置：左栏开头得是个开标签（实得 ${JSON.stringify(main.slice(0, 40))}）`);
-    const mainBody = main.slice(gt + 1, -6);                  // 开标签之后 → 产品补的那个 `</div>` 之前
-    {
-        const expect = pan.slice(panHead[0].length);
-        let i = 0;
-        while (i < Math.min(mainBody.length, expect.length) && mainBody[i] === expect[i]) i++;
-        assert.equal(mainBody, expect,
-            `★★leg99：左栏内容必须**恰好**是四层去掉页头那一段（多一节＝又接了别的块；少一节＝丢了正文）\n`
-            + `  左栏 ${mainBody.length} 字 vs 期望 ${expect.length} 字 · 首个不同位置 = ${i}\n`
-            + `  左栏：${JSON.stringify(mainBody.slice(Math.max(0, i - 30), i + 50))}\n`
-            + `  期望：${JSON.stringify(expect.slice(Math.max(0, i - 30), i + 50))}`);
-    }
-    assert.ok(!main.includes('sw2-agenda-strip') && !main.includes('sw2-map-details'), '★盘算总览与地图只许在右栏（不许两边各印一份）');
+    // leg174: approved recent-story home replaces the two-column layout.
+    assert.ok(merged.includes('data-story-home-panel') && merged.includes('data-story-detail'), '首页和完整故事都在');
+    const drawer = merged.slice(merged.indexOf('<aside class="sw2-story-drawer"'));
+    assert.ok(drawer.includes('sw2-infoband') && drawer.includes('sw2-agenda-strip') && drawer.includes('sw2-map-entry'), '附层按需查看');
+    const main = merged.slice(merged.indexOf('sw2-merged-main'), merged.indexOf('<aside class="sw2-story-drawer"'));
+    assert.ok(main.includes('甲宗异动'), '故事内容有实际账本依据');
+    assert.ok(!main.includes('sw2-agenda-strip') && !main.includes('sw2-map-entry'), '首页和故事正文不重复附层');
+    assert.equal(merged.split('data-action="open-map"').length - 1, 1, '地图只提供一个弹窗入口');
+    assert.equal(merged, out.panorama.replace('<!-- STORY_WORLD_ATTACH -->', out.board.infoband + out.board.agendaStrip + out.board.side), '组合完整保留新渲染产物');
 });
 
 test('★★★leg99 · 说书⑳：**两栏各自独立滑动**（用户令「但要注意两列都能独自滑动」）', () => {
@@ -862,13 +821,32 @@ test('★★leg98 · 说书⑲：**线头那一栏要有自己的台面**（不�
     //     ⇒ 栏目与面卡糊成一片。这不是"文字看不清"（标题本来就 12.76:1），是**这一栏没有面**。
     //   ★判据按**算出来的对比度**咬（不是咬某个十六进制写死的值）：换色可以，**不许换回"没差别的底"**。
     const css = readFileSync(new URL('../web/style.css', import.meta.url), 'utf8');
+    // ★★★leg164：**这一条改成"认令牌"**（用户 2026-10-01 当场拍「改判据⑲，让它认令牌」）。
+    //   病（本笔量出来的，两条都是**尺子**的毛病、不是台面没了）：
+    //     ① 它原来要求那一栏的底是**十六进制字面量**——而 leg164 把配色收进令牌层之后，
+    //        那一处写成 `var(--sw2-card-3)` ⇒ 取不到十六进制 ⇒ 判据红（台面其实好好的）。
+    //     ② 面卡底那一句原来是 `/#20252f/.test(css) ? '#20252f' : …`，而 `#20252f` 是**旧**面卡底；
+    //        leg164 换色之后它只活在**注释**里（注释没剥）⇒ 那句**永远走第一支**、拿旧值当尺子
+    //        （实测：按新台面阶梯算出来只有 **1.036:1** ⇒ 红；按真值算是 **1.147:1** ⇒ 本该绿）。
+    //   ⇒ 两头都改成**从 `:root` 取真值**，并**认一层 `var()`**。
+    //   ★口径一个字没放宽：仍是"这一栏要有自己的底、与面卡底 ≥1.08:1、不许同色、不许亮过金"。
+    const cssNoComment = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const rootVars = new Map();
+    for (const m of cssNoComment.matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;/g)) rootVars.set(m[1], m[2]);
+    /** 把一个色值解成十六进制：直接是字面量就取它；写成 `var(--x)` 就到 `:root` 里查那一格。 */
+    const resolveHex = (v) => {
+        const direct = /#[0-9a-fA-F]{6}/.exec(v || '');
+        if (direct) return direct[0];
+        const byVar = /var\(\s*(--[\w-]+)\s*\)/.exec(v || '');
+        return byVar ? (rootVars.get(byVar[1]) || '') : '';
+    };
     const rule = /\.sw2-pan-face\s+\.sw2-pan-thread\s*\{([^}]*)\}/.exec(css);
     assert.ok(rule, '★必须有一条 `.sw2-pan-face .sw2-pan-thread` 规则（线头那一栏的台面就住这儿）');
     const body = rule[1];
     const bg = (/background\s*:\s*([^;]+)/.exec(body) || [])[1]?.trim();
     assert.ok(bg && bg !== 'transparent', `★这一栏必须有自己的底，不许是 transparent（现在是「${bg}」）`);
-    const hex = /#([0-9a-fA-F]{6})/.exec(bg);
-    assert.ok(hex, `★底色要写成十六进制实色（判据要能算对比度）：${bg}`);
+    const bgHex = resolveHex(bg);
+    assert.ok(bgHex, `★底色要能算成实色（十六进制字面量，或指到 \`:root\` 里某个十六进制令牌）：${bg}`);
 
     // WCAG 相对亮度 / 对比度（判据自带，不 import 产品——样式是数据不是逻辑）
     const lum = (h) => {
@@ -877,14 +855,17 @@ test('★★leg98 · 说书⑲：**线头那一栏要有自己的台面**（不�
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
     const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-    const faceCard = (/#20252f/.test(css) ? '#20252f' : (/:root[^}]*--sw2-card\s*:\s*(#[0-9a-fA-F]{6})/.exec(css) || [])[1]);
-    const rFace = ratio(hex[0], faceCard);
+    // ★面卡底与金色**都从令牌取**（原来一个是写死的旧值、一个是写死的 `#e3ad55`）
+    const faceCard = rootVars.get('--sw2-card');
+    const amber = rootVars.get('--sw2-amber');
+    assert.ok(faceCard && amber, '★前置：`:root` 里必须取得到 `--sw2-card` 与 `--sw2-amber`（否则下面是空绿）');
+    const rFace = ratio(bgHex, faceCard);
     assert.ok(rFace >= 1.08, `★这一栏与面卡底必须有可见的台面差（实测 ${rFace.toFixed(3)}:1，要 ≥1.08）；`
         + `「差 0」正是用户指的那处病`);
     // ★反向之证：**同色**必须被判死（把底写成面卡那个色 ⇒ 等于回到 transparent 那个观感）
-    assert.ok(!(hex[0].toLowerCase() === faceCard.toLowerCase()), '★这一栏的底不许与面卡底同色（那就是"没改"）');
+    assert.ok(!(bgHex.toLowerCase() === faceCard.toLowerCase()), '★这一栏的底不许与面卡底同色（那就是"没改"）');
     // ★另一头也钉：它也不能亮到跟"最新一轮"那枚金色抢位（保持在暗色台面族里）
-    assert.ok(ratio(hex[0], '#e3ad55') > 3, '★这一栏仍是暗色台面（不许亮到压过金/红那两个强调色）');
+    assert.ok(ratio(bgHex, amber) > 3, '★这一栏仍是暗色台面（不许亮到压过金/红那两个强调色）');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -947,7 +928,7 @@ function archiveWorld() {
     return w;
 }
 
-test('★★★leg160 · 说书㉓：**这一页画多少由「往回看轮数」定**——不填＝只画热层；填了＝窗口内的事都回来（含归档、不许读重）', async () => {
+test('★★★leg160/leg168 · 说书㉓：**这一页画多少由「往回看轮数」定**——不填＝只画热层；填了＝窗口内的线**整条**都讲（含归档、不许读重）', async () => {
     const w = archiveWorld();
     // ① 不填 ⇒ **只画热层**（老调用方零扰动：这一条是"旋钮没接上时不许变样"）
     const a0 = buildPanorama(w);
@@ -971,9 +952,9 @@ test('★★★leg160 · 说书㉓：**这一页画多少由「往回看轮数�
         assert.ok(!/panoramaRangeFromValue|normalizePanoramaRange|PANORAMA_SEGMENT|setPanoramaRange/.test(src),
             `★${tag} 里不许再有那一族的函数名（半条都不留）`);
     }
-    // ② 填了 ⇒ **窗口内的事都回来**（含归档），而且**不与热层读重**
+    // ② 填了 ⇒ **窗口内的线都回来**（含归档），而且**不与热层读重**
     //   ★夹具的 `meta.tick = 10`、归档那 4 件在第 1–5 轮 ⇒ 窗口 11 轮（下界第 0 轮）把它们全收进来，
-    //     连第 0 轮那件（开局那颗种子）也在；窗口 10 轮（下界第 1 轮）则把第 0 轮那件挡在外面。
+    //     连第 0 轮那件（开局那颗种子）也在。
     const a = buildPanorama(w, { panelTurns: 11 });
     const ids = a.threads.flatMap((t) => t.events.map((e) => e.id));
     assert.equal(a.stats.events, w.events.length + 4,
@@ -982,30 +963,82 @@ test('★★★leg160 · 说书㉓：**这一页画多少由「往回看轮数�
     for (const id of ['ev_1_9', 'ev_2_9', 'ev_3_9', 'ev_4_9']) {
         assert.ok(ids.includes(id), `★归档里的 ${id} 必须回到某条线上`);
     }
-    //   ★★边界那一件：第 0 轮的事在"最近 10 轮"之外（下界＝10−10+1＝1）⇒ 它**必须**被挡在外面。
-    //     这一条是**窗口真的在裁**的正面证据（只证"归档进来了"证不了裁剪）。
+    // ②b ★★★leg168（用户令「**窗口要改成按线裁**」）：**这一条是本笔的核心**——
+    //   **一条线只要有一件落在窗口内，它整条都讲（起头→过程→结果）。**
+    //   ★夹具里 `ev_0_1`（第 0 轮 · 那颗种子）是 `ev_1_1`（第 1 轮）的来路、`ev_2_1`（第 2 轮）又接着它
+    //     ⇒ 这三件是同一条线（连通分量）。窗口 10 轮（下界第 1 轮）时**只有 `ev_0_1` 落在窗口外**：
+    //     旧口径（按事件裁）会把它切掉（那一屏 **19 件**），新口径**整条都讲**（**20 件**）。
+    //   ★★这一条**必须两侧都咬**：只咬"件数相同"证不了"整条讲"，还要点名那三件在**同一条线**上。
     const a10 = buildPanorama(w, { panelTurns: 10 });
     const ids10 = a10.threads.flatMap((t) => t.events.map((e) => e.id));
-    assert.equal(a10.stats.events, a.stats.events - 1, '★窗口 10 轮 ⇒ 比窗口 11 轮正好少一件（第 0 轮那件）');
-    assert.ok(!ids10.includes('ev_0_1'), '★第 0 轮那件必须落在窗口外（"最近 10 轮"＝第 1–10 轮）');
-    // ③ **窗口是真的**（边界两侧都咬）：窗口 5 轮 ⇒ 下界第 6 轮 ⇒ 归档那 4 件（第 1–5 轮）一件都不许过来
+    assert.equal(a10.stats.events, a.stats.events,
+        `★★★窗口 10 轮与 11 轮这一屏**件数相同**（第 0 轮那件是"它那条线的开头"⇒ 整条都讲）——`
+        + `旧口径（按事件裁）在这里正好少一件：实得 ${a10.stats.events} vs ${a.stats.events}`);
+    assert.ok(ids10.includes('ev_0_1'), '★★★第 0 轮那件必须跟它那条线一起印出来（它就是这条线的开头）');
+    //   ★"整条都讲"的**可证形状**：窗口那一档里，第 0 轮那条线的**成员**与"不设窗（整本账）"那一档逐字相同。
+    //     为什么不用"三件都在"那种写法：这条线的成员不止三件——夹具里它还被另外两条边并过
+    //     （`处境根`那条边：`ev_1_9` 牵动万法阁、而万法阁在这条线上有谋划 `a_1_1`；`plot→owner` 那条边把
+    //      `ev_9_1` 也并了进来）⇒ 实得 `[ev_0_1, ev_1_1, ev_1_9, ev_2_1, ev_2_9, ev_9_1]`。
+    //     ★**成员集必须与全量分组一致**这一条才是"整条都讲"的真形状（写死成员名单会随夹具漂）。
+    const memOf = (p, id) => {
+        const t = p.threads.find((x) => x.events.some((e) => e.id === id));
+        return t ? t.events.map((e) => e.id).sort() : [];
+    };
+    const whole = buildPanorama(w, { panelTurns: 1e9 });
+    assert.ok(memOf(whole, 'ev_0_1').length >= 4,
+        `★前置：第 0 轮那条线在"不设窗"那一档里是多件的（实得 ${JSON.stringify(memOf(whole, 'ev_0_1'))}）`);
+    assert.deepEqual(memOf(a10, 'ev_0_1'), memOf(whole, 'ev_0_1'),
+        '★★★"整条都讲"＝ 窗口那一档里那条线的成员与"不设窗"那一档**逐字相同**（一件不缺、次序照账上）');
+    assert.ok(a10.stats.threadsOutOfWindow === 0,
+        '★这一档一条线都没被裁掉（每一组都还有成员在窗口内）——它与下一档合起来才证得出"窗口真的在裁线"');
+    // ③ **窗口是真的**（两侧都咬）：窗口 5 轮 ⇒ 下界第 6 轮
+    //   ★leg168：这一条现在咬的是**"整条线都在窗外 ⇒ 整条不上这一页"**——那 4 件归档分属两条线：
+    //     · `ev_3_9`/`ev_4_9` 那条**整条**在第 3–4 轮 ⇒ **一件都不上这一页**；
+    //     · `ev_1_9`/`ev_2_9` 那条**跨着窗口**（它被并进了 `ev_9_1` 那条线，第 9 轮在窗内）
+    //       ⇒ **整条都讲**（这两件跟着回来）。★这正是"按线裁"与"按事件裁"的分水岭：
+    //       旧口径下这两件一件都看不见（它们自己落在窗外），新口径下它们跟着自己那条线回来。
     const narrow = buildPanorama(w, { panelTurns: 5 });
     const narrowIds = narrow.threads.flatMap((t) => t.events.map((e) => e.id));
-    for (const id of ['ev_1_9', 'ev_2_9', 'ev_3_9', 'ev_4_9']) {
-        assert.ok(!narrowIds.includes(id), `★窗口外（第 1–5 轮）的 ${id} 不许出现在"最近 5 轮"那一屏上`);
+    for (const id of ['ev_3_9', 'ev_4_9']) {
+        assert.ok(!narrowIds.includes(id), `★整条线都在窗外的 ${id} 不许出现在"最近 5 轮"那一屏上`);
+    }
+    for (const id of ['ev_1_9', 'ev_2_9']) {
+        assert.ok(narrowIds.includes(id),
+            `★${id} 那条线**有成员落在窗口内**（「万法阁封山自守」·第 9 轮）⇒ 整条都讲（它自己虽然在窗外）`);
     }
     assert.equal(narrow.stats.windowFrom, 6, '★窗口下界＝`tick - 轮数 + 1`（与给模型看的那个窗口同一句话）');
+    assert.ok(narrow.stats.threadsOutOfWindow >= 2,
+        `★★"按线裁"真的裁掉了线（实得 ${narrow.stats.threadsOutOfWindow} 条：这一档账上 9 条线只留 2 条）`);
+    assert.equal(narrow.stats.events, 7,
+        `★并且这一屏确实变短了——只剩两条线共 7 件（实得 ${narrow.stats.events}；`
+        + `那条跨线 6 件 ＋ 第 8 轮那一件）`);
     // ④ **接线层真的把旋钮递下去了**（这一条咬的是"旋钮接了没有"——没接上，上面几条全绿也没用）
     const { renderAll } = await import('../src/render.js');
     const base = renderAll(w, { config: {} });
     assert.equal(buildPanorama(w, { panelTurns: PANEL_WINDOW_TURNS }).stats.events, w.events.length + 4,
         '前置：出厂窗口（50）在这一份夹具上够得到归档那 4 件');
     assert.ok(base.panorama.includes('旧事甲'),
-        '★★★出厂值那一档必须**真的把窗口内的归档画出来**（否则旋钮等于没接上）');
+        '★★★出厂值那一档必须**真的把窗口内那条线的归档画出来**（否则旋钮等于没接上）');
+    assert.ok(base.panorama.includes('旧事丙'),
+        '★★同上：另外那条归档线（`ev_3_9`/`ev_4_9`，第 3–4 轮）也在窗口 50 之内 ⇒ 照旧印出来');
     const tight = renderAll(w, { config: { paramEnv: { 往回看轮数: '5' } } });
-    assert.ok(!tight.panorama.includes('旧事甲'),
-        '★★★把旋钮拧到 5 ⇒ 归档那 4 件（第 1–5 轮之外）**必须从这一页上消失**（旋钮真的在管这一页画多少）');
-    // ⑤ 长账上真量：窗口 50 ⇒ 这一页**不再只画热层那 33 件**，但也**不是 579 件全摊开**
+    assert.ok(!tight.panorama.includes('旧事丙'),
+        '★★★把旋钮拧到 5 ⇒ **整条都在窗外**的那条归档线（`旧事丙`/`旧事丁`）必须从这一页上消失'
+        + '（旋钮真的在管这一页画多少）');
+    //   ★★★leg168 勘正（**这一条是旧判据的正面反转，留档**）：旧版这里咬的是「`旧事甲` 必须消失」——
+    //     那是"按事件裁"的产物（那一件自己落在第 1 轮、窗口 5 的下界是第 6 轮 ⇒ 逐件切掉）。
+    //     按线裁之后它**照旧在**：它那条线有成员落在窗口内（`万法阁封山自守`·第 9 轮）⇒ 整条都讲。
+    //     ★这条**不是放宽**：同一处还咬着反面（`旧事丙` 那条整条在窗外的线必须消失），
+    //       一正一反合起来才是"窗口按线裁"这句口径的完整形状。
+    assert.ok(tight.panorama.includes('旧事甲'),
+        '★★★窗口 5 那一档里「旧事甲」**照样在**：它那条线有成员落在窗口内（第 9 轮那件）⇒ 整条都讲'
+        + '（这正是用户令「按线裁」；旧版这一条咬的是"必须消失"）');
+    // ⑤ 长账上真量：这一页**不是全账**，而且窗口这一档**比"只画热层"多**
+    //   ★★★leg168 勘正这一档的读数（**这一条是本笔最大的代价，如实写在这里**）：
+    //     按线裁之后，这份 400 轮合成账上"窗口 50"**不再是 73 件，而是 574 件**
+    //     （那份账里的一条线有 66–94 件 ⇒ 一条线擦到窗口边，就把它那一整段全带回来）。
+    //     ⇒ 这一条**不再咬"页面不会变长"**（那句话在按线裁之下本来就不成立：它是 leg160 按事件裁的产物），
+    //       改咬两件还立得住的事：① 窗口内**不是全账**（账上仍有整条线落在窗外）；② 比只画热层多。
     const longPath = 'F:/deepseek/tmp/leg153/long-world-400.json';
     if (existsSync(longPath)) {
         const lw = JSON.parse(readFileSync(longPath, 'utf8'));
@@ -1015,12 +1048,15 @@ test('★★★leg160 · 说书㉓：**这一页画多少由「往回看轮数�
             '★前置：那份 400 轮装置里真有归档来路（没有它这条判据是空绿）');
         assert.ok(B.stats.events > A.stats.events,
             `★窗口内必须比"只画热层"多（现在 ${A.stats.events} → 窗口 ${B.stats.events}）`);
+        assert.ok(B.stats.threadsOutOfWindow >= 1,
+            `★账上仍有**整条线**落在窗外、不上这一页（实得 ${B.stats.threadsOutOfWindow} 条）——`
+            + `按线裁不是"把整本账摊开"`);
         assert.ok(B.stats.events < B.stats.eventsAll,
-            `★但也**不许把整本账摊开**（窗口 ${B.stats.events} 件 < 账上 ${B.stats.eventsAll} 件）`);
+            `★窗口这一档仍**不是全账**（窗口 ${B.stats.events} 件 < 账上 ${B.stats.eventsAll} 件）`);
     }
 });
 
-test('★★leg160 · 说书㉔：**窗口的边界**——窗口内外的归档两侧都咬 · 账上总数照旧报得对 · 窗口外的一件不许漏进来', () => {
+test('★★leg160/leg168 · 说书㉔：**窗口的边界**——窗口内的归档两侧都咬 · 账上总数照旧报得对 · ★窗口外的件只许"跟着它那条线"回来', () => {
     const w = archiveWorld();
     const ticksIn = (p) => p.threads.flatMap((t) => t.events.map((e) => e.tick));
     // ① 窗口 10 轮（下界第 1 轮）⇒ 归档那 4 件（第 1–5 轮）**在**；窗口 5 轮（下界第 6 轮）⇒ **一件都不留**
@@ -1030,16 +1066,45 @@ test('★★leg160 · 说书㉔：**窗口的边界**——窗口内外的归档
         assert.ok(wideIds.includes(id), `★窗口内的归档那件 ${id} 必须回来（读得到归档，窗口才有意义）`);
     }
     assert.ok(wideIds.includes('ev_1_1'), '★热层里落在窗口内的事照旧在（窗口不是"只给归档"）');
-    assert.ok(ticksIn(wide).every((t) => t >= 1),
-        `★窗口外的一件都不许漏进来（实得第 ${ticksIn(wide).join(',')} 轮）`);
+    // ①b ★★★leg168：**"窗口外的一件都不许漏进来"这条口径整条作废**（它是"按事件裁"的产物，
+    //   而正是它把用户看到的那些"不像开头的事件"造出来的：一条线被拦腰切断，剩下的半截没有开头）。
+    //   新口径（用户令「**窗口要改成按线裁**」）：**一条线只要有一件落在窗口内，它整条都讲**。
+    //   ⇒ 这一条改成**两侧都咬**：
+    //     ① 正面：真有"跨线"（有件落在窗外、它那条线却在窗内）⇒ 那几件**必须在**，而且是整条一起在；
+    //     ② 反面：整条线都在窗外的（下面窗口 5 轮那两条归档线）⇒ **一件都不留**。
+    const wf = wide.stats.windowFrom;
+    const outside = wide.threads.flatMap((t) => t.events.filter((e) => e.tick < wf).map((e) => ({ e, t })));
+    assert.ok(outside.length > 0,
+        `★前置：这一档真有落在窗口外的件（实得 ${outside.length} 件）——没有它，"整条都讲"这条是空绿`);
+    for (const x of outside) {
+        assert.ok(x.t.events.some((e) => e.tick >= wf),
+            `★窗口外的 ${x.e.id}（第 ${x.e.tick} 轮）只许以"**它那条线也在窗口内**"的身份出现，`
+            + `线 ${x.t.id}「${x.t.name}」在窗内一件都没有 ⇒ 它整条都不该上这一页`);
+    }
+    const cross = wide.threads.find((t) => t.events.some((e) => e.tick < wf));
+    assert.ok(cross && cross.events.some((e) => e.tick >= wf),
+        '★★★那条跨着窗口边界的线**整条**印出来（窗外那半截跟着回来）——这正是用户令「按线裁」');
+    assert.ok(ticksIn(wide).includes(0),
+        `★★★窗口外的第 0 轮那件跟着它那条线回来了（实得第 ${ticksIn(wide).join(',')} 轮）`);
     const narrow = buildPanorama(w, { panelTurns: 5 });
     const narrowIds = narrow.threads.flatMap((t) => t.events.map((e) => e.id));
-    for (const id of ['ev_1_9', 'ev_2_9', 'ev_3_9', 'ev_4_9']) {
-        assert.ok(!narrowIds.includes(id), `★窗口外的归档那件 ${id} 不许过来（边界另一侧）`);
+    for (const id of ['ev_3_9', 'ev_4_9']) {
+        assert.ok(!narrowIds.includes(id),
+            `★那条线**整条**都在窗外（第 3–4 轮）⇒ ${id} 一件都不许过来（边界另一侧）`);
     }
-    // ② 窗口极窄（1 轮）⇒ 也不崩、就是"只剩眼前这一段"
+    for (const id of ['ev_1_9', 'ev_2_9']) {
+        assert.ok(narrowIds.includes(id),
+            `★${id} 那条线**跨着窗口**（并进了第 9 轮那条线）⇒ 整条都讲：它自己虽然在窗外，照旧跟着回来`);
+    }
+    assert.ok(narrow.stats.threadsOutOfWindow >= 2,
+        `★★反面：按线裁真的裁掉了线（实得 ${narrow.stats.threadsOutOfWindow} 条）`);
+    // ② 窗口极窄（1 轮）⇒ 也不崩：**这一档是空屏**（账上最晚一件在第 9 轮，窗口下界＝第 10 轮）
     const tiny = buildPanorama(w, { panelTurns: 1 });
-    assert.ok(tiny.stats.events <= 3, `★窗口 1 轮 ⇒ 只剩第 10 轮那几件（实得 ${tiny.stats.events} 件）`);
+    assert.equal(tiny.stats.events, 0,
+        `★窗口 1 轮（下界第 10 轮）⇒ 账上最晚一件在第 9 轮，这一屏该是空的（实得 ${tiny.stats.events} 件）`);
+    assert.ok(tiny.stats.threadsOutOfWindow >= 2, '★它是**按线**裁空的（不是"逐件切掉"）');
+    assert.ok(/最近 1 轮里没有留下可讲的事/.test(visible(renderPanoramaHtml(w, { panelTurns: 1 }))),
+        '★空屏时那句如实说清 ＋ 指路的话照旧在');
     // ③ 账上总数照旧按**全账**算（与"这一屏画多少"分开——那正是 leg159c 勘正过的那一处）
     assert.equal(wide.stats.eventsFrom, 0, '★账上最早那件事＝第 0 轮（开局那颗种子；同 `bornTick` 的老口径）');
     assert.equal(wide.stats.eventsTo, 9, '★账上最晚那件事＝第 9 轮');
@@ -1056,59 +1121,57 @@ test('★★leg160 · 说书㉔：**窗口的边界**——窗口内外的归档
     assert.ok(/大事纪/.test(empty), '★要给去处（旧账不在这一页上）');
 });
 
-test('★★★leg160 · 说书㉕：**只有一件事的线单独收一栏**（用户拍的那条，本笔留着）——不进卡，但一条都不许丢', () => {
+test('★★★leg167 · 说书㉕：**只有一件事的线留在它那个地方的卡里**（用户令「我现在需要回到以前的效果」）——不进末尾那一栏，但一条都不许丢', () => {
+    // ★★★这一条是 leg160 说书㉕ 的**反向**（那一版咬的是"单事件的线单独收一栏、不进卡"）。
+    //   为什么反过来（用户 2026-10-02 实机，逐字）：
+    //     「**跟以前的叙事结构绝对有变化这个很零散很零散以前没有这么多零散要不然我不会发火，
+    //       现在这个连盘算都放进去了**」＋「**直接回退回退，回退到没有更改ui的时候**」。
+    //   ★量出来的（用户那本真账 `大荒z`，四版对照）：leg158 那一版**一个地方的事全摆在那张卡里**
+    //     （「江州城·西关旧屋」卡上四行：3 件 / 2 件 / 1 件 / 1 件），末尾没有那一栏、卡也不会空；
+    //     leg159b 起把单事件的线**从卡里拿出来**（`f.lines = f.lines.filter(t => t.count !== 1)`），
+    //     leg160 又把窗口变常开 ⇒ 这条"拿出来"每次都执行 ⇒ 卡里只剩长故事（真账上出现"卡上 0 条故事"）、
+    //     末尾堆成一栏零碎（真账 8 条，其中 6 条的名字还是**盘算的目标**）。
+    //   ★leg167 把"拿出来"整条撤掉 ⇒ 本判据跟着反过来咬："留在卡里" ＋ "那一栏不许再出现"。
     const w = archiveWorld();
     const { threads } = buildPanorama(w, { panelTurns: 10 });
-    //   ★`buildFaces` 要拿到**同一个窗口**（它按 `opts.panelTurns` 判"要不要把只有一件事的线拿出卡外"——
-    //     两处同一把尺子；不传就是"只画热层"那一档＝不分栏）
     const m = buildFaces(w, threads, { panelTurns: 10 });
     // ① 前置：夹具里真有一件"只过了一件事的线"（否掉"空绿"）
     assert.ok(threads.some((t) => t.count === 1), '★前置：夹具里得真有单事件的线，否则这条判据是空绿');
-    // ② 它们**不在任何面的卡里**
-    for (const f of m.faces) {
-        for (const t of f.lines) {
-            assert.ok(t.count > 1,
-                `★面「${f.place}」的卡里混进了一条只有一件事的线（「${t.name}」）——它该去末尾那一栏`);
-        }
-    }
-    // ③ 它们**一条都没丢**：那一栏正好收着它们
-    //   ★口径（本笔当场被自证闸咬到的一处）：**一个地方都没记**的那种单事件线留在「各处散落」里
-    //     （那一栏管的是"一个地方都没记"），不进这一栏 —— 两边都收就是同一条线算两遍、闸当场不平。
-    const inCards = new Set(m.faces.flatMap((f) => f.lines.map((t) => t.id)));
-    const looseIds = new Set(m.loose.map((x) => x.line.id));
+    // ② ★本笔恢复的口径：**它们留在卡里**
     const singles = threads.filter((t) => t.count === 1);
-    const looseSingles = singles.filter((t) => t.places.length > 0);
+    const inCards = new Set(m.faces.flatMap((f) => f.lines.map((t) => t.id)));
+    const placedSingles = singles.filter((t) => t.places.some((p) => m.faces.some((f) => f.place === p)));
+    assert.ok(placedSingles.length > 0,
+        '★前置：夹具里得有"只有一件事、落脚处却是个面"的线（没有它，下面那条只是空绿）');
+    for (const t of placedSingles) {
+        assert.ok(inCards.has(t.id),
+            `★线 ${t.id}「${t.name}」只有一件事、落脚处是个面 ⇒ 它必须**留在那张卡里**`
+            + `（用户令「回到以前的效果」——原来它在末尾"只有一件事"那一栏里）`);
+    }
     const scatteredSingles = singles.filter((t) => t.places.length === 0);
-    assert.equal(looseIds.size, looseSingles.length, `★那一栏的条数必须等于"只有一件事、且记了地方"的线数（${looseIds.size} vs ${looseSingles.length}）`);
-    for (const t of looseSingles) {
-        assert.ok(looseIds.has(t.id), `★线 ${t.id} 既不在卡里、也不在那一栏 ⇒ 被吞了（本仓最忌的静默丢失）`);
-        assert.ok(!inCards.has(t.id), `★线 ${t.id} 同时出现在卡里与那一栏（同一条线推了两遍）`);
-    }
     for (const t of scatteredSingles) {
-        assert.ok(!looseIds.has(t.id), `★线 ${t.id} 一个地方都没记 ⇒ 它该留在「各处散落」，不许被这一栏收走（收了闸就不平）`);
-        assert.ok(m.others.some((o) => o.line.id === t.id), '★它确实在「各处散落」里（不是两边都没收）');
+        assert.ok(m.others.some((o) => o.line.id === t.id),
+            `★线 ${t.id} 一个地方都没记 ⇒ 它照旧在「各处散落」里（不是被吞了）`);
     }
-    // ④ ★自证闸照旧平：那一栏是**第三个分类**，不是"又数了一遍"
+    // ③ ★★那一栏**整栏不许再出现**（产物 ＋ 可见文本两面咬）
+    const html = renderPanoramaHtml(w, { panelTurns: 10 });
+    const v = visible(html);
+    assert.ok(!html.includes('sw2-pan-loose'), '★★「只有一件事」那一栏不许再出现（leg159b 的"从卡里拿出来"已整条撤掉）');
+    assert.ok(!/只有一件事/.test(v), `★★页面上不许再有「只有一件事」那一栏：${v.slice(-200)}`);
+    assert.ok(html.includes('sw2-pan-other') || v.includes('各处散落'),
+        '★「各处散落」那一块照旧在（它管的是"一个地方都没记"的线，没撤）');
+    // ④ ★自证闸照旧平，且"单独一栏"那一格**留着、恒为 0**（格在、数变——页脚那句正文格式判据逐字咬着）
     const c = m.census;
-    assert.equal(c.loose, looseSingles.length,
-        `★闸里那一格数的是**线**（按 id 去重），不是"印了几行"（一条线到过两处就是两行）：${JSON.stringify(c)} vs 单事件且记了地方的线 ${looseSingles.length} 条`);
+    assert.equal(c.loose, 0, `★"单独一栏"那一格恒为 0（那一栏撤了）：${JSON.stringify(c)}`);
     assert.equal(c.sum, c.total, `★闸必须平：${c.faced}(面内)＋${c.loose}(单独一栏)＋${c.lone}(单线地点)＋${c.scattered}(散落) ≠ ${c.total}`);
     assert.deepEqual(m.dropped, [], '★不许有一条线掉出页面');
-    //    ★反向自证（方向同上一条）：**在总数上多算一条**（`sum` 不跟着重算）⇒ 当场不平。
+    //    ★反向自证：**在总数上多算一条**（`sum` 不跟着重算）⇒ 当场不平。
     const broken = buildFaces(w, threads, { panelTurns: 10 });
     broken.census.total += 1;
     assert.notEqual(broken.census.sum, broken.census.total, '★反向自证：总数多算一条，闸必须不平');
-    // ⑤ 那一栏**在页面上印出来**，而且与「各处散落」是两处（不许混成一栏）
-    const html = renderPanoramaHtml(w, { panelTurns: 10 });
-    const v = visible(html);
-    assert.ok(/只有一件事/.test(v), `★那一栏要有标题（"只有一件事的 N 条"）：${v.slice(-260)}`);
-    assert.ok(html.includes('sw2-pan-loose'), '★那一栏要有自己的块（与「各处散落」分开）');
-    assert.ok(html.includes('sw2-pan-other') || v.includes('各处散落'), '★「各处散落」那一块照旧在（不是被替换掉了）');
-    // ⑥ ★★★**这份夹具咬不住的那一半，用真账咬**（本笔收尾时真账当场咬红一次，见 §⑧ 那段留档）：
-    //    夹具里"只有一件事的线"**落脚的地方都不是面**（都落在单线地点那一边）⇒ 四个格子**刚好**互斥；
-    //    而真账上有一整批"**只有一件事、但它落脚的地方本来就是个面**"（≥2 条线到过）——
-    //    第一版那四格**各数各的**，这条线**被数了两遍**：真账实测 **8＋14＋9＋1 = 32 > 总 23**。
-    //    ★所以这条判据的两个前置（"真账里有这种线"与"那份装置在不在"）缺一不可，缺了就跳过而不是空绿。
+    // ⑤ ★★**这份夹具咬不住的那一半，用真账咬**（照旧）：
+    //    "只有一件事、但它落脚的地方本来就是个面"的那种线，四个格子**互斥且穷尽**——
+    //    leg159b 之前那四格**各数各的**，真账实测 **8＋14＋9＋1 = 32 > 总 23**（当场不平）。
     const realPath = 'F:/deepseek/tmp/leg153/real-world-59.json';
     if (existsSync(realPath)) {
         const rw = JSON.parse(readFileSync(realPath, 'utf8'));
@@ -1121,32 +1184,25 @@ test('★★★leg160 · 说书㉕：**只有一件事的线单独收一栏**（
                 `★真账 · ${档}：四个格子按线去重之后必须**互斥且穷尽**——`
                 + `${rc.faced}(面内)＋${rc.loose}(单独一栏)＋${rc.lone}(单线地点)＋${rc.scattered}(散落) ≠ 总 ${rc.total}`);
             assert.deepEqual(rm.dropped, [], `★真账 · ${档}：不许有一条线掉出页面`);
-            //   ★口径（本笔第一版写错过一次，留档）：一张卡里不许有**重复的行**；
-            //     但**同一条线出现在两张卡上是正常的**（它落脚在一处、路过另一处）⇒
-            //     不能拿"所有卡的 id 去重后几条"跟"所有卡里几行"比（那样必红，且红得没道理）。
+            //   ★口径：一张卡里不许有**重复的行**；但**同一条线出现在两张卡上是正常的**
+            //     （它落脚在一处、路过另一处）⇒ 不能拿"所有卡的 id 去重后几条"跟"所有卡里几行"比。
             for (const f of rm.faces) {
                 const ids = f.lines.map((t) => t.id);
                 assert.equal(new Set(ids).size, ids.length,
                     `★真账 · ${档}：面「${f.place}」的卡里出现了重复的行——同一件事会被印两遍`);
             }
-            if (opt) {
-                // 前置：真账里**真有**"只有一件事、落脚处却是面"的线（不然上面那条只是空绿）
-                bothKids = rt.filter((t) => t.count === 1
-                    && t.places.some((p) => rm.faces.some((f) => f.place === p))).length;
-            }
+            //   ★本笔新增的前置：真账里**真有**"只有一件事、落脚处是个面"的线——它们现在**在卡里**
+            bothKids = rt.filter((t) => t.count === 1
+                && t.places.some((p) => rm.faces.some((f) => f.place === p))
+                && rm.faces.some((f) => f.lines.some((x) => x.id === t.id))).length;
         }
         assert.ok(bothKids > 0,
-            `★前置：真账里必须有"只有一件事、但落脚处是个面"的线（实测 ${bothKids} 条）——`
-            + `没有它，上面那条闸平衡只是夹具太干净，咬不住"被数两遍"这个病`);
+            `★前置：真账里必须有"只有一件事、落脚处是个面、且**印在卡里**"的线（实测 ${bothKids} 条）——`
+            + `没有它，"回到以前的效果"就只是句空话`);
     }
-    // ⑦ ★★★同一条病**在夹具里也钉一遍**（不依赖仓外那份装置；没有它，上面那段就成了"只有本机才跑得到"）：
-    //    这一份夹具照真账那个形状搭——**两条线共用「江州」这个面**，而其中一条**只有一件**。
-    //    ⇒ 「只有一件事」那一格与「面内」那一格同时够得着它 ⇒ 第一版那四格各数各的**当场不平**。
-    //    ★装置与读数：`F:/deepseek/tmp/leg159b-css/verify-objective.mjs`（真账 `real-world-59.json`）。
+    // ⑥ ★★★同一条病**在夹具里也钉一遍**（不依赖仓外那份装置）。
     //   ★★id 的形状是**契约**（`ev_<轮>_<序号>`）：`bornTick()` 只从**纯数字**那两段里读轮次。
-    //     本笔第一版写成 `ev_0_9a` ⇒ 一个轮次都读不出来、全部落到第 0 轮 ⇒ 读数与夹具形状对不上。
-    //   ★★线的形状也是契约：**只有 `plot`/`ripple` 两种源会连成线**（`state` 源各是一件独立的事）
-    //     ⇒ 长线那两件必须写成"后一件引前一件"（本笔第二版踩到的）。
+    //   ★★线的形状也是契约：**只有 `plot`/`ripple` 两种源会连成线**（`state` 源各是一件独立的事）。
     const dw = {
         version: 1,
         context: { setting: { frozen: { canon: { situation: '' } } } },
@@ -1157,24 +1213,21 @@ test('★★★leg160 · 说书㉕：**只有一件事的线单独收一栏**（
             // 长线：两件，都在江州（第 2 件引第 1 件 ⇒ 同一条线）
             { id: 'ev_0_91', title: '第 1 步', source: { type: 'state' }, position: '江州', ripples: ['e_bk_1'], links: {}, closed: false },
             { id: 'ev_1_91', title: '第 2 步', source: { type: 'ripple', ref: 'ev_0_91' }, position: '江州', ripples: ['e_bk_1'], links: {}, closed: false },
-            // 只有一件事、**落脚处却是那个面**（第一版把它数了两遍的那一条）
+            // 只有一件事、**落脚处却是那个面**（leg159b 第一版把它数了两遍的那一条）
             { id: 'ev_2_92', title: '只有一件事', source: { type: 'state' }, position: '江州', ripples: ['e_bk_2'], links: {}, closed: false },
         ],
         milestones: [], volumes: [],
     };
     for (const [档, opt] of [['只画热层（不传窗口）', null], ['按窗口画（出厂 50 轮）', { panelTurns: 50 }]]) {
-        //   ★过渡态（"只有一件事"那一栏还没做出来）就退回旧口径：`loose` 归零、四格照旧平。
-        let dc = buildFaces(dw, buildPanorama(dw, opt ?? {}).threads, opt ?? {}).census;
-        if (!('loose' in dc)) dc = { ...dc, loose: 0, sum: dc.faced + dc.lone + dc.scattered };
+        const d = buildFaces(dw, buildPanorama(dw, opt ?? {}).threads, opt ?? {});
+        const dc = d.census;
         assert.equal(dc.sum, dc.total,
             `★夹具 · ${档}："只有一件事、落脚处却是个面"的那条线被数了两遍——`
             + `${dc.faced}(面内)＋${dc.loose}(单独一栏)＋${dc.lone}(单线地点)＋${dc.scattered}(散落) ≠ 总 ${dc.total}`);
+        assert.equal(dc.loose, 0, `★夹具 · ${档}："单独一栏"那一格恒为 0`);
+        // ★它**在江州那张卡里**（本笔恢复的口径）——这一条就是"回到以前的效果"的最小可证形状
+        const jiang = d.faces.find((f) => f.place === '江州');
+        assert.ok(jiang && jiang.lines.some((t) => t.id === 'ev_2_92'),
+            '★"只有一件事"那条线必须**印在江州那张卡里**（不是被拿到末尾那一栏）');
     }
-    const dh = buildFaces(dw, buildPanorama(dw, { panelTurns: 50 }).threads, { panelTurns: 50 });
-    const dhIds = dh.loose.map((x) => x.line.id);
-    assert.equal(dhIds.length, 1, `★按窗口画那一档：那一栏正好收着"只有一件事"的那一条（实得 ${dhIds.length}）`);
-    assert.ok(!dh.faces.some((f) => f.lines.some((t) => t.id === dhIds[0])),
-        '★它不许同时留在卡里（同一条线推两遍）');
-    assert.ok(dh.loose.some((x) => x.place === '江州'),
-        '★它落脚的地方**本来是个面**，但那一栏照旧要说得出它落在哪（这一格就是第一版数两遍的那一格）');
 });

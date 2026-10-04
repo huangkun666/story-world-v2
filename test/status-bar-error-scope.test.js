@@ -76,7 +76,7 @@ test('★★leg145b ①（★前置自证）：**自己的错**必须真进状�
     const e = { message: '世界步超时（自家异常）', filename: OWN_URL, error: new Error('世界步超时（自家异常）') };
     withStatusBox((box) => {
         captureWarn(() => reportWinError(e));
-        assert.equal(box.textContent, '⚠ 未捕获异常：世界步超时（自家异常）',
+        assert.equal(box.textContent, '注意：未捕获异常：世界步超时（自家异常）',
             '★自家异常必须照旧写进状态条（分流不许把自家的话也拦掉）');
     });
 });
@@ -107,7 +107,7 @@ test('★leg145b ④：**拿不到出处**（无 filename、无 stack）⇒ 当�
     assert.equal(isOwnError({ filename: '' }), true, '★空 filename 等于没出处 ⇒ 当自己的');
     withStatusBox((box) => {
         captureWarn(() => reportWinError({ message: '匿名异常' }));
-        assert.equal(box.textContent, '⚠ 未捕获异常：匿名异常', '★没出处的那种照旧要写（保守优先）');
+        assert.equal(box.textContent, '注意：未捕获异常：匿名异常', '★没出处的那种照旧要写（保守优先）');
     });
 });
 
@@ -122,7 +122,7 @@ test('★leg145b ⑤：`unhandledrejection` 没有 `filename`，改看 `reason.s
 
     withStatusBox((box) => {
         captureWarn(() => reportWinError({ reason: ours }));
-        assert.equal(box.textContent, '⚠ 未捕获异常：自家的 promise 炸了', '★自家的 rejection 照旧要写');
+        assert.equal(box.textContent, '注意：未捕获异常：自家的 promise 炸了', '★自家的 rejection 照旧要写');
         box.textContent = '';
         const warned = captureWarn(() => reportWinError({ reason: theirs }));
         assert.equal(box.textContent, '', '★别人的 rejection 不许进状态条');

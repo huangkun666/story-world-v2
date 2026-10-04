@@ -2,7 +2,7 @@
 // 第十八棒：初始化设定源合订（编排层助手 · 纯函数 · 零引擎状态）
 // 背景：K38 的「换源+worldBook 存储」机制被用户（正确地）判死刑——本文件不再有任何
 // worldBook 概念：设定源只有两条自动路 = 世界信息/卡内置世界书条目 + 角色卡四件套。
-//   - 世界书：**完整条目摄取，全量不截断**（v1 adapter.js L19 教训；按内容去重）；
+//   - 世界书：完整来源按稳定身份收集；不同来源的相同正文分别保留。
 //   - 卡件四件套：按 v1 spend() 同款逐字段预算（散文介绍，非世界书）。
 // ★★leg60 修订上面那两句（原文写"禁用标记跳过"，现在只对了一半，照旧读会读错）：
 //   **禁用条目不再一律跳过**——ST 生态里"禁用"常常是作者的**仓储**（条目关掉、由控制器脚本
@@ -10,13 +10,16 @@
 //     · 启用条目：全量进（原样）；
 //     · 禁用条目：**只进"作者点名过的"那部分**——由 `probeBook` 的纯函数判据选出
 //       （恒注入壳声明的目录 + "自成一套"的壳声明的料），零散实例（一人一条的人物档案）不进，
-//       但它们的**题名照样进名册与未编译台账**（`catalog.skipped`）。
+//       未读取正文不从题名旁路补回；默认合法声明和自选均由统一来源入口决定。
 //   实测：三国 827 条里 563 条禁用 = 全书的 81%；旧口径下引擎只看得到 18.9%（名册只能从 JS 里捞名字）。
 // 分层归属：编排层（只组文本，不落账不结算）。防御上限提案态（铁律 2，随报批）。
 //
 // ★★★leg148：**条目原文里的酒馆宏由本文件换成真名**（`{{user}}` → 人设名、`{{char}}` → 角色名）——
 //   机制、病灶与"为什么必须在源头换"⇒ `src/macros.js` 头注。一句话：**酒馆的宏不该变成世界里的人**。
 import { substituteMacros } from './macros.js';
+import { prepareAbstractEntry, abstractEntryKey, abstractEntryTitle } from './abstract-source.js';
+import { collectAbstractSources, resolveAbstractSources, probeAbstractDeclarations } from './abstract-input.js';
+import { entrySelectionId } from './abstract-selection.js';
 
 export const INIT_PIECE_CAPS = {          // 卡四件套各自上限（字符 · 提案态 · v1 spend 同款）
     description: 1200,
@@ -33,16 +36,25 @@ function clip(str, n) {
     return a.length <= n ? a.join('') : a.slice(0, n).join('');
 }
 
+// ★★（Task 1 复查项 2）：预算切点。**先量出"实际用料前缀"**（条目 → 声明面 → 卡件），
+//   题名候选与一切下游证据只许来自这个前缀——预算外的来源连"给题名自证"的资格都没有。
+function ceilingCut(parts, ceiling) {
+    let total = 0;
+    let count = 0;
+    for (const part of parts) {
+        const len = Array.from(String(part)).length;
+        if (total + len > ceiling) break;
+        total += len;
+        count += 1;
+    }
+    return { count, total };
+}
+
 export function normalizeEntryKey(e) {
     // ★第二十五棒 e（五）：主键取值必须**处理数组**——ST 形状里 `e.key` 常是数组（`["九宸玄陆","世界总纲",…]`），
     //   旧法 `String(e.key ?? …)` 会把它变成一长串逗号连接 ⇒ 同一本书的"世界书侧"与"卡内置侧"行**不可能相同**
     //   ⇒ 去重**完全失效**（实测交集 0）⇒ 同一本书被送进抽取两遍（424 条 / 499,526 字符，顶到 50 万防御上限）。
-    const k = e?.key;
-    if (typeof k === 'string' && k.trim()) return k.trim();
-    if (Array.isArray(k) && k.length) return String(k[0] ?? '').trim();
-    if (Array.isArray(e?.keys) && e.keys.length) return String(e.keys[0] ?? '').trim();
-    if (typeof e?.keys === 'string' && e.keys.trim()) return e.keys.trim();
-    return String(e?.uid ?? e?.name ?? e?.comment ?? '');
+    return abstractEntryKey(e);
 }
 
 // ★★leg60：**送进抽取的标签用「题名」，不用触发词**。
@@ -59,11 +71,7 @@ export function normalizeEntryKey(e) {
 //   ⚠**去重身份一个字不改**（`normalizeEntryKey` 仍管 `fpOf` 的"键+正文"）：
 //     那是另一件事（同一本书被卡与书两条路取到只算一次），别顺手一起动——本仓"一字段一义"。
 function labelOf(e) {
-    const t = String(e?.comment ?? '').trim();
-    if (t) return t;
-    const n = String(e?.name ?? '').trim();
-    if (n) return n;
-    return normalizeEntryKey(e);
+    return abstractEntryTitle(e);
 }
 
 // ★★★leg148：**条目里不许留着酒馆的宏**（病灶与"三道关口为什么都拦不住它" ⇒ `src/macros.js` 头注）。
@@ -77,33 +85,23 @@ function macroSub(text, macroNames) {
     return macroNames ? substituteMacros(text, macroNames) : String(text ?? '');
 }
 
-function normalizeEntry(e) {
-    if (!e || typeof e !== 'object') return null;
-    const label = labelOf(e);
-    const content = String(e.content ?? '').trim();
-    if (!content) return null;
-    return `【${label}】${content}`;
+// ★★（二次复查 Important 1）：**题名行的身份** = 「给出这条题名的来源题名 + 候选名号」。
+//   正文里的题名行与最终名册候选要一一对应（见 `composeInitSource` 里的不动点剔除），用它做键。
+function titleLinePair(from, name) {
+    return `${from}\u0000${name}`;
 }
 
-// 世界书条目两路来源：① ST 合订 worldInfo（含卡内置书混入条目）② 卡内嵌 character_book 原始条目
-// （v1 双路径 ch.data?.character_book || ch.character_book，同款）。禁用标记跳过；全量不截断；按内容去重。
-function collectEntries(worldInfoEntries, character) {
-    const out = [];
-    const seen = new Set();
-    let rawTotal = 0;
-    let disabled = 0;
-    const raw = allEntries(worldInfoEntries, character);
-    for (const e of raw) {
-        if (!e || typeof e !== 'object') continue;
-        if (String(e.content ?? '').trim()) rawTotal += 1;
-        if (isDisabled(e)) { disabled += 1; continue; } // v1 同款：尊重酒馆禁用标记
-        const line = normalizeEntry(e);
-        if (!line) continue;
-        if (seen.has(line)) continue;
-        seen.add(line);
-        out.push(line);
+function normalizeEntry(e, diagnostics = null) {
+    if (!e || typeof e !== 'object') return null;
+    const label = labelOf(e);
+    const prepared = prepareAbstractEntry(e, { title: label });
+    if (diagnostics) {
+        diagnostics.excluded.push(...prepared.excluded);
+        diagnostics.warnings.push(...prepared.warnings);
     }
-    return { out, rawTotal, disabled };
+    const content = e._sw2Resolved === true ? prepared.content : prepared.content.trim();
+    if (!content.trim()) return null;
+    return `【${label}】${content}`;
 }
 
 // ============ ★★leg60：声明面探测（纯函数 · 零模型 · 零 JS 执行 · 可判据锁） ============
@@ -149,23 +147,6 @@ function stripJsComments(s) {
     return String(s).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1 ');
 }
 
-// 一个壳点名的标题里，有没有"互相成族"（共享 2–3 字前后缀，≥ FAMILY_MIN 条）
-function selfContainedFamily(list) {
-    for (const L of AFFIX_LEN) {
-        for (const kind of ['pre', 'suf']) {
-            const g = new Map();
-            for (const t of list) {
-                if (t.length <= L) continue;
-                const a = kind === 'pre' ? t.slice(0, L) : t.slice(-L);
-                if (!g.has(a)) g.set(a, []);
-                g.get(a).push(t);
-            }
-            for (const [affix, mem] of g) if (mem.length >= FAMILY_MIN) return { affix, kind, size: mem.length };
-        }
-    }
-    return null;
-}
-
 // ★★leg60：**题名即名册**（纯函数 · 零模型 · 零 token）——本棒治"名册比人家薄一半"的零成本一刀。
 //   观察（真账实测）：作者**已经把 cast 写在题名里**了——
 //     三国：`控制器_张辽`（×187）· `张辽正史`/`张辽演义`（×184/185）· `甄宓人设控制`（×32）
@@ -179,23 +160,51 @@ function selfContainedFamily(list) {
 //        ★这不是我们列的词表，是**这本书自己的字段**说了算（与 leg23"照书办"同一条纪律）。
 //   返回：[{name, from, why}]（保书序、去重）。**不带 kind**——题名判不出类别，别猜（类别的判据在
 //   照书办的标签面与模型那一侧）；`applyDeclaredToRoster` 只在 kind 为真时才写这个键。
-export function deriveTitleRoster(worldInfoEntries, character = null) {
-    const raw = allEntries(worldInfoEntries, character).filter((e) => String(e.content ?? '').trim());
+//   ★★（Task1 末次复查 Important 1 定稿）：题名例外**只有一档**——
+//     `opts.titleOnlyEntries` = 「**题名与 key 都借给证据面**」的合法自动控制器例外：**它自己的题名行
+//       真进了本次最终用料**（预算切点之内且没被剔），题名与自证 key 随那条题名副本一起生效。
+//     ★没有这一档的条目（清理后只剩技术内容、题名行没进最终用料的壳）**一个字都不借**：
+//       它们没有正文副本、没有题名副本 ⇒ 按"最终用料即唯一证据面"的合同，不属于本次材料，
+//       自然也不许用自己的 key 去给别的候选自证（旧法那档 `keyOnlyEntries` 已删，别再补回来）。
+//     ★为什么删（实测病灶）：同一份 `text` 与同一份 `effectiveEntries` 下，只改一条**根本没进正文**
+//       的壳的 key，`titleRoster` 与书指纹就跟着变——作者自证必须来自本次真读到的材料。
+//       丢掉"未经证实的元数据猜测"是正确的：模型读到的仍是已进正文的普通题名行。
+//     不传这一档 = 与今天逐字节同形（纯函数契约不变）。
+export function deriveTitleRoster(worldInfoEntries, character = null, { titleOnlyEntries = [] } = {}) {
+    const entries = allEntries(worldInfoEntries, character);
+    // ① 体例频次与 ② key 自证吃同一份证据面：「进了正文的来源 + 题名行真进了正文的控制器例外」。
+    const asEntries = (list) => (Array.isArray(list) ? list : []).filter((e) => e && typeof e === 'object');
+    const titleOnly = asEntries(titleOnlyEntries);
+    const extraKeys = new Set(titleOnly);
+    const frequencyEntries = [...entries, ...titleOnly];
+    const worldTitles = new Set(entries.filter((e) => prepareAbstractEntry(e, { title: labelOf(e) }).content.trim()).map(labelOf));
+    const raw = frequencyEntries.filter((e) => {
+        if (extraKeys.has(e)) return true;                     // 控制器例外只借题名与 key
+        const prepared = prepareAbstractEntry(e, { title: labelOf(e) });
+        if (prepared.content.trim()) return true;
+        if (prepared.technical) return false;
+        // 控制器题名仍是作者给的名字依据，但必须确实取用本书的世界正文。
+        const fetch = new RegExp(FETCH_CALL_RE.source, FETCH_CALL_RE.flags);
+        return [...stripJsComments(String(e.content ?? '')).matchAll(fetch)].some((m) => worldTitles.has(m[1]));
+    });
     const titles = [];
     const seenTitle = new Set();
     const keySet = new Set();
-    for (const e of raw) {
-        // ★★★leg148：题名这一栏**只读原文**（不替换）——替换之后 `{{user}}正史` 会变成 `怪璃正史`，
-        //   而**书里没有一个字叫「怪璃正史」** ⇒ 把替换后的题名当名号报上去，就是"凭空造了一个名号"
-        //   （红线：只提取不创作）。纯宏题名的挡法在下游：`sanitizeCanon` 的形状闸 + 实体名的形状闸。
-        const t = labelOf(e);
-        if (t && !seenTitle.has(t)) { seenTitle.add(t); titles.push(t); }
+    const addKeys = (e) => {
         for (const field of [e?.key, e?.keys]) {
             for (const x of (Array.isArray(field) ? field : [field])) {
                 const s = String(x ?? '').trim();
                 if (s) keySet.add(s);
             }
         }
+    };
+    for (const e of raw) {
+        // ★★★leg148：题名这一栏**只读原文**（不替换）——替换之后 `{{user}}正史` 会变成 `怪璃正史`，
+        //   而**书里没有一个字叫「怪璃正史」** ⇒ 把替换后的题名当名号报上去，就是"凭空造了一个名号"
+        //   （红线：只提取不创作）。纯宏题名的挡法在下游：`sanitizeCanon` 的形状闸 + 实体名的形状闸。
+        const t = labelOf(e);
+        if (t && !seenTitle.has(t)) { seenTitle.add(t); titles.push(t); }
+        addKeys(e);
     }
     // ① 体例：2–3 字前后缀，频次 ≥ FAMILY_MIN
     const affixes = [];
@@ -329,7 +338,6 @@ export function slimLegacyCompile(ssot) {
  */
 export function probeBook(worldInfoEntries, character = null, { window = 30000 } = {}) {
     const raw = allEntries(worldInfoEntries, character);
-    const byTitle = new Map();
     let enabled = 0;
     let disabled = 0;
     let enabledChars = 0;
@@ -337,52 +345,9 @@ export function probeBook(worldInfoEntries, character = null, { window = 30000 }
     for (const e of raw) {
         const content = String(e.content ?? '').trim();
         if (!content) continue;
-        const t = labelOf(e);
-        if (t && !byTitle.has(t)) byTitle.set(t, e);
         if (isDisabled(e)) { disabled += 1; disabledChars += charsOf(content); } else { enabled += 1; enabledChars += charsOf(content); }
     }
-    // 壳：启用 且 正文剥注释后含取件调用
-    const shells = [];
-    const declarers = new Map();                 // 标题 → Set(声明者题名)
-    for (const e of raw) {
-        const content = String(e.content ?? '').trim();
-        if (!content || isDisabled(e)) continue;
-        const body = stripJsComments(content);
-        FETCH_CALL_RE.lastIndex = 0;
-        const seen = new Set();
-        let m;
-        while ((m = FETCH_CALL_RE.exec(body))) { const t = m[1].trim(); if (t) seen.add(t); }
-        if (!seen.size) continue;
-        const shell = { title: labelOf(e), constant: e.constant === true, chars: charsOf(content), declares: [...seen] };
-        shells.push(shell);
-        for (const t of seen) {
-            if (!declarers.has(t)) declarers.set(t, new Set());
-            declarers.get(t).add(shell.title);
-        }
-    }
-    // 声明表：书里真有的（按书序）/ 点名了但书里没有的（作者笔误，如实报）
-    const declared = [];
-    const missing = [];
-    for (const t of declarers.keys()) {
-        const e = byTitle.get(t);
-        if (!e) { missing.push(t); continue; }
-        declared.push({ title: t, chars: charsOf(String(e.content ?? '').trim()), disabled: isDisabled(e), by: [...declarers.get(t)] });
-    }
-    // ★取料：恒注入壳的声明 + "自成一套"的壳的声明
-    const pickedTitles = new Map();              // 标题 → 为什么选它
-    for (const sh of shells) {
-        const present = sh.declares.filter((t) => byTitle.has(t));
-        if (!present.length) continue;
-        if (sh.constant) { for (const t of present) pickedTitles.set(t, `恒注入壳「${sh.title}」声明`); continue; }
-        const fam = selfContainedFamily(present);
-        if (fam) for (const t of present) if (!pickedTitles.has(t)) pickedTitles.set(t, `成套声明「${sh.title}」（${fam.affix}·${fam.size} 条）`);
-    }
-    const picked = [];
-    const skipped = [];
-    for (const t of declared) {
-        const why = pickedTitles.get(t.title);
-        if (why) picked.push({ ...t, why }); else skipped.push(t);
-    }
+    const { shells, declared, missing, picked, skipped } = probeAbstractDeclarations(raw);
     const sum = (list) => list.reduce((n, x) => n + x.chars, 0);
     // 旧窗口覆盖率（leg59c 的读数口径：头 window 字符覆盖了多少条启用条目）
     let winChars = 0;
@@ -414,28 +379,6 @@ export function probeBook(worldInfoEntries, character = null, { window = 30000 }
     };
 }
 
-// 取料行（★含**禁用**条目：那正是要治的病）——按书序，去重
-function pickedLines(worldInfoEntries, character, picked) {
-    if (!picked.length) return [];
-    const want = new Set(picked.map((p) => p.title));
-    const out = [];
-    const seen = new Set();
-    const byTitle = new Map();
-    for (const e of allEntries(worldInfoEntries, character)) {
-        const t = labelOf(e);
-        if (want.has(t) && !byTitle.has(t)) byTitle.set(t, e);
-    }
-    for (const p of picked) {
-        const e = byTitle.get(p.title);
-        if (!e) continue;
-        const line = normalizeEntry(e);
-        if (!line || seen.has(line)) continue;
-        seen.add(line);
-        out.push(line);
-    }
-    return out;
-}
-
 /**
  * composeInitSource：合成初始化设定文本（剪枝序：世界书条目[全量] > 声明面取料 > 描述 > 场景 > 人格 > 开场白）
  * @param {object} opts
@@ -453,21 +396,36 @@ function pickedLines(worldInfoEntries, character, picked) {
  * @returns {{ok:boolean, text?:string, label?:string, usedChars?:number, truncated?:boolean,
  *            worldName?:string, entryCount?:number, pieceCount?:number, catalog?:object, reason?:string}}
  */
-export function composeInitSource({ character = null, worldInfoEntries = [], budget = INIT_SOURCE_HARD_CEILING, includeDeclared = true, macroNames = null } = {}) {
+export function composeInitSource({ character = null, worldInfoEntries = [], worldSources = null, budget = INIT_SOURCE_HARD_CEILING, includeDeclared = true, macroNames = null, selection = null } = {}) {
+    const sources = collectAbstractSources({ worldInfoEntries, character, worldSources });
+    const rawEntries = sources.filter(s => s.kind === 'world-entry').map(s => s.entry);
+    const rawCatalog = includeDeclared ? probeBook(rawEntries) : null;
+    const declaredTitles = new Set(rawCatalog?.picked.map(p => p.title) || []);
+    const resolved = resolveAbstractSources({ sources, selection, declaredIds: rawEntries.filter(e => declaredTitles.has(labelOf(e))).map(entrySelectionId) });
+    const custom = resolved.selection.mode === 'custom';
+    worldInfoEntries = resolved.effectiveEntries.filter(e => e._sw2SourceKind === 'world-entry');
     const worldName = typeof character?.name === 'string' && character.name.trim() ? character.name.trim() : '';
 
     const parts = [];
-    const { out: entryLines, rawTotal, disabled } = collectEntries(worldInfoEntries, character);
-    for (const line of entryLines) parts.push(line); // 世界书条目：全量，优先
+    const partEntries = [];
+    const diagnostics = { excluded: resolved.excluded, warnings: resolved.warnings };
+    const rawTotal = rawEntries.filter(e => String(e.content ?? '').trim()).length;
+    const disabled = rawEntries.filter(isDisabled).length;
+    const ordinary = worldInfoEntries.filter(e => custom || !sources.find(s => s.id === e._sw2SelectionId)?.disabled);
+    const entryLines = ordinary.map(e => normalizeEntry(e)).filter(Boolean);
+    for (const e of ordinary) { const line = normalizeEntry(e); if (line) { parts.push(line); partEntries.push(e); } }
     // ★★leg60：**声明面取料**——启用条目之后、卡件之前。为什么排在这儿：
     //   ① 启用条目是"这本书明面上给了什么"，声明面是"作者点名要用的"——两者都是书的本体，排在卡件散文之前；
     //   ② 防御上限若咬到，截掉的是声明面的**尾巴**（人物分阶段剧本），**设定与年份档在最前** ⇒ 先保要害。
-    const catalog = includeDeclared ? probeBook(worldInfoEntries, character) : null;
+    const catalog = includeDeclared ? (custom ? probeBook(worldInfoEntries) : rawCatalog) : null;
     let declaredLines = 0;
     const declaredLineList = [];
     if (catalog && catalog.picked.length) {
-        for (const line of pickedLines(worldInfoEntries, character, catalog.picked)) { declaredLineList.push(line); }
-        for (const line of declaredLineList) parts.push(line);
+        const ordinaryIds = new Set(ordinary.map(e => e._sw2SelectionId));
+        for (const e of worldInfoEntries) if (!ordinaryIds.has(e._sw2SelectionId)) {
+            const line = normalizeEntry(e);
+            if (line) { declaredLineList.push(line); parts.push(line); partEntries.push(e); }
+        }
         declaredLines = declaredLineList.length;
     }
     // ★leg60（第 3 件）：本次**真正编译进源**的条目标签（= 启用条目 + 声明面取料）——
@@ -480,25 +438,165 @@ export function composeInitSource({ character = null, worldInfoEntries = [], bud
     const declaredFrom = entryLines.length;                          // 声明面在 parts 里的区间（算"被上限截掉几条"用）
     const declaredTo = declaredFrom + declaredLineList.length;
     let pieceCount = 0;
-    for (const key of ['description', 'scenario', 'personality', 'first_mes']) {
-        const raw = character?.[key];
-        if (typeof raw !== 'string' || !raw.trim()) continue;
-        parts.push(clip(raw.trim(), INIT_PIECE_CAPS[key])); // v1 spend 同款：只裁卡件散文
+    const cardEntries = resolved.effectiveEntries.filter(e => e._sw2SourceKind === 'character-field');
+    for (const entry of cardEntries) {
+        parts.push(clip(entry.content, INIT_PIECE_CAPS[entry._sw2Field]));
+        partEntries.push(entry);
         pieceCount += 1;
     }
 
+    // ★★（Task 1 复查项 2 + 二次复查 Important 1）：**先按预算切出本次实际用料，再算题名候选**。
+    //   病灶：题名候选的自证（本书 key）与体例频次此前吃的是**预算前**的全部条目 ⇒
+    //   只改一条预算外条目的 key/题名，同一份实际用料就会算出不同的名册与书指纹（复查实测）。
+    //   ★二次复查补的那条更窄的边界：**自动控制器题名例外**的题名行排在全部正文之后 ⇒
+    //   它到底进没进本次用料，要等最终切点说了算；在第一遍就把它并进证据面，等于让一条**被预算挤掉的**
+    //   控制器用它的 key/题名给别的候选当证据（重审夹具：同一份正文、只改被挤掉的 key，两个指纹）。
+    //   口径（两遍定稿，不迭代）：
+    //     ① 先按基础用料切点（题名行还没加）挑出**基础预算内**的候选人——题名行只可能排在正文之后，
+    //        所以这个先来后到不会把"本来进得去"的题名行判死；
+    //     ② 加上题名行后再切一次 = 最终用料；**证据面只认最终用料里的来源身份**：
+    //        · 进了正文的来源（`acceptedWorld`）；
+    //        · 题名行本身进了正文的控制器例外（它的 key 随它一起生效）。
+    //        被预算挤掉的来源（普通条目或控制器）不得给出 key 与体例频次。
     const ceiling = Number(budget) > 0 ? Number(budget) : INIT_SOURCE_HARD_CEILING;
-    const used = [];
-    let total = 0;
-    let usedDeclared = 0;
-    const allLen = parts.reduce((n, p) => n + Array.from(p).length, 0);
-    for (const [i, p] of parts.entries()) {
-        const len = Array.from(p).length;
-        if (total + len > ceiling) break; // 仅防御性上限触发（现实量级不触发）
-        used.push(p);
-        total += len;
-        if (i >= declaredFrom && i < declaredTo) usedDeclared += 1;
+    const baseCut = ceilingCut(parts, ceiling);
+    const baseAcceptedIds = new Set(partEntries.slice(0, baseCut.count).map(e => e._sw2SelectionId));
+
+    // 未进入正文的有效题名也必须进入合订：它们影响名册，缓存和换书指纹要同步看到。
+    // 只提供作者已自证的名字，不把控制器脚本带回，不编属性。
+    const baseWorld = worldInfoEntries.filter(e => baseAcceptedIds.has(e._sw2SelectionId));
+    const baseTitles = new Set(baseWorld.map(labelOf));
+    const itemById = new Map(resolved.sourceItems.map(s => [s.id, s]));
+    const rosterEntries = [...baseWorld];
+    const titleExceptions = [];
+    const evidenceByTitle = new Map();
+    for (const e of baseWorld) if (!evidenceByTitle.has(labelOf(e))) evidenceByTitle.set(labelOf(e), e);
+    // ★★（Task 1 复查项 1）：默认控制器的题名例外**只从统一解析结果**给——合法选中、自动读法、
+    //   清理后仅技术内容的壳，且它声明的题名确实在本次用料里。
+    //   显式全文/选段（含失效选段）一律不看原文：失效选段不许借题名路径变回"生效题名"。
+    for (const e of rawEntries) {
+        const id = entrySelectionId(e);
+        if (baseAcceptedIds.has(id) || isDisabled(e)) continue;
+        const item = itemById.get(id);
+        if (!item || item.selected !== true || item.readMode !== 'auto' || item.status !== 'technical') continue;
+        const fetch = new RegExp(FETCH_CALL_RE.source, FETCH_CALL_RE.flags);
+        if (![...stripJsComments(String(e.content ?? '')).matchAll(fetch)].some(m => baseTitles.has(m[1]))) continue;
+        rosterEntries.push(e);
+        titleExceptions.push(e);                    // ★二次复查：它进没进最终用料，等下面第二遍说了算
+        const t = labelOf(e);
+        if (t && !evidenceByTitle.has(t)) evidenceByTitle.set(t, e);
     }
+    // 第一遍：只按「基础预算内的正文来源 + 借题名的合法控制器」挑候选——题名行排在全部正文之后。
+    const firstPass = includeDeclared ? deriveTitleRoster(rosterEntries) : [];
+    const titleLineAt = new Map();                 // parts 下标 → { from, name, pair }（题名行的身份）
+    const lineIndexOfSource = new Map();           // 来源身份 → 它那条题名行的 parts 下标（同一来源最多一条）
+    for (const d of firstPass) {
+        if (compiledTitles.includes(d.from)) continue;
+        // 题名候选只挂到**给出这条题名的那个来源身份**上（不再照题名回头找来源——
+        // 那会把失效/未选的同名来源重新拉回实际用料）。
+        const evidence = evidenceByTitle.get(d.from);
+        if (evidence) lineIndexOfSource.set(evidence._sw2SelectionId ?? entrySelectionId(evidence), parts.length);
+        titleLineAt.set(parts.length, { from: d.from, name: d.name, pair: titleLinePair(d.from, d.name) });
+        parts.push(`【${d.from}】${d.name}`);
+        partEntries.push(evidence ? { ...evidence, content: d.name, disable: false, enabled: true, _sw2Resolved: true,
+            _sw2SelectionId: evidence._sw2SelectionId ?? entrySelectionId(evidence), _sw2SourceKind: 'world-entry',
+            _sw2Field: null, _sw2ReadMode: 'auto', _sw2Reason: '作者合法声明的题名候选', _sw2TitleOnly: true } : null);
+    }
+
+    const allLen = parts.reduce((n, p) => n + Array.from(p).length, 0);
+    const cut = ceilingCut(parts, ceiling);
+    // ★★★（二次复查 Important 1 定稿）：**最终用料里的来源身份才是证据面，且正文里的题名行必须与最终名册
+    //   一一对应**。第一遍的候选集吃的是「基础预算内的正文来源 + 题名例外」，而一条题名行的 key 自证 /
+    //   体例频次可能来自一条**被最终切点挤掉的**控制器（实测：只改那条预算外控制器的 key，正文里就换成
+    //   了另一条题名行，两个指纹）。⇒ 这里**只剔不补**地迭代到不动点：
+    //     ① 按当前保留的题名行算出证据面；
+    //     ② 用该证据面重派生名册（key 自证与体例频次都只许来自它）；
+    //     ③ 剔掉"名册里没有"的题名行 ⇒ 证据面缩小 ⇒ 回到 ①，直到没有可剔的。
+    //   ★题名例外**只有一档**（判据在下面的 `faceExceptions`）：**题名行真进了最终用料**的合法自动
+    //     控制器——题名、key 一起生效（它的行就是本次正文里的一条）。**没有题名行的壳一个字都不借**
+    //     （旧法那档"只借 key"已删：见 `deriveTitleRoster` 头注的病灶与合同依据）。
+    //   ★为什么不重排、不回填：题名行只可能排在正文之后；剔一行只是把预算还给"后面本来也进不去的行"
+    //     ——回填等于让被挤掉的证据重新生效（正是要治的那一格）。保守：剔掉的预算就空着，宁短不假。
+    let keptLines = new Set([...titleLineAt.keys()].filter((index) => index < cut.count));
+    let usedRoster = [];
+    for (;;) {
+        const faceIds = new Set();
+        for (let index = 0; index < cut.count; index += 1) {
+            if (titleLineAt.has(index) && !keptLines.has(index)) continue;   // 剔掉的题名行不算来源
+            const e = partEntries[index];
+            if (e) faceIds.add(e._sw2SelectionId ?? entrySelectionId(e));
+        }
+        const acceptedWorld = worldInfoEntries.filter(e => faceIds.has(e._sw2SelectionId));
+        const acceptedTitles = new Set(acceptedWorld.map(labelOf));
+        const faceExceptions = [];       // 题名行真进了正文的例外：题名 + key 都算
+        for (const e of titleExceptions) {
+            const lineIndex = lineIndexOfSource.get(entrySelectionId(e));
+            if (lineIndex === undefined) continue;                        // 没有题名行 ⇒ 不借任何东西
+            if (lineIndex < cut.count && keptLines.has(lineIndex)) faceExceptions.push(e);
+        }
+        // 证据面：① 进了正文的来源；② 题名行真进了正文的合法题名例外。别的一律不算。
+        const evidenceEntries = [...acceptedWorld, ...faceExceptions.filter(e => { const t = labelOf(e); return t && acceptedTitles.has(t); })];
+        // 控制器例外只把**它自己的题名**带进体例频次（脚本正文不许变成"书里的一条"）。
+        const keyAndFrequencyOnlyEntries = [...faceExceptions, ...acceptedWorld];
+        const derived = includeDeclared ? deriveTitleRoster(evidenceEntries, null, { titleOnlyEntries: keyAndFrequencyOnlyEntries }) : [];
+        // 名册读数也要来源可归：候选的题名必须仍挂在最终用料里的来源身份上（题名行没进正文 ⇒ 名册里也不留）。
+        usedRoster = derived.filter((d) => {
+            const source = evidenceByTitle.get(d.from);
+            return Boolean(source) && faceIds.has(source._sw2SelectionId ?? entrySelectionId(source));
+        });
+        const justified = new Set(usedRoster.map((d) => titleLinePair(d.from, d.name)));
+        const next = new Set([...keptLines].filter((index) => justified.has(titleLineAt.get(index).pair)));
+        if (next.size === keptLines.size) break;      // 不动点：没有题名行再被剔掉
+        keptLines = next;
+    }
+    const droppedTitleLines = new Set([...titleLineAt.keys()].filter((index) => index < cut.count && !keptLines.has(index)));
+    const used = [];
+    // ★★★Task 3（抽取确认与完整入账）：**发射端自有的"最终接收块"**——来源 ID + **逐字交出去的文本**。
+    //   为什么只能在这里产出（这是本格存在的全部理由）：只有这里同时知道
+    //     ① 哪几条真进了最终用料（预算切点 + 被剔掉的题名行）；② 每条交出去时**带不带题头**（`normalizeEntry`）；
+    //     ③ 宏替换后的实际文本（模型看到的就是它）。`effectiveEntries[].content` 没有题头、没有顺序/偏移，
+    //     而 `sourceItems` 是原文查看面（含未选/被排除内容）⇒ 两者都**不能**当证据底本。
+    //   ★纪律：这里产出的块 = **只含本次允许并实际交出的材料**；被排除/预算外/技术清理掉的一个字都不进来。
+    const allowedBlocks = [];
+    for (let index = 0; index < cut.count; index += 1) {
+        if (droppedTitleLines.has(index)) continue;
+        used.push(parts[index]);
+        const e = partEntries[index];
+        if (!e) continue;
+        const sourceId = e._sw2SelectionId ?? entrySelectionId(e);
+        const text = macroSub(parts[index], macroNames);
+        const title = macroSub(String(e.comment ?? '').trim() || String(e.name ?? '').trim(), macroNames);
+        allowedBlocks.push({
+            sourceId, text, title,
+            titleOnly: e._sw2TitleOnly === true,
+            kind: e._sw2SourceKind ?? 'world-entry',
+            field: e._sw2Field ?? null,
+        });
+    }
+    const total = used.reduce((n, p) => n + Array.from(p).length, 0);   // 报的是**实际交出去**的那份文本长度
+    const usedDeclared = Math.max(0, Math.min(cut.count, declaredTo) - declaredFrom);
+    const effectiveEntries = [];
+    for (const [index, e] of partEntries.entries()) {
+        if (!e) continue;
+        const content = e._sw2SourceKind === 'character-field' ? clip(e.content, INIT_PIECE_CAPS[e._sw2Field]) : e.content;
+        const item = resolved.sourceItems.find(s => s.id === e._sw2SelectionId);
+        if (index >= cut.count || droppedTitleLines.has(index)) {
+            item.status = 'budget-excluded';
+            item.reason = droppedTitleLines.has(index) ? '题名证据不在最终用料内（总输入上限）' : '总输入上限排除';
+            item.content = ''; item.effectiveChars = 0; continue;
+        }
+        item.content = macroSub(content, macroNames);
+        item.effectiveChars = charsOf(item.content);
+        if (content !== e.content) { item.truncated = true; item.reason += '（角色卡字段上限截取）'; }
+        if (e._sw2TitleOnly) { item.status = 'effective-title'; item.reason = e._sw2Reason; }
+        effectiveEntries.push({ ...e, content: item.content, comment: macroSub(e.comment, macroNames), key: Array.isArray(e.key) ? e.key.map(k => macroSub(k, macroNames)) : e.key });
+    }
+    const common = { ...diagnostics, text: macroSub(used.join('\n'), macroNames), sourceItems: resolved.sourceItems, effectiveEntries,
+        selection: resolved.selection, migration: resolved.migration, worldSources, titleRoster: usedRoster, worldName,
+        defaultSelectedIds: effectiveEntries.map(e => e._sw2SelectionId),
+        // ★Task 3：**允许来源块**（发射端自有；证据核验的唯一底本）。接线层把它原样递给
+        //   `extractWorldSetting({ allowedSources })`——抽取器**不再**回头读 `sourceItems` 或原书。
+        allowedBlocks };
     if (!used.length) {
         const pieces = ['description', 'scenario', 'personality', 'first_mes'].filter((k) => typeof character?.[k] === 'string' && character[k].trim());
         const bits = [];
@@ -509,11 +607,13 @@ export function composeInitSource({ character = null, worldInfoEntries = [], bud
         else if (!pieces.length) bits.push(character.shallow === true ? '角色卡还没加载完（ST 只交回了名册那一层，正文还没取）' : '角色卡四件套全空');
         if (rawTotal === 0) bits.push('世界信息/内置书为空');
         else if (disabled === rawTotal) bits.push('世界书条目全部标记禁用');
-        return { ok: false, reason: bits.length ? bits.join('；') : '没有可用设定（详见浏览器控制台诊断）' };
+        return { ok: false, reason: custom && !resolved.selection.selectedIds.length ? '自选来源为空，未读取任何正文' : diagnostics.excluded.length ? '排除技术内容后没有可用设定' : bits.length ? bits.join('；') : '没有可用设定（详见浏览器控制台诊断）', ...common,
+            catalog: catalog ? { entries: catalog.entries, enabled: catalog.enabled, disabled: catalog.disabled, titleRoster: [] } : null };
     }
 
     return {
         ok: true,
+        ...common,
         // ★★★leg148：**出口换一次**——整份产出文本里的酒馆宏在这里统一换成真名。
         //   `macroNames` 缺省 null ⇒ `macroSub` 原样返回 ⇒ **逐字节回到今天**（零漂移）。
         //   ★`usedChars` 报的是**换之前**的长度：换名会改字符数（`{{user}}` 9 字 → 真名 2–3 字），
@@ -526,12 +626,12 @@ export function composeInitSource({ character = null, worldInfoEntries = [], bud
         entryCount: parts.length - pieceCount,
         pieceCount,
         declaredLines,
-        // ★leg60：**题名面**（零 token 的 cast）——**顶层键**，因为抽取执行器直接吃它
+        // ★leg60：**题名面**（不新增模型调用）——**顶层键**，因为抽取执行器直接吃它
         //   （`web/index.js` 的 `extraDeclared: src.titleRoster`）。
         //   ⚠这一行踩过一次：我第一版把它塞进了下面的 `catalog` 摘要里 ⇒ 顶层没有 ⇒
         //     `extraDeclared: undefined` ⇒ 三国那 191 个题名名号**一个都没进册**，而且**全绿**。
         //     （与 leg60 治的别名通道是同一个形状："机制对了、线没接上"。判据已补在 init-source.test。）
-        titleRoster: catalog ? catalog.titleRoster : [],
+        titleRoster: usedRoster,
         // ★leg60：声明面读数带上走（编排层用它做人话上报与"编译完整性"自检）。
         //   为什么必须带出去：这一棒**第一次**去读作者关掉的仓储（三国 30.9 万字 / 188 条），
         //   不报出"读了多少、漏了多少"，就是"静默多读 30 万字"——那与本仓"每条变更留痕"相反。
@@ -550,10 +650,10 @@ export function composeInitSource({ character = null, worldInfoEntries = [], bud
             declaredLines,
             // ★leg60：**题名即名册**（零 token，纯函数）——抽取执行器把它当"照书办"的声明面强制并册
             //   （三国实测：题名里写着 185 个人物，而模型只抽到 127 ⇒ 这一刀是"作者已经列好了 cast"）。
-            titleRoster: catalog.titleRoster,
+            titleRoster: usedRoster,
             // ★leg60（第 3 件）编译完整性：书里"设定类"条目有几条 / 本次编译覆盖了几条 / 漏了哪些（前 12 个）
             completeness: (() => {
-                const cc = compileCompleteness(worldInfoEntries, character, { compiledTitles });
+                const cc = compileCompleteness(rawEntries, null, { compiledTitles: effectiveEntries.filter(e => e._sw2SourceKind === 'world-entry').map(e => sources.find(s => s.id === e._sw2SelectionId)?.title) });
                 return {
                     settingTitles: cc.settingTitles.length,
                     settingCompiled: cc.compiled,

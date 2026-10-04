@@ -75,7 +75,7 @@ const variants = [
 ];
 for (const v of variants) {
     const res = composeInitSource({ character: v.character, worldInfoEntries: [...list, ...v.extra] }); // 缺省预算 500k（浏览器同款）
-    console.log(`${v.label} @500k: ok = ${res.ok} | usedChars = ${res.usedChars} | truncated = ${res.truncated} | fp = ${res.ok ? bookFingerprint(res.text) : 'n/a'}`);
+    console.log(`${v.label} @500k: ok = ${res.ok} | usedChars = ${res.usedChars} | truncated = ${res.truncated} | fp = ${res.ok ? bookFingerprint(res.text, res.titleRoster) : 'n/a'}`);
 }
 
 if (exportFile) {
@@ -88,6 +88,6 @@ if (exportFile) {
     console.log('export entities =', w?.entities?.length, '->', (w?.entities || []).slice(0, 12).map((e) => `${e.name}[${e.kind}]`).join(', '));
     for (const v of variants) {
         const res = composeInitSource({ character: v.character, worldInfoEntries: [...list, ...v.extra] });
-        if (res.ok && fp === bookFingerprint(res.text)) console.log(`★ MATCH ${v.label}：导出世界确由 大荒-姬元真 ${v.label} 口径合订文本抽取`);
+        if (res.ok && fp === bookFingerprint(res.text, res.titleRoster)) console.log(`★ MATCH ${v.label}：导出世界确由 大荒-姬元真 ${v.label} 口径合订文本抽取`);
     }
 }

@@ -231,9 +231,10 @@ const ledgerDoc = ({ canon = {}, meta = {}, events = [] } = {}) => ({
     meta: { tick: 1, ...meta },
 });
 
-test('契约层：名册条目带 parentSource/parentSourceFrom 必须过——引擎建势力树时逐条写它', () => {
-    // 真账实测：这两格由 `computeContainmentParents` 那一支写上（值如「名字包含」「名字包含@天庭」），
-    //   而 `entities` 那一块**登记过**它们、`canon.bookEntities` 这一块没有 ⇒ 名册一条带来源就违约。
+test('契约层：名册条目带 parentSource/parentSourceFrom 必须过——旧账的历史出处值仍合法', () => {
+    // ★Task 3 更新：真账里这两格由旧法写上（值如「名字包含」「名字包含@天庭」「member-line」），
+    //   而**新法不再生产**它们（名字包含/成员行只作候选与定位；见 src/abstract.js 的 verifyClaimedParent 头注）。
+    //   本条的判据不变：**旧账与快照不重建** ⇒ 这些历史值必须继续过契约（自由字符串）。
     const doc = ledgerDoc({ canon: { bookEntities: [{ name: '天庭百官', kind: 'faction', parent: '天庭', parentSource: '名字包含', parentSourceFrom: '名字包含@天庭' }] } });
     const r = validate(doc, ssotSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
@@ -300,22 +301,17 @@ test('★★反证的反证：补登记不等于把闸门打开——这四块�
     assert.ok(!r4.ok && r4.errors.some((e) => e.includes('meta.野键meta') && e.includes('未知字段')), r4.errors.join('; '));
 });
 
-test('契约层：事件 `position` 可选——老账缺位置的那几条起根事件照旧合法；但**世界步**仍要求新事件给地点', () => {
-    // ★leg155 用户拍板：「**放宽：位置改成可选**」＋「**我记得没有让事件必须带地点**」。
-    //   复核属实：这一条**不是他下的令**——它是"首次纳入版本库"那一笔（leg1–leg6）就写在契约里的
-    //   （`git log -S` 一笔即中），而它咬到的是**旧账**：实教那份 5 条六月旧引擎写的起根事件没有这一格
-    //   （现版引擎**每一件都写**，另三份 94 件逐件核过 ⇒ 放开的是"账本这一侧"，不是"事件不必说在哪"）。
+test('契约层：事件 position 在历史账和新事件提议两侧都可选', () => {
+    // 用户「位置改成可选」要求适用于事件，不因新旧账采用两套要求。
     const doc = ledgerDoc({ events: [{ id: 'ev_seed_1', title: '父亲企图带回白屋', source: { type: 'seed' } }] });
     const r = validate(doc, ssotSchema);
     assert.equal(r.ok, true, r.errors.join('; '));
-    // ★反证的反证：**提议那一侧一个字不动**——模型新提的事仍必须给地点（世界步契约照旧必填）
     const step = {
         actions: [], newEvents: [{ title: '边关扣货', source: { type: 'state' } }],
         agendaAdvances: [], newAgendas: [], agendaCancels: [], newEntities: [], entityFates: [],
     };
     const rs = validate(step, worldStepSchema);
-    assert.ok(!rs.ok, '世界步缺位置仍须被拒（放开账本 ≠ 放开提议）');
-    assert.ok(rs.errors.some((e) => e.includes('newEvents[0].position') && e.includes('必填缺失')), rs.errors.join('; '));
+    assert.equal(rs.ok, true, rs.errors.join('; '));
 });
 
 test('契约层：卷号计数器 `nextVolume`（顶层）必须过——`planChronicleRotation` 每次落卷都写它', () => {

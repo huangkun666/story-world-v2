@@ -51,7 +51,7 @@ function makeExtract({ maxOk = Infinity, calls = null } = {}) {
     return extract;
 }
 
-const EMPTY_CACHE = () => ({ map: new Map(), get(k) { return this.map.get(k) ?? null; }, set(k, v) { this.map.set(k, v); } });
+const EMPTY_CACHE = () => ({ map: new Map(), get(k) { return this.map.get(k) ?? null; }, set(k, v, extractedAt, meta) { this.map.set(k, { canon: v, extractedAt, ...meta }); } });
 
 // ★leg60：**题名面**（零 token 的 cast）在大书路径上也要过——并册 + 全书级出处判定放行。
 //   为什么单独一条：大书路径有一道"全书级出处校验"（`src.includes(name)`，纯编造才丢），

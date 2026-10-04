@@ -60,7 +60,10 @@ function mkLedger() {
 test('L1：三种方式都真跑得动，而且取到的东西**不一样**（不是同一套换了名字）', () => {
     const w = mkLedger();
     const out = {};
-    for (const m of Object.values(RECALL_MODES)) {
+    // ★★★leg161：**向量那一档不在这一条里**——它要"调用方嵌好的查询向量 ＋ 一个索引"才跑得动
+    //   （本层同步、不碰网络：见 `modeByVector` 头注）。它的空手而归由 L1b 单独钉。
+    const offline = [RECALL_MODES.RECENT, RECALL_MODES.BY_KEYWORD, RECALL_MODES.BY_NAMES];
+    for (const m of offline) {
         const r = recallLedger(w, { modes: [m], limit: 50, text: '黄坤 大盘谷' });
         out[m] = r;
         assert.equal(r.ok, true, `${m} 应当取到东西：${r.reason}`);
@@ -79,6 +82,25 @@ test('L1：三种方式都真跑得动，而且取到的东西**不一样**（�
     // ★口径（本笔删掉四种取法之后仍然成立）：本层**只认账上写着的字**，不猜、不模糊匹配
     assert.equal(recallLedger(w, { modes: [RECALL_MODES.BY_NAMES], text: '账上一个都没有的名字' }).ok, false,
         '★话里没有账上真名 ⇒ 一条都不取（不许凭空造锚）');
+});
+
+test('L1b：★★向量那一档——**没递向量 / 没索引 ⇒ 空手而归**（失败零阻塞，不许抛、不许编）', () => {
+    const w = mkLedger();
+    // ① 什么都没递（＝没配通道 / 还没嵌好）：这一档空手，但**别的档照常**
+    const r1 = recallLedger(w, { modes: [RECALL_MODES.BY_VECTOR], text: '黄坤 大盘谷' });
+    assert.deepEqual(r1.items, [], '没递向量 ⇒ 一条都不取');
+    // ★它**不把整批拖垮**：与字面路并用时，字面路那部分照常取到
+    const r2 = recallLedger(w, { modes: [RECALL_MODES.BY_VECTOR, RECALL_MODES.BY_NAMES], text: '黄坤 大盘谷', limit: 50 });
+    assert.equal(r2.ok, true, `并用时字面路照常工作：${r2.reason}`);
+    assert.ok(r2.items.length > 0, '字面路那部分不许被向量那一档拖空');
+    // ② 递了向量但没索引 ⇒ 一样空手（不是拿 0 分冒充）
+    const r3 = recallLedger(w, { modes: [RECALL_MODES.BY_VECTOR], qVector: [0.1, 0.2, 0.3] });
+    assert.deepEqual(r3.items, [], '没索引 ⇒ 空手');
+    // ③ 荒唐输入不抛（这一档的唯一硬纪律：加速层不许影响世界）
+    for (const bad of [null, undefined, 0, 'x', {}, []]) {
+        const r = recallLedger(w, { modes: [RECALL_MODES.BY_VECTOR], qVector: bad });
+        assert.deepEqual(r.items, [], `qVector=${JSON.stringify(bad)} ⇒ 空手，不抛`);
+    }
 });
 
 test('L2：方式可以并用（并集），并且**同一条往事只留一份**（不是把去重糊过去，是按"这一条是谁"认）', () => {

@@ -176,7 +176,7 @@ test('★★leg154·③（反证的反证）：真·空卡的旧话一个字没�
 
 test('★★leg154·④：一次"读不到"不许把整局锁死（缓存只缓存真读到的那份）', async () => {
     bookSource.resetBookCache();
-    const noBook = { name: '大荒z', avatar: 'a.png', description: '一个修真世界。', data: {} };
+    const noBook = { name: '大荒z', avatar: 'a.png', data: {} }; // 真正没有任何允许正文；卡描述也已成为可读来源。
     const first = await bookSource.bookTextForEntity({ name: '万妖盟' }, fakeCtx([noBook]));
     assert.equal(first.ok, false, '★一本都没读到 ⇒ ok 为假（"读不到"这一态）');
     // ★不调 resetBookCache：卡上刚挂上书（等价于"ST 那边把书挂上了 / 懒加载卡取回了全卡"）

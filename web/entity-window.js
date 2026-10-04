@@ -437,11 +437,11 @@ export function createEntityWindowHub({ getWorld, setStatus = null, doc = null }
     function open(id) {
         const d = D();
         if (!d?.createElement || !d?.body?.appendChild) {
-            if (setStatus) setStatus('⚠ 这个环境里开不了实体窗口');
+            if (setStatus) setStatus('注意：这个环境里开不了实体窗口');
             return false;
         }
         const world = getWorld();
-        if (!world) { if (setStatus) setStatus('⚠ 还没有世界可看'); return false; }
+        if (!world) { if (setStatus) setStatus('注意：还没有世界可看'); return false; }
         close();                                   // 先撤上一层（连点两个实体 ⇒ 换内容，不留两份）
         const mask = d.createElement('div');
         // ★★★`sw2-open` 这一个类**绝不能少**（leg140 真机上就是栽在它上面）：

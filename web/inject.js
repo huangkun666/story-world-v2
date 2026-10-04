@@ -27,12 +27,17 @@
 //   `ledger-recall.js`（**零 import 的真叶子**，只读调用方递进来的账）⇒ 不引回环、不碰 DOM。
 //   为什么取数放在这里而不是编排层：`apply()` 是**唯一**同时拿得到 `getCtx()`（上一轮正文＋这一轮输入）
 //   与 `getWorld()`（账）的地方；而 `web/index.js` 只剩 **1 行**余量（硬锁 `<3100`）⇒ **不许再往那里加**。
-import { recallLedger, RECALL_MODES, formatRecalled, timeMarkAt } from '../src/ledger-recall.js';
+import { recallLedger, RECALL_MODES, formatRecalled, timeMarkAt, rankKeywordMatches } from '../src/ledger-recall.js';
+// ★★★leg161：**检索参数那三格的出厂值**住 `src/limits.js`（渲染层也要画它们，而 `src/` 不许反向 import `web/`）
+//   ⇒ 出厂值只有一个真源，本模块**只引用、不自己抄一份**。
+import { RETRIEVAL_MIN_SCORE, RETRIEVAL_TOP, RETRIEVAL_DEPTH, RETRIEVAL_LITERAL_SHARE, LEDGER_CHARS_DEFAULT } from '../src/limits.js';
 // ★★★leg123：**格名表从引擎那一侧取**（`tag-extract.js` 是真源，零 import 的叶子 ⇒ 浏览器侧安全、不成环）
 import { CHANGE_FIELDS, CHANGE_FIELD_KIND } from '../src/tag-extract.js';
 // ★★★leg119：卷库那一侧（浏览器 IndexedDB）——取"冷档里的编年行"要用它。
 //   ★本模块顶层**零 indexedDB 访问**（`idb-backend.js` 自己就是"惰性 + 守卫"的）⇒ Node 侧 import 它照样安全。
 import { createIdbVolumeStore } from './idb-backend.js';
+import { filterHistoryVolumes } from '../src/vector-history.js';
+import { diagnostics } from '../src/diagnostics.js';
 
 export const INJECT_KEY_TAGS = 'sw2_tags';       // ① 格式指令 + ② 名号对照（合成一条）
 export const INJECT_KEY_WORLD = 'sw2_world';     // ③ 世界动向（默认关）
@@ -42,8 +47,8 @@ export const INJECT_KEY_LEDGER = 'sw2_ledger';   // ④ ★leg115：**账上往�
  * ★★★leg115：**账上往事那一段的预算**（提案态，可调）。
  * 为什么是这一个数（不是拍脑袋）：
  *   · `maxChars`：★**唯一当家的就是这一个**。硬上限，防的是"账长大了把聊天上下文吃掉"。
- *     排名（轮次新的在前，见 `ledger-recall.js`）决定**这 1600 字里装的是哪几条**——
- *     所以它装下的正是"离这一轮最近的那些往事"，不是随手切一段。
+ *     名称与关键词候选按命中词数、同分按新旧选择；向量候选保留相似度顺序。
+ *     选择完再按时间顺序排版，避免排版顺序决定哪条往事占得到额度。
  *   ★**没有条数上限**（本仓血证：`entityUpdates ≤3` 那个没量过的提案态数字当家、还静默拦，
  *     2026-09-22 用户拍板直接撤）⇒ 2026-09-23 把调用里那个 `limit: turns * 6` 也一并撤了：
  *     它是个**估出来的**数字（8×6=48），而 `maxChars` 已经决定了条数 ⇒ 留着只会是第二个没量过的闸。
@@ -51,8 +56,66 @@ export const INJECT_KEY_LEDGER = 'sw2_ledger';   // ④ ★leg115：**账上往�
  *     （上面那个 `limit`）时把字段留在了表里。实测本模块**零读者**：`:497` 只传 `.maxChars`，
  *     而 `sw2RecallQueryText(ctx, cap)` 的第二参是**字符数**（那个 cap 与"轮数"不是一回事，
  *     见下面 leg115④ 那条判据）⇒ 留着只会让下一任以为"轮数还管着什么"。
+ *
+ * ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」＋「**保证相关度最大就不用管时间了**」）：
+ *   **聊天侧这一段从此也吃向量路**，参数面照用户给的那张图**三格**（见下面 `RETRIEVAL_PARAMS`）。
  */
-export const LEDGER_RECALL_DEFAULT = Object.freeze({ maxChars: 1600 });
+//   ★★★（2026-10-05）**这个数现在是旋钮**（玩家可在参数页「往事注入多少字」那一格填）：
+//     出厂值搬进 `src/limits.js` 的 `LEDGER_CHARS_DEFAULT`（那里是"渲染层与真跑读同一个数"的
+//     唯一真源——`src/` 不许反向 import `web/`）；本表只留"没填过时"的兜底，与出厂值同源。
+export const LEDGER_RECALL_DEFAULT = Object.freeze({ maxChars: LEDGER_CHARS_DEFAULT });
+
+/**
+ * ★★★leg161：**检索参数三格**——用户 2026-10-01 附 `yuzuki-Memory` 的「检索参数」截图定的口径：
+ * 「**这是记忆插件的向量模型参数配置，就这几个**」。
+ *
+ * | 那一格 | 它管什么 | 出厂 | 为什么是这个数 |
+ * |---|---|---|---|
+ * | `minScore` | **相似度阈值** | **0.30** | ★★实测（真账 · 换词问法）：分数挤在 **0.42~0.49**、**正解常比错答分低**，门槛 0.5 只剩 **1/16** ⇒ **出厂必须给低**，它是"想收紧时才动"的旋钮，**不是用来过滤的** |
+ * | `top` | **最大召回条数** | **6** | 实测支撑（按实体问"他做过什么"前 6 里 6.00/6）★**不另立一把尺**：整段预算仍归 `maxChars` |
+ * | `depth` | ★**检索上下文深度** | **2** | ＝**查询串取几条正文消息**（`yuzuki-Memory` 那一格是同一件事：它 `extractSearchText` 从 `ctx.chat` 末尾往回凑 `depth` 条）。★我们原来**写死 2**，leg161 **改成参数** |
+ * | `literalShare` | ★**字面路那一份额度** | **0.6** | ★★**实测逼出来的**（400 轮长账）：字面路取回 **641 行**、1600 字只装 **24 行** ⇒ 合成一个池子按"新的在前"装 ⇒ **向量那 6 行一条也挤不进去**（两臂读数一模一样）。⇒ 剩下的 **40% 专留给向量路**（"按意思找回来的旧事"才有位置） |
+ *
+ * ★**与「往事轮数」不是一回事**（别合并）：那一格（出厂 50）管**窗口下界**（哪些行算"窗口外"），
+ *   本表这一格管"**问多长**"（拿几条正文去问）。
+ * ★★（2026-10-05）**这一表只是出厂值**：玩家填过的那几格以**现读设置**为准，见下面 `liveRetrievalParams`。
+ *   ★病：leg161 起这三格在界面上可填，而真跑的那条路读的**一直是这张冻结表** ⇒ 填了不生效。
+ * ★**维度 / 一批几行不在这里**：那是"从厂商问得到的"，**不许做成旋钮**（用户令：
+ *   「**至于多少维度还有向量化多少行直接可以从厂商问到不用写到参数里懂吗？**」）⇒ 运行时读回。
+ */
+export const RETRIEVAL_PARAMS = Object.freeze({
+    minScore: RETRIEVAL_MIN_SCORE, top: RETRIEVAL_TOP, depth: RETRIEVAL_DEPTH,
+    literalShare: RETRIEVAL_LITERAL_SHARE, maxChars: LEDGER_RECALL_DEFAULT.maxChars,
+});
+
+/**
+ * 参数页那几格的**现读**：填过的用填的，没填的回出厂。
+ * 用户 2026-10-05 问出来的病：界面能填、设置也写盘，而真跑的那条路读的是上面那个**冻结常数**
+ * ⇒「最大召回条数」填多少都是 6。⇒ 取数一律改成"每次用时现取"。
+ *
+ * ★（2026-10-05 第二笔）**多一格 `maxChars`**（「往事注入多少字」）：它此前是**写死的**
+ *   （`LEDGER_RECALL_DEFAULT.maxChars = 1600`），参数页上没有旋钮 ⇒ 现在是同一个现读口径。
+ *   ★它与另外三格的**性质不同**：那三格只管**按语义那一路**；这一格是**整段的字数上限**，
+ *   字面路与向量路**两路合起来**都吃它（两路各有一份额度，见 `apply()` 里那段）。
+ * @param {object|null} settings 插件设置（`data-settings` 那几格的现值）
+ * @returns {{minScore:number, top:number, depth:number, literalShare:number, maxChars:number}}
+ */
+export function liveRetrievalParams(settings = null) {
+    const num = (value, fallback, floor = false) => {
+        const n = Number(value);
+        if (value == null || value === '' || !Number.isFinite(n) || (floor && n < 1)) return fallback;
+        return floor ? Math.floor(n) : n;
+    };
+    const s = settings && typeof settings === 'object' ? settings : {};
+    return {
+        minScore: num(s.retrievalMinScore, RETRIEVAL_PARAMS.minScore),
+        top: num(s.retrievalTop, RETRIEVAL_PARAMS.top, true),
+        depth: num(s.retrievalDepth, RETRIEVAL_PARAMS.depth, true),
+        literalShare: RETRIEVAL_PARAMS.literalShare,
+        // ★★★（2026-10-05）「往事注入多少字」——整段的字符硬上限（两路共用这一格）。
+        maxChars: num(s.retrievalMaxChars, RETRIEVAL_PARAMS.maxChars, true),
+    };
+}
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // ★★★leg119：**卷（冷档）里的编年行**——取往事时**要一起看**
@@ -77,13 +140,15 @@ export const LEDGER_RECALL_DEFAULT = Object.freeze({ maxChars: 1600 });
 //   · ★★纪律：**永远不抛；拿不到就返回空**（照 `recall.js` 那条"失败零阻塞"）。
 //     返回空 = 调用方按"**没有卷**"走 = **接线之前的行为**——不是新行为，也不是坏行为。
 let volumeCtxGetter = null;      // 由 createInjector 注入（**现取** ST 上下文，不许抓死）
+let volumeWorldGetter = null;
 let volumeCache = [];            // 当前聊天的卷（含 `rows`）
 let volumeCacheChatId = null;    // 这份缓存属于哪个聊天（**切聊天要整个作废**）
 let volumeRefreshing = false;
 
 /** 接线层注入"现在是哪个聊天"的取数口（`createInjector` 调一次；见 `deps` 注）。 */
-function bindVolumeSource(getCtx) {
+function bindVolumeSource(getCtx, getWorld) {
     volumeCtxGetter = typeof getCtx === 'function' ? getCtx : null;
+    volumeWorldGetter = typeof getWorld === 'function' ? getWorld : null;
 }
 
 function currentVolumeChatId() {
@@ -99,6 +164,11 @@ async function readAllVolumes(chatId) {
     const listed = await store.list();
     const full = await Promise.all((listed || []).map((v) => store.get(v.id).catch(() => null)));
     return full.filter((v) => v && Array.isArray(v.rows));
+}
+
+export async function loadLedgerVolumes(chatId, world = null) {
+    const volumes = await readAllVolumes(String(chatId || 'default'));
+    return world ? filterHistoryVolumes(world, volumes) : volumes;
 }
 
 /** 后台刷一次缓存（同一时刻只飞一次）。★失败只是"这次没刷上"——不抛、也**不清空**已有缓存。 */
@@ -128,7 +198,7 @@ export function ledgerVolumes() {
     const chatId = currentVolumeChatId();
     refreshVolumesInBackground();
     if (!chatId || volumeCacheChatId !== chatId) return [];
-    return volumeCache;
+    return filterHistoryVolumes(volumeWorldGetter?.(), volumeCache);
 }
 
 /** ★名册不封顶（leg89 更正·用户：「120个角色上顶没必要啊」）——见 `rosterText` 的注释。 */
@@ -298,28 +368,40 @@ export function proseOnly(text) {
  *     ⇒ 三个读数一起看才敢改：**只把 cap 分一半反而更差**（剥后那截被砍短 ⇒ 名字少了），
  *       而**两截都给满**是唯一"空手更少、且一轮都不掉"的口径。
  *   ★代价为零：查询串**不进模型**（它只用来在账上点名），长一点不花一个 token。
+ * @param {number} cap   **每一条正文**最多取几个字（默认 400）
+ * @param {number} depth ★★★leg161：**取几条正文**＝「检索上下文深度」（默认 2 ＝ 本笔之前写死的那个行为）
  * @returns {string} 形如「<原文尾巴> <剥后正文尾巴> <玩家这一轮打的>」（有重复时自动去重一截）
  */
-export function sw2RecallQueryText(ctx, cap = 400) {
+export function sw2RecallQueryText(ctx, cap = 400, depth = 2) {
     const chat = ctx?.chat;
     if (!Array.isArray(chat) || !chat.length) return '';
     const textOf = (m) => (typeof m?.mes === 'string' ? m.mes : '');
     const last = chat[chat.length - 1];
     const lastIsUser = last?.is_user === true;
     const currentUser = lastIsUser ? textOf(last).trim() : '';
-    let prevRaw = '';
-    for (let i = chat.length - (lastIsUser ? 2 : 1); i >= 0; i -= 1) {
-        if (chat[i]?.is_user === true) continue;        // 跳过更早的玩家发言，只要**上一轮正文**
+    // ★★★leg161（用户令「**把看多少轮之前改成旋钮给用户**」那族口径 ＋ 检索参数三格）：
+    //   **取几条正文当查询串**＝「检索上下文深度」（`RETRIEVAL_PARAMS.depth`，出厂 2）。
+    //   ★它与 `yuzuki-Memory` 那一格是**同一件事**（它 `extractSearchText` 从 `ctx.chat` 末尾往回凑 `depth` 条）。
+    //   ★**缺省 2 ＝ 本笔之前写死的那个行为**（逐字节不变）⇒ 老调用方零扰动。
+    //   ★跳过玩家发言（只要"世界写的那几轮正文"），跳过空白；凑不满就有几条算几条（**不编**）。
+    const wantDepth = Number.isFinite(Number(depth)) && Number(depth) > 0 ? Math.floor(Number(depth)) : 2;
+    const proseParts = [];
+    for (let i = chat.length - (lastIsUser ? 2 : 1); i >= 0 && proseParts.length < wantDepth; i -= 1) {
+        if (chat[i]?.is_user === true) continue;        // 跳过更早的玩家发言，只要**世界写的正文**
         const t = textOf(chat[i]).trim();
-        if (t) { prevRaw = t; break; }
+        if (t) proseParts.push(t);
     }
     const n = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 400;
     const tail = (s) => (s.length > n ? s.slice(-n) : s);
-    const prose = proseOnly(prevRaw).trim();
-    // ★两截都要，但**一模一样时只留一截**（没机器块的正文 ⇒ 两截是同一份，重复没有意义）
     const parts = [];
+    // ★第一截照旧"原文尾巴"（leg136 实测：只取剥壳那截会掉 12 轮）
+    const prevRaw = proseParts[0] || '';
     if (prevRaw) parts.push(tail(prevRaw));
-    if (prose && prose !== prevRaw) parts.push(tail(prose));
+    // ★第二截＝**每条都补一截"剥掉标签块之后的"**（原来只对上一轮做；深度 >1 时那几轮同样要）
+    for (const raw of proseParts) {
+        const prose = proseOnly(raw).trim();
+        if (prose && prose !== raw) parts.push(tail(prose));
+    }
     if (currentUser) parts.push(currentUser);
     return parts.filter(Boolean).join(' ');
 }
@@ -511,18 +593,98 @@ export function buildInjections(world, { roster = true, spec = true, worldTide =
  *   - `isOn(key)`  读设置开关（缺省 false = 不注入）
  *   - `setStatus(msg)` 如实出声（取不到注入口时只报一次）
  */
-export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus = () => {} } = {}) {
+export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus = () => {}, vectorRecall = null, vectorEnabled = () => true, retrievalParams = null } = {}) {
     if (typeof getCtx !== 'function' || typeof getWorld !== 'function') {
         throw new TypeError('createInjector：`getCtx` 与 `getWorld` 必须是函数（注入的是函数不是值）');
     }
+    // ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」）：**向量路**（可选）。
+    //
+    //   【为什么它是一个注入的函数、而不是本模块自己 import 向量层】
+    //     ① 存储与网络住浏览器侧（`web/embed-runtime.js`）——本模块**照旧零 indexedDB 顶层访问**，
+    //        Node 里可直接真跑（判据不需要造环境）；
+    //     ② ★`apply()` 是**同步**的（ST 的注入口是同步的），而"把查询串嵌成一条向量"要**一趟网络**
+    //        ⇒ **不能在这里 await**。⇒ 定稿：**调用方在消息进来时后台把向量备好**，
+    //        本模块只同步读属于当前查询的结果；没备好就只走字面路，结果完成后重设注入。
+    //     ★这与本模块既有的"**卷缓存 ＋ 后台刷新**"是同一个办法（见上面 `volumeCache` 那一族）。
+    const vecDeps = typeof vectorRecall === 'function' ? vectorRecall : null;
+    // ★★★（2026-10-05）参数页那三格**现读**：由接线层把"读设置"这一个动作递进来。
+    //   缺省（没接线／判据里的纯注入器）⇒ 每格都回 `RETRIEVAL_PARAMS` 的出厂值 = 本笔之前的行为。
+    //   ★**每次用时现取**，不在装配时抓死——抓死就是这一笔要治的那个病。
+    const paramsNow = () => (typeof retrievalParams === 'function' ? liveRetrievalParams(retrievalParams()) : RETRIEVAL_PARAMS);
+    let vecRows = [], vectorEpoch = 0, vectorScope = null, vectorJob = null;
+    let vecNote = vecDeps ? '还没备' : '没接向量路';
+    // 结果属于一次完整查询；同一个世界对象也可能换话题、切聊天或回档。
+    // ★★（2026-10-05）**取数那几格（问多长／取几条／多像才算像）也算这份结果的一部分**——
+    //   它们一改，手里这份就是按旧参数备的 ⇒ 必须当场作废重取（见下面 `prefetchVectors` 那条
+    //   `sameVectorScope` 短路）。旧法用装配时抓死的常数，所以这条指纹永远不会变。
+    function readVectorScope() {
+        try {
+            const ctx = getCtx(), world = getWorld();
+            const p = paramsNow();
+            const text = sw2RecallQueryText(ctx, 400, p.depth);
+            return world && text ? {
+                world, tick: world.meta?.tick, text,
+                chatId: ctx?.chatId, characterId: ctx?.characterId, groupId: ctx?.groupId,
+                top: p.top, minScore: p.minScore, depth: p.depth,
+            } : null;
+        } catch (_) { return null; }
+    }
+    function sameVectorScope(a, b) {
+        return Boolean(a && b && a.world === b.world && a.tick === b.tick && a.text === b.text
+            && a.chatId === b.chatId && a.characterId === b.characterId && a.groupId === b.groupId
+            && a.top === b.top && a.minScore === b.minScore && a.depth === b.depth);
+    }
+    /** ★调用方（接线层）在消息进来时调它：后台把向量备好；**永不抛**。 */
+    function prefetchVectors() {
+        try {
+            if (!vecDeps || !vectorEnabled() || !isOn('injectLedgerRecall')) { clearVectors(); return; }
+            const scope = readVectorScope();
+            if (!scope) { clearVectors(); return; }
+            if (sameVectorScope(vectorScope, scope)) return vectorJob;
+            clearVectors();
+            vectorScope = scope;
+            const epoch = vectorEpoch;
+            vecNote = '准备中';
+            const current = () => {
+                try {
+                    return epoch === vectorEpoch && vectorEnabled() && isOn('injectLedgerRecall')
+                        && sameVectorScope(scope, readVectorScope());
+                } catch (_) { return false; }
+            };
+            const reapply = () => { try { apply(); } catch (_) { /* 后台召回不能影响发送 */ } };
+            const p = vecDeps();
+            if (p && typeof p.then === 'function') {
+                vectorJob = Promise.resolve(p).then((rows) => {
+                    if (!current()) { if (epoch === vectorEpoch) clearVectors(); return; }
+                    if (rows == null) { clearVectors(); reapply(); return; }
+                    vecRows = Array.isArray(rows) ? rows : Array.isArray(rows?.items) ? rows.items : [];
+                    vecNote = vecRows.length ? `${vecRows.length} 条` : '空手';
+                    reapply();
+                }).catch((err) => {
+                    if (!current()) { if (epoch === vectorEpoch) clearVectors(); return; }
+                    clearVectors(); vecNote = `失败（${err?.message || err}）`;
+                    reapply();
+                });
+                return vectorJob;
+            }
+            else { clearVectors(); }
+        } catch (err) {
+            // 失败零阻塞：加速层不许影响世界、也不许拦住注入
+            clearVectors(); vecNote = `失败（${err?.message || err}）`;
+        }
+    }
     // ★★★leg119：卷缓存也要知道"现在是哪个聊天"——复用同一个 `getCtx`（**不新增依赖形参**，
     //   见本模块上面那一族注释：`web/index.js` 只剩 1 行余量，加不了新接线）。
-    bindVolumeSource(getCtx);
+    function clearVectors() { vectorEpoch++; vecRows = []; vectorScope = null; vectorJob = null; vecNote = '关键词'; }
+    bindVolumeSource(getCtx, getWorld);
     let warned = false;
     let lastLine = null;
     // ★★★leg92：**跑过的证据**（用户报"开关是 1、字典里却没有"时，这一格能一眼分开"没跑"与"跑了失败"）。
     //   记的是**事实**：调用了几次、最后一次什么结果、什么时候。
-    const runs = { count: 0, lastOk: null, lastOff: null, lastChars: 0, lastAt: null };
+    //   ★★★（2026-10-05）**多一格 `last`**：上一次那几段各多少字、往事取回几条（参数页那一行读数读它，
+    //     见 `runFacts()`）。★与 `lastChars` 那种"一个总数"不同：它是**分段的**，面板才画得出
+    //     "格式指令 N 字 · 世界动向 M 字 · 账上往事 K 字"。
+    const runs = { count: 0, lastOk: null, lastOff: null, lastChars: 0, lastAt: null, last: null };
 
     const readApi = () => {
         const ctx = getCtx();
@@ -546,6 +708,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
 
     /** 撤掉上一轮注入的两段（**先撤后写**：绝不让上一轮冒充本轮）。 */
     function clear() {
+        clearVectors();
         const api = readApi();
         if (!api) return false;
         try {
@@ -557,8 +720,33 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     }
 
     /**
+     * ★★★（2026-10-05 · 用户令「**把图片的第一段话中的关键信息抽取出来展示在参数页**」）：
+     * **把上一次注入的经过抽成一份读数**（面板据此画那一行；措辞住 `web/inject-readout.js`）。
+     * ★为什么不在面板那边解析 `line` 那个句子：那是**给人读的整句**（还带着"position=0"这类
+     *   排查用的尾巴），从里面正则抠数字就等于把印法变成口径——本仓治过这种病（"同一件事两处表达"）。
+     * ★这里**只报事实**：每段多少字、往事取回几条/被额度挡下几条、向量那一路什么状态。
+     * @returns {object|null} 注入器还没跑过 ⇒ `null`（面板画"还没跑过"，不编数）。
+     */
+    function runFacts() {
+        const last = runs.last || null;
+        if (!last) return null;
+        const n = (v) => (v == null ? null : Number(v) || 0);
+        return {
+            count: runs.count, at: runs.lastAt,
+            status: last.status,
+            tagsBytes: n(last.tagsBytes), rosterBytes: n(last.rosterBytes),
+            roster: Boolean(last.rosterInTags),
+            tideBytes: n(last.tideBytes),
+            ledgerOn: Boolean(last.ledgerOn),
+            divergenceBytes: n(last.divergenceBytes), recalledBytes: n(last.recalledBytes),
+            recall: last.recall ? { ...last.recall } : null,
+            totalBytes: n(last.tagsBytes) + n(last.tideBytes) + n(last.ledgerBytes),
+        };
+    }
+
+    /**
      * 按当前设置与世界**重设**注入。返回自证读数（面板/控制台都读它）：
-     * `{ ok, off, tagsChars, worldChars, line }`。★`off` = 玩家把开关关了（**不是失败**，别报成失败）。
+     * `{ ok, off, tagsChars, worldChars, line, facts }`。★`off` = 玩家把开关关了（**不是失败**，别报成失败）。
      */
     function apply() {
         const spec = Boolean(isOn('injectTagSpec'));
@@ -568,18 +756,22 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         const stamp = () => {
             runs.count += 1;
             runs.lastAt = (() => { try { return new Date().toISOString(); } catch (_) { return null; } })();
+            // ★★★（2026-10-05）**这一格的初值**：`runs.last` 由下面各条出口按"这一次真发生了什么"填。
+            //   先清空 ⇒ 不会出现"这一次没走到那一步、面板却印着上一次的事"（"过期货冒充新检索"那条老病）。
+            runs.last = { status: 'ok' };
         };
         if (!spec && !roster && !tide && !ledgerOn) {
             clear();
             lastLine = '标签注入：已关（插件不看也不动你的对话）';
             stamp(); runs.lastOk = true; runs.lastOff = true; runs.lastChars = 0;
-            return { ok: true, off: true, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs } };
+            runs.last = { status: 'off' };
+            return { ok: true, off: true, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs }, facts: runFacts() };
         }
         const api = readApi();
         if (!api) {
             // ★如实降级：注入口取不到就别假装注入成功（也只吵一次，别每轮刷屏）
             lastLine = '标签注入：这个 ST 版本没有"往上下文里塞东西"的接口——已跳过（世界照常推进）';
-            if (!warned) { warned = true; setStatus?.(`⚠ ${lastLine}`); }
+            if (!warned) { warned = true; setStatus?.(`注意：${lastLine}`); }
             stamp(); runs.lastOk = false; runs.lastOff = false; runs.lastChars = 0;
             return { ok: false, off: false, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs } };
         }
@@ -588,8 +780,12 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         //     也就**不用动 `web/index.js`**（它只剩 1 行余量，动不了）。
         //   ★纪律照 `recall.js`：**失败零阻塞**——取不到就空串，世界照常推进、另外三段照常注入。
         const world = getWorld();
+        if (!ledgerOn || !vectorEnabled() || (vectorScope && !sameVectorScope(vectorScope, readVectorScope()))) clearVectors();
         let ledger = '';
         let ledgerNote = '（这段没开）';
+        // ★★★（2026-10-05）**这一次取往事的经过**（面板读数行读它，见 `web/inject-readout.js`）。
+        //   ★每次 `apply()` 都重算：没开这一段 ⇒ 停在 `null`（面板按"未开"画，不拿上一轮冒充这一轮）。
+        let recallFacts = null;
         if (ledgerOn) {
             // ★★★leg146b：**卷先取**——分歧那一段也要用它读时间印记（时间点可能落在已经轮转进卷的行上；
             //   `timeMarkAt` 与检索层看的是**同一份**账，见 `ledger-recall.js:206-209`）。
@@ -601,21 +797,139 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
             let recalled = '';
             let recallNote = '没取';
             let q = '';
-            try { q = sw2RecallQueryText(getCtx()); } catch (_) { q = ''; }
-            if (!q) recallNote = '⚠ 取不到"上一轮正文＋这一轮输入" ⇒ 这一轮没取';
+            try { q = sw2RecallQueryText(getCtx(), 400, paramsNow().depth); } catch (_) { q = ''; }
+            if (!q) recallNote = '注意：取不到"上一轮正文＋这一轮输入" ⇒ 这一轮没取';
             else {
                 // ★★主锚 = **账上真名**（真账实测：上一轮正文里每次都有 11–13 个账上真名，照名取命中 133–224 行）；
                 //   字面关键词**并用**当兜底（它单独用会栽：玩家正文与账本用词本来就不同，实测命中 0 条）。
                 // ★★★leg119：**卷要一起看**——轮转把最旧的编年整段搬进卷之后，不接这一格就会**悄悄少一半**
                 //   （见本模块上面那一族注释；世界模型那一侧走 `pack.js` 的**同一个** `volumes` 参数）。
                 //   ★leg146b：`vols` 已提到上面取（分歧那一段的时间印记也要用它）。
-                const got = recallLedger(world, { modes: [RECALL_MODES.BY_NAMES, RECALL_MODES.BY_KEYWORD], text: q, maxChars: LEDGER_RECALL_DEFAULT.maxChars, volumes: vols });
-                recalled = got.ok ? formatRecalled(world, got.items, { volumes: vols }) : '';
-                recallNote = got.ok ? `${recalled.length} 字` : `没命中（${got.reason}）`;
+                // ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」＋「**保证相关度最大就不用管时间了**」）：
+                //   **两路并联**——字面路（按真名/按词）＋ **向量路**（按意思）。
+                //   ★为什么是并联不是替代（实测）：两法捞出来的行**几乎不重叠（0–1/6）**——
+                //     字面路认"名字对得上"，向量路认"意思近"（够得着"只写了车队、没写谁家的"那种）。
+                //   ★向量那一路的**条数/阈值**走 `RETRIEVAL_PARAMS`（用户定的三格），
+                //     它的向量由调用方**后台备好**（`prefetchVectors`）——本函数**同步**，不许在这里 await。
+                //   ★**去重按行身份**（轮次 ＋ 洗过的那句正文）：一个事实只许出现一次
+                //     （口径与 `pack.js` 的 `lineKeyOf` 同源）。
+                // 先合并完整候选，再按命中数选择预算；预先截断会丢掉匹配更多词的旧行。
+                const got = recallLedger(world, { modes: [RECALL_MODES.BY_NAMES, RECALL_MODES.BY_KEYWORD], text: q, maxChars: null, volumes: vols });
+                const lit = got.ok ? rankKeywordMatches(got.items || [], q) : [];
+                const lineKey = (row) => `${Number(row?.tick)}|${proseOnly(String(row?.text ?? '')).trim()}`;
+                const extra = vecRows.filter((r) => Number(r?.tick) <= Number(world.meta?.tick));
+                // ★★★leg161（**实测逼出来的**）：**两路必须各有一份额度，不能合成一个池子。**
+                //   病（400 轮长账上量的）：字面路取回 **641 行**、而 1600 字只装得下 **24 行**
+                //   ⇒ 合成一个池子按"轮次新的在前"装 ⇒ 装的全是最新的那 24 行，
+                //   **向量路那 6 行一条也挤不进去**（两臂读数一模一样 ⇒ 向量路等于没接）。
+                //   ⇒ 治法：**先给字面路一份额度（保眼前接得上话头），再给向量路一份**
+                //     （保"按意思找回来的旧事"真有位置）——这正是用户那句
+                //     「**保证相关度最大就不用管时间了**」的落点：不划额度，相关度就永远输给时间。
+                const kept = [];
+                const keptKeys = new Set();
+                let vectorCount = 0;
+                let litCount = 0;
+                // ★★★（2026-10-05）**这一格现在是玩家填的**（参数页「往事注入多少字」）——
+                //   此前写死 `LEDGER_RECALL_DEFAULT.maxChars`。
+                const cap = paramsNow().maxChars;
+                // ★★★（2026-10-05 · 用户令「**字额度切忌把事件截掉**」）：**这一轮到底有几条往事没装下**
+                //   ——它进读数行（"额度装不下 N 条"）。★不许静默丢：额度是玩家自己填的，
+                //   他得看得见"我这一刀切掉了多少"。
+                let overflow = 0;
+                // ★★★**总上限那一道：量的就是"真注入那几行"**（对得上玩家填的那个数）。
+                //   ★为什么不拿 `JSON.stringify({tick,text}).length`：那把尺量的是**另一件东西**
+                //   （连引号带键名，还不含"【第 N 轮】"那一行）⇒ 玩家填 200、真塞 600，而面板还说"没超"。
+                //   ★口径：**先按两路各自的优先级装满，再量一次真实产出，超了就从队尾整条摘**
+                //   （队尾＝最不优先的那一条：字面路按命中词数、向量路按相似度，两路都是"越靠后越不该占额度"）。
+                //   ★摘的永远是**整条**——绝不把一条往事切一半（用户 2026-10-05：「字额度切忌把事件截掉」）。
+                const buildKept = () => picks.map((p) => p.it)
+                    .sort((a, b) => (Number(a?.tick) || 0) - (Number(b?.tick) || 0));
+                const litCap = extra.length ? Math.floor(cap * paramsNow().literalShare) : cap;
+                // ★每一条占多少字：**照 `formatRecalled` 的同一句法量**（"  · 那句话" ＋ 它上面那行
+                //   "【第 N 轮 · …】"）。★这里只是两路各自份额的粗算（同一轮多条会略高估 ⇒ 只会更保守），
+                //   真正的**总上限**由下面"量真实产出、从队尾整条摘"那一步收口——那一步才是硬判据。
+                const sizeOf = (it) => {
+                    const tick = Number(it?.tick);
+                    const line = `  · ${proseOnly(String(it?.text ?? '')).trim()}`;
+                    const time = timeMarkAt(world, tick, vols);
+                    const bits = [`第 ${tick} 轮`];
+                    if (time.known) bits.push(`那一轮此后又过了：${time.elapsed}`);
+                    else bits.push('（这一轮的"过了多久"账上没记——正文里没写时长）');
+                    return 2 + `【${bits.join(' · ')}】`.length + line.length;
+                };
+                const picks = [];
+                let used = 0;
+                // ★字面路：**按它的优先级装**（命中词多的在前）——装不下就跳过、接着试下一条
+                //   （它按相关性排，跳过一条不等于丢掉后面更该来的）。
+                for (const it of lit) {
+                    if (keptKeys.has(lineKey(it))) continue;
+                    const n = sizeOf(it);
+                    if (used + n > litCap) { overflow++; continue; }
+                    used += n; picks.push({ it, from: 'lit' }); keptKeys.add(lineKey(it)); litCount++;
+                }
+                // ★向量路那一份：它的顺序**就是相似度序**（从最像到最不像）——**不许重排**
+                //   （排了就把那一层唯一的产出毁了：哪几条最像）。
+                for (const it of extra) {
+                    // 只排除实际选入的字面记录，候选池里的旧行仍可能需要向量额度。
+                    if (keptKeys.has(lineKey(it))) continue;
+                    const n = sizeOf(it);
+                    if (used + n > cap) { overflow++; continue; }
+                    used += n; picks.push({ it, from: 'vec' }); keptKeys.add(lineKey(it)); vectorCount++;
+                }
+                // ★字面路这一趟「跳过装不下的、接着试下一条」会把顺序打乱（原文是"按命中数排"，
+                //   跳过的那些**不许**因此排到更该来的后面）⇒ 照旧由下面的时间序排序收口。
+                for (const it of lit) {
+                    if (keptKeys.has(lineKey(it))) continue;
+                    const n = sizeOf(it);
+                    if (used + n > cap) { overflow++; continue; }
+                    used += n; picks.push({ it, from: 'lit' }); keptKeys.add(lineKey(it));
+                }
+                let keptOut = buildKept();
+                let recalledText = keptOut.length ? formatRecalled(world, keptOut, { volumes: vols }) : '';
+                while (cap > 0 && keptOut.length > 1 && recalledText.length > cap) {
+                    const dropped = picks.pop();
+                    overflow++;
+                    if (dropped.from === 'vec') vectorCount--; else litCount--;
+                    keptOut = buildKept();
+                    recalledText = keptOut.length ? formatRecalled(world, keptOut, { volumes: vols }) : '';
+                }
+                // ★★★（2026-10-05「字额度切忌把事件截掉」的第二半）：**一条都不许截半条，
+                //   但也不许因为额度小就一条都不给**——真的一条都装不下时，**整条**装那一条
+                //   （最像的那条向量 / 最先的那条字面），并在读数里如实报出"没装下的有几条"。
+                //   ★为什么必须有这一条：额度的下限是 1 字，而一条往事印出来几十字 ⇒
+                //   没有它，玩家把额度填小就等于**完全关掉了这一段**（那不是"少给"，是"没给"）。
+                if (!keptOut.length && cap > 0) {
+                    const first = (extra[0] ?? lit[0]);
+                    if (first) {
+                        picks.push({ it: first, from: extra[0] ? 'vec' : 'lit' });
+                        if (extra[0]) vectorCount++; else litCount++;
+                        keptOut = buildKept();
+                        recalledText = formatRecalled(world, keptOut, { volumes: vols });
+                    }
+                }
+                for (const it of keptOut) kept.push(it);
+                recalled = recalledText;
+                recallNote = kept.length
+                    ? `${recalled.length} 字（字面 ${litCount} ＋ 向量 ${vectorCount}`
+                        + `${overflow ? ` · 额度 ${cap} 字装不下 ${overflow} 条` : ''}）`
+                    : (got.ok ? '没命中' : `没命中（${got.reason}）`);
+                if (vecDeps) recallNote += ` · 向量路 ${vecNote}`;
+                // ★★★（2026-10-05）**这一段交给面板的读数**（结构与措辞见 `web/inject-readout.js`）：
+                //   "哪几路真跑了、各取回几条、被额度挡下几条"。★此处**只报事实**，不判断好坏。
+                recallFacts = {
+                    bytes: recalled.length, items: kept.length,
+                    divergenceBytes: div.length,
+                    literal: lit.length, vector: extra.length,
+                    keptLiteral: litCount, keptVector: vectorCount,
+                    overflow, cap,
+                    vectorNote: vecNote,
+                };
             }
             // ★**没分歧、也没取到往事 ⇒ 空串**：与接线之前**逐字节相同**（零扰动，判据 D1 锁着）。
             ledger = [div, recalled].filter(Boolean).join('\n\n');
-            ledgerNote = `${ledger.length} 字（跟书不一样 ${div.length} 字 · 往事 ${recalled.length ? `${recalled.length} 字` : recallNote}）`;
+            //   ★★★leg161：读数里**要看得见两路各给了什么**（"字面 N ＋ 向量 M"）——
+            //     否则"向量路到底进没进去"在界面上完全看不出来（本仓那条"读数要能说出内容"的老账）。
+            ledgerNote = `${ledger.length} 字（跟书不一样 ${div.length} 字 · 往事 ${recallNote}）`;
         }
         const { tags, world: tideText } = buildInjections(world, { spec, roster, worldTide: tide, ledger });
         try {
@@ -628,20 +942,29 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
             else api.fn(INJECT_KEY_LEDGER, '', api.position, 0, false, api.sysRole);
         } catch (err) {
             lastLine = `标签注入：写入失败（${err?.message || err}）——这一轮没有注入`;
-            setStatus?.(`⚠ ${lastLine}`);
+            setStatus?.(`注意：${lastLine}`);
             stamp(); runs.lastOk = false; runs.lastOff = false; runs.lastChars = 0;
-            return { ok: false, off: false, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs } };
+            runs.last = { status: 'fail' };
+            return { ok: false, off: false, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs }, facts: runFacts() };
         }
         warned = false;
         stamp(); runs.lastOk = true; runs.lastOff = false; runs.lastChars = tags.length + tideText.length + ledger.length;
+        // ★★★（2026-10-05）**这一次注入的经过**（面板那一行读数读它）：哪几段真写了、各多少字、
+        //   往事那一段两路各取回几条。★放在 `lastChars` 那两条出口**之前**——三种出口都要带上它。
+        runs.last = {
+            status: runs.lastChars ? 'ok' : 'empty',
+            tagsBytes: tags.length, rosterInTags: roster, tideBytes: tideText.length, ledgerBytes: ledger.length,
+            ledgerOn, divergenceBytes: recallFacts?.divergenceBytes ?? 0, recalledBytes: recallFacts?.bytes ?? 0,
+            recall: recallFacts,
+        };
         // ★leg90c：读数里**明写位置**——它是这一段能不能真进 prompt 的判据（`IN_PROMPT`=0 → ST 映射成 'end'）。
         // ★★★leg92：**开关开着、但一个字都没注入**（世界没进内存 ⇒ 名册取不到 ⇒ 两段都空）
         //   必须**明说**，否则它和"已关"在界面上长得一样（这正是 leg92 那个真缺陷被藏了这么久的原因）。
         if (!runs.lastChars) {
-            lastLine = `标签注入：⚠ 开关开着，但这一次**一个字都没注入**`
+            lastLine = `标签注入：注意：开关开着，但这一次**一个字都没注入**`
                 + `（名册/世界动向都需要世界账；世界还没进内存时取不到）· position=${api.position}`;
-            setStatus?.(`⚠ ${lastLine}`);
-            return { ok: true, off: false, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs } };
+            setStatus?.(`注意：${lastLine}`);
+            return { ok: true, off: false, tagsChars: 0, worldChars: 0, line: lastLine, runs: { ...runs }, facts: runFacts() };
         }
         // ★★★leg93 修（读数印错名·会误导排查）：这一格原来是 `名册 ${world.length} 字`——
         //   **世界动向那段（`world`）的字数被印成了"名册"**。名册根本不在这里：它在 ① 段里
@@ -651,7 +974,8 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         lastLine = `标签注入：格式指令 ${tags.length} 字 · 世界动向 ${tideText.length ? `${tideText.length} 字` : '（未开）'}`
             + ` · 账上往事 ${ledgerNote}`
             + `（作为系统提示词排在提示词末尾 · position=${api.position}；插件只注入这几段，不读也不改你的正文）`;
-        return { ok: true, off: false, tagsChars: tags.length, worldChars: tideText.length, ledgerChars: ledger.length, ledgerNote, line: lastLine, runs: { ...runs } };
+        diagnostics.record('注入', 'info', '上下文已注入', { tagsChars: tags.length, worldChars: tideText.length, ledgerChars: ledger.length, ledgerNote, vectors: vecRows.length });
+        return { ok: true, off: false, tagsChars: tags.length, worldChars: tideText.length, ledgerChars: ledger.length, ledgerNote, line: lastLine, runs: { ...runs }, facts: runFacts() };
     }
 
     // ★★★leg115：**在"玩家把消息发出去"的那一刻再重设一次**——这是第四段能不能拿到"这一轮输入"的关键。
@@ -667,11 +991,17 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         if (es?.on && sentEvt && !es.__sw2LedgerHooked) {
             es.__sw2LedgerHooked = true;
             es.on(sentEvt, () => {
-                try { if (isOn('injectLedgerRecall')) apply(); } catch (_) { /* 失败零阻塞：注入不成绝不许拦住发消息 */ }
+                try {
+                    if (isOn('injectLedgerRecall')) { prefetchVectors(); apply(); }
+                } catch (_) { /* 失败零阻塞：注入不成绝不许拦住发消息 */ }
             });
         }
     } catch (_) { /* 取不到事件总线 ⇒ 退化成"只有上一轮正文"，另有自证面会如实报 */ }
 
     // ★leg92：`runs` 也交出去——"跑过没有"是排查第一问（见上面那段注释）。
-    return { apply, clear, readApi, _last: () => lastLine, _runs: () => ({ ...runs }) };
+    // ★★★leg161：`prefetchVectors` 一并交出去——接线层在**消息进来时**调它（后台把查询向量备好），
+    //   这样 `apply()` 那一刻是**同步读缓存**（ST 的注入口是同步的，这里不许 await）。
+    // ★★★（2026-10-05）：`_facts` 也交出去——参数页那一行读数直接问它（接线层**不必**再存一份，
+    //   省下来的行数是硬需求：`web/index.js` 有 `<3100` 行硬锁）。
+    return { apply, clear, clearVectors, readApi, prefetchVectors, _vecNote: () => vecNote, _last: () => lastLine, _runs: () => ({ ...runs }), _facts: () => runFacts() };
 }

@@ -38,20 +38,20 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
         if (typeof afterTick !== 'function') return;
         try {
             const r = afterTick(payload);
-            if (r && typeof r.then === 'function') r.then(null, (err) => onStatus?.(`⚠ 旁路（向量补嵌）出错：${err?.message || err}`));
+            if (r && typeof r.then === 'function') r.then(null, (err) => onStatus?.(`注意：旁路（向量补嵌）出错：${err?.message || err}`));
         } catch (err) {
-            onStatus?.(`⚠ 旁路（向量补嵌）出错：${err?.message || err}`);
+            onStatus?.(`注意：旁路（向量补嵌）出错：${err?.message || err}`);
         }
     }
 
     async function advance(dialogue = '') {
         if (running) {
-            onStatus?.('⚠ 上一轮还在演算，稍候再试（防重入）');
+            onStatus?.('注意：上一轮还在演算，稍候再试（防重入）');
             return { ok: false, skipped: 'busy' };
         }
         const world = load();
         if (!world) {
-            onStatus?.('尚无世界：当前聊天没有世界账——可到设置页「✨ 开始新世界」一键创建（角色卡自动为源），或「⬆ 导入恢复」载入备份');
+            onStatus?.('尚无世界：当前聊天没有世界账——可到设置页「开始新世界」一键创建（角色卡自动为源），或「导入恢复」载入备份');
             return { ok: false, skipped: 'no-world' };
         }
         running = true;
@@ -60,7 +60,7 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
             const res = await tick({ world, dialogue: String(dialogue ?? '') });
             if (!res.ok) {
                 // 失败降级：世界原样不动（引擎不变式），状态条报错，重试路径=再点一次
-                onStatus?.(`⚠ 演算失败：${res.error}（世界原样未动，可重试）`);
+                onStatus?.(`注意：演算失败：${res.error}（世界原样未动，可重试）`);
                 return { ok: false, error: res.error };
             }
             // save 允许异步（浏览器侧：IDB 入卷 + 热账写回）——必须 await 拿到真世界再 refresh。
@@ -71,7 +71,7 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
             try {
                 hot = await save(res.ssot);
             } catch (err) {
-                onStatus?.(`⚠ 落账失败：${err?.message || err}（世界已演算未保存，可重试）`);
+                onStatus?.(`注意：落账失败：${err?.message || err}（世界已演算未保存，可重试）`);
                 return { ok: false, error: String(err?.message || err), save: true };
             }
             refresh?.(hot ?? res.ssot);
@@ -79,7 +79,7 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
             runAfterTick({ hot: hot ?? res.ssot, world: res.ssot, dialogue: String(dialogue ?? '') });   // ★旁路（不挡、不抛）
             return { ok: true, tick: res.ssot?.meta?.tick };
         } catch (err) {
-            onStatus?.(`⚠ 演算异常：${err?.message || err}（世界原样未动，可重试）`);
+            onStatus?.(`注意：演算异常：${err?.message || err}（世界原样未动，可重试）`);
             return { ok: false, error: String(err?.message || err), thrown: true };
         } finally {
             running = false;

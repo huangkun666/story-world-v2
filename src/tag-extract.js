@@ -20,8 +20,10 @@
 //      会让 `check-step.js` 拒**整步**（红线 1：不许替玩家走）。**记下来可以，替它决定不行。**
 //   5. **时长只当上下文，不做算术**（"三天"与"一炷香"在插件看来都是串字；断言"三天=72小时"就是编数）；
 //   6. **形状不合的行**进 `malformed`、**被截断的条数**进 `parsed/count` 的差——丢了什么必须能被看见。
-// 纯函数：零 DOM、零传输、零 import（叶子模块），Node 可测。
+// 纯函数：零 DOM、零传输（★Task 3 复查起 import 共用的**身份解析器** `entity-identity.js`——见 `makeResolver`），
+//   Node 可测。
 // 分层归属：引擎规则侧（S3）。
+import { normEntityName, resolveEntityIdentityWithCanon } from './entity-identity.js';
 
 /** 行动标签一行的切格符：★**全角**竖线（半角 `|` 是 Markdown 表格与代码块里最常见的字符，认它必然误切）。 */
 export const TAG_FIELD_SEP = '｜';
@@ -55,9 +57,9 @@ export const CHANGE_FIELD_KIND = {
 /** ★驻点也允许由戏来改（细案 §5 第 6 条），但它要**过地名归一**——不在地名表里就丢 + 留痕。 */
 export const CHANGE_PLACE_FIELD = 'location';
 
-/** 形近字归一：去空白 + 全角/半角不敏感（NFKC）+ 小写。别名对齐靠它（实测"小娥 ≠ 白小娥"那类坑）。*/
+/** 形近字归一：去空白 + 全角/半角不敏感（NFKC）+ 小写。★Task 3 复查起**共用** `entity-identity.js` 那一把尺。*/
 function normName(v) {
-    return String(v ?? '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+    return normEntityName(v);
 }
 
 /** 地点归一：只去空白与原样（★**不做 NFKC**——地名要写回账上，改了字就改了地名）。 */
@@ -66,46 +68,40 @@ function normPlace(v) {
 }
 
 /**
- * 名号 → 实体（三档：id → name → aliases）。
+ * 名号 → 实体（**唯一一把尺子**：`entity-identity.js` 的 `resolveEntityIdentityWithCanon`）。
  * ★为什么连 id 也认：模型偶尔会把 id 照抄进标签（名册里两样都给了它），认下来比丢掉好。
  * ★★优先级写死（leg89 用户拍板「模型认得出那就直接按照插件的正名来看」）：
- *   **账上正名 → 书里正名 → 别名**。为什么正名必须在别名之前：别名可能跟别人的正名撞车
- *   （书里既有「小娥」这条、又是「白小娥」的别名）⇒ 先收正名，别名再收时才不会把真名盖掉。
- * @param entities 账上实体（`[{id,name,aliases}]`）
+ *   **账上正名 → 别名（实体别名 ∪ 名册兜底别名，并集后判唯一）**。为什么正名必须在别名之前：
+ *   别名可能跟别人的正名撞车（书里既有「小娥」这条、又是「白小娥」的别名）⇒ 先收正名，
+ *   别名再收时才不会把真名盖掉。
+ * ★★★Task 3 复查（task-3-review.md ⑥）：**同档内"唯一命中"才算数**——旧实现是一张
+ *   `byKey` 的"先到先得"表（`if (byKey.has(k)) return;`），于是两个实体共享同一个别名（都叫 `大人`）时
+ *   第一个登记的人赢。现在：命中**集合**里有多个不同 id ⇒ 返回 null（未定，调用方如实进 `unresolved`）。
+ * ★★★Task 3 复查第二轮（task-3-fixes-review.md ④）：别名档**先并集再判唯一**——旧法实体别名先命中
+ *   就直接返回，名册兜底别名（另一个实体）根本没机会参与唯一性判定 ⇒ 跨来源同名时选错了人。
+ *   并集与判定都住在 `entity-identity.js`（一处实现，四个消费者共用）。
+ * @param entities 账上实体（`[{id,name,aliases}]`）——★Task 3 起**别名也住在账上**（`seedBookEntities` 写入）
  * @param canon    书名录（`[{name,aliases}]`，来自 `context.setting.frozen.canon.bookEntities`）
- *                 ——★别名住在这里，账上没有（播种不拷别名，见设计文档 §14）
+ *                 ——旧账/历史世界的兼容兜底：`entities[].aliases` 缺失时仍按名册里的别名解析
  */
 function makeResolver(entities = [], canon = []) {
-    const byKey = new Map();
-    const add = (key, id) => {
-        const k = normName(key);
-        if (!k) return;
-        if (byKey.has(k)) return;              // 先到先得（确定性，不随机）
-        byKey.set(k, id);
-    };
-    // ① 账上：id 与正名
-    const entityKeys = new Set();
-    for (const e of entities) if (e?.id) entityKeys.add(normName(e.id));
-    for (const e of entities) if (e?.id) add(e.id, e.id);
-    for (const e of entities) if (e?.id) entityKeys.add(normName(e.name));
-    for (const e of entities) if (e?.id) add(e.name, e.id);
-    // ② 书里正名：**只补账上还没有的键**，且**不给 id**（账上没这个人 ⇒ 写它就是归不上，不许凭空造）。
-    //    ⚠这一档是"占位"用的：它让"这个名字是一条真名"这件事优先于"它还是别人的别名"（见 ③）。
-    const canonNameId = new Map();   // 书里正名 → 账上实体 id（账上没有就是 null）
-    for (const c of canon) {
-        const k = normName(c?.name);
+    const live = (Array.isArray(entities) ? entities : []).filter((e) => e?.id);
+    const idHits = new Map();                                 // ① id 原样照抄（标签这一层的既有约定）
+    for (const e of live) {
+        const k = normName(e.id);
         if (!k) continue;
-        canonNameId.set(k, entityKeys.has(k) ? byKey.get(k) : null);
-        add(c.name, null);
+        const bucket = idHits.get(k) || [];
+        if (!bucket.includes(e.id)) bucket.push(e.id);
+        idHits.set(k, bucket);
     }
-    // ③ 别名（最后收：正名/账上已经占了键的，别名不许盖）
-    for (const e of entities) if (e?.id) for (const a of e.aliases || []) add(a, e.id);
-    for (const c of canon) {
-        // 书里的别名指回**账上同名的那个实体**（有才是 id，没有就是 null ⇒ 归不上，如实报数）
-        const target = canonNameId.get(normName(c?.name)) ?? null;
-        for (const a of c.aliases || []) add(a, target);
-    }
-    return (raw) => byKey.get(normName(raw)) || null;
+    return (raw) => {
+        const k = normName(raw);
+        if (!k) return null;
+        const ids = idHits.get(k);
+        if (ids) return ids.length === 1 ? ids[0] : null;      // 同一个 id 抄到多个实体上 ⇒ 未定（不猜）
+        const r = resolveEntityIdentityWithCanon(live, canon, raw);
+        return r.status === 'ok' ? r.id : null;                // ② 正名唯一 → 它；③ 别名档并集后唯一才算
+    };
 }
 
 /** 标签块的开围栏（**围栏行只有它自己**才算——围栏后面跟别的不算）。 */

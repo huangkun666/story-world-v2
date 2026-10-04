@@ -83,6 +83,7 @@ export const EXTRACTION_MAX_TOKENS = 32768;
 //   数字（**提案态**，铁律 2，随长跑曲线定案）：300,000 ms = 5 分钟/次。
 //     依据：单块 ≈ 59k 字符输入 + ≤16,384 tokens 输出（reasoning 占盘）⇒ 分钟级，给 2.5 倍余量；
 //     同时它**不是无上限**——天花板 = 300 s（旧法最坏 62 分钟/块 ⇒ 现在最坏 5 分钟/块即止损跳过）。
+import { diagnostics } from './diagnostics.js';
 export const EXTRACTION_TIMEOUT_MS = 300_000;
 
 // 超时标记：给调用方一个**可判**的形态（不是靠猜错误文案）。
@@ -210,6 +211,7 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
     return async (prompt) => {
         if (typeof send !== 'function') throw new Error('没有可用的发送通道（这个环境里 fetch 与 XMLHttpRequest 都没有）');
         const controller = new AbortController();
+        const started = Date.now();
         // ★`abort(reason)` 里的 reason 在真浏览器里**到不了我们手上**（见上面 leg93d 那段），
         //   它留着只为两件事：① 本仓既有判据的假 fetch 会读它；② 调试时能在 devtools 里看见。
         //   **不要指望靠它给用户一句人话**——那句在下面的 catch 里显式组。
@@ -230,6 +232,7 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
                 }),
                 signal: controller.signal,
             });
+            diagnostics.record('网络', res.ok ? 'info' : 'error', '模型请求', { model, status: res.status, ms: Date.now() - started });
             if (!res.ok) {
                 const snippet = (await res.text()).slice(0, 240);
                 const err = new Error(`HTTP ${res.status}`);
@@ -238,6 +241,7 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
                 throw err;
             }
             const data = await res.json();
+            if (data?.usage) diagnostics.record('模型', 'info', '用量', { usageTokens: data.usage });
             return data?.choices?.[0]?.message?.content ?? '';
         } catch (err) {
             // leg27：超时**如实标识**（判据 = 本控制器自己发出过中止 ⇒ fetch 因我们超时而拒）

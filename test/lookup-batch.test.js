@@ -91,11 +91,13 @@ test('leg25 d：批量查询走通一次并落账（runBatchLookup）', async ()
     const transport = async () => '{"玄一道祖":{"实力":"T9渡劫巅峰","位置":"昆仑山"}}';
     const bookText = async () => ({ ok: true, entries: [{ name: '昆仑道宫', text: '- 玄一道祖 (男, T9渡劫巅峰): 人族守护神，居昆仑山。' }] });
     // leg25 f（X4）：默认面只问「实力」⇒ ok 记 1；显式带上位置那条腿时才记 2。
-    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 5 });
+    // ★Task 4：这两条固定响应是**裸标量**（无 `ev`）⇒ 走**显式** legacy 道；严格出处道（默认）
+    //   的正/负判据见 `test/integration-boundary-lookup.test.js`（本用例测的是"分批→落账"这条链）。
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 5, evidencePolicy: 'legacy' });
     assert.equal(r.stats.ok, 1, '★默认面：只落「实力」一栏');
     assert.equal(r.ssot.entities.find((x) => x.id === 'e_a')['实力'], 'T9渡劫巅峰');
     assert.equal(r.ssot.meta.entityFields.e_a.attempts['实力'].state, 'ok');
-    const r2 = await runBatchLookup({ ssot: world(), transport, bookText, ids: ['e_a'], tick: 5, fields: ['实力', '位置'] });
+    const r2 = await runBatchLookup({ ssot: world(), transport, bookText, ids: ['e_a'], tick: 5, fields: ['实力', '位置'], evidencePolicy: 'legacy' });
     assert.equal(r2.stats.ok, 2, '显式要两栏 ⇒ 实力 + 位置都落账（位置那条腿仍是可用能力）');
     assert.equal(r2.ssot.entities.find((x) => x.id === 'e_a')['位置'], '昆仑山');
 });
@@ -255,7 +257,8 @@ test('leg25 d（C1）：location 只写位置集原有项（唯一断言：不�
     const bookText = async () => ({ ok: true, entries: [{ name: '混乱之地·万妖盟', text: '- 玄一道祖 (男, T8大乘中期): 盟主。所在地: 南荒部洲·十万大山' }] });
     return import('../src/entity-lookup.js').then(async ({ runBatchLookup }) => {
         // leg25 f（X4）：位置那条腿要**显式**要（默认面只剩实力）
-        const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 7, fields: ['实力', '位置'] });
+        // ★Task 4：固定响应无 `ev` ⇒ **显式** legacy 道（本用例锁的是"地名不发明"，不是证据道）。
+        const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 7, fields: ['实力', '位置'], evidencePolicy: 'legacy' });
         const e = r.ssot.entities.find((x) => x.id === 'e_a');
         assert.equal(e['位置'], '南荒部洲·十万大山', '原话照抄留档');
         assert.equal(e.location, '十万大山', 'location = 集内更长的那一项');
@@ -394,7 +397,8 @@ test('leg25 d：查书抽到的位置标"书里原话"（与结构推导分开�
     w.entities = [{ id: 'e_a', kind: 'character', name: '玄一道祖', location: '未明' }];
     const transport = async () => '{"玄一道祖":{"位置":"南荒部洲·十万大山"}}';
     const bookText = async () => ({ ok: true, entries: [{ name: '万妖盟', text: '所在地: 南荒部洲·十万大山' }] });
-    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 4, fields: ['实力', '位置'] });
+    // ★Task 4：固定响应无 `ev` ⇒ **显式** legacy 道（本用例锁的是"位置来源"标记）。
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['e_a'], tick: 4, fields: ['实力', '位置'], evidencePolicy: 'legacy' });
     assert.equal(r.ssot.entities[0].location, '十万大山');
     assert.equal(r.ssot.meta.entityFields.e_a.位置来源, '书里原话', '★模型从原话抽的 ⇒ "书里原话"');
 });

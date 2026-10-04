@@ -258,10 +258,12 @@ test('leg25 e：可重入补齐——已建好的世界加载时补上归属/档
     assert.equal(r.changed, true, '有补齐 ⇒ 需要落盘');
     assert.ok(r.backfilled >= 3, `补齐计数可见（实际 ${r.backfilled}）`);
     const qing = w.entities.find((e) => e.name === '清玄真人');
-    assert.equal(qing.parent, '昆仑道宫', '★成员行反推出归属');
+    // ★★★Task 3 口径变更（依据：已批准设计 §6.2「成员行只用于定位，不直接新增关系」；
+    //   先有失败证据：改后实测这里由 '昆仑道宫' 变 undefined，而属性补齐一条没少）。
+    assert.equal(qing.parent, undefined, '★成员行不再反推归属（旧账里的历史值照旧显示，新账不再生产）');
     assert.equal(qing['实力'], 'T7合体中期', '★紧贴名号的档位原话照抄');
     assert.equal(w.entities.find((e) => e.name === '昆仑道宫')['规模'], '正道仙门魁首', '★势力规模原话照抄');
-    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, undefined, '书里没有依据的：不许凭空挂（被反驳=refuted）');
+    assert.equal(w.entities.find((e) => e.name === '散修甲').parent, undefined, '书里没有依据的：不许凭空挂');
     // 世界进度一个字节都不许动
     assert.equal(w.meta.tick, 42);
     assert.equal(w.chronicle.length, 1);
@@ -305,9 +307,11 @@ test('web/index.js 接线回归锁：模块可加载（顶层零 DOM 守卫不�
     assert.match(src, /nextVolume/, 'E1：热账卷号在接线里被读/写');
     assert.match(src, /if \(!rot(?:ation)?\.ok\) throw new Error\(rot(?:ation)?\.error\)/, 'E2：队列 save 面把轮转失败抛出去（不静默当成功）');
     assert.doesNotMatch(src, /catch \(_\) \{\s*return world;\s*\}/, 'E2：旧「吞异常返回原世界」实现已消失');
-    assert.match(src, /seedBookEntities\(/, 'E4：名册入账仍在 loadWorld 入口');
+    // ★Task 3：名册入账与关系网收进 `web/seed-diagnostics.js` 的 `seedAndReport`（同一件事，一处实现；
+    //   入口文件因此只留一行接线——`web/index.js` 有行数硬锁）。行为断言仍走真跑（见上面两条用例）。
+    assert.match(src, /seedAndReport\(/, 'E4：名册入账仍在 loadWorld 入口（Task 3 起经 seedAndReport 收口）');
     assert.match(src, /seedAndBackfill\(/, 'leg25 e：loadWorld 走可重入收口 seedAndBackfill（不是内联老逻辑）');
     assert.match(src, /bookEntriesForInherit\(\)/, 'leg25 f：三条取书路走同一个取数口（loadWorld 补齐也在内）');
-    assert.match(src, /seedBookEntities\(seed, \{ entries:/, 'leg25 e：初始化创建世界时也把真书正文交给名册落账');
+    assert.match(src, /seedAndReport\(seed, \{ entries: src\.worldInfoEntries/, 'leg25 e：初始化创建世界时也把真书正文交给名册落账');
     assert.match(src, /flushHotMeta\(\)/, 'E4：名册入账后有显式落盘路径');
 });

@@ -277,17 +277,22 @@ test('leg25 c 生·新实体**账面不带数值**：入局落账零属性字段
     assert.equal(r2s.ssot.entities.some((e) => e.name === '漕帮'), false, '被拒提议零落账');
 });
 
-test('A-10 生·book 源：书名录命中才放行；seed 幂等入账（书序优先、缺省 kind=character、位置集首个）', () => {
+test('A-10 生·book 源：书名录命中才放行；seed 幂等入账（书序优先、缺类别待核对、位置集首个）', () => {
+    // ★★★Task 3 口径变更（依据：已批准设计 §6.2/§6.3「没有模型确认或合法作者明确声明的类别，
+    //   不默认将其种为角色或势力；仍未确认则保留为待核对候选」；先有失败证据：改后实测
+    //   `城门卒` 由 `{name,kind:'character'}` 变成 `{name}` 且不再入账）。
     const seed = sanitizeCanon({ bookEntities: [{ name: '城门卒' }, { name: '白小娥', kind: 'character' }, { name: '城门卒' }] });
     assert.equal(seed.ok, true);
-    assert.deepEqual(seed.canon.bookEntities, [{ name: '城门卒', kind: 'character' }, { name: '白小娥', kind: 'character' }], '净化去重');
-    assert.deepEqual(seed.canon.bookEntities.map((b) => b.kind), ['character', 'character'], '缺省 kind=character');
+    assert.deepEqual(seed.canon.bookEntities, [{ name: '城门卒' }, { name: '白小娥', kind: 'character' }], '净化去重（缺类别保持缺）');
+    assert.deepEqual(seed.canon.bookEntities.map((b) => b.kind), [undefined, 'character'], '★缺类别不再默认 character');
     const w = baseWorld();
     w.context.setting = { frozen: { fingerprint: 'fp1', extractedAt: '2026-09-08T00:00:00Z', canon: { ...seed.canon, rules: [], powerScale: [], society: '', techOrMagic: '', historyNotes: [] } }, dynamic: { tension: { polarity: '未聚', direction: '', intensity: 0.5 }, env: {}, derivedFrom: [] } };
     const s1 = seedBookEntities(w);
-    assert.equal(s1.seeded, 2);
-    assert.ok(w.entities.some((e) => e.name === '城门卒' && e.id === 'e_bk_1' && e.location === '临渊城'));
-    assert.ok(w.entities.some((e) => e.name === '白小娥' && e.id === 'e_bk_2'));
+    assert.equal(s1.seeded, 1, '★只入账类别已确认的那一条');
+    assert.equal(s1.pendingKind, 1, '待核对候选如实计数');
+    assert.deepEqual(s1.pendingNames, ['城门卒']);
+    assert.ok(w.entities.some((e) => e.name === '白小娥' && e.id === 'e_bk_1'));
+    assert.equal(w.entities.some((e) => e.name === '城门卒'), false, '类别未确认不入实体账');
     assert.equal(w.entities.find((e) => e.id === 'e_bk_1').attrs, undefined, 'leg25 c：seed 通道不落数值属性（键都不存在——四维已删）');
     const s2 = seedBookEntities(w);
     assert.equal(s2.seeded, 0, '幂等：二次 seed 零新增');

@@ -22,6 +22,18 @@ import { renderModelListHtml, renderModelProbeHtml } from '../src/render.js';
 /** 按 id 找键的那三个框（地址/密钥/模型）。★数字键**不在这张表里**（它们走 `data-settings`，见下）。 */
 export const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model' };
 
+/**
+ * ★★★leg161：**「记忆通道（向量）」那三格**（设置页那张卡）。
+ *   ★它与上面那张表**分开**：那是"世界模型"的通道，这是"嵌入模型"的通道——两条独立的通道、
+ *     两把独立的密钥（用户可能一个用本地网关、一个用云端）。
+ *   ★★**只有三格**：地址/密钥/模型号。**维度与"一批几行"故意不在表里**——用户令
+ *     「**至于多少维度还有向量化多少行直接可以从厂商问到不用写到参数里懂吗？**」⇒ 运行时读回。
+ *   ★键名沿用 leg152 定的那三个（`sw2_emb_*`）——**别改名**：改了会把老玩家填过的配置丢掉。
+ */
+export const EMBED_SETTINGS_INPUTS = {
+    embedBaseUrl: 'sw2_emb_base', embedApiKey: 'sw2_emb_key', embedModel: 'sw2_emb_model',
+};
+
 // 数字型设置键的范围（唯一真源：reading 端——渲染层只画 min/max 提示，**拦截在这里**）。
 //   ★为什么拦：这两个数直接进引擎（`resolveBrowserTransport` → `createHttpTransport` 的
 //     `timeoutMs`/`maxTokens`）⇒ 落一个 NaN 或负数进去 = 每轮调用当场失败，而玩家只会看到"演算失败"。
@@ -35,7 +47,28 @@ export const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 
 export const SETTINGS_NUM_RANGE = {
     callTimeoutSec: [5, 600], callMaxTokens: [1024, 131072], tagMaxActions: [1, 200],
     extractConcurrency: [1, Number.POSITIVE_INFINITY],
+    // ★★★leg161（用户令「**这是记忆插件的向量模型参数配置，就这几个**」）：**检索参数那三格**。
+    //   ★它们住**参数页**的注入卡（与"插件动不动你的对话"同一处）——因为那一段就是它们管的东西。
+    //   ★★`retrievalTop` / `retrievalDepth` 是**整数**（条数）；`retrievalMinScore` 是**小数**
+    //     ⇒ 它走下面那条小数通道（`/^\d+$/` 那种整数口会把它整条拒掉，本笔当场核出来的）。
+    retrievalTop: [1, 50],
+    retrievalDepth: [1, 20],
+    retrievalMinScore: [0, 1],
 };
+
+/** ★leg161：**小数**设置键（现在只有「相似度阈值」一个）——范围照 `SETTINGS_NUM_RANGE`。 */
+export const SETTINGS_FLOAT_KEYS = new Set(['retrievalMinScore']);
+
+/** ★leg161：小数的归一：合法 ⇒ 保留两位；非法/越界 ⇒ null（调用方**不写盘**并如实出声）。 */
+export function sw2NormalizeFloatSetting(key, raw) {
+    const range = SETTINGS_NUM_RANGE[key];
+    if (!range || !SETTINGS_FLOAT_KEYS.has(key)) return null;
+    const s = String(raw ?? '').trim();
+    if (!/^\d+(\.\d+)?$/.test(s)) return null;      // 空串/负号/中文一律不受理（不猜）
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < range[0] || n > range[1]) return null;
+    return Math.round(n * 100) / 100;
+}
 
 /** 数字键的**人话名**（出现在状态条上，所以是玩家可见文本：零引擎术语）。 */
 export const SETTINGS_NUM_LABEL = {
@@ -43,6 +76,12 @@ export const SETTINGS_NUM_LABEL = {
     callMaxTokens: '单轮输出上限（token）',
     tagMaxActions: '单轮注入行动条数上限',
     extractConcurrency: '同时问几块',
+    // ★leg161：检索参数那三格（名字照玩家看得懂的话说，零引擎术语）。
+    //   ★2026-10-05：**名字保持原样**——玩家已经认得它们；"这一格作用在哪、管什么"
+    //     改由参数页那四格各挂的一枚小问号说清（见 `src/render.js` 的 `paramHint`）。
+    retrievalMinScore: '相似度阈值',
+    retrievalTop: '最大召回条数',
+    retrievalDepth: '检索上下文深度',
 };
 
 /** 数字设置的归一：合法 ⇒ 整数；非法/越界 ⇒ null（调用方**不写盘**并如实出声，绝不写 NaN）。 */
@@ -119,8 +158,8 @@ export function createModelChannelHub(deps = {}) {
         status('正在取模型列表…');
         const r = await listModels({ baseUrl: s.baseUrl, apiKey: s.apiKey, fetchImpl });
         if (!r.ok) {
-            state.catalog = { models: [], limits: {}, note: `✗ 取不到模型列表：${r.error}` };
-            status(`⚠ 取不到模型列表：${r.error}`);
+            state.catalog = { models: [], limits: {}, note: `取不到模型列表：${r.error}` };
+            status(`注意：取不到模型列表：${r.error}`);
         } else {
             // ★★★leg157：清单里**顺手带上服务端自己报的容量**（`limits`，键 = 模型 id）——
             //   点某一项时用它把「单轮输出上限」填好（见 `pickModelAction`）。
@@ -130,7 +169,7 @@ export function createModelChannelHub(deps = {}) {
             state.catalog = {
                 models: r.models,
                 limits: r.limits || {},
-                note: `✓ 取到 ${r.models.length} 个模型（点一下即填进「世界模型」）`
+                note: `取到 ${r.models.length} 个模型（点一下即填进「世界模型」）`
                     + (declared
                         ? ` · 其中 ${declared} 个自己报了输出上限——点它时会**一并**填好「单轮输出上限」`
                         : ' · 这个网关一个都没报输出上限（那一格就按出厂值走）'),
@@ -148,9 +187,9 @@ export function createModelChannelHub(deps = {}) {
         const r = await probeModel({ baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model, fetchImpl });
         // ★用户 2026-09-27 当场裁的：**不写"模型回了几个字"**（那是内部噪声，玩家要的是通没通）。
         state.probe = r.ok
-            ? { ok: true, line: `✓ 通 · ${String(s.model || '')} · ${secs(r.ms)}` }
-            : { ok: false, line: `✗ ${r.error}` };
-        status(r.ok ? `✓ 连通 · ${String(s.model || '')} · ${secs(r.ms)}` : `⚠ 连不通：${r.error}`);
+            ? { ok: true, line: `通 · ${String(s.model || '')} · ${secs(r.ms)}` }
+            : { ok: false, line: `注意：${r.error}` };
+        status(r.ok ? `连通 · ${String(s.model || '')} · ${secs(r.ms)}` : `注意：连不通：${r.error}`);
         paint();
         return r;
     }
@@ -221,7 +260,7 @@ export function createModelChannelHub(deps = {}) {
                         '原始 target': `${String(e.target?.tagName || '').toUpperCase()}.${e.target?.className || ''}`,
                         'data-param': hit.getAttribute('data-param'),
                     });
-                    status('⚠ 这一下没接上（面板结构变了）——已拒绝提交，世界账没动');
+                    status('注意：这一下没接上（面板结构变了）——已拒绝提交，世界账没动');
                     return;
                 }
                 // ★★leg108：属性那一半不再手拼 —— 与主委托共用 `readPayload`；`el` 仍是**手工加的那一个键**
@@ -230,11 +269,15 @@ export function createModelChannelHub(deps = {}) {
                 if (typeof dispatchAction === 'function') dispatchAction('set-param', { ...payload, value: payload.value ?? hit.value, el: hit }, e);
                 return;
             }
-            const key = Object.keys(SETTINGS_INPUTS).find((k) => SETTINGS_INPUTS[k] === e.target?.id);
+            // ★★★leg161：**记忆通道那三格也走这一条**（表分开、处理同一条）——键名各自独立，
+            //   免得两条通道的地址/密钥互相覆盖（一个本地网关、一个云端是常见配法）。
+            const allInputs = { ...SETTINGS_INPUTS, ...EMBED_SETTINGS_INPUTS };
+            const key = Object.keys(allInputs).find((k) => allInputs[k] === e.target?.id);
             if (key) {
                 const v = e.target.value;
-                if (key === 'apiKey') {
-                    if (v && v.trim()) write('apiKey', v.trim()); // 留空=不改（防一次误清）
+                if (key === 'apiKey' || key === 'embedApiKey') {
+                    // ★两条通道的密钥**分开存**（各自留空=不改，防一次误清）
+                    if (v && v.trim()) write(key, v.trim());
                     return;
                 }
                 write(key, v);
@@ -248,7 +291,7 @@ export function createModelChannelHub(deps = {}) {
                 const n = sw2NormalizeNumericSetting(numKey, e.target.value);
                 if (n == null) {
                     const [lo, hi] = SETTINGS_NUM_RANGE[numKey] || [];
-                    status(`⚠ 「${SETTINGS_NUM_LABEL[numKey] || numKey}」要填 ${lo}–${hi} 之间的整数——这一下没有写入（世界账没动）`);
+                    status(`注意：「${SETTINGS_NUM_LABEL[numKey] || numKey}」要填 ${lo}–${hi} 之间的整数——这一下没有写入（世界账没动）`);
                     return;
                 }
                 write(numKey, n);

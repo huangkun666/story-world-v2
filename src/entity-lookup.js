@@ -21,6 +21,16 @@
 //
 // 分层归属：编排层（铁律 9）。零 DOM、零 Node 内建、零索引库依赖——浏览器与 Node 同构。
 
+import { ABSTRACT_FACT_RULES } from './abstract-shape.js';
+import { resolveEntityIdentityWithCanon } from './entity-identity.js';
+// ★★★Task 4（integration boundaries）：查书这条路的**出处协议**（与抽取/起根同一把尺子）。
+//   复审接口②：`buildLookupPrompt → runLookup → runBatchLookup/runEntityLookupStep → applyLookup`
+//   此前**没有任何证据协议**——模型回什么字符串就写什么（`{'陆青':{'实力':'凭空捏造的渡劫境'}}` 照落账）。
+//   治法：提示词给**每个名号自己的来源清单**（发射端/取书面交出来的最终正文），
+//   回文每条字段带 `ev:{s,q}`；引擎用 `verifyQuote` 核"编号属于该名号 + 原话在该来源的展示文本里 +
+//   字段值在它自己的 `ev.q` 里"（别人的值在别处出现**不算**）。原始凭证只进受门控的诊断，不落世界账。
+import { freezeAllowedSources, verifyQuote, presenceIn, evidenceRecord, materialRowsOf, scopeForRows } from './abstract-evidence.js';
+
 export const ROUND_PICK_CAP = 15;          // 提案（用户 2026-09-11 拍板）：每轮上场实体上限
 // ★leg25 f（用户拍板「X4 摘掉位置查书腿」）：本模块的**面从 `['实力','位置']` 收窄为 `['实力']`**。
 //   为什么摘掉「位置」这条腿（依据 `docs/spec-failure-verdict-and-visibility.md` §4.2）：
@@ -39,19 +49,18 @@ export const ENTITY_LOOKUP_MAX_ATTEMPTS = 2;            // 提案：同字段自
 export const ENTITY_LOOKUP_MAX_FAILS = 3;               // 提案：连续失败熔断阈值（世界推进优先）
 
 // ---------- 名号对齐（不按位置对齐：模型少一项就会全错位；重名时按 id 回填） ----------
-function rosterIndex(world) {
-    const byName = new Map();
-    for (const e of world?.entities || []) {
-        const arr = byName.get(e.name) || [];
-        arr.push(e);
-        byName.set(e.name, arr);
-    }
-    return byName;
-}
+// ★★★Task 3：解析改为**正名 ∪ 已确认别名**（`src/entity-identity.js` 的统一解析器）——
+//   旧法只按正名精确查（`byName.get(raw)`），别名查不到（预检 §2.4：`entity-lookup` 只认正名）。
+// ★★★Task 3 复查第二轮（task-3-fixes-review.md ④）：**与标签/归属/关系端点同一把尺子**——
+//   旧法用"正名 ∪ 别名"的合并索引直接数命中数，于是「小娥」既是账上 `小娥` 的正名、又是
+//   `白小娥` 的别名时，这里判成"重名 ⇒ 丢"，而标签/归属却按 leg89 口径认出 `小娥`（同一个名字
+//   两处结论不同）。现在调 `resolveEntityIdentityWithCanon`：**唯一正名压过别人的别名**，
+//   别名档并集后唯一才算。纪律不变：**唯一命中才算**（多命中一律丢弃，宁可漏回填不可错回填）；
+//   **不做子串猜**。账上没有书名录这一路（模型回的是账上名号），故 `canon` 传空。
 // 模型回的名号 → 实体：唯一命中才算；重名/未命中一律丢弃（宁可漏回填，不可错回填）
-function resolveByName(byName, raw) {
-    const arr = byName.get(String(raw ?? '').trim());
-    return arr && arr.length === 1 ? arr[0] : null;
+function resolveByName(entities, raw) {
+    const r = resolveEntityIdentityWithCanon(entities, [], raw);
+    return r.status === 'ok' ? r.entity : null;
 }
 // 可被选中的实体：在册且未灭/未退休（门控面同一口径）
 const pickable = (e) => Boolean(e) && e.status !== 'dead' && e.status !== 'retired';
@@ -263,7 +272,7 @@ export async function planBatches({ world, ids = [], fields = ENTITY_LOOKUP_FIEL
  * 查**指定的一批**实体（面板单实体 / 批量补全的分批，都走这里；与每轮前置步同一收口）。
  * 与 runEntityLookupStep 的区别：不选人（名单由调用方给定），其余口径完全一致。
  */
-export async function runBatchLookup({ ssot, transport, bookText, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, tick = 0, bookEntries = null } = {}) {
+export async function runBatchLookup({ ssot, transport, bookText, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, tick = 0, bookEntries = null, evidencePolicy = null, onEvidence = null } = {}) {
     const out = { ssot, stats: null, warning: null, calls: 0, locationInherited: 0 };
     if (!ids.length) return out;
     // 位置继承是**零 token 结构推断**（组织条目驻地 → 成员），不依赖模型通道 ⇒ 没通道也照跑
@@ -274,16 +283,18 @@ export async function runBatchLookup({ ssot, transport, bookText, ids = [], fiel
         return d.ssot;
     };
     if (!transport) return { ...out, ssot: withInherit(ssot) };
+    const warns = [];
     const { batches, skipped } = await planBatches({ world: ssot, ids, fields, forceFields, bookText });
-    if (skipped.length) out.warning = `${skipped.length} 个实体无需查（${skipped.slice(0, 3).map((s) => s.reason).join('/')}）`;
+    if (skipped.length) warns.push(`${skipped.length} 个实体无需查（${skipped.slice(0, 3).map((s) => s.reason).join('/')}）`);
     const flat = batches.flatMap((b) => b.items);
-    if (!flat.length) return { ...out, ssot: withInherit(ssot) };
+    if (!flat.length) return { ...out, ssot: withInherit(ssot), warning: warns.length ? warns.join('；') : null };
     const idList = flat.map((x) => x.id);
-    const res = await runLookup({ world: ssot, transport, ids: idList, bookText });
+    const res = await runLookup({ world: ssot, transport, ids: idList, bookText, fields, evidencePolicy, onEvidence });
     out.calls += 1;
     if (res.byName === null) {
-        out.warning = `查书调用失败：${res.error}`;
-        return { ...out, ssot: noteFailure(ssot, tick) };    // 失败不写痕（这回没查成 ≠ 书里没有）
+        // ★Task 4：严格道缺材料/坏回文与"调用失败"分开说——但两者都**不写痕**（这回没查成 ≠ 书里没有）。
+        warns.push(res.policy === 'strict' ? `查书调用失败（严格出处道）：${res.error}` : `查书调用失败：${res.error}`);
+        return { ...out, ssot: noteFailure(ssot, tick), warning: warns.join('；') };
     }
     let readFailed = false;
     const sources = {};
@@ -292,16 +303,22 @@ export async function runBatchLookup({ ssot, transport, bookText, ids = [], fiel
         if (!src.ok) readFailed = true;
         sources[it.id] = src.ok ? src.entries.map((x) => x?.name ?? x) : undefined;
     }
-    if (readFailed) out.warning = '查书取不到世界书原文（本轮不写「书未明述」，下轮再试）';
-    const applied = applyLookup({ ssot, ids: idList, byName: res.byName, sources, tick, fields });
+    if (readFailed) warns.push('查书取不到世界书原文（本轮不写「书未明述」，下轮再试）');
+    const applied = applyLookup({ ssot, ids: idList, byName: res.byName, byId: res.byId, sources, tick, fields, rejected: res.rejected || null, rejectedById: res.rejectedById });
     out.stats = applied.stats;
+    if (applied.stats.rejected) {
+        // ★Task 4：**第三种结局要看得见**——"模型回了但出处核不过"不许长得像"书里没有"。
+        warns.push(`${applied.stats.rejected} 条字段的出处核不过（已拒收、不落账；不算「书未明述」，下轮可重试）`);
+    }
+    if (warns.length) out.warning = warns.join('；');
     // 查书之后再跑一遍位置继承：本批查回来的"位置"若没能归一化进集，结构推断可以补上（只填空位）
     const finalSsot = withInherit(applied.ssot);
     return { ...out, ssot: noteSuccess(finalSsot) };
 }
 
-export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS) {
+export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS, { strict = false } = {}) {
     const lines = [
+        ...ABSTRACT_FACT_RULES,
         '你是世界设定的字段抽取器。只提取不创作：只从给定原文里取事实，原文没写的一律留空，绝不推测、不补全。',
         '任务：为下面的每个名号，抽出它在**原文里写明**的字段。',
         '口径（必须遵守）：',
@@ -312,15 +329,31 @@ export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS)
         '• **势力条目不抽实力**（势力只写它自己的性质/规模描述，与角色档位不是一回事）——势力条目的"实力"一律留空；',
         '• 只写该名号**自身**写明的字段；只在它的成员/属下身上写明的，不算它的；',
         '• 取不到就不写这个键（**不要填 ""、不要填"未知"、不要猜**）。',
-        `输出严格 JSON：{ "<名号>": { ${fields.map((f) => `"${f}": "原文原话"`).join(', ')} } }`,
-        '不要输出任何解释文字。',
-        '———— 原文 ————',
     ];
+    if (strict) {
+        // ★Task 4：严格道——形状与引用纪律（与 `buildAttrsOnlyPrompt` 同一口径）。
+        lines.push(
+            '★★**每一条字段都要带 `ev`（出处）**：`ev.s` = 该名号下面「来源清单」里的编号，`ev.q` = 该编号来源里**逐字照抄**的那句原文；',
+            '  **字段值必须能在自己的 `ev.q` 里逐字找到**——找不到的字段**不要写**（引擎逐字核，核不过的一律不收）。',
+            '  编号只许引**该名号自己那几条**（每个名号下面各有一份清单）：引别的名号下面的编号、或引本次没给出的编号，都会被拒收。',
+            `输出严格 JSON：{ "<名号>": { ${fields.map((f) => `"${f}": {"文":"原文原话","ev":{"s":"S1","q":"原文依据"}}`).join(', ')} } }`,
+        );
+    } else {
+        lines.push(`输出严格 JSON：{ "<名号>": { ${fields.map((f) => `"${f}": "原文原话"`).join(', ')} } }`);
+    }
+    lines.push('不要输出任何解释文字。');
+    lines.push(strict ? '———— 原文（每个名号只许引它自己那几条编号）————' : '———— 原文 ————');
     for (const t of targets) {
         const src = (t.entries || []).filter((x) => x && x.text);
-        lines.push(`【${t.name}】`);
+        lines.push(strict ? `【${t.name}】（实体 id: ${t.id}）` : `【${t.name}】`);
         if (!src.length) lines.push('（本书没有该名号的条目）');
-        else for (const s of src) lines.push(String(s.text));
+        else {
+            for (const s of src) {
+                // ★Task 4：每条来源写出编号（与 `freezeAllowedSources` 的 ref 一一对应，见 runLookup）。
+                if (strict && s.ref) lines.push(`${s.ref} = ${String(s.title || s.name || '(无题名)')}`);
+                lines.push(String(s.text));
+            }
+        }
     }
     return lines.join('\n');
 }
@@ -396,7 +429,137 @@ export async function resolveBookSource(bookText, entity) {
     return { ok: true, entries: Array.isArray(raw) ? raw : [] };
 }
 
-export async function runLookup({ world, transport, ids, bookText } = {}) {
+/**
+ * ★★★Task 4：把一批 target 的条目冻成"**每个名号自己的一份来源清单**"，并算出各自的作用域。
+ *
+ * 为什么每个名号单独一份（而不是全书一份大清单）：查书这条路要能回答"这条字段值**凭哪一句**入账"，
+ *   而模型最容易犯的错正是**拿别人的出处**（复审接口②：`{'陆青':{'实力':…}}` 这种无出处回文照落账；
+ *   而 `甲的实力` 出现在乙的条目里时，模型会拿乙的编号去证明甲）。⇒ 每个名号的编号只覆盖它自己的条目，
+ *   引擎核的时候也只认它自己的片段：**引别的名号的编号 = 本次没展示过 = 拒收**。
+ *
+ * 作用域用 `scopeForRows`（与抽取/起根同一把尺子）：材料 = 所有条目按顺序 `\n` 相接，
+ *   行号区间按条目累加 ⇒ 每个名号拿到的片段**恰好是它自己那几条的正文**。
+ */
+function freezeLookupTargets(targets) {
+    const blocks = [];
+    for (const t of targets) {
+        t.entries = (t.entries || []).filter((e) => e && String(e.text ?? '').trim()).map((e) => ({ ...e }));
+        for (const e of t.entries) {
+            const sourceId = String(e.sourceId ?? e.name ?? `entry-${blocks.length + 1}`).trim() || `entry-${blocks.length + 1}`;
+            blocks.push({ sourceId, title: String(e.name ?? '').trim(), text: String(e.text) });
+            e.ref = `S${blocks.length}`;
+        }
+    }
+    const frozen = freezeAllowedSources(blocks);
+    if (!frozen) return null;
+    const rows = materialRowsOf(frozen.text);
+    const spanOf = new Map();
+    let cursor = 0;
+    for (const b of frozen.list) {
+        const n = materialRowsOf(b.text).length;
+        spanOf.set(b.ref, { from: cursor, to: cursor + n - 1 });
+        cursor += n;
+    }
+    for (const t of targets) {
+        const indexes = [];
+        for (const e of t.entries) {
+            const sp = spanOf.get(e.ref);
+            if (!sp) continue;
+            for (let i = sp.from; i <= sp.to && i < rows.length; i += 1) indexes.push(i);
+        }
+        t.frozen = frozen;
+        t.scope = scopeForRows(frozen, { text: frozen.text, rows, indexes });
+    }
+    return frozen;
+}
+
+/**
+ * ★★★Task 4（复审接口②）：**严格道的回文核对**——别名/ID/正名先解析到 target，再逐字段核出处。
+ *
+ * 三条口径（缺一条就是"没接上"）：
+ *   ① **键解析用全仓唯一那把尺子**（`resolveEntityIdentityWithCanon`：正名优先、别名并集后判唯一）——
+ *      模型用**已确认别名**（如 `青衣客`）或 id 回话时，必须能对到目标实体；不在本批/歧义 ⇒ 不收（不猜）。
+ *   ② **每条字段要 `ev:{s,q}`**：`s` 必须属于**该名号自己**的来源清单、`q` 必须在该来源的展示文本里、
+ *      **字段值必须出现在它自己的 `q` 里**（别人的值在别处出现不算）。
+ *   ③ **多个叫法互相矛盾 ⇒ 拒收该字段**（不许"先到先得"——与名册合并同一条纪律）。
+ *
+ * @returns {{byName:object, rejected:object}} `byName` = 旧形状（`{名号:{字段:原话}}`）；
+ *   `rejected` = `{名号:{字段:原因}}`（**不是 pending、不是 absent**——是"有回话但出处核不过"）。
+ */
+function verifyLookupReplies(world, targets, obj, fields, onEvidence) {
+    const entities = world?.entities || [];
+    const canon = world?.context?.setting?.frozen?.canon?.bookEntities || [];
+    const byName = {};
+    const rejected = {};
+    const byId = {};
+    const rejectedById = {};
+    const keysFor = (t) => {
+        const out = [];
+        for (const [k, v] of Object.entries(obj)) {
+            if (k === t.id) { out.push({ key: k, value: v }); continue; }
+            const r = resolveEntityIdentityWithCanon(entities, canon, k);
+            if (r.status === 'ok' && r.id === t.id) out.push({ key: k, value: v });
+        }
+        return out;
+    };
+    for (const t of targets) {
+        const replies = keysFor(t).filter((x) => x.value && typeof x.value === 'object' && !Array.isArray(x.value));
+        const kept = {};
+        const rej = {};
+        const note = (rec) => { if (typeof onEvidence === 'function') { try { onEvidence(rec); } catch (_) { /* 观测面绝不许成为故障点 */ } } };
+        for (const f of fields) {
+            const claims = [];
+            for (const { value } of replies) {
+                const raw = value[f];
+                if (raw === undefined || raw === null) continue;
+                const text = typeof raw === 'string' ? raw.trim() : String(raw?.文 ?? raw?.value ?? raw?.text ?? '').trim();
+                if (!text) continue;
+                const ev = (raw && typeof raw === 'object' && raw.ev && typeof raw.ev === 'object' && !Array.isArray(raw.ev)) ? raw.ev : null;
+                claims.push({ text, ev });
+            }
+            if (!claims.length) continue;                       // 模型没给这一栏 ⇒ 走旧 pending 语义
+            const distinct = [...new Set(claims.map((c) => c.text))];
+            if (distinct.length > 1) {
+                rej[f] = `同名号的多个叫法给出互相矛盾的字段值（${distinct.slice(0, 2).join(' / ')}）⇒ 不采先到者`;
+                note(evidenceRecord({ cls: 'lookup', subject: `${t.name}·${f}`, action: 'drop', why: rej[f], quote: distinct[0] }));
+                continue;
+            }
+            let why = '出处核不过';
+            for (const c of claims) {
+                const v = verifyQuote(t.frozen, { ev: c.ev, scope: t.scope, cls: 'lookup', subject: `${t.name}·${f}` });
+                if (!v.ok) { why = v.why; continue; }
+                if (!presenceIn(v.quote, c.text)) { why = '字段值不在所引原话里（别处的原话不算）'; continue; }
+                kept[f] = c.text;
+                note(evidenceRecord({ cls: 'lookup', subject: `${t.name}·${f}`, action: 'keep', ref: v.ref, quote: c.text }));
+                why = null;
+                break;
+            }
+            if (!(f in kept)) {
+                rej[f] = why;
+                note(evidenceRecord({ cls: 'lookup', subject: `${t.name}·${f}`, action: 'drop', why, ref: claims[0].ev?.s ?? null, quote: claims[0].text }));
+            }
+        }
+        byId[t.id] = Object.keys(kept).length ? kept : null;
+        if (Object.keys(rej).length) rejectedById[t.id] = rej;
+        const owner = resolveEntityIdentityWithCanon(entities, canon, t.name);
+        byName[t.name] = owner.status === 'ok' && owner.id === t.id ? byId[t.id] : null;
+        if (owner.status === 'ok' && owner.id === t.id && Object.keys(rej).length) rejected[t.name] = rej;
+    }
+    return { byName, byId, rejected, rejectedById };
+}
+
+/**
+ * runLookup({ world, transport, ids, bookText }) → { byName, error }
+ * bookText 是注入面（浏览器=从 canon.bookEntities 取原文；Node 诊断=直接给文本），
+ *   本模块不读世界书文件，保持纯编排层。
+ * 失败语义：调用失败/坏 JSON → { byName: null, error }（调用方**不写任何痕迹**，下轮重试）。
+ *
+ * ★★★Task 4（复审接口②）：**默认严格**——每条字段都要"该名号自己的来源编号 + 逐字原话"。
+ *   · `evidencePolicy:'legacy'` = **显式**旧口径（离线固定响应/老 demo 专用）：照旧只按正名取值，
+ *     **没有出处也照收**（这条只许显式声明，不许因为"这次没给元数据/模型没给出处"自动回落）。
+ *   · 严格道缺材料（取到的条目没有正文）⇒ **拒**（`byName:null` + 原因），不静默变 legacy。
+ */
+export async function runLookup({ world, transport, ids, bookText, fields = ENTITY_LOOKUP_FIELDS, evidencePolicy = null, onEvidence = null } = {}) {
     const ents = (world?.entities || []);
     const idIndex = new Map(ents.map((e) => [e.id, e]));
     const targets = (await Promise.all((ids || []).map(async (id) => {
@@ -410,17 +573,34 @@ export async function runLookup({ world, transport, ids, bookText } = {}) {
         return { id: e.id, name: e.name, entries: src.entries, readFailed: !src.ok };
     }))).filter(Boolean).filter((t) => t.entries.length);
     if (!targets.length) return { byName: {}, skipped: 'no-source', ok: true };
+    const strict = evidencePolicy !== 'legacy';
+    if (strict) {
+        if (!freezeLookupTargets(targets)) {
+            return { byName: null, error: '严格出处道：本次取到的条目没有正文（无材料可核）', policy: 'strict' };
+        }
+        // 冻完之后：**没有自己条目（或算不出作用域）的名号一律不进本次调用**——
+        //   否则它没有"自己那份清单"，就可能拿别人的编号冒领（scope 为空 ⇒ 退回块内存在性那条弱口径）。
+        for (let i = targets.length - 1; i >= 0; i -= 1) {
+            if (!targets[i].entries.length || !targets[i].scope) targets.splice(i, 1);
+        }
+        if (!targets.length) return { byName: {}, skipped: 'no-source', ok: true };
+    }
     let text = '';
     try {
-        text = await transport(buildLookupPrompt(world, targets));
+        text = await transport(buildLookupPrompt(world, targets, fields, { strict }));
     } catch (err) {
-        return { byName: null, error: String(err?.message || err) };
+        return { byName: null, error: String(err?.message || err), policy: strict ? 'strict' : 'legacy' };
     }
     const obj = parseJson(text);
-    if (!obj || typeof obj !== 'object') return { byName: null, error: 'bad-json' };
-    const out = {};
-    for (const t of targets) out[t.name] = obj[t.name] ?? null;   // 缺失=null（查书标记里算"没给"）
-    return { byName: out, ok: true };
+    if (!obj || typeof obj !== 'object') return { byName: null, error: 'bad-json', policy: strict ? 'strict' : 'legacy' };
+    if (!strict) {
+        // ★显式 legacy：**逐字旧行为**（只认正名键；没有出处也收）——旧固定响应零扰动。
+        const out = {};
+        for (const t of targets) out[t.name] = obj[t.name] ?? null;   // 缺失=null（查书标记里算"没给"）
+        return { byName: out, ok: true, policy: 'legacy' };
+    }
+    const verified = verifyLookupReplies(world, targets, obj, fields, onEvidence);
+    return { ...verified, ok: true, policy: 'strict' };
 }
 
 // ---------- ③ 回写（引擎纯函数）：查书标记 + 逐字段独立 + 不可变风格 ----------
@@ -433,12 +613,16 @@ export async function runLookup({ world, transport, ids, bookText } = {}) {
  *   `undefined` = **这一轮没读成书**（取书抛错/书没取到）→ 一律 pending，**绝不记 absent**
  *     （第二十五棒 d：旧法把"读不到书"与"书里没有"同形处置 ⇒ 误写「书未明述」并永久锁死该栏，
  *      违反硬规矩「绝不用空值反推『书里没有』」）
+ * ★★★Task 4：`rejected` = `{ 名号: { 字段: 原因 } }`（严格道的**第三种结局**：有回话、但出处核不过）。
+ *   它**既不是 pending（模型没给）也不是 absent（书没写）**——旧法会把这两种情形混成一个数，
+ *   于是"模型没带出处"看起来像"书里没有"（复审接口②点名的病）。现在如实计数（`stats.rejected`）
+ *   并留原因；状态 `rejected` 仍可重试（`missingFields` 只跳过 ok/absent）。
  */
-export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields = ENTITY_LOOKUP_FIELDS } = {}) {
-    const stats = { ok: 0, pending: 0, absent: 0, unread: 0, written: [] };
+export function applyLookup({ ssot, ids, byName, byId = null, sources = {}, tick = 0, fields = ENTITY_LOOKUP_FIELDS, rejected = null, rejectedById = null } = {}) {
+    const stats = { ok: 0, pending: 0, absent: 0, unread: 0, rejected: 0, written: [] };
     if (byName === null || byName === undefined) return { ssot, stats };
     const entities = [...(ssot?.entities || [])];
-    const roster = rosterIndex(ssot);
+    const roster = entities;                       // ★复核第二轮：正名/别名唯一性由共用解析器判（见 resolveByName）
     const idxById = new Map(entities.map((e, i) => [e.id, i]));
     const prevMeta = ssot.meta || {};
     const entityFields = { ...(prevMeta.entityFields || {}) };
@@ -455,12 +639,20 @@ export function applyLookup({ ssot, ids, byName, sources = {}, tick = 0, fields 
         // 回文按名号对齐：**唯一命中**才算（重名/未命中一律丢弃——宁可漏填，不可错填；
         //   实测世界里 623 实体重名 0 组，但防御不能省：模型少一项就会让位置对齐全错位）
         const owner = resolveByName(roster, e.name);
-        const reply = owner && owner.id === id ? (byName[e.name] ?? null) : null;
+        const reply = byId && Object.hasOwn(byId, id) ? byId[id] : (owner && owner.id === id ? (byName[e.name] ?? null) : null);
+        // ★Task 4：出处核不过的字段（同一把尺子判的 owner 闸也照用——歧义名号一律不收）。
+        const rej = rejectedById && Object.hasOwn(rejectedById, id) ? rejectedById[id] : ((owner && owner.id === id && rejected && typeof rejected === 'object') ? (rejected[e.name] || {}) : {});
         const next = { ...e };
         let changed = false;
         const provenance = {};   // 本次回写要落到 entityFields 的来源标记（如「位置来源」）
 
         for (const f of fields) {
+            if (rej[f]) {
+                // 有回话、但出处核不过 ⇒ **不落值、不记 pending/absent**，如实计数并留原因（下轮可重试）。
+                attempts[f] = { count: (attempts[f]?.count ?? 0) + 1, lastTriedAt: tick, state: 'rejected', why: String(rej[f]) };
+                stats.rejected += 1;
+                continue;
+            }
             const v = reply && typeof reply[f] === 'string' ? reply[f].trim() : '';
             if (v) {
                 // 有值：落账 + 留痕（from = 查过的条目；实测模型回的就是原文原话）
@@ -646,7 +838,7 @@ export function deriveLocationFromBook({ world, entities = null, entries = [] } 
  *   → { ssot, picks, warning, calls, stats }
  * 语义：选人失败 → 退回 prevPicks（再退兜底名单）；查书失败 → 不写痕；全部绝不阻塞调用方。
  */
-export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0, moveFact = null, prevPicks = null, bookEntries = null } = {}) {
+export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0, moveFact = null, prevPicks = null, bookEntries = null, evidencePolicy = null, onEvidence = null } = {}) {
     const out = { ssot, picks: prevPicks || fallbackCandidates(ssot), warning: null, calls: 0, stats: null, locationInherited: 0 };
     if (!transport || lookupDisabled(ssot, tick)) {
         // 查书熔断/无通道时，位置继承照样有得赚（零 token）——别把结构事实也一起停掉
@@ -686,7 +878,7 @@ export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0,
 
     // 与 runBatchLookup 同一收口（选定名单后的一切完全一致：取数一次用两次 / sources 语义 / 回写）
     const batch = await runBatchLookup({
-        ssot, transport, bookText, ids: need.map((e) => e.id), tick, bookEntries,
+        ssot, transport, bookText, ids: need.map((e) => e.id), tick, bookEntries, evidencePolicy, onEvidence,
     });
     out.calls += batch.calls || 1;
     out.stats = batch.stats;

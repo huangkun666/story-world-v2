@@ -69,7 +69,8 @@ test('leg141·㉓：★出处闸——原话真在书文里的收下；编的丢
     ], { sourceText: BOOK, rosterNames: roster });
     assert.equal(r.kept.length, 2, `★只有指得回书里的那两条该收下（实收 ${r.kept.length}）`);
     assert.deepEqual(r.kept.map((x) => `${x.from}→${x.to}`), ['凌霄→玄天宗', '苏问→凌霄']);
-    assert.equal(r.kept[0].quote, '凌霄乃玄天宗掌门。', '★原话原样带着（下一步落账时才丢）');
+    assert.deepEqual(r.kept[0], { from: '凌霄', to: '玄天宗', type: '掌门' },
+        '★★复查第二轮（finding ⑦）：新账关系边只留语义端点/类型——原话是过程凭证，核完即弃，不落 canon');
     // ★编的那条必须**有明细**地被丢掉（本仓"不许静默"）
     assert.equal(r.dropped.length, 1, '★编的那条要丢掉');
     assert.match(r.dropped[0].edge, /凌霄 → 苏问/, '明细要认得出是哪一条');

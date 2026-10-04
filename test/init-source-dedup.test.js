@@ -23,7 +23,7 @@ test('leg25 e：主键取值必须处理数组——`key: []` 与 `keys: []` 同
     assert.equal(normalizeEntryKey({ comment: '只有注释', content: 'x' }), '只有注释', '退到 comment');
 });
 
-test('leg25 e：同一本书两路来源（世界书文件 + 卡内置）⇒ 合订只算一份（本命回归锁）', () => {
+test('不同来源的同正文保留身份；同一来源重复读取只算一份', () => {
     const entries = [worldBookEntry, { key: ['世界总纲'], comment: '世界总设定', content: '大荒世界。' }];
     const character = {
         name: '大荒z',
@@ -32,8 +32,10 @@ test('leg25 e：同一本书两路来源（世界书文件 + 卡内置）⇒ 合
     };
     const r = composeInitSource({ character, worldInfoEntries: entries });
     assert.equal(r.ok, true);
-    assert.equal(r.entryCount, 2, `★同一本书只算一份（实际 ${r.entryCount}——>2 就是又被读了两遍）`);
-    assert.equal(r.text.split('【').length - 1, 2, '文本里每个条目只出现一次');
+    assert.equal(r.entryCount, 4, '两条世界信息与两条卡内置记录来源不同，不能按正文丢掉身份');
+    assert.equal(r.text.split('【').length - 1, 4);
+    const duplicateRead = composeInitSource({ character, worldInfoEntries: [...entries, ...entries] });
+    assert.equal(duplicateRead.entryCount, 4, '同一来源重复读取不会重复输入');
     assert.equal(r.truncated, false, '不到防御上限（旧案顶到 50 万）');
     assert.match(r.text, /吞天妖王/, '正文在');
 });

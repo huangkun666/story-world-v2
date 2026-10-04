@@ -34,7 +34,7 @@ try {
             const list = Array.isArray(ents) ? ents : (ents && typeof ents === 'object' ? Object.values(ents) : null);
             if (list) {
                 const res = composeInitSource({ character: null, worldInfoEntries: list });
-                const fp = res.ok ? bookFingerprint(res.text) : 'n/a';
+                const fp = res.ok ? bookFingerprint(res.text, res.titleRoster) : 'n/a';
                 console.log(`  [${k}] entries=${list.length} composedChars=${res.ok ? res.usedChars : '-'} fp=${fp}`);
             } else console.log(`  [${k}] entries: none`);
         }

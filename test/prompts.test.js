@@ -60,7 +60,12 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-31：★le
     //     （"生产有了、消费没有"那个形状，本仓已经付过三次账）。
     //   ★它要守住的两件事：① 三栏**都是往事原文、都不是这一轮新发生的事**（否则模型会把旧事当新闻）；
     //     ② **可能与"纪事"读到同一件事**（两遍翻同一份账）⇒ 别当成两件事、别重开同名同目标的线。
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-31');
+    // ★★★leg163（用户令「既然是全塞了就不需要点名表了所以删了这个功能即可」）：
+    //   第 15 条（`lookupScales`"要尺子就点名要"）**整条撤走** ⇒ 版本 v2-agenda-t1-31 → **v2-agenda-t1-32**。
+    //   ★为什么必须同批撤提示词（不是只撤代码）：留着一句"照抄「刻度目录」里的表名"，
+    //     而那份目录已经**不再进包**（leg135「全塞」之后它本来就是空的）⇒ 那是**叫模型去抄一份
+    //     不存在的东西** = 本仓最忌的"提示词替机制承诺一个它做不到的事"（这一条当初就是为治那个病而立的）。
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-34');
     assert.ok(MAIN_PROMPT.includes('按意思找回的旧事'), '★那一栏的名字必须出现在指路里（名字对不上＝说了等于没说）');
     assert.ok(MAIN_PROMPT.includes('三种找法，一种东西'), '★必须点破"三栏是同一种东西的三种找法"');
     assert.ok(MAIN_PROMPT.includes('都不是这一轮新发生的事'), '★★否则模型会把翻出来的旧事当成刚发生的事');
@@ -253,6 +258,12 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-31：★le
     assert.ok(OUTPUT_TEMPLATE.includes('"relationUpdates"'), '模板必须示范 relationUpdates 形状（模型照模板写）');
     assert.ok(OUTPUT_TEMPLATE.includes('"relationClosures"'), '模板必须示范 relationClosures 形状（了结要引 id）');
     assert.equal(OUTPUT_TEMPLATE.includes('"fieldQueries"'), false, '模板里也不许再示范已撤的那一组');
+    // ★★★leg163（用户令「既然是全塞了就不需要点名表了所以删了这个功能即可」）：反向锁。
+    //   撤走的是一整条通道（提示词第 15 条 + 契约那一格 + 引擎校验 + 出包两格 + 面板两段）
+    //   ⇒ 提示词与模板里**一个字都不许回潮**（回潮了模型会写一个引擎不认的组 = 整步被拒）。
+    assert.equal(MAIN_PROMPT.includes('lookupScales'), false, '★按需查表已整族撤走，提示词里不许回潮');
+    assert.equal(OUTPUT_TEMPLATE.includes('lookupScales'), false, '★模板里也不许再示范这一组');
+    assert.equal(MAIN_PROMPT.includes('刻度目录'), false, '★目录已随它同批撤走（叫模型抄一份不存在的东西）');
     assert.ok(!OUTPUT_TEMPLATE.includes('"stateChanges"'), 'OUTPUT_TEMPLATE 不再示范 stateChanges');
     assert.ok(MAIN_PROMPT.includes('dialogueBook=对话依据册'), '依据册段说明在模板（K38 补差包 C 条）');
     // init 路径可用

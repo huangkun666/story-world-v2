@@ -14,8 +14,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SWITCH_PARAMS, switchOn, isParamKey, normalizeParam } from '../src/params.js';
-import { ensureAutoAdvanceKey, sw2AutoAdvanceOn, sw2OnMessageReceived } from '../web/index.js';
-import { renderParamsHtml, renderSettingsHtml } from '../src/render.js';   // leg52：推进入口改在设置页，判据要扫那一页
+// ★★★leg162：总闸那一族（`ensureAutoAdvanceKey` / `sw2AutoAdvanceOn`）已搬进 `web/status-bar.js`
+//   ⇒ 消费者**改指向新家**（本仓纪律：接线层不许 re-export，见 `web-snapshot-layout.test.js` 那几条）。
+import { ensureAutoAdvanceKey, sw2AutoAdvanceOn } from '../web/status-bar.js';
+import { sw2OnMessageReceived } from '../web/index.js';
+import { renderParamsHtml, renderSettingsHtml } from '../src/render.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KEY = 'autoAdvance';
@@ -140,11 +143,15 @@ test('leg33d·④ 渲染面：总闸卡排在最前，且写出"当前后果"（
     //     ⇒ 判据改指**留存的那一面**：设置页有它；且**参数页不再重复**它。
     //     （"有人接"那一半由 `test/param-hub.test.js` 的 ⑪e 扫两页一起锁。）
     assert.ok(!htmlOff.includes('data-action="advance-world"'),
-        '★leg52：参数页不再重复画「推进一轮」（它是动作，不是输入；设置页那枚是唯一入口）');
-    const settingsOff = renderSettingsHtml(off, { config: {} });
-    assert.ok(settingsOff.includes('data-action="advance-world"'),
-        '★★「要推请按「推进一轮」」这句提示必须真有一枚按钮兑现——它现在在**设置页**（入口一个不少）');
-    assert.ok(settingsOff.includes('推进一轮'), '设置页那枚按钮的名字与状态栏/提示同一口径');
+        '★leg52：参数页不再重复画「推进一轮」（它是动作，不是输入）');
+    // ★★★leg162（用户令「**上移就是独立于设置页了…整个窗口的上方**」）：那枚按钮的**唯一入口**
+    //   从"设置页"升成了"**窗口外壳的动作条**"（`settings.html`，八页常驻）⇒ 这条断言改指外壳模板。
+    //   ★"要推请按「推进一轮」"这句话的**实质**（必须真有一枚按钮兑现）一个字没撤，只是它的家在别处了。
+    //   ★"渲染层一枚都不许再画"由 `test/render.test.js` 的 K34 那条双向锁着（这里只管"确有入口"）。
+    const shell = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');
+    assert.ok(shell.includes('data-action="advance-world"'),
+        '★★「要推请按「推进一轮」」这句提示必须真有一枚按钮兑现——它现在在**窗口外壳的动作条**里（入口一个不少）');
+    assert.ok(shell.includes('推进一轮'), '外壳那枚按钮的名字与状态栏/提示同一口径');
     // 开着时的后果说明
     const on = world({ env: { [KEY]: '1' } });
     const htmlOn = renderParamsHtml(on, {});

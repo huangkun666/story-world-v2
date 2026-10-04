@@ -71,7 +71,7 @@ function stripComments(src) {
 }
 
 // 切走的符号清单（**分两族**，因为两族的家不同）——本清单就是"它们该住哪"的契约
-const SHAPE_SYMBOLS = ['SCALE_RULES', 'RULE_CLASS_GUIDE', 'SCALE_SHAPE_OBJ', 'SCALE_SHAPE_JSON'];
+const SHAPE_SYMBOLS = ['ABSTRACT_FACT_RULES', 'SCALE_RULES', 'RULE_CLASS_GUIDE', 'SCALE_SHAPE_OBJ', 'SCALE_SHAPE_JSON'];
 const TIER_SYMBOLS = [
     'TIER_KEY_RE', 'RANGE_LIKE', 'bracketPrefix', 'stripBrackets', 'tierKeyOfInner', 'tierKeyOf',
     'tierAxisOf', 'sameShapeKey', 'tierGroupKeyOf', 'mergeSameTierEntries', 'dedupeTiers',
@@ -308,7 +308,19 @@ test('★★leg71 丙案⑤：切割**没有引入新环**（与基线逐条对�
     //     `src/embed-orchestration.js`＝**编排**（一轮里补嵌与召回的胶水）。
     //   ★★★leg156（用户令「稳定版不带没验过的功能」）：上面那 **4 个整族撤走**
     //     （记忆层在真机上一次都没验过）⇒ 54 - 4 = **50**。
-    assert.equal(files.length, 50, `★src 模块数 = 50（leg71 新增 2 个：shape 与 tier；★leg85 新增 1 个：render-base；★leg89 新增 1 个：tag-extract；★leg94 新增 1 个：panorama；★leg112 新增 1 个：book-check；★leg113 新增 1 个：chronicle-brief；★leg115 新增 1 个：ledger-recall；★leg125 **删除** 2 个：memory-bridge · recall；★leg128 新增 1 个：lines；★leg144 新增 1 个：parallel-run；★leg148 新增 1 个：macros；★leg152 新增 4 个：ledger-vector · embed-client · vector-store · embed-orchestration；★leg156 **删除** 那 4 个 ⇒ 50）；实为 ${files.length} ⇒ 有人加了/删了模块，请同步本判据`);
+    //   ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」＋「**向量记忆就是rp内标准的解决失忆方案**」）：
+    //     **那 4 个接回来** ⇒ 50 + 4 = **54**。★它们的作用一个字没变（见上面 leg152 那一段），
+    //     这一笔新增的只是"聊天侧那一段也吃向量路"（`modes` 加一档 ＋ `web/inject.js` 并联）。
+    // leg174 adds the separate story renderer; panorama remains a zero-import leaf.
+    // leg177：新增 render-subtabs.js 统一两页的子页签结构，仅依赖 render-base，没有新增依赖环。
+    // leg178：新增 abstract-selection、diagnostics、vector-history；继续核验零依赖环。
+    // leg185：新增 abstract-input，统一来源收集与生效副本；上面的环检测保持逐边验证。
+    // ★Task 3：新增 abstract-evidence（允许来源冻结 + 原话核对 + 依据摘要）与 entity-identity
+    //   （名号/别名的唯一解析器）⇒ 61 + 2 = **63**；两者都是纯函数模块，逐边环检测证明零新环。
+    // leg188：新增零依赖 abstract-setting-report，汇总设定抽取过程读数。
+    // leg189：新增零依赖 abstract-fields，所有属性处理路径复用无损文本合并。
+    // leg191：地理查询、抽取、预算、地图阅读和共用抽取上限；以上仍逐边核验依赖环。
+    assert.equal(files.length, 71, `★src 模块数 = 71；实为 ${files.length} ⇒ 请同步登记`);
 });
 
 test('★leg71 丙案⑥：环检测器**不是空绿**（反向自证：塞一个真环进去，它必须报出来）', () => {

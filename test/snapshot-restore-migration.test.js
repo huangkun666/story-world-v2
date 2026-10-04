@@ -245,7 +245,7 @@ test('★★leg85：载入期与恢复期跑的是**同一个**函数（不是�
         '★载入期那处必须还在（本棒不动它——本棒只是让恢复期走同一个函数）');
     // ② 恢复期那处（新家）
     const store = read('web/snapshot-store.js');
-    assert.match(store, /const\s+migrated\s*=\s*migrateStyleRulesFromCanon\(r\.world\)/,
+    assert.match(store, /(?:const|let)\s+migrated\s*=\s*migrateStyleRulesFromCanon\(r\.world\)/,
         '★恢复期必须调**同一个** `migrateStyleRulesFromCanon`（写回前、就地算一次）');
     assert.match(store, /^import \{ migrateStyleRulesFromCanon \} from '\.\.\/src\/settle\.js';$/m,
         '★它必须是 import 进来的（本仓"import 花括号里不写注释"那条纪律：整行逐字比对，防漂移）');

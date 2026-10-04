@@ -5,34 +5,34 @@
   "manifest": {
     "id": "story_world_v2",
     "displayName": "观棋窗口 (Story World v2)",
-    "version": "1.0.1",
-    "panelVersion": "1.0.1"
+    "version": "1.1.0",
+    "panelVersion": "1.1.0"
   },
   "current": {
-    "tests": "1466/1466",
+    "tests": "2038/2038",
     "smokeBytes": 8351,
-    "panelBuild": "leg160-panel-window",
-    "cssVersion": "20261001-leg160-panel-window",
-    "mainPromptV": "v2-agenda-t1-31",
+    "panelBuild": "leg194-original-line-gone",
+    "cssVersion": "20261005-leg193-inject-readout",
+    "mainPromptV": "v2-agenda-t1-34",
     "webIndexLines": 3097,
     "webIndexLineLock": 3100
   },
   "docs": {
-    "stateBytes": 18976,
+    "stateBytes": 19455,
     "startHereBytes": 292796,
     "frozenIndexBytes": 326960,
     "ledgerFullBytes": 978029,
-    "docsFiles": 231,
-    "docsBytesLf": 6732783,
+    "docsFiles": 271,
+    "docsBytesLf": 7213918,
     "docsCountNote": "★不含生成物 docs/index.json 自己（自指计数会让文件永不收敛——见 §⑤ 留档）；★字节按 **LF 归一**数（读进来减掉 CRLF 的字节）：判据锁着它，而检出状态（CRLF/LF）因机而异，不该把\"结账机怎么结账\"算进文档体积（实测差异：leg105 交接 CRLF 12532B vs LF 12387B，正好差它的 145 个 CRLF）。",
-    "handoffsRoot": 109,
+    "handoffsRoot": 122,
     "handoffsArchive": 34,
     "latestLedgerLeg": 125,
-    "latestHandoffLeg": 160
+    "latestHandoffLeg": 173
   },
   "release": {
     "repo": "huangkun666/story-world-v2",
-    "sourceBuild": "leg160-panel-window",
+    "sourceBuild": "leg194-original-line-gone",
     "published": {
       "build": "leg157-merged-scroll",
       "tag": "v1.0.1",

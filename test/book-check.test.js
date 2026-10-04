@@ -70,10 +70,17 @@ test('leg112 ②-b：横幅只在"真换了"时出；且指纹一律转义（不
 // ─────────────────── ③ 接线：checkCurrentBook 真跑（注入 fake ST ctx） ───────────────────
 
 // fake ST ctx：卡内置书（`character_book`）——与 `test/web-book-source-layout.test.js` 同一形状
+// ★★（dsh 有界跟进 · Task 1 复查遗留项 1）：卡上点名挂了世界书（`data.extensions.world = '大荒'`），
+//   ⇒ 夹具**必须同时给出那本书的取书口**（`loadWorldInfo`）。此前这一格没有取书口 = "挂载了但没读到"，
+//   在本笔之前它被当成"读到了一份少一点的书"照样算指纹（正是遗留项 1 那个假警报）；
+//   修好之后那一态如实算"未读全 ⇒ 不判断"⇒ 这三条会红——**红的是夹具的口径，不是断言**。
+//   ⇒ 照 `test/web-book-source-layout.test.js` ⑥ 同一条治法给夹具补上"真读得到"的来源
+//   （读到零条也算读到了）；**断言一字未改**。"挂载了没读到"这一态由 ③′ 的三条回归单独钉住。
 function fakeCtx(entries) {
     const cardBook = { entries };
     const character = { name: '大荒z', data: { extensions: { world: '大荒' }, character_book: cardBook }, character_book: cardBook };
-    return { character, characters: [character], characterId: 0, extensionSettings: {}, chatMetadata: {} };
+    return { character, characters: [character], characterId: 0, extensionSettings: {}, chatMetadata: {},
+        loadWorldInfo: async (name) => (name === '大荒' ? { entries: [] } : null) };
 }
 const BOOK = [
     { key: '昆仑道宫', comment: '昆仑道宫', content: '- 清玄真人 (男, T7合体中期): 掌教。' },
@@ -82,7 +89,8 @@ const BOOK = [
 
 test('★★leg112 ③-a：账上指纹 = 现在这本书 ⇒ changed=false（接线真跑，不是 grep）', async () => {
     const ctx = fakeCtx(BOOK);
-    const fpNow = bookFingerprint(composeInitSource({ character: ctx.character, worldInfoEntries: BOOK }).text);
+    const { entries } = await bookSource.collectWorldInfoEntries(ctx, ctx.character);
+    const fpNow = bookFingerprint(composeInitSource({ character: ctx.character, worldInfoEntries: entries }).text);
     const world = { context: { setting: { frozen: { fingerprint: fpNow } } } };
     const r = await bookSource.checkCurrentBook(world, { ctx });
     assert.equal(r?.changed, false, `★同一本书必须判"没换"（算出来 ${fpNow}）`);
@@ -115,6 +123,112 @@ test('leg112 ③-d：账上没有指纹（老账）/ 一本书都没挂 ⇒ null
     assert.equal(r, null, '★★书没读到 ⇒ 一句话都不说（绝不拿"读不到"当"书变了"）');
     // ctx 为 null（没有 ST 上下文）⇒ 同样不抛
     assert.equal(await bookSource.checkCurrentBook({ context: { setting: { frozen: { fingerprint: 'x' } } } }, { ctx: null }), null);
+});
+
+// ─────────── ③′ 接线：**未读全 ⇒ 不判断**（Task 1 复查遗留项 1 · dsh 有界跟进） ───────────
+//
+// ★病（基线）：`currentBookFingerprint` 只看"合订出没出文本"，**不看** `collectWorldInfoEntries(...).incomplete`
+//   ⇒ 某本挂载书这次读不到时，它拿**部分文本**算出一个"新指纹"，与账上（完整时算的）一比就报"书换了"——
+//   书一个字没改，只是这次没读全。这与本文件顶上那条红线同源：**绝不拿"读不到"当"书变了"**
+//   （`src/book-check.js` 口径②；`web/book-source.js` 三态纪律）。卡还在懒加载（浅卡）同理：
+//   **卡四件套也是这份指纹源的一部分**，没到手就不许拿剩下的部分文本下判断。
+//
+// ★夹具纪律（与 ③ 的 `fakeCtx` 同一形状）：卡点名挂了世界书 ⇒ 夹具必须让那本书**真读得到**
+//   （"点名了书却没有取书口" = 挂载了但没读到，正是下面 1-b 要治的那一态）。
+
+const CARD_ENTRY = { key: '昆仑道宫', comment: '昆仑道宫', content: '- 清玄真人 (男, T7合体中期): 掌教。' };
+const MOUNTED_ENTRY = { key: '万法阁', comment: '万法阁', content: '- 公输巧 (男, T4金丹后期): 阁主。' };
+
+/** 完整可读的夹具：卡内置书 + 卡上点名挂的世界书（`failMounted` ⇒ 那本挂载书这次读不到）。 */
+function mountedCtx({ failMounted = false } = {}) {
+    const cardBook = { entries: [CARD_ENTRY] };
+    const character = { name: '大荒z', avatar: 'a.png', data: { extensions: { world: '大荒' }, character_book: cardBook }, character_book: cardBook };
+    return {
+        character, characters: [character], characterId: 0, extensionSettings: {}, chatMetadata: {},
+        loadWorldInfo: async (name) => (name === '大荒' ? (failMounted ? null : { entries: [MOUNTED_ENTRY] }) : null),
+    };
+}
+
+/** 同一场对话的两种读卡态：全卡（四件套齐）与 ST 的浅卡（`toShallow()`：四件套与卡上世界名都不在）。 */
+function cardCtx({ shallow = false } = {}) {
+    const character = shallow
+        ? { shallow: true, name: '大荒z', avatar: 'a.png', data: {} }
+        : { name: '大荒z', avatar: 'a.png', description: '一个修真世界。', data: {} };
+    return {
+        characterId: 0, characters: [character], extensionSettings: {}, chatMetadata: { world_info: '大荒' },
+        loadWorldInfo: async (name) => (name === '大荒' ? { entries: [MOUNTED_ENTRY] } : null),
+    };
+}
+
+/**
+ * ★★（Task 1 二次复查 · Minor）：**预期中的诊断警告要收走并断言**——"未读全就不判断"这条是
+ *   `currentBookFingerprint` / `bookTextForEntity` 的**有意**行为（`console.warn` 是给人看的诊断），
+ *   但它混在通过输出里会让"全绿"看起来像有毛病。收走 ≠ 吞掉：
+ *   **条数必须与预期一致**（多了少了都当场断言失败，并把收到的原文一起报出来），
+ *   断言失败本身照旧可见；`finally` 一定还原，意外多出来的警告照样留在输出里。
+ */
+async function captureWarnings(fn) {
+    const saved = console.warn;
+    const lines = [];
+    console.warn = (...args) => { lines.push(args.map(x => String(x)).join(' ')); };
+    try { return { result: await fn(), lines }; } finally { console.warn = saved; }
+}
+const NO_WARN = (lines, what) => assert.deepEqual(lines, [], `${what}：这一段不该有警告输出`);
+
+test('★遗留项1-a：完整读到的书 ⇒ 照旧判"没换"（正向对照：治未读全不许把这条治坏）', async () => {
+    const stored = (await bookSource.currentBookFingerprint(mountedCtx())).fresh;
+    assert.ok(stored.startsWith('fnv1a_'), `★夹具必须真合订出文本（否则下面几条是空绿），实际 ${stored}`);
+    const r = await bookSource.checkCurrentBook({ context: { setting: { frozen: { fingerprint: stored } } } }, { ctx: mountedCtx() });
+    assert.equal(r?.changed, false, '★读全了 ⇒ 同一本书照旧判"没换"');
+});
+
+test('★★遗留项1-b：一本挂载书读不到（只剩部分文本）⇒ 绝不报"书换了"，一句话都不说', async () => {
+    const stored = (await bookSource.currentBookFingerprint(mountedCtx())).fresh;
+    assert.ok(stored.startsWith('fnv1a_'), '★账上来路必须是"完整时"算的指纹');
+    const partialCtx = mountedCtx({ failMounted: true });
+    const partial = await captureWarnings(() => bookSource.currentBookFingerprint(partialCtx));
+    assert.equal(partial.result.fresh, '', '★★未读全 ⇒ 指纹必须是空的（宁可不判断，也不拿部分文本算一个"新指纹"）');
+    assert.equal(partial.lines.length, 1, `★这一跑只该说一句"没读全"的诊断，实收：${JSON.stringify(partial.lines)}`);
+    assert.ok(partial.lines[0].includes('没读全'), `★诊断要说清理由（未读全 ≠ 书换了），实为：${partial.lines[0]}`);
+    const late = await captureWarnings(() => bookSource.checkCurrentBook({ context: { setting: { frozen: { fingerprint: stored } } } },
+        { ctx: mountedCtx({ failMounted: true }) }));
+    assert.equal(late.result, null, '★★书一个字没改（只是这次没读全）⇒ 一句话都不许说（绝不拿"读不到"当"书变了"）');
+    assert.equal(late.lines.length, 1, `★同样只该有一句诊断，实收：${JSON.stringify(late.lines)}`);
+    assert.ok(late.lines[0].includes('没读全'), `★诊断理由要一致，实为：${late.lines[0]}`);
+    // ★反证：这份"部分文本"确实会算出**另一个指纹**（否则上面两条是空绿——病根本没被复现）
+    const got = await bookSource.collectWorldInfoEntries(partialCtx, partialCtx.character);
+    assert.equal(got.incomplete, true, '★夹具必须真是"挂载了但没读到"（不是"书里没有"）');
+    const text = composeInitSource({ character: partialCtx.character, worldInfoEntries: got.entries, worldSources: got.worldSources }).text;
+    assert.notEqual(bookFingerprint(text), stored, '★★部分文本算出来确实是另一个指纹——不修就会报假警报');
+});
+
+test('★★遗留项1-c：卡还没加载完（浅卡）⇒ 也不许报"书换了"（卡四件套也是指纹源的一部分）', async () => {
+    const stored = (await bookSource.currentBookFingerprint(cardCtx())).fresh;
+    assert.ok(stored.startsWith('fnv1a_'), '★账上来路必须是"全卡时"算的指纹');
+    const shallowCtx = cardCtx({ shallow: true });
+    const shallow = await captureWarnings(() => bookSource.currentBookFingerprint(shallowCtx));
+    assert.equal(shallow.result.fresh, '', '★★卡四件套还没到手 ⇒ 同样不许拿剩下的部分文本算指纹');
+    assert.equal(shallow.lines.length, 1, `★这一跑只该说一句"没读全"的诊断，实收：${JSON.stringify(shallow.lines)}`);
+    assert.ok(shallow.lines[0].includes('没读全'), `★诊断要说清理由，实为：${shallow.lines[0]}`);
+    const late = await captureWarnings(() => bookSource.checkCurrentBook({ context: { setting: { frozen: { fingerprint: stored } } } }, { ctx: cardCtx({ shallow: true }) }));
+    assert.equal(late.result, null, '★★卡还在懒加载 ⇒ 一句话都不许说');
+    assert.equal(late.lines.length, 1, `★同样只该有一句诊断，实收：${JSON.stringify(late.lines)}`);
+    assert.ok(late.lines[0].includes('没读全'), `★诊断理由要一致，实为：${late.lines[0]}`);
+    // ★反证：这一态**不是**"取书失败"（挂载书真读到了、有料），而是"卡件没到手"——必须由浅卡这一关单独拦住
+    const got = await bookSource.collectWorldInfoEntries(shallowCtx, shallowCtx.characters[0]);
+    assert.equal(got.incomplete, false, '★这一次不是"挂载书没读到"（那条路由 1-b 拦）——所以必须有第二关');
+    const text = composeInitSource({ character: shallowCtx.characters[0], worldInfoEntries: got.entries, worldSources: got.worldSources }).text;
+    assert.ok(text, '★浅卡这次是有料的（世界书读得到）——只是卡四件套没到手');
+    assert.notEqual(bookFingerprint(text), stored, '★★不把浅卡当"未读全" ⇒ 这份部分文本就会报假警报');
+});
+
+test('★遗留项1-d：读全的这次一句话都不说（正向对照：收警告不许把正常路径也收掉）', async () => {
+    const clean = await captureWarnings(() => bookSource.currentBookFingerprint(mountedCtx()));
+    assert.ok(clean.result.fresh.startsWith('fnv1a_'), '★读全了 ⇒ 照旧算出指纹');
+    NO_WARN(clean.lines, '完整读到');
+    const shallowFree = await captureWarnings(() => bookSource.currentBookFingerprint(cardCtx()));
+    assert.ok(shallowFree.result.fresh.startsWith('fnv1a_'));
+    NO_WARN(shallowFree.lines, '全卡');
 });
 
 // ─────────────────── ④ 接线：那一族（hub）真跑（注入假依赖） ───────────────────
