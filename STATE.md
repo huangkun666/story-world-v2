@@ -62,7 +62,7 @@
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-34`** | `src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`newEvents[].position` 仍可省、仍不猜地点。 |
 | `web/index.js` 行数 | **3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） | `split('\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行） |
 | `CACHE_VERSION` | **`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充"已有地图"，旧缓存一并失效） | `src/fp-hash.js` |
-| 发布仓 main | **`e28be61`** · 构建号 **`leg194-original-line-gone`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵）。★这一版是 leg195 推的（用户令「**我要发布了，这次是一次很大的更新**」）——**leg161–leg194 那 51 笔一次上线**；本机那份克隆已 `reset --hard origin/main` 到它 | `node scripts/verify-release.mjs` |
+| 发布仓 main | **`395eb9c`** · 构建号 **`leg196-map-mobile`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵）。★leg196 推的（用户令「**把这个bug修复后然后推送**」）；本机那份克隆已 `reset --hard origin/main` 到它 | `node scripts/verify-release.mjs` |
 | release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 下令发布，原话「我要发布了，这次是一次很大的更新」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑） | `test/browser-compat.test.js` |

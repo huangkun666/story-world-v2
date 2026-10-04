@@ -64,22 +64,27 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg194-original-line-gone';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+const PUBLISHED_BUILD = 'leg196-map-mobile';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+//   ★★leg196（2026-10-05）：用户真机报了手机端的 bug（点地图只在最顶上露一小块框）⇒ 修完**当场推**：
+//     发布仓 main `5d68a6b` → **`395eb9c`**（构建号 `leg196-map-mobile` · 版本号仍 `1.1.0`，这一笔是**修 bug**，
+//     没升版本号）。脚本自带核验 **8/8 ✔**（含 6 处逐字节）。
+//     ★**tag/release 这一笔没动**：`v1.1.0` 仍指着 `e28be61`（＝**没有这个修复**的那一棵）
+//       ⇒ 从 release 页下载的人拿到的还是带 bug 的那一版；**装仓库地址/走更新的人拿到的是修好的**。
+//       要不要为它另发一个补丁版（1.1.1 ＋ 新 tag），**等用户拍板**——本笔没擅自升版本号。
 //   ★★leg195（2026-10-05）：**用户令「我要发布了，这次是一次很大的更新」** ⇒ 发布仓 main 从 `88bd80e`
 //     （leg160）一次推到 **`e28be61`**（构建号 `leg194-original-line-gone` · 版本号 **1.0.1 → 1.1.0**）：
-//     **leg161–leg194 那 51 笔一次上线**。脚本自带核验 **8/8 ✔**。
-//     ★与 leg158/leg160 那两次不同的一处：**这一笔同时发了 release**（用户拍板）——另打新 tag
-//       **`v1.1.0` → `e28be61`**（`prerelease:false`），旧四个 tag 原样不动。⇒
-//       **点 release 下载的人现在拿到的就是这一棵**（此前一直停在 `v1.0.1`）。
-//     ★记账次序照旧（别试图"追上 tip"）：正式那一笔先推（= `PUBLISHED_COMMIT_REF`），随后这一笔
-//       **纯记账提交**压在它上面再推一次 ⇒ `build`/`commit` 两格**必然落后远端 tip 一笔**，这是设计使然。
+//     **leg161–leg194 那 51 笔一次上线**。★与 leg158/leg160 那两次不同的一处：**这一笔同时发了 release**
+//     ——另打新 tag **`v1.1.0` → `e28be61`**（`prerelease:false`），旧四个 tag 原样不动。
+//     ⇒ **点 release 下载的人从此拿到的是这一棵**（此前一直停在 `v1.0.1`）。
+//   ★记账次序照旧（别试图"追上 tip"）：正式那一笔先推（= `PUBLISHED_COMMIT_REF`），随后这一笔
+//     **纯记账提交**压在它上面再推一次 ⇒ `build`/`commit` 两格**必然落后远端 tip 一笔**，这是设计使然。
 //   ★leg158/leg160 留下的那两处"每次都会撞"的坑不改，见 `docs/dev-process.md` §10.1：
-//     ① `git` 直连 github 是断的、**不读系统代理** ⇒ 给 `HTTPS_PROXY` 就通（leg195 同样给了）
+//     ① `git` 直连 github 是断的、**不读系统代理** ⇒ 给 `HTTPS_PROXY` 就通（leg195/leg196 同样给了）
 //     ② `publish-release.mjs` 第④步 `commit-tree -p <远端 main>` 要**父提交在本地对象库里**
 //   ★leg154 那一笔的留档（**发布点已前移，但那次撤正的教训照旧管用**）：第一次推 `2e066dc` 是"导出整棵树"
 //     ⇒ 把分支上还没在真机验过的几笔一起带了出去，用户当场点出来（「还没测试的功能放上去干嘛？
 //     要不然我新开分支的意义在哪？」）⇒ 改成"上个发布树 ＋ 只这一处修复"，用 REST 推成 `824abc5`。
-const PUBLISHED_COMMIT_REF = 'e28be6162ab39b26d470eeaa0b2db141d52bd0c2';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
+const PUBLISHED_COMMIT_REF = '395eb9c8e04d376e2f3cbaaffefe380f264bb037';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）
 // ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
 //   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
 //   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。
