@@ -10,11 +10,17 @@
 //     masquerade as verified new field claim"）
 //
 // 口径（本文件逐条钉死）：
-//   ① 新默认 = **严格出处道**：每条字段要"该名号自己的来源编号 + 逐字原话"，且**字段值必须出现在
-//      它自己引的那句原话里**（别人的值在别处出现不算）；
-//   ② 出处核不过是**第三种结局**（`rejected`）：既不是 pending（模型没给）也不是 absent（书没写）；
+//   ① 新默认 = **严格出处道**：每条字段要"该名号自己的来源编号 + 逐字原话"——★leg197 起引擎照旧逐字核，
+//      但核的结果**只进诊断面**（`keep` / `unverified`）：**核不过不再丢这条字段，一律照收**；
+//   ② `unverified`（给了出处、对不上）既不是 pending（模型没给）也不是 absent（书没写）——它是"照收 + 记账"；
+//      `rejected` 只剩**同名号多值冲突**这一条来路（那不是"找不到原文"，是"两个叫法互相矛盾"）；
 //   ③ `evidencePolicy:'legacy'` 只许**显式**声明（旧固定响应那条路），不许因"缺元数据/模型没给出处"自动回落；
 //   ④ 原始凭证（编号/原话）**只进受门控的诊断面**，不落世界账、不进快照。
+//
+// ★★★leg197（用户令，逐字）：「把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为
+//   全部取消了…现在我要全面撤销」⇒ 本文件原先钉死的"出处核不过 = 第三种结局 rejected"**已被该令覆盖**：
+//   上面那条红（无出处照落账 / 别名回话落 pending）当年是要治的病，现在是**用户要的口径**——
+//   各条测试改成断言"字段照收 + 出处对不上照旧记进 `unverified` 诊断"。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -29,21 +35,25 @@ const worldOf = (entities, canon = []) => ({
 const entry = (name, text, sourceId = `entry-${name}`) => ({ name, text, sourceId });
 const transportOf = (obj) => async () => JSON.stringify(obj);
 
-test('Task4·查书默认严格：没有出处的裸标量**不许落账**（旧法照收）', async () => {
+test('Task4·查书默认严格：没有出处的裸标量照收，出处对不上记 unverified（★leg197：出处不再丢，照收）', async () => {
     const w = worldOf([{ id: 'a', kind: 'character', name: '陆青', location: '未明' }]);
     const bookText = async () => [entry('人物_陆青', '陆青行走江湖。')];
-    const r = await runBatchLookup({ ssot: w, transport: transportOf({ 陆青: { 实力: '凭空捏造的渡劫境' } }), bookText, ids: ['a'], tick: 1 });
-    assert.equal(r.ssot.entities[0]['实力'], undefined, '★无出处的字段不许写进世界账');
-    assert.equal(r.stats.ok, 0);
-    assert.equal(r.stats.rejected, 1, '★如实记"有回话但出处核不过"（不是 pending）');
+    const evidence = [];
+    const r = await runBatchLookup({ ssot: w, transport: transportOf({ 陆青: { 实力: '凭空捏造的渡劫境' } }), bookText, ids: ['a'], tick: 1, onEvidence: rec => evidence.push(rec) });
+    // ★leg197：裸标量不再因为"没有出处"被丢——模型给的字段值照落账（旧法 undefined）。
+    assert.equal(r.ssot.entities[0]['实力'], '凭空捏造的渡劫境', '★leg197：没有出处的字段照收');
+    assert.equal(r.stats.ok, 1);
+    assert.equal(r.stats.rejected, 0, '★leg197：出处核不过不再是第三种结局——它现在照收，`rejected` 只剩同名多值冲突');
     assert.equal(r.stats.pending, 0, '★不许长得像"模型没给"');
     assert.equal(r.stats.absent, 0, '★更不许长得像"书里没有"');
-    assert.match(String(r.warning), /出处核不过/, '★要有一条人话警告（旧法 warning=null）');
-    assert.equal(r.ssot.meta.entityFields.a.attempts['实力'].state, 'rejected', '状态可重试（missingFields 只跳过 ok/absent）');
-    assert.equal(JSON.stringify(r.ssot).includes('凭空捏造'), false, '★编造的值一个字都不许进账');
+    assert.equal(r.warning, null, '★leg197：出处对不上不再发"出处核不过"警告（那一支只剩同名多值冲突）');
+    assert.equal(r.ssot.meta.entityFields.a.attempts['实力'].state, 'ok', '落账成功 ⇒ 状态 ok（可重试语义不变：missingFields 只跳过 ok/absent）');
+    // ★leg197：主张照收，但"这次没带出处"这件事照旧记进诊断面（unverified），一条都不许静默。
+    assert.equal(evidence.some(x => x.subject === '陆青·实力' && x.action === 'unverified' && /缺来源编号/.test(x.why)), true, '★出处对不上仍要看得见');
+    assert.equal(JSON.stringify(r.ssot).includes('凭空捏造'), true, '★leg197：这个值现在照收（用户当次的明确选择：出处只记账、不拦人）');
 });
 
-test('Task4·别名/ID/正名都能对到人：唯一别名 + 真出处 = 收；无出处 = 拒（不是 pending）', async () => {
+test('Task4·别名/ID/正名都能对到人：唯一别名 + 真出处 = 收；无出处也照收（★leg197：出处不再丢，照收）', async () => {
     const w = worldOf([{ id: 'a', kind: 'character', name: '陆青', aliases: ['青衣客'], location: '未明' }],
         [{ name: '陆青', aliases: ['青衣客'] }]);
     const text = '陆青又称青衣客，境界为感气境。';
@@ -56,11 +66,14 @@ test('Task4·别名/ID/正名都能对到人：唯一别名 + 真出处 = 收；
     assert.equal(ok.stats.ok, 1, `★别名回话要认得出人：${ok.warning || ''}`);
     assert.equal(ok.ssot.entities[0]['实力'], '感气境');
     assert.equal(/"ev"|"quote"|"S1"/.test(JSON.stringify(ok.ssot)), false, '★原始凭证不落世界账');
-    // ② 同一个别名键但**没有出处** ⇒ 拒（旧法：落成 pending，看起来像"模型没给"）
-    const noProof = await runBatchLookup({ ssot: w, bookText, ids: ['a'], tick: 1, transport: transportOf({ 青衣客: { 实力: '感气境' } }) });
-    assert.equal(noProof.ssot.entities[0]['实力'], undefined);
-    assert.equal(noProof.stats.rejected, 1);
+    // ② 同一个别名键但**没有出处** ⇒ ★leg197 起**照收**（旧法落成 pending / 后来落成 rejected）
+    const noProofEvidence = [];
+    const noProof = await runBatchLookup({ ssot: w, bookText, ids: ['a'], tick: 1, transport: transportOf({ 青衣客: { 实力: '感气境' } }), onEvidence: rec => noProofEvidence.push(rec) });
+    assert.equal(noProof.ssot.entities[0]['实力'], '感气境', '★leg197：没有出处不再拦这条字段');
+    assert.equal(noProof.stats.ok, 1);
+    assert.equal(noProof.stats.rejected, 0);
     assert.equal(noProof.stats.pending, 0);
+    assert.equal(noProofEvidence.some(x => x.subject === '陆青·实力' && x.action === 'unverified'), true, '★出处对不上照旧记进诊断');
     // ③ id 键（模型回 id）也认
     const byId = await runBatchLookup({
         ssot: w, bookText, ids: ['a'], tick: 1,
@@ -96,28 +109,37 @@ test('Task4·非目标/歧义别名一律不收；同一名号多条叫法互相
     });
     assert.equal(conflict.stats.ok, 0, '★矛盾的两条都不收（不许"先到先得"）');
     assert.equal(conflict.stats.rejected, 1);
-    assert.match(String(conflict.warning), /出处核不过/);
+    // ★leg197：`rejected` 现在只剩这一条来路（同名多值冲突，不是出处判据）⇒ 警告也如实只讲冲突。
+    assert.match(String(conflict.warning), /同名号|互相矛盾/);
 });
 
-test('Task4·字段值必须在自己引的那句原话里：别处/别人的原话不算（不许夹带）', async () => {
+test('Task4·字段值不在自己引的那句原话里也照收，只记 unverified（★leg197：出处不再丢，照收）', async () => {
     const w = worldOf([{ id: 'a', kind: 'character', name: '甲', location: '未明' }]);
     // 同一条目里写着两个人的属性：甲=感气境、乙=化神期
     const text = '甲境界为感气境。乙境界为化神期。';
     const bookText = async () => [entry('人物_甲', text)];
-    // ① 引的出处里**根本没有这个值**（值在材料别处写着）⇒ 拒（这就是"夹带"的机械判据）
+    // ① 引的出处里**根本没有这个值**（值在材料别处写着）⇒ ★leg197 起照收，只记"值不在所引原话里"
+    const piggyEvidence = [];
     const piggy = await runBatchLookup({
         ssot: w, bookText, ids: ['a'], tick: 1,
         transport: transportOf({ 甲: { 实力: { 文: '化神期', ev: { s: 'S1', q: '甲境界为感气境。' } } } }),
+        onEvidence: rec => piggyEvidence.push(rec),
     });
-    assert.equal(piggy.stats.ok, 0, '★"别人的值"不许借出处夹带进来（值必须在自己引的那句里）');
-    assert.equal(piggy.stats.rejected, 1);
-    // ② 同一条目里但引的是**没展示过的另一条来源** ⇒ 拒（本次没给它的编号）
+    assert.equal(piggy.stats.ok, 1, '★leg197：借出处夹带的值照收（旧法 ok=0/rejected=1）');
+    assert.equal(piggy.stats.rejected, 0);
+    assert.equal(piggy.ssot.entities[0]['实力'], '化神期', '★取第一条回话作为该字段的值');
+    assert.equal(piggyEvidence.some(x => x.subject === '甲·实力' && x.action === 'unverified' && /字段值不在所引原话里/.test(x.why)), true, '★"夹带"照旧看得见');
+    // ② 同一条目里但引的是**没展示过的另一条来源** ⇒ 同样只记诊断、照收
+    const outsideEvidence = [];
     const outside = await runBatchLookup({
         ssot: w, bookText, ids: ['a'], tick: 1,
         transport: transportOf({ 甲: { 实力: { 文: '感气境', ev: { s: 'S9', q: '甲境界为感气境。' } } } }),
+        onEvidence: rec => outsideEvidence.push(rec),
     });
-    assert.equal(outside.stats.ok, 0, '★编号不在本次用料 ⇒ 拒');
-    // ③ 正确出处 ⇒ 收（阳性对照）
+    assert.equal(outside.stats.ok, 1, '★leg197：编号不在本次用料也照收');
+    assert.equal(outside.stats.rejected, 0);
+    assert.equal(outsideEvidence.some(x => x.subject === '甲·实力' && x.action === 'unverified' && /来源不在本次用料/.test(x.why)), true);
+    // ③ 正确出处 ⇒ 收（阳性对照：这一条永远要过）
     const ok = await runBatchLookup({
         ssot: w, bookText, ids: ['a'], tick: 1,
         transport: transportOf({ 甲: { 实力: { 文: '感气境', ev: { s: 'S1', q: '甲境界为感气境。' } } } }),
@@ -125,7 +147,7 @@ test('Task4·字段值必须在自己引的那句原话里：别处/别人的原
     assert.equal(ok.stats.ok, 1, `阳性对照：${ok.warning || ''}`);
 });
 
-test('Task4·每个名号只许引自己那几条来源（不许拿另一个目标的条目当出处）', async () => {
+test('Task4·每个名号只许引自己那几条来源：引错编号照收、只记 unverified（★leg197：出处不再丢，照收）', async () => {
     const w = worldOf([
         { id: 'a', kind: 'character', name: '甲', location: '未明' },
         { id: 'b', kind: 'character', name: '乙', location: '未明' },
@@ -139,15 +161,19 @@ test('Task4·每个名号只许引自己那几条来源（不许拿另一个目�
             乙: { 实力: { 文: '化神期', ev: { s: 'S2', q: '乙境界为化神期。' } } },   // 乙引自己的编号
         });
     };
-    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['a', 'b'], tick: 1 });
-    assert.equal(r.stats.ok, 1, `只有乙那条合法：${JSON.stringify(r.stats)} / ${r.warning || ''}`);
+    const evidence = [];
+    const r = await runBatchLookup({ ssot: w, transport, bookText, ids: ['a', 'b'], tick: 1, onEvidence: rec => evidence.push(rec) });
+    // ★leg197：甲引了乙的编号，引擎照旧核得出来（记 unverified），但**照收**（旧法 ok=1、甲一个字都不落账）。
+    assert.equal(r.stats.ok, 2, `两条都落账：${JSON.stringify(r.stats)} / ${r.warning || ''}`);
     assert.equal(r.ssot.entities.find((e) => e.id === 'b')['实力'], '化神期');
-    assert.equal(r.ssot.entities.find((e) => e.id === 'a')['实力'], undefined, '★甲不许引乙的条目');
+    assert.equal(r.ssot.entities.find((e) => e.id === 'a')['实力'], '化神期', '★leg197：引错编号只记账，不拦人');
+    assert.equal(evidence.some(x => x.subject === '甲·实力' && x.action === 'unverified' && /S2/.test(x.why)), true, '★"引了别人的条目"照旧看得见');
+    assert.equal(evidence.some(x => x.subject === '乙·实力' && x.action === 'keep'), true);
     assert.match(prompts[0], /【甲】[\s\S]*S1 = 人物_甲/, '提示词按名号给出各自清单');
     assert.match(prompts[0], /【乙】[\s\S]*S2 = 人物_乙/);
 });
 
-test('Task4·pending / rejected / absent 三种结局分开（不许混成一个数）', async () => {
+test('Task4·pending / absent / 出处核不过分开（核不过现在照收；rejected 只留给同名多值冲突）（★leg197：出处不再丢，照收）', async () => {
     const w = worldOf([{ id: 'a', kind: 'character', name: '甲', location: '未明' }]);
     const bookText = async () => [entry('人物_甲', '甲境界为感气境。')];
     // ① 模型没给这一栏 ⇒ pending（可重试）
@@ -155,11 +181,15 @@ test('Task4·pending / rejected / absent 三种结局分开（不许混成一个
     assert.equal(pending.stats.pending, 1);
     assert.equal(pending.stats.rejected, 0);
     assert.equal(pending.ssot.meta.entityFields.a.attempts['实力'].state, 'pending');
-    // ② 有回话但出处核不过 ⇒ rejected
-    const rejected = await runBatchLookup({ ssot: w, bookText, ids: ['a'], tick: 1, transport: transportOf({ 甲: { 实力: '感气境' } }) });
-    assert.equal(rejected.stats.rejected, 1);
-    assert.equal(rejected.stats.pending, 0);
-    assert.equal(rejected.ssot.meta.entityFields.a.attempts['实力'].state, 'rejected');
+    // ② 有回话但出处核不过 ⇒ ★leg197 起**照收**，只记 unverified——既不算 pending，也不算 rejected
+    const unverifiedEvidence = [];
+    const noProof = await runBatchLookup({ ssot: w, bookText, ids: ['a'], tick: 1, transport: transportOf({ 甲: { 实力: '感气境' } }), onEvidence: rec => unverifiedEvidence.push(rec) });
+    assert.equal(noProof.stats.ok, 1, '★leg197：出处对不上照收');
+    assert.equal(noProof.stats.rejected, 0);
+    assert.equal(noProof.stats.pending, 0);
+    assert.equal(noProof.stats.absent, 0, '★更不许长得像"书里没有"');
+    assert.equal(noProof.ssot.meta.entityFields.a.attempts['实力'].state, 'ok');
+    assert.equal(unverifiedEvidence.some(x => x.action === 'unverified'), true, '★"出处对不上"照旧单独记一笔');
     // ③ 书读到了、但书里确实没有这个名号 ⇒ **只有这一种情形**才允许 absent（书未明述），
     //   且它既不算 pending 也不算 rejected（三种结局各归各的数）
     const empty = await runBatchLookup({ ssot: w, bookText: async () => ({ ok: true, entries: [] }), ids: ['a'], tick: 1, transport: transportOf({ 甲: { 实力: '感气境' } }) });
@@ -167,6 +197,19 @@ test('Task4·pending / rejected / absent 三种结局分开（不许混成一个
     assert.equal(empty.stats.rejected, 0);
     assert.equal(empty.stats.pending, 0);
     assert.equal(empty.ssot.meta.entityFields.a.attempts['实力'].state, 'absent');
+    // ④ ★leg197：`rejected` 仍是一种**独立的**结局，但只剩"同名号的多个叫法互相矛盾"这一条来路
+    //   （它不是"找不到原文"）——不许因为"现在出处不拦人"就把这一格也一起抹平。
+    const conflict = await runBatchLookup({
+        ssot: worldOf([{ id: 'a', kind: 'character', name: '甲', aliases: ['甲某'], location: '未明' }], [{ name: '甲', aliases: ['甲某'] }]),
+        bookText, ids: ['a'], tick: 1,
+        transport: transportOf({
+            甲: { 实力: { 文: '感气境', ev: { s: 'S1', q: '甲境界为感气境。' } } },
+            甲某: { 实力: { 文: '化神期', ev: { s: 'S1', q: '甲境界为感气境。' } } },
+        }),
+    });
+    assert.equal(conflict.stats.rejected, 1, '★矛盾的两条都不收（不许"先到先得"）');
+    assert.equal(conflict.stats.pending, 0);
+    assert.equal(conflict.ssot.meta.entityFields.a.attempts['实力'].state, 'rejected');
     // 读不到书 ⇒ pending（**绝不是** absent）——红线不变
     const unread = await runBatchLookup({ ssot: w, bookText: async () => ({ ok: false }), ids: ['a'], tick: 1, transport: transportOf({ 甲: { 实力: '感气境' } }) });
     assert.equal(unread.ssot.meta.entityFields.a.attempts['实力'].state, 'pending');

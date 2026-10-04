@@ -142,8 +142,8 @@ test('Task3 F6：跨类别同名与共享别名都不得被自动合并', () => 
     assert.equal(sameNameConflict[0].kind, undefined, '类别冲突不得由书序决定（摘掉 ⇒ 待核对）');
 });
 
-// ---- 严格证据：允许来源编号 + 原话；未核实一律拒收并留原因 ------------------------------
-test('Task3：严格证据道拒收缺出处/来源不在用料/原话对不上，并逐条留原因', async () => {
+// ---- 严格证据：允许来源编号 + 原话；★leg197 起核不过**只记账、一律照收** ----------------
+test('Task3：出处核不过（缺出处/来源不在用料/原话对不上）一律照收，核验结果只进诊断（★leg197：出处不再丢，照收）', async () => {
     const records = [];
     const payload = {
         bookEntities: [
@@ -154,20 +154,39 @@ test('Task3：严格证据道拒收缺出处/来源不在用料/原话对不上�
     };
     const { r } = await runSmall({ text: SCI_TEXT, blocks: SCI_BLOCKS, payload, onEvidence: (x) => records.push(x) });
     const canon = r.setting.frozen.canon;
-    for (const nm of ['月野兔', '露娜', '科学团']) {
+    // ★leg197（用户令「因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动…全面撤销」）：
+    //   类别/别名/所属一律**照收**——旧法在这里 `delete kind` / 不写 parent（"留作待核对候选"），
+    //   现在核验结果只进诊断（`keep` / `unverified`），**不再决定收不收**。
+    const moon = canon.bookEntities.find((x) => x.name === '月野兔');
+    assert.ok(moon, '月野兔的名号仍应在册');
+    assert.equal(moon.kind, 'character', '未核实的类别照收（旧法：核不过就摘掉类别）');
+    assert.equal(moon.parent, '科学团', '未核实的归属照收（旧法：核不过就不写 parent）');
+    for (const nm of ['露娜', '科学团']) {
         const b = canon.bookEntities.find((x) => x.name === nm);
-        assert.ok(b, `${nm} 的名号仍应在册（待核对候选，不许消失）`);
-        assert.equal(b.kind, undefined, `${nm} 的未核实类别不得成为世界事实`);
-        assert.equal(b.parent, undefined, `${nm} 的未核实归属不得成为世界事实`);
+        assert.ok(b, `${nm} 的名号仍应在册`);
+        assert.equal(b.kind, 'character', `${nm} 的未核实类别照收（★leg197：出处对不上只记账，不丢项）`);
     }
     const whys = records.map((x) => x.why);
     assert.ok(whys.some((w) => /缺来源|缺出处/.test(String(w))), `缺出处要留原因：${whys.join('|')}`);
     assert.ok(whys.some((w) => /来源不在本次用料/.test(String(w))), `来源越界要留原因：${whys.join('|')}`);
     assert.ok(whys.some((w) => /原话对不上/.test(String(w))), `原话对不上要留原因：${whys.join('|')}`);
-    assert.ok(r.evidence.summary.dropped >= 3);
-    // 名号本身没出现在材料里 ⇒ 连候选都不留（既有"纯编造名号照旧丢"的口径不变）
-    const bogus = await runSmall({ text: SCI_TEXT, blocks: SCI_BLOCKS, payload: { bookEntities: [{ name: '查无此人', kind: 'character' }] } });
-    assert.equal(bogus.r.setting.frozen.canon.bookEntities.length, 0);
+    // ★leg197：出处这一类**一条都不再丢**——计数从 `dropped` 挪到 `unverified`（`dropped` 在这条路上恒 0）。
+    assert.equal(r.evidence.summary.dropped, 0, '出处核不过不再算丢弃');
+    assert.ok(r.evidence.summary.unverified >= 3, `核不过要如实计数：${JSON.stringify(r.evidence.summary)}`);
+    assert.ok(Object.keys(r.evidence.summary.unverifiedByReason || {}).some((w) => /缺来源|缺出处/.test(w)),
+        `核不过的原因要可复述：${JSON.stringify(r.evidence.summary.unverifiedByReason)}`);
+    // ★leg197：名号本身没出现在材料里 ⇒ **照旧在册**（旧法连候选都不留）。
+    const bogusRecords = [];
+    const bogus = await runSmall({
+        text: SCI_TEXT, blocks: SCI_BLOCKS,
+        payload: { bookEntities: [{ name: '查无此人', kind: 'character' }] },
+        onEvidence: (x) => bogusRecords.push(x),
+    });
+    const fake = bogus.r.setting.frozen.canon.bookEntities.find((b) => b.name === '查无此人');
+    assert.ok(fake, '出处核不过的名号照收（旧法：材料里找不到连候选都不留）');
+    assert.equal(fake.kind, 'character', '类别同样照收');
+    assert.ok(bogusRecords.some((x) => x.class === 'kind' && x.action === 'unverified' && /缺来源编号/.test(String(x.why))),
+        `核不过仍要留诊断：${JSON.stringify(bogusRecords)}`);
 });
 
 test('描述属性不再因引用不匹配而拒收，原始模型值完整保留', async () => {
@@ -188,7 +207,7 @@ test('描述属性不再因引用不匹配而拒收，原始模型值完整保�
     assert.equal(records.some((x) => x.class === 'field' && x.action === 'drop'), false);
 });
 
-test('Task3：关系边必须带允许来源与原话，核不过丢并留原因；核过的照常收下', async () => {
+test('Task3：关系边核不过不再丢（照收）——本次落空的边是"端点不在名册"这条非出处判据（★leg197：出处不再丢，照收）', async () => {
     const records = [];
     const text = SCI_TEXT;
     const blocks = SCI_BLOCKS;
@@ -202,7 +221,9 @@ test('Task3：关系边必须带允许来源与原话，核不过丢并留原因
     };
     const { r } = await runSmall({ text, blocks, payload, onEvidence: (x) => records.push(x) });
     const rels = r.setting.frozen.canon.relations || [];
-    assert.equal(rels.length, 1, `只有核过的边能收下：${JSON.stringify(rels)}`);
+    // ★leg197：出处核不过的边**照收**；这里落空的两条是因为端点不在名册（非出处判据），不是"找不到原文"。
+    assert.equal(rels.length, 1, `落空的边是端点不在名册那两条（非出处原因）：${JSON.stringify(rels)}`);
+    assert.match(r.errors.join('|'), /端点不在名册/, `丢弃原因要如实说是"端点不在名册"：${r.errors.join('|')}`);
     assert.equal(rels[0].from, '月野兔');
     // ★边上不挂常驻出处章（用户 2026-09-27 裁示）：名册里可以带 quote（抽取面），**落账后**的边只有
     //   `{id,from,to,type,tick}`（与 test/book-relations.test.js 同一把尺子）。
@@ -377,12 +398,17 @@ test('Task3：verifyClaimedParent 不再用成员名单反驳，也不把成员�
     assert.equal(verifyClaimedParent({ name: '月野兔', claimed: '科学团', ownEntry: explicit, memberEntry: entry }), 'explicit');
 });
 
-test('Task3：证据摘要可复述（计数与原因），明细只在调试面', async () => {
+test('Task3：证据摘要可复述（收下/待核对/出处对不上 + 原因），明细只在调试面（★leg197：出处不再丢，照收）', async () => {
     const records = [];
     const payload = { bookEntities: [{ name: '月野兔', kind: 'character' }] };
     const { r } = await runSmall({ text: SCI_TEXT, blocks: SCI_BLOCKS, payload, onEvidence: (x) => records.push(x) });
     const sum = summarizeEvidence(records);
-    assert.ok(sum.raw >= 1 && sum.dropped >= 1);
-    assert.equal(r.evidence.summary.dropped, sum.dropped);
+    // ★leg197：出处核不过**不再算丢弃** ⇒ 计数从 `dropped` 挪到 `unverified`（`dropped` 在这条路上恒 0）。
+    assert.ok(sum.raw >= 1 && sum.unverified >= 1, `核不过要可复述：${JSON.stringify(sum)}`);
+    assert.equal(sum.dropped, 0, '出处这一类不再有丢弃');
+    assert.equal(r.evidence.summary.unverified, sum.unverified);
+    assert.equal(r.evidence.summary.dropped, 0);
+    assert.ok(Object.keys(sum.unverifiedByReason || {}).some((w) => /缺来源|缺出处/.test(w)),
+        `核不过的原因要可复述：${JSON.stringify(sum.unverifiedByReason)}`);
     assert.ok(!('quote' in (r.evidence.summary || {})), '摘要不带原话（明细走诊断面）');
 });

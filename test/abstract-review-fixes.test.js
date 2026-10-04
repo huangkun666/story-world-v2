@@ -36,6 +36,14 @@ async function runSmall({ text, blocks, payload, onEvidence = null, expectOk = t
         sourceText: text, extract: fixed(payload, calls), allowedSources: blocks, onEvidence,
     });
     assert.equal(r.ok, expectOk, `抽取结果：${(r.errors || []).join('；')}`);
+    // ★leg197：出处核验**不再丢项** ⇒ 严格道的摘要行换成 `formatEvidenceLine` 的新措辞
+    //   （「…出处对不上 N（**照收**），出处对不上的原因：…」；`非出处原因丢弃` 那一段只在真有非出处丢弃时才出现）。
+    //   这条 helper 照旧**不弱化**：真记过账的那几次必须能读出新格式。
+    const sum = r.evidence?.summary;
+    if (r.evidence?.policy === 'strict' && sum?.raw) {
+        assert.match(r.errors.join('|'), /抽取依据：主张 \d+ 条（收下 \d+ \/ 待核对 \d+/,
+            `摘要行要按新措辞：${(r.errors || []).join('；')}`);
+    }
     return { r, calls };
 }
 /** 从提示词里取出**本次真正交出去的书文**（提示词正文段的结尾就是它）。 */
@@ -51,7 +59,8 @@ test('复查③：所引来源必须真的在**本次展示的那一块**里—�
         { sourceId: 'entry-a', title: '人物甲', text: `【人物甲】\n${shared}\n这是第一条独有的正文。` },
         { sourceId: 'entry-b', title: '人物乙', text: `【人物乙】\n${shared}\n这是第二条独有的正文。` },
     ]);
-    // 孩子只见到了 entry-a（spanText = 它的正文）⇒ 引 entry-b 必须拒收（旧法：全局表里能找到 S2 就放行）
+    // 孩子只见到了 entry-a（spanText = 它的正文）⇒ 引 entry-b 判不通过（旧法：全局表里能找到 S2 就放行）。
+    // ★leg197：判不通过现在**只记账**——调用方照收，不拿这个结论丢项（见下面那些流程判据）。
     const unseen = verifyQuote(frozen, { ev: { s: 'S2', q: shared }, spanText: frozen.list[0].text, cls: 'kind', subject: '陆青' });
     assert.equal(unseen.ok, false, '同一句话在看不见的条目里出现，不构成"本次材料里的出处"');
     assert.match(String(unseen.why), /不在本次展示/);
@@ -60,7 +69,7 @@ test('复查③：所引来源必须真的在**本次展示的那一块**里—�
     assert.equal(seen.ok, true, `见到的那一条必须放行：${seen.why}`);
 });
 
-test('复查③/④：分块与拆半的真实流程不得借未见来源；清单只列本次展示的来源且不截断', async () => {
+test('复查③/④：分块与拆半的真实流程里核验仍逐块跑（借未见来源只记账、照收）；清单只列本次展示的来源且不截断（★leg197：出处不再丢，照收）', async () => {
     const A_MARK = '甲角独有记号『甲独』';
     const B_MARK = '乙角独有记号『乙独』';
     const filler = (mark, n) => Array.from({ length: n }, (_, i) => `${mark}的填充行${i}：此段只为把书撑过分块下限。`).join('\n');
@@ -94,9 +103,10 @@ test('复查③/④：分块与拆半的真实流程不得借未见来源；清�
     // 正向：两个名号各自在**真的有它**的那一块里被确认（跨块合并后都在册）
     assert.equal(canon.bookEntities.find((b) => b.name === '甲角')?.kind, 'character');
     assert.equal(canon.bookEntities.find((b) => b.name === '乙角')?.kind, 'character');
-    // 负向：每个"借了没见过的来源"的块都留了拒收原因（旧法这些块全部静默放行）
-    const borrowed = records.filter((x) => x.class === 'kind' && x.action === 'drop' && /不在本次展示/.test(String(x.why)));
-    assert.ok(borrowed.length >= 2, `每个未见来源的块都要留原因：${JSON.stringify(records.filter((x) => x.action === 'drop'))}`);
+    // ★leg197：出处核不过**不再丢**（`unverified` 照收）——这一段证明的是"核验仍逐块跑、差异仍留诊断"。
+    const borrowed = records.filter((x) => x.class === 'kind' && x.action === 'unverified' && /不在本次展示/.test(String(x.why)));
+    assert.ok(borrowed.length >= 2, `每个未见来源的块都要留核验原因：${JSON.stringify(records.filter((x) => x.action === 'unverified'))}`);
+    assert.equal(r.evidence.summary.dropped, 0, '出处这一类不再有丢弃（计数挪到 `unverified`）');
     // 来源清单按**本次这一块**列（S1/S2 是全局稳定编号，不许重排）
     const rosterPrompts = prompts.filter((p) => p.includes('"bookEntities"'));
     const chunkB = rosterPrompts.find((p) => chunkOf(p).includes('乙线') && !chunkOf(p).includes('甲线'));
@@ -128,13 +138,12 @@ test('复查④：来源清单不设 400 上限——第 513 条已接受来源�
     assert.equal(verifyQuote(frozen, { ev: { s: 'S513', q: last }, spanText: text }).ok, true, '第 513 条必须可引');
 });
 
-// ============================ ① 设定面：每一类都要出处 ======================================
+// ============================ ① 设定面：每一类都记账（★leg197：核不过照收） =================
 const SET_TEXT = '【世界】天地灵气稀薄，常人难入修行。凡俗国度林立。';
 const SET_BLOCKS = blocksOf([['w1', SET_TEXT]]);
 
-test('复查①：设定事实没有来源编号/原话 ⇒ 一律不收（旧法：文本在材料里就收）', async () => {
+test('复查①：设定事实没有来源编号/原话 ⇒ 照样收下，核不过只进诊断（★leg197：出处不再丢，照收）', async () => {
     const { r } = await runSmall({
-        expectOk: false,
         text: SET_TEXT, blocks: SET_BLOCKS,
         payload: {
             society: '天地灵气稀薄，常人难入修行。',
@@ -145,12 +154,18 @@ test('复查①：设定事实没有来源编号/原话 ⇒ 一律不收（旧�
             tension: { polarity: '灵气', direction: '稀薄' },
         },
     });
-    assert.equal(r.setting, undefined, '全部设定无出处，不许按成功替换');
-    assert.equal(r.settingReport.kept.total, 0);
-    assert.equal(r.evidence.summary.dropped, 7, '七条无依据主张逐项拒收');
+    // ★leg197：七条无出处主张**全部照收**（旧法：一律不收、拒绝替换、kept.total = 0）。
+    assert.ok(r.setting, '设定照常装配（出处核不过不再拒绝替换）');
+    assert.equal(r.setting.frozen.canon.society, '天地灵气稀薄，常人难入修行。', '没有出处的 society 照收');
+    assert.equal(r.settingReport.kept.total, 7, '七条主张全部入账');
+    assert.equal(r.evidence.summary.dropped, 0, '出处这一类不再有丢弃');
+    assert.equal(r.evidence.summary.unverified, 7, '七条都要如实记"出处对不上"');
+    assert.ok(Object.keys(r.evidence.summary.unverifiedByReason || {}).some((w) => /缺来源编号|缺出处/.test(w)),
+        `核不过的原因要可复述：${JSON.stringify(r.evidence.summary.unverifiedByReason)}`);
 });
 
-test('复查①：所引原话必须真的包含该项原话（同一块里的另一句不算出处）', async () => {
+test('复查①：所引原话不包含该项原话 ⇒ 该项照收，核验差异仍留诊断（★leg197：出处不再丢，照收）', async () => {
+    const records = [];
     const { r } = await runSmall({
         text: SET_TEXT, blocks: SET_BLOCKS,
         payload: {
@@ -159,14 +174,19 @@ test('复查①：所引原话必须真的包含该项原话（同一块里的�
             techOrMagic: '天地灵气稀薄，常人难入修行。',                     // 共用这一条 ev ⇒ 收
             rules: [{ 文: '凡俗国度林立。' }, { 文: '天地灵气稀薄' }],
         },
+        onEvidence: (x) => records.push(x),
     });
     const canon = r.setting.frozen.canon;
-    assert.equal(canon.society, '', '设定原话不在所引出处 ⇒ 不收');
+    // ★leg197：设定原话不在所引出处里 ⇒ **照收**（旧法：核不过就置空）。
+    assert.equal(canon.society, '凡俗国度林立。', '设定原话不在所引出处 ⇒ 照收（只记账）');
     assert.equal(canon.techOrMagic, '天地灵气稀薄，常人难入修行。');
-    assert.deepEqual(canon.rules, ['天地灵气稀薄'], '散在多处的法则各自给出处，共句的共用顶层 ev');
+    // ★leg197：法则也不再按"在所引原话里"摘条 ⇒ 两条都在册（旧法只留共句的那条）。
+    assert.deepEqual(canon.rules, ['凡俗国度林立。', '天地灵气稀薄'], '散在多处的法则各自给出处，核不过照收');
+    assert.ok(records.some((x) => x.subject === 'society' && x.action === 'unverified' && /不在所引出处内/.test(String(x.why))),
+        `核不过仍要留诊断：${JSON.stringify(records)}`);
 });
 
-test('复查①/②：环境档位校验枚举格式 + 真出处，不要求枚举词出现在中文里', async () => {
+test('复查①/②：环境档位只校验枚举格式——出处核不过照收，枚举外的照旧拒收（★leg197：出处不再丢，照收）', async () => {
     const { r } = await runSmall({
         text: SET_TEXT, blocks: SET_BLOCKS,
         payload: { ev: { s: 'w1', q: '凡俗国度林立。' }, env: { 民生度: '艰难', 动乱度: '动荡' } },
@@ -181,14 +201,18 @@ test('复查①/②：环境档位校验枚举格式 + 真出处，不要求枚�
         payload: { ev: { s: 'w1', q: '凡俗国度林立。' }, env: { 民生度: '很惨' } },
     });
     assert.equal(bad.r.setting, undefined, '非法枚举必须拒收，不产生空的成功结果');
+    // ★leg197：没有出处的档位**照收**（留下的那道判据只有枚举格式 `normalizeParam`）。
+    const noEvRecords = [];
     const noEv = await runSmall({
-        expectOk: false,
         text: SET_TEXT, blocks: SET_BLOCKS, payload: { env: { 民生度: '艰难' } },
+        onEvidence: (x) => noEvRecords.push(x),
     });
-    assert.equal(noEv.r.setting, undefined, '没有出处的环境档位不许收');
+    assert.equal(noEv.r.setting.dynamic.env['民生度'], '艰难', '没有出处的环境档位照收（旧法：不许收）');
+    assert.ok(noEvRecords.some((x) => x.subject === 'env.民生度' && x.action === 'unverified' && /缺来源编号|缺出处/.test(String(x.why))),
+        `核不过要留诊断：${JSON.stringify(noEvRecords)}`);
 });
 
-test('复查①：概念表档位与旧两列都要过"所引原话"闸，note 不再是免检格', async () => {
+test('复查①：概念表档位/注/维度一律不再过出处闸——核不过照收，只留形状与去重（★leg197：出处不再丢，照收）', async () => {
     const text = '【战力】T1 感气境：初入门径。T2 筑基境：气贯全身。';
     const blocks = blocksOf([['w1', text]]);
     const good = await runSmall({
@@ -206,11 +230,13 @@ test('复查①：概念表档位与旧两列都要过"所引原话"闸，note �
             刻度: [{ 名: '战力', 档位: ['T1|感气境', 'T9|编造境'] }],
         },
     });
-    const tiers = (bad.r.setting.frozen.canon.刻度?.[0]?.档位 || []).map((t) => t.档);
-    assert.deepEqual(tiers, ['T1'], '档位不在所引原话里 ⇒ 丢（旧法只在整块材料里找）');
-    const noEv = await runSmall({ text, blocks, expectOk: false, payload: { 刻度: [{ 名: '战力', 档位: ['T1|感气境'] }] } });
-    assert.equal(noEv.r.settingReport.kept.刻度, 0, '概念表没有出处 ⇒ 整张不收');
-    // 旧两列：note 现在也要在所引原话里
+    // ★leg197：档位/注**整层不再过出处闸** ⇒ `T9|编造境` 照收（旧法：不在所引原话里就丢档）。
+    assert.deepEqual(bad.r.setting.frozen.canon.刻度?.[0]?.档位, [{ 档: 'T1', 注: '感气境' }, { 档: 'T9', 注: '编造境' }],
+        `档位不再按所引原话丢：${JSON.stringify(bad.r.setting.frozen.canon.刻度)}`);
+    // ★leg197：概念表也不再要出处 ⇒ 没有出处照样收（旧法：整张不收）。
+    const noEv = await runSmall({ text, blocks, payload: { 刻度: [{ 名: '战力', 档位: ['T1|感气境'] }] } });
+    assert.equal(noEv.r.settingReport.kept.刻度, 1, '概念表没有出处 ⇒ 照收（形状与去重照旧）');
+    // 旧两列：★leg197 起 `note`/维度同样不再按所引原话丢
     const legacyCols = await runSmall({
         text, blocks,
         payload: {
@@ -220,8 +246,8 @@ test('复查①：概念表档位与旧两列都要过"所引原话"闸，note �
         },
     });
     const ps = legacyCols.r.setting.frozen.canon.powerScale;
-    assert.deepEqual(ps.map((x) => x.level), ['T1'], 'note 不在所引原话里的档位项一起丢');
-    assert.deepEqual(legacyCols.r.setting.frozen.canon.dims, [], '维度不在所引原话里 ⇒ 丢');
+    assert.deepEqual(ps.map((x) => x.level), ['T1', 'T2'], 'note 不在所引原话里的档位项照收（旧法：只留 T1）');
+    assert.deepEqual(legacyCols.r.setting.frozen.canon.dims, [{ name: '战力', range: 'T1~T2' }], '维度不在所引原话里 ⇒ 照收（旧法：丢）');
 });
 
 // ============================ ③ 逐字段/别名/归属：各自的出处 ================================
@@ -263,9 +289,10 @@ test('描述属性保留模型抽取值，不再按所引句子逐字丢弃', as
     assert.equal(attrsJia.fields.身份, '城主', '属性遍同样保留');
 });
 
-test('复查③：别名与归属也要在自己引的那句原话里（不能只出现在整块材料里）', async () => {
+test('复查③：别名与归属不再按"在所引原话里"拦——照收，核验照旧记账（★leg197：出处不再丢，照收）', async () => {
     const text = '【陆青】陆青独自行走江湖。夜行者是柳白的别名。';
     const blocks = blocksOf([['w1', text]]);
+    const records = [];
     const { r } = await runSmall({
         text, blocks,
         payload: {
@@ -273,16 +300,22 @@ test('复查③：别名与归属也要在自己引的那句原话里（不能�
                 { name: '陆青', kind: 'character', aliases: ['夜行者'], parent: '柳白', ev: { s: 'w1', q: '陆青独自行走江湖。' } },
             ],
         },
+        onEvidence: (x) => records.push(x),
     });
     const lu = r.setting.frozen.canon.bookEntities.find((b) => b.name === '陆青');
-    assert.equal(lu.aliases, undefined, '别名叫法不在所引原话里 ⇒ 不许注入');
-    assert.equal(lu.parent, undefined, '归属名不在所引原话里 ⇒ 不许注入');
+    // ★leg197：别名/归属不再要求"出现在所引原话里" ⇒ 照收（旧法：核不过就不注入）。
+    assert.deepEqual(lu.aliases, ['夜行者'], '别名叫法不在所引原话里 ⇒ 照收');
+    assert.equal(lu.parent, '柳白', '归属名不在所引原话里 ⇒ 照收');
+    // 记账照旧：别名/归属各留一条核对记录（本例共用那条已核过的身份出处 ⇒ `keep`；不再有"别名对不上"这道闸）。
+    assert.ok(records.some((x) => x.class === 'alias' && x.subject === '陆青'), `别名仍要记账：${JSON.stringify(records)}`);
+    assert.ok(records.some((x) => x.class === 'parent' && x.subject === '陆青'), '归属仍要记账');
 });
 
 // ============================ ④ 同响应重复：先核验，再冲突感知合并 ==========================
-test('复查④：同名重复先逐条核验——未核实别名不许注入，冲突类别留诊断且不先到先得', async () => {
+test('复查④：同名重复逐条记账后合并——未核实别名照收；冲突类别仍留诊断且不先到先得（★leg197：出处不再丢，照收）', async () => {
     const text = '【陆青】陆青独自行走江湖。柳白实力是T9。夜行者是柳白的别名。青衣也指一个组织。';
     const blocks = blocksOf([['w1', text]]);
+    const records = [];
     const { r } = await runSmall({
         text, blocks,
         payload: {
@@ -293,11 +326,15 @@ test('复查④：同名重复先逐条核验——未核实别名不许注入�
                 { name: '青衣', kind: 'faction', ev: { s: 'w1', q: '青衣也指一个组织。' } },     // 同名两类
             ],
         },
+        onEvidence: (x) => records.push(x),
     });
     const canon = r.setting.frozen.canon;
     const lu = canon.bookEntities.find((b) => b.name === '陆青');
-    assert.equal(lu.aliases, undefined, '未核实的别名不许借同名合并混进来');
+    // ★leg197：出处核不过**不再丢项** ⇒ 未核实的别名照旧并进同名条目（旧法：不许混进来）。
+    assert.deepEqual(lu.aliases, ['夜行者'], '未核实的别名照收（只记账；旧法不许借同名合并混进来）');
     assert.equal(lu.kind, 'character', '已核实的类别保留');
+    assert.ok(records.some((x) => x.class === 'alias' && x.subject === '陆青' && x.action === 'unverified'),
+        `未核实仍要留诊断：${JSON.stringify(records)}`);
     const qing = canon.bookEntities.find((b) => b.name === '青衣');
     assert.equal(qing.kind, undefined, '两条都核过但类别冲突 ⇒ 不选先到的，留作待核对候选');
     assert.ok(/冲突/.test(r.errors.join('|')), `冲突必须留痕：${r.errors.join('|')}`);
@@ -506,7 +543,7 @@ test('复查⑧：已确认别名要能解析归属链与关系端点（canon �
     assert.equal(rel.seeded, 1, `别名端点的边要落账：${rel.dropped.join('|')}`);
 });
 
-test('复查⑪：关系出处只有一种形状 ev:{s,q}，旧口径显式兼容；legacy 固定响应不受影响', async () => {
+test('复查⑪：关系边两种出处形状照旧认（缺编号只记账、照收）；legacy 固定响应不受影响（★leg197：出处不再丢，照收）', async () => {
     const text = '【月野兔】月野兔（水手月亮），所属势力：科学团。她是科学团的成员。';
     const blocks = blocksOf([['w2', text]]);
     const base = {
@@ -527,12 +564,17 @@ test('复查⑪：关系出处只有一种形状 ev:{s,q}，旧口径显式兼�
         payload: { ...base, relations: [{ from: '月野兔', to: '科学团', type: '成员', s: 'w2', quote: '她是科学团的成员。' }] },
     });
     assert.equal(legacyShape.r.setting.frozen.canon.relations?.length, 1, '旧 s+quote 口径要显式兼容');
-    // ③ 两种形状都不给 ⇒ 拒收并留原因
+    // ③ 两种形状都不给 ⇒ ★leg197：**照收**（出处核不过只记账；丢的只剩形状/端点不在名册那几类）
+    const noEvRecords = [];
     const noEv = await runSmall({
         text, blocks,
         payload: { ...base, relations: [{ from: '月野兔', to: '科学团', type: '成员', quote: '她是科学团的成员。' }] },
+        onEvidence: (x) => noEvRecords.push(x),
     });
-    assert.equal(noEv.r.setting.frozen.canon.relations, undefined, '没有来源编号的边不许收');
+    assert.deepEqual(noEv.r.setting.frozen.canon.relations, [{ from: '月野兔', to: '科学团', type: '成员' }],
+        '没有来源编号的边照收（落账形状只剩语义端点/类型）');
+    assert.ok(noEvRecords.some((x) => x.class === 'relation' && x.action === 'unverified' && /缺来源编号/.test(String(x.why))),
+        `核不过仍要留诊断：${JSON.stringify(noEvRecords)}`);
     // ④ legacy 调用（无允许来源）逐字不变：固定响应仍按书文核原话
     const legacyRun = await extractWorldSetting({
         sourceText: text,

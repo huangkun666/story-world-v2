@@ -1948,8 +1948,10 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
 // ★★leg62（用户令「之后增加一个独立抽取设定的入口方便我直抽设定快速看效果」）：**直抽刻度的结果栏**。
 //   它只画"这一次抽到什么"，**不碰账本**（草稿放在 `world.context.__scaleDraft`，是会话态、不是契约字段）。
 //   为什么必须如实画三样：① 每张表（表名 + 用途 + 档位/维度）；② **这次抽到几条**；
-//   ③ ★**被出处闸丢掉的档位**——档位名对不上原文的会被净化层丢（见 `sanitizeScales`），
-//      丢掉的不许静默，否则用户看到"怎么少了几档"却不知道是模型编的（本仓"漏了如实报"的纪律）。
+//   ③ ~~被出处闸丢掉的档位~~——★★leg197（用户令「…找不到原文而丢弃模型提出的行动…现在要全面撤销」）：
+//      **档位不再过出处闸**（`sanitizeScales` 已不看原文）⇒ `draft.dropped` 在生产里**恒为 0**，
+//      下面那一支因此**不再会画出来**。留着它是因为草稿的形状与既有判据都还认这一格
+//      （`test/scales-concept-table.test.js` 拿一份手工草稿验过它）；真要清，连判据一起清。
 export function renderScaleDraftHtml(draft, world = null) {
     if (!draft || typeof draft !== 'object') return '';
     const scales = Array.isArray(draft.scales) ? draft.scales : [];

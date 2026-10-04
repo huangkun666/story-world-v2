@@ -15,18 +15,15 @@ export const geographyShape = {
 export function sanitizeGeography(raw, { sourceText = '', evidence = null, previous = null } = {}) {
   const warnings = [], dropped = [], geography = empty(), keys = new Map();
   const reject = (subject, why) => { dropped.push({ subject, why }); warnings.push(`地图: ${subject}：${why}`); };
-  const check = (item, cls, subject) => {
+  // ★★★leg197（用户令：全面撤销"引用找不到原文就丢"）：下面这两个"核出处"的函数**不再决定收不收**——
+  //   它们只把结果记进诊断（`evidence.records`）与 `warnings`。留下的判据全是**形状**：
+  //   临时编号/原名缺失或编号重复 · 端点未确认或关系类型非法 · 包含环 · 重复关系。
+  //   ★`literal`（"这个名称/文本要在核过的引用里逐字出现"）整条撤掉：那正是"找不到原文就丢"。
+  const noteProof = (item, cls, subject) => {
     const proof = verifyQuote(evidence?.frozen, { ev: item?.ev, scope: evidence?.scope ?? null, spanText: sourceText, cls, subject });
-    if (Array.isArray(evidence?.records)) evidence.records.push(evidenceRecord({cls,subject,action:proof.ok?'keep':'drop',why:proof.why,ref:proof.ref,quote:proof.ok?null:proof.quote}));
-    if (!proof.ok) reject(subject, proof.why);
-    return proof.ok ? proof : null;
-  };
-  const literal = (text, proof, subject) => {
-    if (proof.quote.includes(text)) return true;
-    const why = '该原文名称或文本未在核过的引用中逐字出现';
-    reject(subject, why);
-    if (Array.isArray(evidence?.records)) evidence.records.push(evidenceRecord({cls:'geography-text',subject,action:'drop',why,ref:proof.ref}));
-    return false;
+    if (Array.isArray(evidence?.records)) evidence.records.push(evidenceRecord({cls,subject,action:proof.ok?'keep':'unverified',why:proof.why,ref:proof.ref,quote:proof.ok?null:proof.quote}));
+    if (!proof.ok) warnings.push(`地图: ${subject}：出处核不过——${proof.why}（★leg197：**照收**，只记这一条）`);
+    return proof;
   };
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.places) || !Array.isArray(raw.links)) {
     reject('地理输出', 'places 与 links 必须是数组'); return { geography, warnings, dropped };
@@ -34,11 +31,10 @@ export function sanitizeGeography(raw, { sourceText = '', evidence = null, previ
   for (const p of raw.places) {
     const key=value(p?.key), name=value(p?.name);
     if (!key || !name || keys.has(key)) { reject(name || key || '地点','临时编号/原名缺失或编号重复'); continue; }
-    const proof=check(p,'geography-place',name);
-    if (!proof || !literal(name,proof,name)) continue;
+    noteProof(p,'geography-place',name);
     const out={id:`p_${geography.places.length+1}`,name};
-    if (value(p.qualifier) && literal(value(p.qualifier),proof,`${name} 身份说明`)) out.qualifier=value(p.qualifier);
-    const aliases=[...new Set((Array.isArray(p.aliases)?p.aliases:[]).map(value).filter(a=>a&&a!==name&&literal(a,proof,`${name} 别名`)))];
+    if (value(p.qualifier)) out.qualifier=value(p.qualifier);
+    const aliases=[...new Set((Array.isArray(p.aliases)?p.aliases:[]).map(value).filter(a=>a&&a!==name))];
     if (aliases.length) out.aliases=aliases;
     geography.places.push(out);keys.set(key,out.id);
   }
@@ -46,11 +42,10 @@ export function sanitizeGeography(raw, { sourceText = '', evidence = null, previ
     const subject=`${value(l?.from)} → ${value(l?.to)}`;
     const from=keys.get(value(l?.from)),to=keys.get(value(l?.to)),type=value(l?.type);
     if (!from || !to || from===to || !['within','adjacent','passage'].includes(type)) { reject(subject,'端点未确认或关系类型非法'); continue; }
-    const proof=check(l,'geography-link',subject);
-    if (!proof) continue;
+    noteProof(l,'geography-link',subject);
     const out={from,to,type};
     if (type==='passage') {
-      for (const k of ['via','condition']) if (value(l[k]) && literal(value(l[k]),proof,`${subject} ${k==='via'?'通道名':'条件'}`)) out[k]=value(l[k]);
+      for (const k of ['via','condition']) if (value(l[k])) out[k]=value(l[k]);
       if (['both','forward'].includes(l.direction)) out.direction=l.direction;
       else if (l.direction!==undefined) reject(subject,'方向非法，方向字段已弃');
     }
@@ -104,7 +99,7 @@ export async function extractGeography({ sourceText, allowedSources, extract, pr
   for(let i=0;i<rows.length;i++){if(chars+rows[i].text.length>SETTING_CHUNK_CHAR&&indexes.length){chunks.push(indexes);indexes=[];chars=0;}indexes.push(i);chars+=rows[i].text.length+1;}if(indexes.length)chunks.push(indexes);
   for(let i=0;i<chunks.length;i++){
     const picked=chunks[i],text=picked.map(j=>rows[j].text).join('\n'),scope=scopeForRows(frozen,{text:source,rows,indexes:picked});
-    const prompt=[{role:'system',content:'只抽取本次材料明述的地点身份、别名、包含(within)、相邻(adjacent)与通道(passage)。不猜距离、方向或道路。同名不同地点使用不同临时 key；尽量保留原文完整名称。每个地点与关系都带 ev。没有资料就返回空数组。输出严格 JSON：'+JSON.stringify({geography:geographyShape})},{role:'user',content:evidenceDictionary(frozen,{scope})+'\n'+text}];
+    const prompt=[{role:'system',content:'只抽取本次材料明述的地点身份、别名、包含(within)、相邻(adjacent)与通道(passage)。不猜距离、方向或道路。同名不同地点使用不同临时 key；尽量保留原文完整名称。每个地点与关系都带 ev（引擎会逐字核并把结果记进诊断；★核不过不再丢弃，但"抄不出原话的就别交"这条纪律照旧）。没有资料就返回空数组。输出严格 JSON：'+JSON.stringify({geography:geographyShape})},{role:'user',content:evidenceDictionary(frozen,{scope})+'\n'+text}];
     try{
       calls++;
       const output=await extract(prompt.map(m=>m.content).join('\n\n'));

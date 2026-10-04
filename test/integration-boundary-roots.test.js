@@ -14,6 +14,10 @@
 //   ③ 根只在收口拿**父块整段**（`chunk.text`）当出处闸 ⇒ 子块能引"自己没见过"的原话。
 // 本文件走**生产函数**（`extractWorldSetting` / `seedRootsChunked` / `sanitizeSeedRoots` / `mergeCanonChunks`），
 //   固定响应只证明**程序保存链**（哪些主张被收下/拒收、写成了什么形状），不宣称模型识别质量（设计 §8 末条）。
+//
+// ★★★leg197（用户令「…因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动…现在我要全面撤销」）：
+//   **出处那一层从"闸门"降成"记账"**——本文件里原先所有"引了没展示的来源 / 原话对不上 ⇒ 拒收"的判据，
+//   一律翻成"**照收**，且 `warnings` / `errors` 仍如实点名对不上"（`verifyQuote` 一个字没改，只是没人再拿它当闸）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -44,8 +48,9 @@ const firstShownRow = (prompt) => {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ① 净化层：严格道只认"本次展示片段"里的编号与原话（同句在别的条目里出现不算）
+//   ★leg197：核不过**照收**——这一段现在验的是"核得出、且留痕"，不是"拒收"。
 // ══════════════════════════════════════════════════════════════════════════════
-test('Task4·起根闸：同句落在两个条目里时，引"没展示的那一条"必须拒（不许冒领）', () => {
+test('Task4·起根闸：同句落在两个条目里时，引"没展示的那一条"**照收**（★leg197：出处不再丢），但警告仍点名"不在本次展示的材料内"', () => {
     const SHARED = '陆青前往东城参加聚会。';
     const A = `【甲条】${SHARED}\n甲条独有的一句。`;
     const B = `【乙条】${SHARED}\n乙条独有的一句。`;
@@ -57,16 +62,20 @@ test('Task4·起根闸：同句落在两个条目里时，引"没展示的那一
     const ok = clean([{ title: '甲事', parties: ['陆青'], quote: SHARED, ev: { s: 'src-a', q: SHARED } }]);
     assert.equal(ok.roots.length, 1, `本块自己的出处要收：${JSON.stringify(ok.warnings)}`);
     assert.equal(ok.roots[0].ev, undefined, '★原始凭证不落（净化产物只有 title/position/parties/quote/why）');
+    // ★leg197：引"本次没展示的那一条"不再是拒收理由 ⇒ 照收；但"借了没见过的来源"仍要留痕（不许静默）
     const foreign = clean([{ title: '乙事', parties: ['陆青'], quote: SHARED, ev: { s: 'src-b', q: SHARED } }]);
-    assert.equal(foreign.roots.length, 0, '★引"本次没展示的那一条"必须拒（同句逐字相同也不行）');
-    assert.match(foreign.warnings.join('|'), /不在本次展示的材料内/);
+    assert.equal(foreign.roots.length, 1, '★leg197：引"本次没展示的那一条"**照收**（旧法这里拒；同句逐字相同与否都不再是判据）');
+    assert.match(foreign.warnings.join('|'), /不在本次展示的材料内/, '★但警告仍点名"借了没展示的来源"');
+    assert.match(foreign.warnings.join('|'), /照收/, '★leg197：留痕写明"照收，只记这一条"');
     const outside = clean([{ title: '甲事', parties: ['陆青'], quote: '乙条独有的一句。', ev: { s: 'src-a', q: '乙条独有的一句。' } }]);
-    assert.equal(outside.roots.length, 0, '★原话不在所引来源的展示片段里 ⇒ 拒');
+    assert.equal(outside.roots.length, 1, '★leg197：原话不在所引来源的展示片段里 ⇒ 照收（旧法拒）');
+    assert.match(outside.warnings.join('|'), /不在本次展示的片段内/, '★警告仍点名"对不上"');
     const mismatch = clean([{ title: '甲事', parties: ['陆青'], quote: SHARED, ev: { s: 'src-a', q: '甲条独有的一句。' } }]);
-    assert.equal(mismatch.roots.length, 0, '★"书里那句话"不在自己的 `ev.q` 里 ⇒ 拒（不许借别处）');
+    assert.equal(mismatch.roots.length, 1, '★leg197："书里那句话"不在自己的 `ev.q` 里 ⇒ 照收（旧法拒；不许借别处也不再用丢弃来罚）');
+    assert.match(mismatch.warnings.join('|'), /不在所引原话里/, '★警告仍点名那一处错配');
     const noEv = clean([{ title: '甲事', parties: ['陆青'], quote: SHARED }]);
-    assert.equal(noEv.roots.length, 0, '★严格道缺 `ev` ⇒ 拒（旧法：只要 quote 在整块里就收）');
-    assert.match(noEv.warnings.join('|'), /缺来源编号/);
+    assert.equal(noEv.roots.length, 1, '★leg197：严格道缺 `ev` ⇒ 照收（旧法：拒）');
+    assert.match(noEv.warnings.join('|'), /缺来源编号/, '★警告仍点名"缺来源编号"（旧法那句丢弃理由照旧报出来）');
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -115,7 +124,7 @@ test('Task4·分块起根：来源清单随块走 + 跨块冒领拒收 + 显式 
     assert.match(r3.errors.join('|'), /没有提供「允许来源」/);
 });
 
-test('Task4·分块起根：拆到两块之后，各块只认自己展示的那几条来源', async () => {
+test('Task4·分块起根：拆到两块之后，"冒领"的那两条**照收**（★leg197：出处不再丢），警告仍点名跨块冒领', async () => {
     const SHARED = '陆青前往东城参加聚会。';
     const A = `【甲条】${SHARED}\n甲条独有的一句。`;
     const B = `【乙条】${SHARED}\n乙条独有的一句。`;
@@ -140,11 +149,13 @@ test('Task4·分块起根：拆到两块之后，各块只认自己展示的那�
         evidencePolicy: 'strict', fingerprint: 'f', at: 't', maxPerChunk: 8, concurrency: 1,
     });
     assert.equal(r.ok, true, (r.errors || []).join('；'));
-    assert.equal(r.seeded, 2, `每块只收自己那条（"冒领"两条必须被拒）；实际 ${JSON.stringify(w.events.map((e) => e.title))}`);
-    assert.deepEqual(w.events.map((e) => e.title).sort(), ['乙事', '甲事']);
+    // ★leg197：每块的"冒领"项不再被拒 ⇒ 两块各收 2 条（跨块同标题去重后落账 3 条：甲事 / 冒领 / 乙事）
+    assert.equal(r.seeded, 3, `★leg197：冒领也落账（旧法 2 条）；实际 ${JSON.stringify(w.events.map((e) => e.title))}`);
+    assert.deepEqual(w.events.map((e) => e.title).sort(), ['乙事', '冒领', '甲事']);
     assert.equal(prompts[0].includes('S2 = 乙条'), false, '★第一块的清单只许列它自己那条（S1）');
     assert.match(prompts[1], /S2 = 乙条/, '★第二块的清单列的是它自己那条');
-    assert.match(r.warnings.join('|'), /不在本次展示的材料内/, '拒收要留原因');
+    assert.match(r.warnings.join('|'), /不在本次展示的材料内/, '★跨块冒领仍要留原因（旧法"拒收"、现在"照收 + 留痕"）');
+    assert.match(r.warnings.join('|'), /照收/, '★leg197：留痕写明"照收，只记这一条"');
     assert.equal(JSON.stringify(w.events).includes('"ev"'), false, '★世界账里不许出现原始凭证键');
     assert.equal(JSON.stringify(w.events).includes('"q"'), false, '★世界账里不许出现原始凭证键');
 });
@@ -152,7 +163,7 @@ test('Task4·分块起根：拆到两块之后，各块只认自己展示的那�
 // ══════════════════════════════════════════════════════════════════════════════
 // ③ 并进第二遍（大书生产路）：逐块核 + 拆半后根/关系不丢 + skipRoster 不重抽
 // ══════════════════════════════════════════════════════════════════════════════
-test('Task4·并进第二遍：每块按自己展示的片段核（跨块冒领拒收），skipRoster 不问根', async () => {
+test('Task4·并进第二遍：每块按自己展示的片段核——跨块冒领**照收**（★leg197：出处不再丢），skipRoster 不问根', async () => {
     const A_ONLY = '甲独有的话。';
     const B_ONLY = '乙独有的话。';
     const A_TEXT = `【甲条】${A_ONLY}\n${filler('甲线', 1600)}`;
@@ -182,8 +193,10 @@ test('Task4·并进第二遍：每块按自己展示的片段核（跨块冒领�
     assert.ok(Array.isArray(r.rawRoots), '★"并进来了"必须能被接线层看见（按有没有这一格分叉）');
     const got = r.rawRoots.flat();
     assert.ok(got.length >= 1, `本块自己的根要收下：${JSON.stringify(r.errors)}`);
-    assert.equal(got.some((x) => x.title === '冒领'), false, '★引"本次没展示的那一条"的根必须被拒（旧法拿父块整段核 ⇒ 会放行）');
-    assert.ok(r.errors.join('|').includes('不在本次展示'), `拒收要留原因：${r.errors.join('|')}`);
+    // ★leg197：引"本次没展示的那一条"的根**照收**（旧法拿父块整段核 ⇒ 会放行；现在核归核、收归收）
+    assert.equal(got.some((x) => x.title === '冒领'), true, '★leg197：跨块冒领的根**照收**（出处核不过不再决定收不收）');
+    assert.ok(r.errors.join('|').includes('不在本次展示'), `★但留痕仍要点名"不在本次展示"：${r.errors.join('|')}`);
+    assert.ok(r.errors.join('|').includes('照收'), '★leg197：留痕写明"照收，只记这一条"（不许静默）');
     assert.equal(JSON.stringify(r.setting).includes('"ev"'), false, '★setting（会持久化的那份）里不许出现原始凭证');
     // 首块不问根：只有非首块的提示词里有 roots 那一项
     const rootPrompts = prompts.filter((p) => p.includes('"roots"'));

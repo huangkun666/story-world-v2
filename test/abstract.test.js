@@ -258,20 +258,39 @@ test('leg20 世情路径：situation 净化与落账（原文措辞；非法置�
     assert.equal(none.canon.situation, '', '缺省=空串合法');
 });
 
-test('leg24 片1 停抄书：抽取输出只留 name/kind/parent——attrs/race/location/evidence 一律不入册', async () => {
+test('leg24 片1 停抄书：抽取输出只留 name/kind/parent——attrs/race/location/evidence 一律不入册；书外名号照收只记诊断（★leg197：出处不再丢，照收）', async () => {
     const rawBook = '万法阁：灵脉霸主，掌大荒灵脉。白小娥：炼气三层。';
     const withExtras = {
         ...FULL_RAW,
         bookEntities: [
             { name: '万法阁', kind: 'faction', parent: '大虞', attrs: { hardPower: 0.9, office: 0.8, 依据: '灵脉霸主' }, race: '人族', location: '昆仑山' },
             { name: '白小娥', kind: 'character', attrs: { hardPower: 0.3, 依据: '炼气三层' } },
-            { name: '无据客', kind: 'character', attrs: { intel: 0.6 } },
+            // ★leg197：这一条**故意给一个书里找不到的出处**——旧法它被"全书级出处校验"整条摘掉，
+            //   现在照收，只在诊断里记一条 `unverified`（用户令：出处只记账、不拦人）。
+            { name: '无据客', kind: 'character', attrs: { intel: 0.6 }, ev: { s: 'S1', q: '书里根本没有这句话' } },
         ],
     };
-    const r = await extractWorldSetting({ sourceText: rawBook, extract: fakeExtract(withExtras) });
+    // ★leg197：本用例走**严格道**（给了允许来源）——出处核验的结果才有诊断可看（legacy 道不产出出处记录）。
+    const evidenceRecords = [];
+    const r = await extractWorldSetting({
+        sourceText: rawBook, extract: fakeExtract(withExtras),
+        allowedSources: [{ sourceId: 'book', text: rawBook }],
+        onEvidence: (rec) => evidenceRecords.push(rec),
+    });
     assert.equal(r.ok, true);
     const es = r.setting.frozen.canon.bookEntities;
-    assert.ok(!es.some((b) => b.name === '无据客'), '小书也拒绝原文没有的名号');
+    // ★leg197：旧断言是 `!es.some((b) => b.name === '无据客')`（小书也拒绝原文没有的名号）——现在**照收**。
+    const outsider = es.find((b) => b.name === '无据客');
+    assert.ok(outsider, '★leg197：原文里没有的名号也照收（出处只记账、不拦人）');
+    assert.equal(outsider.kind, 'character', '类别同样照收（旧法核不过会把 kind 一起摘掉）');
+    // ★leg197：对不上这件事仍要看得见——诊断里一条 `unverified`，人话摘要里一个「出处对不上 N（照收）」。
+    const outsiderRecs = evidenceRecords.filter((rec) => rec.subject === '无据客');
+    assert.ok(outsiderRecs.length >= 1 && outsiderRecs.every((rec) => rec.action === 'unverified'),
+        `★leg197：出处对不上只记账（unverified），不丢项：${JSON.stringify(outsiderRecs)}`);
+    assert.match(String(outsiderRecs[0].why), /原话对不上/, '诊断要写明"原话对不上"（不许静默）');
+    assert.ok(r.evidence.summary.unverified >= 1 && r.evidence.summary.dropped === 0,
+        '★leg197：摘要里 dropped 恒 0，出处那一档计进 unverified');
+    assert.ok(r.errors.some((e) => e.includes('出处对不上')), `人话摘要里也要看得见：${r.errors.join('; ')}`);
     for (const name of ['万法阁', '白小娥']) {
         const item = es.find((b) => b.name === name);
         assert.ok(item, `${name} 名号仍入册（身份是主键，不随停抄书而丢）`);

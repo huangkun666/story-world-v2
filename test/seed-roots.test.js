@@ -2,7 +2,8 @@
 // ★★leg40：**从世界源起根**——把书里"正在发生的事"提取成账上的线头事件（治"世界源只剩名册、一条事都没起过"）。
 // 这一族用例锁四件事：
 //   ① **只提取不发明**：当事人必须是**账上真有的实体名**（对不上就丢这条根，绝不新建、绝不猜）；
-//   ② **净化是机械的**：没有书里原话 / 没有当事人 / 形状不对 ⇒ 丢，且如实上报；
+//   ② **净化是机械的**：没有当事人 / 形状不对 / 重复 ⇒ 丢，且如实上报；
+//      ★leg197：**"没有书里原话"不再丢根**（出处那一道闸整条撤了——只记账，不拦人）；
 //   ③ **幂等 + 零调用**：同一本书只种一次；线头够用时一次调用都不发（`shouldSeedRoots`）；
 //   ④ **失败零阻塞 + 不碰世界进度**：调用抛错/返回非 JSON ⇒ 原样返回不抛；落账只追加 `events` 与 `meta.seedRoots`。
 import { test } from 'node:test';
@@ -11,6 +12,9 @@ import {
     buildSeedRootsPrompt, sanitizeSeedRoots, applySeedRoots, shouldSeedRoots, seedRoots, seedRootsChunked,
     longestBookRun, SEED_ROOTS_MAX, SEED_QUOTE_MIN_RUN,
 } from '../src/seed-roots.js';
+// ★leg197：出处核现在只在**严格道**（调用方给了「允许来源」`frozen`）上跑，且结果只进 `warnings`——
+//   判据要能自己喂一份 `frozen` 进去，才验得了"核不过**照收**、但留痕"。
+import { freezeAllowedSources } from '../src/abstract-evidence.js';
 import { computeOpenRoots } from '../src/pack.js';
 
 const mkWorld = () => ({
@@ -51,23 +55,27 @@ test('★leg60 起根提示词：单发路径仍按 30000 截断，分块路径�
     assert.ok(chunked.includes('甲'.repeat(39999)), '★块尾巴那一段必须真的在提示词里（此前被静默切掉）');
 });
 
-test('leg40·起根：净化是机械的——没原话/没当事人/重复/形状不对的丢，且如实上报', () => {
+test('leg40·起根：净化是机械的——**没原话的照收**（★leg197：出处不再丢），没当事人/重复/形状不对的丢，且如实上报', () => {
     const { roots, warnings } = sanitizeSeedRoots({
         roots: [
             { title: '遗迹试炼大开', position: '青丘（推）', parties: ['青丘', '白泽'], quote: '复苏历：遗迹试炼大开' },
             { title: '', parties: ['甲'], quote: 'x' },                    // 无标题
-            { title: '没有原话', parties: ['乙'], quote: '' },              // 指不回书里
+            { title: '没有原话', parties: ['乙'], quote: '' },              // ★leg197：不再因此丢（旧法判"指不回书里"）
             { title: '没有当事人', parties: [], quote: 'y' },               // 没人办的事
             { title: '遗迹试炼大开', position: '青丘', parties: ['青丘'], quote: '重复' },   // 与第一条重名
             'not-an-object',
         ],
     });
-    assert.equal(roots.length, 1, '六条里只有一条合格');
+    // ★leg197：出处那一道闸撤了 ⇒ 六条里两条合格（旧法只收 1 条，"没有原话"那条被丢）
+    assert.equal(roots.length, 2, `★leg197：缺 quote 的根照收（旧法六条里只收 1 条；实收 ${roots.length}）`);
     assert.equal(roots[0].title, '遗迹试炼大开');
     assert.equal(roots[0].position, '青丘', '★位置走 normalizePosition（「（推）」注解剥掉——与全局同一条口径）');
     assert.deepEqual(roots[0].parties, ['青丘', '白泽']);
-    assert.ok(warnings.length >= 4, '每一条被丢的都要有理由（不静默丢料）');
-    assert.ok(warnings.some((w) => w.includes('没有书里原话')), '缺 quote 的理由要写明');
+    assert.equal(roots[1].title, '没有原话', '★leg197：它就是旧法被丢的那一条——现在照收');
+    assert.equal(roots[1].quote, '', '★leg197：原话空着就空着（净化不再据此丢根，也不替它编一句）');
+    assert.ok(warnings.length >= 3, '每一条被丢的都要有理由（不静默丢料）');
+    // ★leg197：'没有书里原话'这条丢弃理由整条撤了——`warnings` 里不许再出现它
+    assert.equal(warnings.some((w) => w.includes('没有书里原话')), false, '★leg197：缺 quote 不再是丢弃理由（出处闸已撤）');
     // 上限
     const many = sanitizeSeedRoots({ roots: Array.from({ length: 20 }, (_, i) => ({ title: `事${i}`, parties: ['青丘'], quote: `q${i}` })) });
     assert.ok(many.roots.length <= SEED_ROOTS_MAX, `条数硬上限 ${SEED_ROOTS_MAX}`);
@@ -164,6 +172,10 @@ test('leg40·起根：shouldSeedRoots 的判据（已种过 / 线头够用 / 线
 //   在起根这条路上此前只靠提示词自觉**（提示词写着"每条都要能指回书里的原话"，没有任何代码在核）。
 //   ★夹具纪律（本仓明令）：下面全是自造记号，**不含任何一本书里的词**——
 //     要的是那个**形状**：合法的对得上十几到几十个字，外来的只碰得上两三个字。
+//   ★★★leg197（用户令「…因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动…现在我要全面撤销」）：
+//     **这道闸整条撤了**——原话对不上书文**不再丢根**（`longestBookRun` / `SEED_QUOTE_MIN_RUN`
+//     只剩"那把尺子"本身；`sanitizeSeedRoots` 一个字都不再读 `sourceText`）。
+//     核只发生在**严格道**（调用方给了 `frozen`），结果只进 `warnings`。下面每条判据都按新口径翻过。
 test('★★★本笔·起根闸：最长连续段能算准（逐字命中 / 带省略号跳字 / 外来句）', () => {
     const book = '甲'.repeat(20) + '乙'.repeat(20);
     assert.equal(longestBookRun('甲'.repeat(20), book), 20, '逐字抄书 ⇒ 对上全长');
@@ -175,7 +187,7 @@ test('★★★本笔·起根闸：最长连续段能算准（逐字命中 / 带
     assert.equal(longestBookRun('甲甲', ''), 0, '没书文 ⇒ 0（不抛）');
 });
 
-test('★★★本笔·起根闸：原话对不上书文的根**丢**，且如实报出"对上了几个字"（不许静默）', () => {
+test('★★★本笔·起根闸：原话对不上书文的根**照收**（★leg197：出处不再丢，照收），只给 `sourceText` 时一个字都不核', () => {
     const book = '甲'.repeat(20) + '乙'.repeat(20);
     const { roots, warnings } = sanitizeSeedRoots({
         roots: [
@@ -185,18 +197,24 @@ test('★★★本笔·起根闸：原话对不上书文的根**丢**，且如�
             { title: '碰三个字的', parties: ['甲'], quote: '甲甲甲丙丙丙丁丁丁戊戊' },
         ],
     }, { sourceText: book });
-    assert.deepEqual(roots.map((r) => r.title), ['逐字的', '跳字的'],
-        `★只收"真在书里"的那两条（实测收下 ${JSON.stringify(roots.map((r) => r.title))}）`);
-    assert.equal(warnings.filter((w) => w.includes('指不回书里')).length, 2, '两条被丢的各有理由（不静默丢料）');
-    assert.ok(warnings.some((w) => w.includes('最长只对得上 0 个字')), '★报数要写清"对上了几个字"（0）');
-    assert.ok(warnings.some((w) => w.includes('最长只对得上 3 个字')), '★报数要写清"对上了几个字"（3）');
-    // ★反向自证：这条闸真的在咬 —— 同一个 quote，把书文换成"它真的在里面"的那本，必须收下
+    // ★leg197：只给 `sourceText` 已不再触发任何核对——旧法"最长连续段"那道闸整条撤了 ⇒ 四条一律照收
+    assert.deepEqual(roots.map((r) => r.title), ['逐字的', '跳字的', '外来的', '碰三个字的'],
+        `★leg197：四条全收（旧法只收"真在书里"的那两条；实测收下 ${JSON.stringify(roots.map((r) => r.title))}）`);
+    assert.equal(warnings.length, 0, '★leg197：这条路没给 `frozen` ⇒ 不核、也不再出"指不回书里"的丢弃警告');
+    // ★leg197：诊断没有消失，只是挪进了**严格道**（给了 `frozen` 才核），且**只记账、不丢根**
+    const frozen = freezeAllowedSources([{ sourceId: 'src-1', text: book }]);
+    const strict = sanitizeSeedRoots({
+        roots: [{ title: '外来的', parties: ['甲'], quote: '丙丙丙丁丁丁戊戊庚庚', ev: { s: 'src-1', q: '丙丙丙丁丁丁戊戊庚庚' } }],
+    }, { sourceText: book, frozen });
+    assert.equal(strict.roots.length, 1, '★leg197：出处核不过 ⇒ **照收**（旧法这里丢根）');
+    assert.ok(strict.warnings.some((w) => w.includes('照收')), '★但"对不上"仍要留痕（★leg197：照收，只记这一条）');
+    // ★反向自证：同一条 quote 放进"它真在里面"的那本 ⇒ 照样收下（出处不再是收不收的判据）
     const { roots: same } = sanitizeSeedRoots({ roots: [{ title: '外来的', parties: ['甲'], quote: '丙丙丙丁丁丁戊戊庚庚' }] },
         { sourceText: '书文：丙丙丙丁丁丁戊戊庚庚正在发生' });
-    assert.equal(same.length, 1, '★反向自证：同一句话放进它真在的那本书里 ⇒ 收下（否则这条闸是无脑乱杀）');
+    assert.equal(same.length, 1, '★同一条 quote 放进它真在的那本书里 ⇒ 收下（两条路都收，不许无脑乱杀）');
 });
 
-test('★★★本笔·起根闸：真接线（分块起根那条路）——外来句进不了账，且读数里看得见', async () => {
+test('★★★本笔·起根闸：真接线（分块起根那条路）——外来句**照进账**（★leg197：出处不再丢），读数里看得见两条', async () => {
     const w = mkWorld();
     const chunk = '甲'.repeat(30) + '乙'.repeat(30);
     const res = await seedRootsChunked({
@@ -209,26 +227,43 @@ test('★★★本笔·起根闸：真接线（分块起根那条路）——外
         }),
     });
     assert.equal(res.ok, true, '★前置：这一批整体是成的（不是"全失败恰好没落账"）');
-    assert.equal(res.seeded, 1, `★只有书里真有的那条落账（实测 ${res.seeded}）`);
-    assert.deepEqual(res.ids, ['ev_seed_1']);
+    // ★leg197：这条路没给「允许来源」（legacy）⇒ 一个字都不核、也不丢 ⇒ 两条都落账
+    assert.equal(res.seeded, 2, `★leg197：两条都落账（旧法只落"书里真有的"那条；实测 ${res.seeded}）`);
+    assert.deepEqual(res.ids, ['ev_seed_1', 'ev_seed_2']);
     const ev = w.events.find((e) => e.id === 'ev_seed_1');
     assert.equal(ev.title, '书里真有的');
-    assert.equal(w.events.some((e) => e.title === '别处来的'), false, '★★外来句**一个字都没进账**');
-    assert.ok(res.warnings.some((x) => x.includes('最长只对得上 0 个字')),
-        '★丢弃理由随读数带出去（`seedRootsForWorld` 会把它打进控制台，不静默）');
+    assert.equal(w.events.some((e) => e.title === '别处来的'), true, '★★leg197：外来句**照进账**（旧法这里断言它一个字都没进）');
+    assert.equal(res.chunks[0].got, 2, '★读数里看得见：这一块收下 2 条（净化产物计数，跨块去重之前）');
+    // ★leg197：没给允许来源 ⇒ 连"对不上"的警告都不出（诊断只在给了 `frozen` 的严格道上跑）
+    assert.equal(res.warnings.length, 0, '★leg197：legacy 路不核 ⇒ 没有出处警告（旧法那条"最长只对得上 0 个字"随闸一起撤）');
+    // ★leg197：诊断仍在——同一条接线给上「允许来源」再跑一遍：外来句照样落账，但 warnings 点名"核不过…照收"
+    const w3 = mkWorld();
+    const res3 = await seedRootsChunked({
+        ssot: w3, chunks: [chunk], fingerprint: 'fp-gate3', at: 'now', maxPerChunk: 4,
+        sourceText: chunk, allowedSources: [{ sourceId: 'src-1', text: chunk }], evidencePolicy: 'strict',
+        extract: async () => ({
+            roots: [
+                { title: '书里真有的', parties: ['青丘'], quote: '甲'.repeat(12), ev: { s: 'src-1', q: '甲'.repeat(12) } },
+                { title: '别处来的', parties: ['青丘'], quote: '丙丙丙丁丁丁戊戊庚庚', ev: { s: 'src-1', q: '丙丙丙丁丁丁戊戊庚庚' } },
+            ],
+        }),
+    });
+    assert.equal(res3.seeded, 2, '★leg197：严格道也照收（核不过 ≠ 丢根）');
+    assert.ok(res3.warnings.some((x) => x.includes('照收')), '★但读数里点名"出处核不过…照收"（丢弃理由随读数带出去，不静默）');
     // ★反向自证：同一个夹具、同一条外来句，只要书文里真有它 ⇒ 就该落账（证明上面那条不是"一律杀"）
     const w2 = mkWorld();
     const res2 = await seedRootsChunked({
         ssot: w2, chunks: ['丙丙丙丁丁丁戊戊庚庚正在发生'], fingerprint: 'fp-gate2', at: 'now', maxPerChunk: 4,
         extract: async () => ({ roots: [{ title: '别处来的', parties: ['青丘'], quote: '丙丙丙丁丁丁戊戊庚庚' }] }),
     });
-    assert.equal(res2.seeded, 1, '★反向自证：书文里真有它 ⇒ 照样落账（闸只认"在不在书里"，不认别的）');
+    assert.equal(res2.seeded, 1, '★反向自证：书文里真有它 ⇒ 照样落账（legacy 路两条都收，出处不是判据）');
 });
 
-test('★本笔·起根闸：调用方没给书文 ⇒ **不核**，但如实记一条警告（不许静默降级）', () => {
+test('★本笔·起根闸：调用方没给书文 ⇒ **不核、也不留出处警告**（★leg197：出处不再丢，照收）', () => {
     const { roots, warnings } = sanitizeSeedRoots({ roots: [{ title: '甲', parties: ['乙'], quote: '丙丙丙' }] });
     assert.equal(roots.length, 1, '没给书文 ⇒ 老行为（旧调用方零扰动）');
-    assert.ok(warnings.some((w) => w.includes('没有书文可比')), '★但"这次没核"必须看得见（不许静默降级）');
+    // ★leg197：旧法这里有一条"没有书文可比 ⇒ 这次没核"的警告——那道 legacy 核对整条撤了，警告一并撤
+    assert.deepEqual(warnings, [], '★leg197：不核就不再报"没有书文可比"（旧口径的警告随出处闸一起撤）');
     assert.ok(SEED_QUOTE_MIN_RUN > 3 && SEED_QUOTE_MIN_RUN <= 14,
         `★常量自证：阈值落在实测两档之间（外来 3 / 合法 14 起），现为 ${SEED_QUOTE_MIN_RUN}`);
 });

@@ -2052,7 +2052,7 @@ if (typeof window !== 'undefined') {
     //      "这把尺长什么样"一次调用就够 ⇒ 想快速看效果时不必等整条管线。
     //   ② **结果不入账**：草稿挂在 `world.context.__scaleDraft`（会话态，不是契约字段、不写盘），
     //      已冻结的设定一个字不动。要真采用就走正常的初始化/重抽（本按钮不当第二条写入口）。
-    //   ③ 档位名照旧过**出处闸**（`sanitizeScales` 用同一份原文滤）⇒ 模型编的档位当场丢并如实报数。
+    //   ③ ★leg197：档位名**不再过出处闸**（`sanitizeScales` 已不看原文）⇒ 模型交的档位一律照收；下面那个 dropped 读数因此恒为 0。
     bus['extract-scales'] = longTask.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => {
         const settings = modelSettings() || {};
         const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
@@ -2087,7 +2087,7 @@ if (typeof window !== 'undefined') {
         }
         const errors = [];
         const scales = sanitizeScales(obj.刻度 ?? obj.轴 ?? obj, { sourceText: src.text }, errors);
-        // ★如实报"被出处闸丢掉的档位"条数（丢掉的不许静默）
+        // ★leg197：出处闸已撤 ⇒ 这个读数恒为 0（旧读数留着，免得动草稿形状与既有判据；见上一条注释）。
         const dropped = errors.filter((e) => /原文查不到/.test(e)).length;
         const world = readHotMeta() ? loadHotAccount(readHotMeta()) : null;
         if (!world) { setStatus('注意：世界还没载入，直抽结果无处可放（账本未动）'); return; }

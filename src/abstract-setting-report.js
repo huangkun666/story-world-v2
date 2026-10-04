@@ -38,9 +38,12 @@ export function settingReportOf({ reports = [], canon, tension, env, cached = fa
 }
 
 export function captureSettingReport(raw, cleaned, records = []) {
-    const reasons = records.filter(r => ['setting', 'tension', 'env'].includes(r.class) && r.action === 'drop')
+    // ★★★leg197：出处核验**不再丢项**，所以"为什么设定是空的"这一类拒因已经没有来源。
+    //   但"哪几项的原话对不上"仍然要看得见 ⇒ 把 `unverified`（给了出处、对不上，★照收）
+    //   一并收进 `reasons`。`drop` 那一支留着（非出处原因的丢弃仍会走到这里）。
+    const reasons = records.filter(r => ['setting', 'tension', 'env'].includes(r.class) && (r.action === 'drop' || r.action === 'unverified'))
         .map(r => String(r.why || '设定核验未通过'));
-    // 刻度净化还使用 errors，不通过逐条 evidence 回调；不能漏掉这条诊断路径。
+    // 刻度净化的形状类坏项仍走 errors（它不通过逐条 evidence 回调）；不能漏掉这条诊断路径。
     reasons.push(...(cleaned.errors || []).filter(s => /^(刻度|rules\b|society\b|techOrMagic\b|historyNotes\b|situation\b|tension\b|env\b)/.test(s)));
     return { returned: settingCounts(raw, raw.tension, raw.env), reasons };
 }

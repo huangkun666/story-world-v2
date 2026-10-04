@@ -1,6 +1,27 @@
 // story-world-v2/src/abstract-evidence.js
 // Task 3（抽取确认与完整入账）：**抽取依据（允许来源 + 原话）的唯一一处簿记**。
 //
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★leg197（用户令，逐字）：
+//   「把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了，
+//     之前取消了属性相关的，现在我要全面撤销」
+//
+//   ⇒ **口径改成：出处只记账、不拦人。**
+//     模型交的每一条主张（名号/类别/别名/所属/设定/刻度/档位/关系/起根/地理/查书取值）
+//     **一律收下**；它给的 `ev:{s,q}` 引擎照旧逐字核一遍，**核的结果只进诊断面**
+//     （`evidenceRecord` 的 `action`），**不再决定收不收**。
+//
+//   · 这条令**覆盖 leg189**（那一笔撤的是"属性值的逐字出处拒收"，本笔把剩下的一并撤掉：
+//     类别/别名/所属/设定面/刻度/关系边/起根/地理/查书——**同一把尺子，一起撤**）。
+//   · **没撤的是"形状"与"冲突"**（它们不是"找不到原文"）：
+//     缺端点/自指/缺名/枚举白名单（`PARAM_GEARS` 档位词）/同名重复的类别与归属冲突留墓碑/
+//     关系边两端要在名册里（解析不出实体 id 的边落不了账）/酒馆宏占位符不当名号。
+//   · 因此 `evidenceRecord` 多了一个动作值 **`unverified`** = "给了出处、但对不上"——
+//     ★它现在**照收**，与 `drop` 分开记，免得"诊断里写着 drop、账上却收下了"这种自相矛盾。
+//     本模块自己不再产出 `drop`（`drop` 仍留给"非出处原因"的丢弃，如查书时的同名多值冲突）。
+//   · `verifyQuote` 本身**一个字没改**：它还是那把尺子，只是**没人再拿它当闸门**。
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+//
 // 依据（已批准，不再重复批准）：
 //   · docs/superpowers/specs/2026-10-03-abstraction-sources-design.md §6.1/§6.2/§6.3
 //   · task-3 Codex 决议：证据与拒收明细走**既有抽取诊断**（`src/diagnostics.js` +
@@ -260,16 +281,21 @@ export function evidenceDictionary(frozen, { scope = null, descriptiveFields = f
     lines.push(descriptiveFields
         ? '引用纪律：实体身份、关系与全局设定要带 `ev:{s:"<编号>", q:"<该来源里逐字照抄的原文>"}`；描述属性保留模型抽取内容，不要求匹配同一句引用。'
         : '引用纪律：每一条语义主张都要带 `ev:{s:"<编号>", q:"<该来源里逐字照抄的原文>"}`；');
-    lines.push('  `s` 必须来自本清单，`q` 必须在**本次这一块**所引来源的正文里逐字找得到（引擎逐字核；核不过的主张一律不收）。');
+    // ★★★leg197：这里原先写着"核不过的主张一律不收"——**那句已经不成立**（用户令：全面撤销出处丢弃）。
+    //   现在如实写成"引擎会逐字核、结果进诊断"：纪律照旧要求照抄原文（它是质量的抓手），
+    //   但**不再拿"核不过"当丢弃的理由**。
+    lines.push('  `s` 必须来自本清单，`q` 必须在**本次这一块**所引来源的正文里逐字找得到（引擎会逐字核，核的结果记进抽取诊断）。');
     return lines.join('\n');
 }
 
 /**
  * 核对一条"带出处的语义主张"。
+ * ★★★leg197：**它现在只是那把尺子，不是闸门**——调用方一律"核了照收"（结果进诊断），
+ *   不再拿 `ok === false` 去丢任何一条主张（用户令见文件头）。函数体一个字未改。
  * @param {object|null} frozen `freezeAllowedSources` 的产物（null = 本次没有允许来源 ⇒ legacy，调用方另判）
  * @param {{ev:*, scope?:object|null, spanText?:string, cls?:string, subject?:string}} args
  *   `scope` = **本次这一块真正展示了哪几块的哪一段**（`scopeForRows` / `scopeForText` 的产物）。
- *     给了它就**只认它**：编号不在里面 ⇒ 拒收；原话不在它给的片段里 ⇒ 拒收。
+ *     给了它就**只认它**：编号不在里面 ⇒ 判不通过；原话不在它给的片段里 ⇒ 判不通过。
  *   `spanText` = 兼容入口（没给 `scope` 时由它反推作用域；反推不出来才退回旧的"块内存在性"口径）。
  * @returns {{ok:boolean, why:string|null, ref:string|null, id:string|null, block:object|null, quote:string|null, fragment:string|null}}
  */
@@ -313,39 +339,57 @@ export function presenceIn(text, value) {
 }
 
 /** 一条抽取依据记录（进诊断面；**不进世界账**）。 */
-export function evidenceRecord({ cls = 'claim', subject = '', action = 'drop', why = null, ref = null, quote = null, extra = null } = {}) {
+export function evidenceRecord({ cls = 'claim', subject = '', action = 'unverified', why = null, ref = null, quote = null, extra = null } = {}) {
     const rec = { class: cls, subject: String(subject ?? ''), action, why: why ?? null, ref: ref ?? null, quote: quote ?? null };
     if (extra && typeof extra === 'object') Object.assign(rec, extra);
     return rec;
 }
 
-/** 计数摘要（可以进返回值/缓存信封；**不含原话与明细**——那些只在受门控的诊断里）。 */
+/**
+ * 计数摘要（可以进返回值/缓存信封；**不含原话与明细**——那些只在受门控的诊断里）。
+ * ★★★leg197：多一格 `unverified` = "给了出处、但对不上"——**这一档现在照收**（不再算进 `dropped`）。
+ *   `dropped` 这个键**留着**（它是既有信封与面板读数的形状），但出处这条路上它**恒为 0**：
+ *   本模块产出的记录里不再有"因为找不到原文而丢弃"。非出处原因的丢弃（如查书同名多值冲突）
+ *   仍记 `drop`，照旧进 `dropped`。
+ */
 export function summarizeEvidence(records = []) {
     const byReason = {};
+    const unverifiedByReason = {};
     const byClass = {};
     let kept = 0;
     let dropped = 0;
     let pending = 0;
+    let unverified = 0;
     for (const r of (Array.isArray(records) ? records : [])) {
         const cls = String(r?.class ?? 'claim');
         byClass[cls] = (byClass[cls] || 0) + 1;
         if (r?.action === 'keep') kept += 1;
         else if (r?.action === 'pending') pending += 1;
-        else if (r?.action === 'drop') {
+        else if (r?.action === 'unverified') {
+            unverified += 1;
+            // ★单独一张表：`byReason` 只装"为什么丢"，`unverifiedByReason` 装"为什么核不过"——
+            //   混在一起会让读数变成"丢了很多"，而实际一条都没丢。
+            const why = String(r?.why ?? '未知原因');
+            unverifiedByReason[why] = (unverifiedByReason[why] || 0) + 1;
+        } else if (r?.action === 'drop') {
             dropped += 1;
             const why = String(r?.why ?? '未知原因');
             byReason[why] = (byReason[why] || 0) + 1;
         }
     }
-    return { raw: records.length, kept, dropped, pending, byReason, byClass };
+    return { raw: records.length, kept, dropped, pending, unverified, byReason, unverifiedByReason, byClass };
 }
 
 /** 一行中文摘要（`details` 为真才带明细片段——与既有调试开关同一道门）。 */
 export function formatEvidenceLine(summary, { details = false, max = 6 } = {}) {
     if (!summary || !summary.raw) return '抽取依据：本次没有需要记录的语义主张';
-    const parts = [`抽取依据：主张 ${summary.raw} 条（收下 ${summary.kept} / 拒收 ${summary.dropped} / 待核对 ${summary.pending}）`];
+    const parts = [`抽取依据：主张 ${summary.raw} 条（收下 ${summary.kept} / 待核对 ${summary.pending}`
+        + `${summary.unverified ? ` / 出处对不上 ${summary.unverified}（**照收**）` : ''}`
+        + `${summary.dropped ? ` / 非出处原因丢弃 ${summary.dropped}` : ''}）`];
+    const unv = Object.entries(summary.unverifiedByReason || {});
+    if (unv.length) parts.push(`出处对不上的原因：${unv.slice(0, max).map(([w, n]) => `${w}×${n}`).join('；')}`);
     const reasons = Object.entries(summary.byReason || {});
-    if (reasons.length) parts.push(`原因：${reasons.slice(0, max).map(([w, n]) => `${w}×${n}`).join('；')}`);
+    if (reasons.length) parts.push(`丢弃原因：${reasons.slice(0, max).map(([w, n]) => `${w}×${n}`).join('；')}`);
     if (details && Array.isArray(summary.samples) && summary.samples.length) {
         parts.push(`明细：${summary.samples.slice(0, max).join('；')}`);
     }

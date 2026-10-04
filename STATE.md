@@ -47,9 +47,10 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **2039 / 2039 · fail 0 · skipped 0 · todo 0**（含地点关系契约与查询、地理抽取与来源核验、地图弹窗开关、当轮地理输入与预算裁剪、导出回档、「往事怎么找」各格现读设置，以及字数额度/整条进不截半条/两路共用查询串/注入读数行/那句原始读数撤掉/**整屏遮罩必须自己声明宽高**） | `node --test`（无参，在插件目录内） |
+| 判据 | **2048 / 2048 · fail 0 · skipped 0 · todo 0**（含**出处只记账不拦人**那一族 9 条：`test/evidence-nodrop.test.js` 的记账层／五条净化路／**反向自证**／"没撤的那一半"；以及地点关系契约与查询、地理抽取、地图弹窗开关、当轮地理输入与预算裁剪、导出回档、「往事怎么找」各格现读设置，以及字数额度/整条进不截半条/两路共用查询串/注入读数行/整屏遮罩必须自己声明宽高） | `node --test`（无参，在插件目录内） |
 | 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0** | `node demo/smoke-demo.js` |
-| `PANEL_BUILD` | **`leg196-map-mobile`** | `src/render-base.js`；**手机端地图浮层从"顶上一条缝"变回"整屏"**（用户 2026-10-05 真机报「点击地图显示不完整…在最顶上只有一点点框框」）。此前 leg194 的"两句原始读数整行撤掉"、leg193 的字数额度与读数行、leg192 的三格现读设置、地图弹窗、位置可省、属性保留继续有效。 |
+| `PANEL_BUILD` | **`leg197-evidence-nodrop`** | `src/render-base.js`；**"引用找不到原文就丢"整族撤销**（用户 2026-10-05 令「把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了…现在我要全面撤销」）⇒ 以前"模型提了、但书里找不到那句原话"的名号/类别/别名/所属/设定项/档位/关系边/开局事件/地图地点/查书取值，**现在都会出现在面板上**。此前 leg196 的手机端地图整屏、leg194 的两句读数撤掉、leg193 的字数额度、leg192 的地图弹窗与位置可省、属性保留继续有效。 |
+| ★出处核验（leg197 起） | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped` 在出处这条路上**恒为 0**（它只装"非出处原因"的丢弃）。★**没撤的**：形状（缺名/缺 title/缺当事人/自指/端点不在名册）· 冲突墓碑 · 枚举白名单（`PARAM_GEARS`）· 查书同名多值冲突 · 酒馆宏占位符不当名号 | `src/abstract-evidence.js`（口径全文写在文件头）· `test/evidence-nodrop.test.js` |
 | ★「往事注入多少字」出厂值 | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路合起来吃它）；★**装不下的往事整条不进、绝不截半条**（用户 2026-10-05：「字额度切忌把事件截掉」） | `src/limits.js` · `web/inject.js`（`liveRetrievalParams`） |
 | ★主调用输出上限（出厂值） | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** ⇒ 16,384 上第 11 轮起「返回空」/「非法 JSON」交替。★设置页那两个框**现读**、玩家可自己填 | `src/transport-http.js` |
 | ★模型容量怎么来的 | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** | `src/transport-http.js` · `web/model-channel.js` |
@@ -58,10 +59,10 @@
 | `包预算` 出厂值 | **50000**（leg135 抬的：用户令「我预算抬到50000token」） | `src/limits.js` |
 | ★`往回看轮数` 出厂值 | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两件事** | `src/limits.js`（★`PANEL_WINDOW_TURNS`） |
 | ★leg136–leg156 各笔 | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） | `docs/done-archive.md` |
-| `CSS_VERSION` | **`20261005-leg196-map-mobile`** | `web/index.js`；`CSS_PIN` 的版本与内容指纹同步。leg196 改的是地图那张整屏遮罩（自己声明宽高 ＋ 手机档 `100dvh`）——病根与全量读数在 `web/style.css` 的 leg196 注释里。 |
-| `MAIN_PROMPT_V` | **`v2-agenda-t1-34`** | `src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`newEvents[].position` 仍可省、仍不猜地点。 |
+| `CSS_VERSION` | **`20261005-leg196-map-mobile`** | `web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197 未升**（`web/style.css` 一个字节没动）；leg196 改的是地图那张整屏遮罩（自己声明宽高 ＋ 手机档 `100dvh`）——病根与全量读数在 `web/style.css` 的 leg196 注释里。 |
+| `MAIN_PROMPT_V` | **`v2-agenda-t1-34`** | `src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`newEvents[].position` 仍可省、仍不猜地点。★**leg197 未升**（`src/prompts.js` 一行未碰）。 |
 | `web/index.js` 行数 | **3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） | `split('\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行） |
-| `CACHE_VERSION` | **`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充"已有地图"，旧缓存一并失效） | `src/fp-hash.js` |
+| `CACHE_VERSION` | **`10`**（★leg197 **9 → 10**：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与净化口径都变了，同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效） | `src/fp-hash.js` |
 | 发布仓 main | **`395eb9c`** · 构建号 **`leg196-map-mobile`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵）。★leg196 推的（用户令「**把这个bug修复后然后推送**」）；本机那份克隆已 `reset --hard origin/main` 到它 | `node scripts/verify-release.mjs` |
 | release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
@@ -178,7 +179,7 @@
 
 ## 4. 当前工作
 
-leg196 已办结（用户 2026-10-05 真机报的 bug：「**手机端有bug点击地图显示不完整…在最顶上只有一点点框框，把这个bug修复后然后推送**」）：**病根在宿主页面**——酒馆给 `<html>` 加了 `-webkit-transform` ＋ `-webkit-perspective` ⇒ 固定定位的包含块变成 `<html>` 那个**算出来是 0** 的盒子 ⇒ 地图遮罩（只写了 `inset:0`）塌成 **12px**、盒子 26px（用户那张截图就是它）。**治法**：照另外两张遮罩**自己声明 `width:100%;height:100%`** ＋ `box-sizing:border-box`，手机档补 `height:100dvh`。**实证**：改前 458×**12**、改后 458×**1017**（装置 `F:/deepseek/tmp/leg196-map-mobile/`）；判据新增 M9（**先证红**：改前那棵正好红这一条）。交接见 F 盘 `session-handoff-2026-10-05-leg196-map-mobile.md`。★上一笔（leg195 发布 1.1.0）已搬进 `docs/done-archive.md`。
+leg197 已办结（用户 2026-10-05 令，逐字「**把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了，之前取消了属性相关的，现在我要全面撤销**」；同场第二道令「**顺便把文档移植到F盘的那个位置这样好管理并且c盘也不会爆满**」）。**撤的是什么**：出处那一整套（允许来源冻结 ＋ `ev:{s,q}` 逐字核 ＋ "名字要在书文里"的全书级校验）**照跑，但只记账**——核的结果进抽取诊断（`keep`/`pending`/**`unverified`＝给了但对不上、★照收**），**不再决定任何一条主张收不收**。leg189 撤的是"属性值那一格"，本笔把剩下的**一并**撤掉：类别／别名／所属／设定面／刻度与档位／关系边／起根／地理／查书取值。**没撤的**（不是"找不到原文"）：形状（缺名/缺 title/缺当事人/自指/端点不在名册）· 同名冲突墓碑 · `PARAM_GEARS` 枚举白名单 · 查书同名多值冲突 · 酒馆宏占位符不当名号。**判据**：新增 `test/evidence-nodrop.test.js` 9 条（记账层／五条净化路／**反向自证：那几道闸的痕迹一个都不许留**／"没撤的那一半"），**先证红**（拿改前那棵树跑 ⇒ 8 红 1 绿，绿的那条正是"没撤的那一半"）；全量 **2048 / 2048 · fail 0**。**四个号**：`PANEL_BUILD` → `leg197-evidence-nodrop`；`CACHE_VERSION` → **10**；`CSS_VERSION`／`MAIN_PROMPT_V` **不升**。真跑一次抽象（真书 `大荒-姬元真` ＋ 真模型 ＋ 严格道，**274 秒 / 4 次调用 / ok**）：概念表 18 张 115 档 · 法则 33 条 · 书名录 55 个 · 设定面 44 条 · 关系网 2 条（种账 2/2）· **出处核验 168 条主张：核过 163 · 出处对不上 5（照收）· 丢弃 0**。日志 `F:/deepseek/tmp/leg197-evidence/real-abstraction.log`。交接见 F 盘 `session-handoff-2026-10-05-leg197-evidence-nodrop.md`。★上一笔（leg196 手机端地图浮层）已搬进 `docs/done-archive.md`。
 
 ---
 
@@ -187,6 +188,15 @@ leg196 已办结（用户 2026-10-05 真机报的 bug：「**手机端有bug点�
 - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**；
   HEAD **`59d5535`**；本次仅向 docs 归档文档，原开发分支保留）。当前实现位于
   `C:/Users/30319/.codex/worktrees/332e/plugins/story-world-v2`，分支 **`codex/entities-refresh`**；1e1b 召回实现、fb99 故事详情实现、d050 记忆与调试实现及此前阅读改版工作树保留。
+- ★★**文档住哪（leg197 起）**：用户令「**把文档移植到F盘的那个位置**」⇒
+  **F 盘那份 `F:/deepseek/plugins/story-world-v2/docs/` 现在是文档的家**：leg197 已把 C 盘工作树那份 docs
+  **整棵合并进去**（272 个文件逐字节核对通过 ＋ F 盘原有的 27 份独有文件保留 ⇒ 共 **299 份**），
+  备份在 `F:/deepseek/tmp/leg197-docs-migration/`（`C-docs-before` / `F-docs-before`）。
+  ★**还差最后一步（没做成，如实登记）**：把 C 盘那个 `docs` 目录**换成指向 F 盘的目录联接**——
+  实测 `Rename-Item docs` 与"腾空后删目录"**都被 Windows 拒绝（EPERM）**，而同级的 `demo`/`scripts`
+  改名正常 ⇒ 是**某个长驻进程占着 `docs` 这个目录本身**（多半是本会话的文件观察层），
+  **本会话内解不开**。⇒ 收尾脚本已写好：`node F:/deepseek/tmp/leg197-docs-migration/finish-junction.mjs`
+  （幂等、带回滚；**重启 DSH 会话后再跑一次**即可收口）。在那之前：**新交接一律写 F 盘那份**（这条本来就是这个仓的规矩）。
 - **部署位**：`…\SillyTavern\data\default-user\extensions\story-world-v2`＝**发布仓的一个 git 克隆**（★leg156 起
   **不再是 junction**）⇒ ★**开发目录改的东西不会自己进酒馆**：走"提交 → 推发布仓（或**装本地预览**，
    当前工作树装置 `F:/deepseek/tmp/leg190-optional-event-position/install-local-preview.mjs`）→ `git pull` → **Ctrl+Shift+R**”。

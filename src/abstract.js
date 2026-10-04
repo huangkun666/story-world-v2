@@ -45,7 +45,11 @@ import { computeWeight } from './weight.js';
 // ★★★leg141：**"原话必须真在书里"那把尺子只有一把**（leg139 立的，住在 `seed-roots.js`）。
 //   书里关系网要核"那句原话真在书文里"⇒ **借它，不另写一份**（本仓最贵的病是"同一件事两处口径"）。
 //   ★无环：`seed-roots.js` 只 import `./position.js`，而 `position.js` 零 import。
-import { longestBookRun, SEED_QUOTE_MIN_RUN, seedRootsShape, seedRootsBrief, sanitizeSeedRoots, rankSeedCandidates, maxRootsPerChunk } from './seed-roots.js';
+//   ★★★leg197：**`longestBookRun` / `SEED_QUOTE_MIN_RUN` 这两个 import 删了**——
+//     本文件里唯一读它们的两个地方（`sanitizeBookRelations` 的原话闸、小书名册/设定面的名字闸）
+//     都随"全面撤销出处丢弃"一并撤除。那把尺子**仍在 `seed-roots.js` 里**（起根那条路还要用），
+//     只是本文件不再需要它。import 一个没人读的符号正是本仓最讨厌的"看着像还在用"。
+import { seedRootsShape, seedRootsBrief, sanitizeSeedRoots, rankSeedCandidates, maxRootsPerChunk } from './seed-roots.js';
 // ★★★leg71（丙案 · 切口 1+2）：两块**语义上不属于"抽取"**的东西切出去，本文件按新位置 import 回来。
 //   · `abstract-shape.js` = 提示词的**形状**（4 处 `...展开`，纯数据、零依赖）；
 //   · `abstract-tier.js` = **档位归一 + 法则分类**（leg61/62b/64 的成果，pack.js 与 render.js 真正的消费者）。
@@ -193,7 +197,8 @@ export function buildAbstractPrompt(sourceText) {
         '  · 师徒 / 父子 / 结拜 / 婚配 / 主仆 / 辖属 / 上下级 / 盟友 / 仇敌 / 旧怨 …都算，**用书里自己的说法**当 `type`。',
         '  · `from` / `to` 必须是上面名册里出现过的名号（原文名，逐字）；一条边只交一次。',
         '  · ★**每一条都必须带 `quote`**（书里那句话，照抄原文）：**指不出那句话的，就不要交这一条**——',
-        '    引擎会把每句原话拿去书文里逐字核，**核不过的直接丢掉**。',
+        '    引擎会把每句原话拿去书文里逐字核一遍，核的结果进抽取诊断（★leg197：**核不过不再丢这条边**，',
+        '    但"照抄原文"这条纪律照旧是质量的抓手：抄不出原话的关系，多半是推出来的，不要交）。',
         '  · ★**不许按常识推**：原文没写"他俩是师徒"，哪怕故事读起来像，也**不要交**。',
         '———— 设定原文如下 ————',
         sourceText,
@@ -326,9 +331,9 @@ export function buildRosterPrompt(sourceText, declared = [], { sources = null, s
         '  · **`from` / `to` 必须是上面名册里出现过的名号**（原文名，逐字）——落账时引擎要拿它去账上认人。',
         ...(evidence
             ? ['  · ★**每一条都必须带 `ev:{s,q}`**：`ev.q` = 书里写着这层关系的**那句话，照抄原文**（指不出那句话的，就不要交这一条）。',
-                '    引擎会核"编号 + 原话是否真的在本次这一块里"；**核不过的直接丢掉**（宁可少几条，也不要编）。']
+                '    引擎会核"编号 + 原话是否真的在本次这一块里"，核的结果进抽取诊断（★leg197：**核不过不再丢这条边**）。']
             : ['  · ★**每一条都必须带 `quote`**：书里写着这层关系的**那句话，照抄原文**。**指不出那句话的，就不要交这一条。**',
-                '    引擎会把每句原话拿去书文里逐字核；**核不过的直接丢掉**（宁可少几条，也不要编）。']),
+                '    引擎会把每句原话拿去书文里逐字核一遍，核的结果进抽取诊断（★leg197：**核不过不再丢这条边**）。']),
         '  · 一条边只交一次（不许正反各交一遍、也不许同一对人用两种说法各交一条）；通常**这一段里只有几条**。',
         '  · ★**不许按常识推**：原文没写"他俩是师徒"，哪怕故事读起来像，也**不要交**——那是模拟开始以后的事。',
     ];
@@ -351,7 +356,7 @@ export function buildRosterPrompt(sourceText, declared = [], { sources = null, s
             '  · 名号、类别、别名、所属共用这一条 `ev`。描述属性可以整合不同句子的资料，保留完整信息，不要求与同一句引用逐字匹配。',
             '  · **设定项（刻度/法则/判据/格局/体系/史略/世情/张力/环境档位）也要出处**：本次响应的设定项可以共用顶层 `ev`；',
             '    散在多处的逐项自己给 `ev`（形状 `{"名":"…","ev":{"s":"…","q":"…"}}` / `{"文":"…","ev":{…}}`）。',
-            '    每一项的原话都必须能在它所用的 `ev.q` 里**逐字**找到——找不到的项一律不收（没有出处的项**根本不要交**）。',
+            '    每一项的原话都必须能在它所用的 `ev.q` 里**逐字**找到——★leg197：核的结果只进抽取诊断，**不再因为核不过而丢掉这一项**（但"抄不出原话的设定，根本不要交"这条纪律照旧）。',
             // ★★★Task 3 复查第二轮（finding ⑥）：这三格与张力/环境**各格可以各自带出处**（书里常散在两块里），
             //   提示词给的例子必须与净化层**真收**的形状一致（旧提示词只 advertises 了一部分，
             //   而净化层把对象形状当"非字符串"丢——宣传与判据不符正是复审点名的病）。
@@ -359,7 +364,8 @@ export function buildRosterPrompt(sourceText, declared = [], { sources = null, s
             '    写成 `{"文":"<逐字原话>","ev":{"s":"…","q":"…"}}`（`文` 里的原话要能在自己的 `ev.q` 里逐字找到）；',
             '    环境档位写成 `{"文":"富足","ev":{…}}`——`文` 就是档位词（引擎只认档位词表，不要求它出现在中文原文里）。',
             '    也可以照旧写字符串，由顶层 `ev` 统一兜底（散在多处的项要各自给 `ev`，否则只能引到一处）。',
-            '  · 编号不在清单里、或原话在所指来源里对不上的主张，引擎**一律不收**（名号本身留作待核对候选，不替它猜类别）。',
+            '  · 编号不在清单里、或原话在所指来源里对不上的主张：★leg197 起引擎**照收**（只把"对不上"记进抽取诊断）。',
+            '    但**仍然要照规矩给 `ev`**——"凭哪句原文"是这份抽取质量的自证；给不出就说明这一条本来不该交。',
             '  · **不许编原话**：`q` 只能从该来源里抄，不能改写、不能拼接两处；`q` 是"它凭哪句原文入账"的凭证。',
         );
         lines.push(evidenceDictionary(sources, { scope, descriptiveFields: true }));
@@ -545,7 +551,7 @@ export function buildSettingOnlyPrompt(sourceText, declared = [], { sources = nu
             '  `{"文":"<逐字原话>","ev":{"s":"…","q":"…"}}`（环境档位的 `文` 就是档位词）——散在几块里的各自给出处；',
             '  也可以照旧写字符串，由顶层 `ev` 统一兜底。',
             '  刻度/判定依据/格局/体系/史略/世情/张力/环境档位的每一项，原话都必须能在它所用的 `ev.q` 里**逐字**找到；',
-            '  找不到出处的设定项**不要交**（引擎逐字核，核不过的一律不收；没有 `ev` 的项也不收）。',
+            '  ★leg197：核的结果只进抽取诊断，**不再因为核不过而丢掉这一项**——但"抄不出原话的设定项不要交"这条纪律照旧（它是质量的抓手）。',
         );
         lines.push(evidenceDictionary(sources, { scope }));
     }
@@ -1062,18 +1068,20 @@ function sanitizeTierList(rawList, errors, where) {
 /**
  * 刻度/概念表净化（纯函数 · 导出以便单测）。
  * 纪律：`名` 必填（缺则整张表弃并留痕）· `用途` 可选 · 空表弃 ·
- *   同名表**合并**（块间同表不许拆成两张——真机实测同一把尺散布在书里几处）·
- *   `档` 逐字过**出处闸**（对不上原文的档位丢并留痕；描述属性另走完整保留政策）。
- * ★`名` **不过**出处闸（允许描述性标题，见文件头纪律②）。
- * ★★★Task 3 复查（task-3-review.md ①）：严格道下 `settingClaim` = 共用的"编号 + 原话"核对函数——
- *   每张表**必须**有可核出处（`raw.ev` 或顶层共用 ev，由调用方的闭包兜），且 `档位`/`维度` 这些
- *   **照抄原文的取值**必须出现在所引的那句原话里（旧法只在整块材料里找，`note` 更是免检）。
- *   `名`/`源`/`用途` 与 `kind` 同类：是**标签**，只要表本身有出处即可，不要求字面出现在原话里。
+ *   同名表**合并**（块间同表不许拆成两张——真机实测同一把尺散布在书里几处）。
+ * ★★★leg197（用户令「因为引擎根据模型给的引用而找不到原文而丢弃…全面撤销」）：
+ *   **档位 / 注 / 子表档位 / 维度 一律不再过出处闸。**
+ *   旧法（leg61–leg63 立、Task 3 收窄成"所引的那句原话"）要求 `档` 逐字能在原文里找到，
+ *   对不上就丢档、丢注、甚至整张表不收。**这一整层撤了**——模型交的照收；
+ *   留下的只有**形状与去重**：缺 `名` 整张弃 · 同名合表 · 同名档位去重 · 条数上限。
+ *   ⇒ `settingClaim` 这个形参**一并删掉**（它已无消费者；留一个"传了也不起作用"的口子，
+ *     正是本仓最讨厌的"看着像闸门"的东西）。`sourceText` 留着只为调用方零改动，本函数不再读它。
+ *   ★`名`/`源`/`用途` 从来不过出处闸（它们是"这把尺叫什么"的语义标签，见文件头纪律②）。
  */
-export function sanitizeScales(rawScales, { sourceText = '', settingClaim = null } = {}, errors = []) {
+export function sanitizeScales(rawScales, { sourceText = '' } = {}, errors = []) {
     if (rawScales === undefined) return [];
     if (!Array.isArray(rawScales)) { errors.push('刻度 非数组（已弃）'); return []; }
-    const src = String(sourceText || '').replace(/\s+/g, '');
+    void sourceText;                          // ★leg197：出处闸已撤，这个形参不再被读（只为调用方零改动而留）
     const byName = new Map();                 // 表名 → 表（同名合并）
     const order = [];
     for (const raw of rawScales) {
@@ -1081,14 +1089,6 @@ export function sanitizeScales(rawScales, { sourceText = '', settingClaim = null
         const name = String(raw.名 ?? raw.轴 ?? '').trim();       // `轴` 兼容真机试算那版形状
         if (!name) { errors.push('刻度 项缺 名（已弃）'); continue; }
         const cutName = name.length > SCALE_NAME_MAX ? name.slice(0, SCALE_NAME_MAX) : name;
-        // ★复查①：整张表先过出处闸（没有 ev / 编号越界 / 原话对不上 ⇒ 整张不收，不留下无出处的档位）。
-        const ownEv = raw.ev && typeof raw.ev === 'object' && !Array.isArray(raw.ev) ? raw.ev : null;
-        const sc = settingClaim ? settingClaim('setting', `刻度《${cutName}》`, ownEv) : null;
-        if (settingClaim && !sc.ok) {
-            errors.push(`刻度《${cutName}》没有可核出处（${sc.why}）⇒ 整张不收`);
-            continue;
-        }
-        const cited = (v) => (settingClaim ? presenceIn(sc.quote, v) : (src ? src.includes(String(v).replace(/\s+/g, '')) : true));
         let table = byName.get(cutName);
         if (!table) {
             table = { 名: cutName };
@@ -1109,87 +1109,38 @@ export function sanitizeScales(rawScales, { sourceText = '', settingClaim = null
             if (use) table.用途 = use.length > SCALE_USE_MAX ? use.slice(0, SCALE_USE_MAX) : use;
         }
         // 档位（含 `档`/`档位`/`档位表` 三种叫法，都吃）
-        let tiers = sanitizeTierList(raw.档位 ?? raw.档 ?? raw.档位表, errors, `刻度《${cutName}》`);
-        // ★出处闸：档位名必须能在本书原文里找到（逐字）。
-        //   ★为什么这条闸能立住：两次真机实测**0 条落空**（大荒 143+187 档全中、实教 9 档全中）。
-        //   为什么必须有：模型在"这把尺"上最容易做的是**补全一个它认识的档位**（书里没写）。
-        //   ★复查①：严格道下"原文"收窄成**所引的那句原话**（旧法在整个材料里找 ⇒ 别处的档位也能混进来）。
-        {
-            const kept = [];
-            for (const t of tiers) {
-                if (!cited(t.档)) {
-                    errors.push(`刻度《${cutName}》档位「${t.档}」${settingClaim ? '不在所引出处里' : '原文查不到'}（已弃）`);
-                    continue;
-                }
-                // ★★★Task 3 复查第二轮（task-3-fixes-review.md ⑤）：**每个非空 `注` 也是照抄原文的取值**。
-                //   病（复审逐字复现）：这里只核 `档`，`注` 整个对象一起收下 ⇒ `档位:['T1|编造修炼注释']`
-                //   在所引原话只有 `T1 感气境：初入门径。` 时，编造的注照样进 canon。
-                //   治法：`注` 与 `档` **同一把尺子**（同一句所引原话 / 同一份材料）——核不过就**只丢注**
-                //   （档位本身有出处，不因注被编造就一起丢），并逐条留痕。空注不核（没有值就没有主张）。
-                //   ★表名 `名`/`源`/`用途` **不核**：它们是"这把尺叫什么"的语义标签（文件头纪律②），
-                //     不是照抄原文的取值——这里一个字的语义判断都不加，只做机械存在性。
-                if (t.注 && !cited(t.注)) {
-                    errors.push(`刻度《${cutName}》档位「${t.档}」的注「${t.注}」${settingClaim ? '不在所引出处里' : '原文查不到'}（已弃该注）`);
-                    const bare = { 档: t.档 };
-                    kept.push(bare);
-                    continue;
-                }
-                kept.push(t);
-            }
-            tiers = kept;
-        }
+        //   ★★★leg197：这里原先有一层**出处闸**——"档位名（以及每个非空 `注`）必须在原文里逐字找到，
+        //     严格道下收窄成'必须在所引的那句原话里'"，对不上就丢档、丢注（Task 3 复查第二轮 ⑤ 加的）。
+        //     **整层撤掉**（用户令：全面撤销"引用找不到原文就丢"）。留下的只有形状与去重：
+        //     同名档位只留第一条 · 单表条数上限（都在 `sanitizeTierList` 里）。
+        const tiers = sanitizeTierList(raw.档位 ?? raw.档 ?? raw.档位表, errors, `刻度《${cutName}》`);
         if (tiers.length) {
             table.档位 = table.档位 || [];
             const have = new Set(table.档位.map((x) => x.档));
             for (const t of tiers) if (!have.has(t.档)) { have.add(t.档); table.档位.push(t); }
         }
         // 子表（用户拍「当子表」：对"大境界"的细分不另立一张表）
+        //   ★★★leg197：子表那两道出处闸（"子表没有可核出处 ⇒ 不收"、"子档/子注不在所引原话里 ⇒ 丢"）
+        //     **整层撤掉**（用户令：全面撤销出处丢弃）。形状与去重照旧。
         for (const sub of (Array.isArray(raw.子表) ? raw.子表 : [])) {
             if (!sub || typeof sub !== 'object') continue;
             const sn = String(sub.名 ?? sub.轴 ?? '').trim();
             if (!sn) continue;
             const cutSn = sn.length > SCALE_NAME_MAX ? sn.slice(0, SCALE_NAME_MAX) : sn;
-            // ★复查①：子表可以自带给自己的出处（`sub.ev`），不给就用整张表那一条（上面已核过）。
-            const subEv = sub.ev && typeof sub.ev === 'object' && !Array.isArray(sub.ev) ? sub.ev : null;
-            const subSc = (settingClaim && subEv) ? settingClaim('setting', `刻度《${cutName}》子表《${cutSn}》`, subEv) : sc;
-            if (settingClaim && (!subSc || !subSc.ok)) {
-                errors.push(`刻度《${cutName}》子表《${cutSn}》没有可核出处（${subSc?.why ?? '缺出处'}）⇒ 不收`);
-                continue;
-            }
-            const subCited = (v) => (settingClaim ? presenceIn(subSc.quote, v) : (src ? src.includes(String(v).replace(/\s+/g, '')) : true));
             let st = (table.子表 || []).find((x) => x.名 === cutSn);
             if (!st) { st = { 名: cutSn }; table.子表 = table.子表 || []; table.子表.push(st); }
             const stiers = sanitizeTierList(sub.档位 ?? sub.档, errors, `刻度《${cutName}》子表《${cutSn}》`);
-            const keep = stiers.filter((t) => {
-                if (!subCited(t.档)) {
-                    errors.push(`刻度《${cutName}》子表《${cutSn}》档位「${t.档}」${settingClaim ? '不在所引出处里' : '原文查不到'}（已弃）`);
-                    return false;
-                }
-                // ★复查第二轮⑤：子档的 `注` 同一把尺子（用**子表自己的**所引原话核；核不过只丢注）。
-                if (t.注 && !subCited(t.注)) {
-                    errors.push(`刻度《${cutName}》子表《${cutSn}》档位「${t.档}」的注「${t.注}」${settingClaim ? '不在所引出处里' : '原文查不到'}（已弃该注）`);
-                    delete t.注;
-                }
-                return true;
-            });
-            if (keep.length) st.档位 = (st.档位 || []).concat(keep.filter((t) => !(st.档位 || []).some((x) => x.档 === t.档)));
+            if (stiers.length) st.档位 = (st.档位 || []).concat(stiers.filter((t) => !(st.档位 || []).some((x) => x.档 === t.档)));
         }
         // 维度那一半：某些刻度自身就是一把尺（实教 `S~E级` 下的 5 个属性维度）
+        //   ★★★leg197：维度名/取值范围那两道出处闸**同样撤掉**（同上）。
         for (const d of (Array.isArray(raw.维度) ? raw.维度 : [])) {
             if (!d || typeof d !== 'object') continue;
             const dn = String(d.名 ?? d.name ?? '').trim();
             if (!dn) continue;
-            // ★复查①：维度名与取值范围同样是"照抄原文的取值" ⇒ 要在所引原话里。
             const range0 = String(d.范围 ?? d.range ?? '').trim();
-            if (settingClaim && !cited(dn)) {
-                errors.push(`刻度《${cutName}》维度「${dn}」不在所引出处里（已弃）`);
-                continue;
-            }
-            if (settingClaim && range0 && !cited(range0)) {
-                errors.push(`刻度《${cutName}》维度「${dn}」的取值范围「${range0}」不在所引出处里（已弃该范围）`);
-            }
             const item = { 名: dn.length > BOOK_DIM_MAX ? dn.slice(0, BOOK_DIM_MAX) : dn };
-            if (range0 && (!settingClaim || cited(range0))) item.范围 = range0.length > BOOK_DIM_MAX ? range0.slice(0, BOOK_DIM_MAX) : range0;
+            if (range0) item.范围 = range0.length > BOOK_DIM_MAX ? range0.slice(0, BOOK_DIM_MAX) : range0;
             table.维度 = table.维度 || [];
             if (!table.维度.some((x) => x.名 === item.名)) table.维度.push(item);
         }
@@ -1445,16 +1396,13 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
     //   ⚠若哪天要"接上"它做止损：leg61 已实测那条路会**误伤属性**（见 `buildAttrsOnlyPrompt` 头注 `:344-352`）。
     const present = [];
 
-    // ★★★Task 3（抽取确认与完整入账）：**抽取依据**（`evidence = {frozen, strict, records, scope}`）。
-    //   给了 `frozen`（本次允许来源的冻结表，见 `freezeAllowedSources`）⇒ 逐条核"来源编号 + 原话"：
-    //     · 名号/类别/别名/所属共用该条的 `ev:{s,q}`；
-    //     · 描述属性完整保留模型抽取内容，不再用出处核验丢弃；
-    //     · 设定面（刻度/法则/格局/体系/史略/世情/张力/环境）**每一项都要出处**，且原话在所引原话里。
-    //   **核不过是拒收该主张、保留名号（待核对候选），不是拒收整个响应**——设计 §6.3：
-    //   "类别未确认的题名候选……仍未确认则保留为待核对候选，不猜类别，不悄悄消失"。
-    //   没给 `frozen` ⇒ **legacy**（调用方显式声明本次不做来源核验；见 extractWorldSetting 的 policy）。
-    //   ★复查（task-3-review.md ③④）：`evidence.scope` = **本次调用真正展示的那几块的哪一段**
-    //     （`scopeForRows` 的产物）——没有它，同句出现在别的条目里时编号会被冒领。
+    // ★★★leg197（用户令「…因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动…现在我要全面撤销」）：
+    //   **出处只记账、不拦人。** `evidence` 这一套（允许来源冻结 + 逐字核原话）**照旧跑**，
+    //   但它的结果**只进诊断面**（`evidenceRecord`），**不再是任何一条主张收不收的理由**。
+    //   · 核过 ⇒ 记 `keep`；给了出处但核不过 ⇒ 记 `unverified`（**照收**）；没给 ⇒ 记 `pending`。
+    //   · 覆盖 leg189（属性值那一道）之后的**其余全部**：类别/别名/所属/设定面/刻度/关系边/起根/地理。
+    //   · 没撤的是"形状"与"冲突"（不是"找不到原文"）：缺名/自指/枚举白名单/同名重复冲突留墓碑/
+    //     关系边两端要在名册里（解析不出实体 id 的边本来就落不了账）。
     const evStrict = Boolean(evidence && evidence.strict === true && evidence.frozen);
     const evRecords = Array.isArray(evidence?.records) ? evidence.records : null;
     const evScope = evidence?.scope ?? null;
@@ -1466,6 +1414,12 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         const v = verifyQuote(evidence.frozen, { ev, scope: evScope, spanText: sourceText, cls, subject });
         return { ok: v.ok, legacy: false, block: v.block, why: v.why, ref: v.ref, quote: v.quote, fragment: v.fragment };
     };
+    // 记一条出处核对的结果（★leg197：**只记账**——`unverified` 那一条照收，别把这里读成闸门）。
+    const noteClaim = (cls, subject, c) => {
+        if (!evStrict) return;
+        if (c.ok) note(cls, subject, 'keep', null, c.ref, null);
+        else note(cls, subject, 'unverified', c.why, c.ref, null);
+    };
     // ★★★Task 3 复查（task-3-review.md ①）：**设定面每一项都要出处**（旧法只核"原话在不在整块材料里"）。
     //   形状只有一处：顶层 `ev:{s,q}` = 本次响应设定项的共用出处；单项可自带 `ev` 覆盖它。
     const settingEvTop = raw.ev && typeof raw.ev === 'object' && !Array.isArray(raw.ev) ? raw.ev : null;
@@ -1475,22 +1429,21 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
     //   （与上面 `rules` 那一段认的几种写法**同一份**，别让"取正文"与"取出处"认不同的键）。
     const itemTextOf = settingTextOf;
     /**
-     * 收一条设定项：**过"编号 + 原话"闸**，并要求该项原话真的在所引原话里。
-     * legacy（没有允许来源）⇒ **逐字返回旧行为**（旧固定响应/旧账零扰动）。
-     * @returns 收下的原文（拒收 ⇒ 空串；调用方据此丢项）
+     * 收一条设定项。
+     * ★★★leg197：**照收** —— 出处/原话核不过**只记诊断**（`unverified`），**不再丢项**（用户令）。
+     *   那一层"设定原话要在所引出处里"同样降级成诊断（旧法核不过就丢）。
+     *   legacy（没有允许来源）⇒ 逐字返回旧行为。
+     * @returns 收下的原文（★空串现在只表示"这一项本来就没有正文"，**不再表示被拒收**）
      */
     const keepSetting = (cls, subject, item, { inside = true } = {}) => {
         const s = itemTextOf(item);
-        if (!evStrict) return s;
         if (!s) return '';
+        if (!evStrict) return s;
         const ev = itemEvOf(item) || settingEvTop;
         const v = verifyQuote(evidence.frozen, { ev, scope: evScope, spanText: sourceText, cls, subject });
-        if (!v.ok) { note(cls, subject, 'drop', v.why, v.ref, s); return ''; }
-        if (inside && !presenceIn(v.quote, s)) {
-            note(cls, subject, 'drop', '设定原话不在所引出处内', v.ref, s);
-            return '';
-        }
-        note(cls, subject, 'keep', null, v.ref, null);
+        if (!v.ok) note(cls, subject, 'unverified', v.why, v.ref, s);
+        else if (inside && !presenceIn(v.quote, s)) note(cls, subject, 'unverified', '设定原话不在所引出处内', v.ref, s);
+        else note(cls, subject, 'keep', null, v.ref, null);
         return s;
     };
 
@@ -1498,11 +1451,8 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
     //   为什么"派生"而不是"两处各收一份"：两处各收 ⇒ 同一个档位在两张表里各存一份 ⇒ 迟早漂移，
     //   而下游（`dedupeTiers` 校验词 / `buildScaleAnchor` / 面板其余栏）读的是旧两列，
     //   ⇒ 漂移会以"面板上和包里不一样"这种最难查的形态出现。**一处生产、两处消费**。
-    //   ★复查①：严格道把"出处核对"交给 `sanitizeScales`（档位/维度逐项要在**所引原话**里）。
-    const scales = sanitizeScales(raw.刻度, {
-        sourceText,
-        settingClaim: evStrict ? ((cls, subject, ev) => verifyQuote(evidence.frozen, { ev: ev || settingEvTop, scope: evScope, spanText: sourceText, cls, subject })) : null,
-    }, errors);
+    //   ★leg197：`settingClaim` 那一格**删了**（档位/注/维度/子表不再过出处闸，见 `sanitizeScales` 头注）。
+    const scales = sanitizeScales(raw.刻度, { sourceText }, errors);
     if (scales.length) {
         canon.刻度 = scales;
         present.push('刻度');
@@ -1514,10 +1464,11 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
     if (!scales.length && Array.isArray(raw.powerScale)) {
         for (const it of raw.powerScale) {
             if (!it || typeof it !== 'object') { errors.push('powerScale 含非对象项（已弃）'); continue; }
-            // ★复查①：旧两列也要出处——`level` 与 `note` 都要在所引原话里（旧法 note 连存在性都不核）。
+            // ★leg197：`level`/`note` 的出处核验只记账（`keepSetting` 不再因核不过返回空串）⇒
+            //   这条 `continue` 现在只挡**真的没写**（键缺/空串），不再挡"原话对不上"。
             const level = keepSetting('setting', 'powerScale.level', { 文: String(it.level ?? '').trim(), ev: itemEvOf(it) });
             const note0 = keepSetting('setting', 'powerScale.note', { 文: String(it.note ?? '').trim(), ev: itemEvOf(it) });
-            if (!level || !note0) { errors.push('powerScale 项缺 level/note，或其原话没有可核出处（已弃）'); continue; }
+            if (!level || !note0) { errors.push('powerScale 项缺 level/note（已弃）'); continue; }
             canon.powerScale.push({ level, note: note0 });
         }
     } else if (!scales.length && raw.powerScale !== undefined) errors.push('powerScale 非数组（已弃）');
@@ -1535,7 +1486,7 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         for (const it of raw.dims) {
             if (!it || typeof it !== 'object') { errors.push('dims 含非对象项（已弃）'); continue; }
             const name = keepSetting('setting', 'dims.name', { 文: String(it.name ?? '').trim(), ev: itemEvOf(it) });
-            if (!name) { errors.push('dims 项缺 name，或其原话没有可核出处（已弃）'); continue; }
+            if (!name) { errors.push('dims 项缺 name（已弃）'); continue; }
             if (seenDim.has(name)) continue;
             seenDim.add(name);
             const item = { name: name.length > BOOK_DIM_MAX ? name.slice(0, BOOK_DIM_MAX) : name };
@@ -1586,8 +1537,12 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         //     所以摘的是"模型标成这几类"的条目，而不是靠内容猜（本仓明禁过拟合）。
         const pruned = pruneJunkRules(canon.rules, Object.fromEntries(out));
         canon.rules = pruned.rules;
-        // ★★★Task 3：严格道下**设定原话必须在所引出处里**（机械存在性；不新增模型字段）。
+        // ★★★Task 3：严格道下**设定原话要在所引出处里**（机械存在性；不新增模型字段）。
         //   ★复查①：改成"每一项都要出处"——没有 `ev`（顶层共用或该项自带）的法则一律不收。
+        //   ★leg197：那道"不收"**撤了**——`keepSetting` 现在照收（核的结果只记诊断）。
+        //     这一段因此只剩"逐条过一遍记账"的作用；**法则本身一条都不再被摘掉**。
+        //     （注意别与上面那条 `pruneJunkRules` 混起来：那一条撤的是"文风禁令/变量指令/其他"三类，
+        //       凭的是**模型的类别标注**、不是出处，照旧拦。）
         if (evStrict && canon.rules.length) {
             const keptRules = [];
             for (const s of canon.rules) {
@@ -1649,10 +1604,15 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
     if (Array.isArray(raw.bookEntities)) {
         const byName = new Map();
         /**
-         * 把一条名册行核成"能当世界事实的那几格"（**逐条独立核验**）。
+         * 把一条名册行核成"能当世界事实的那几格"。
          * ★★★Task 3 复查（task-3-review.md ③⑥）：旧法在 `seen.has(name)` 那一支**先短路**，
-         *   于是第二条同名行的别名/类别/归属**根本没核**就被并进第一条（复审实测：无出处的
-         *   `夜行者` 就这么进了账），而它的冲突类别被整条丢掉。现在**先核后并**。
+         *   于是第二条同名行的别名/类别/归属**根本没核**就被并进第一条，而它的冲突类别被整条丢掉。
+         *   现在**逐条独立处理、后并**（★leg197：那条"先核"已经不再丢任何东西，见下）。
+         * ★★★leg197（用户令：全面撤销出处丢弃）：**类别/别名/所属一律照收**——
+         *   旧法核不过就 `delete item.kind` / 丢别名 / 不写 parent（"留作待核对候选"）。
+         *   现在只把核对结果记进诊断（`keep` / `unverified`），**三格都照写**。
+         *   留下的判据只有形状：`kind` 只认三个枚举值（别的当"模型没说"）· 别名只收非空字符串 ·
+         *   `parent` 过 `normalizeParentName`（去前导层级符号，不改名字本体）。
          */
         const cleanRow = (it, name) => {
             // ★★★Task 3：**缺类别不再默认 character**（设计 §6.2：搜索键、题名片段只作候选；
@@ -1660,52 +1620,27 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
             //   旧法 `kind === 'faction' ? 'faction' : kind === 'location' ? 'location' : 'character'`
             //   把"模型没说"与"模型说是角色"变成同一件事 ⇒ 题名候选被静默造成角色。
             const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : it.kind === 'character' ? 'character' : undefined;
-            // 描述仍完整保存；只有通过原有关系核验的所属才升为结构 parent。
+            // 描述仍完整保存；`所属` 照旧升为结构 parent（★leg197：不再要求出处核得过）。
             const parent = normalizeParentName(it.parent || bookFieldTextOf(it.fields?.['所属']));
             const item = { name };
             if (kind) item.kind = kind;
-            // ★★★Task 3：**主张出处核对**（严格道）——名号/类别/别名/所属共用这一条 `ev`。
-            //   核不过 ⇒ 只保留名号（待核对候选），类别/别名/归属一概不当世界事实（设计 §6.2/§6.3）。
+            // ★leg197：名号/类别/别名/所属共用这一条 `ev`，核了只记账（`unverified` 照收）。
             const ident = claim('identity', name, it.ev && typeof it.ev === 'object' ? it.ev : null);
-            if (kind && !ident.ok) {
-                delete item.kind;
-                note('kind', name, 'drop', ident.why, ident.ref, it.ev?.q ?? null);
-                errors.push(`「${name}」的类别没有可核出处（${ident.why}）⇒ 留作待核对候选，不按角色/势力入账`);
-            } else if (kind) {
-                note('kind', name, 'keep', null, ident.ref, null);
-            } else if (evStrict) {
-                note('kind', name, 'pending', '模型未给类别');
-            }
+            if (kind) noteClaim('kind', name, ident);
+            else if (evStrict) note('kind', name, 'pending', '模型未给类别');
             // ★leg60 别名通道（见 sanitizeAliases 头部注释：这一行此前缺失 ⇒ 跨块归一从未生效）
             const aliases = sanitizeAliases(it.aliases, name);
             if (aliases) {
                 // ★Task 3：别名可另给出处（`aliasEv`，形状同 `ev`）；不给就共用身份那条 `ev`。
+                //   ★leg197：核不过**照收**（旧法整批丢、或逐条按"别名叫法要在所引原话里"丢）。
                 const aliasClaim = it.aliasEv && typeof it.aliasEv === 'object' ? claim('alias', name, it.aliasEv) : ident;
-                if (evStrict && !aliasClaim.ok) {
-                    note('alias', name, 'drop', aliasClaim.why, aliasClaim.ref, null);
-                } else if (evStrict) {
-                    // ★复查③：别名叫法本身要出现在**所引的那句原话**里（旧法只在整块材料里找 ⇒ 夹带）。
-                    const kept = aliases.filter((a) => {
-                        if (presenceIn(aliasClaim.quote, a)) return true;
-                        note('alias', `${name}→${a}`, 'drop', '别名叫法不在所引出处', aliasClaim.ref, a);
-                        return false;
-                    });
-                    if (kept.length) item.aliases = kept;
-                } else {
-                    item.aliases = aliases;
-                }
+                item.aliases = aliases;
+                if (evStrict) noteClaim('alias', name, aliasClaim);
             }
             if (parent) {
                 const parentClaim = it.parentEv && typeof it.parentEv === 'object' ? claim('parent', name, it.parentEv) : ident;
-                if (evStrict && !parentClaim.ok) {
-                    note('parent', name, 'drop', parentClaim.why, parentClaim.ref, null);
-                } else if (evStrict && !presenceIn(parentClaim.quote, parent)) {
-                    // ★复查③：归属名要出现在**所引的那句原话**里（成员名单既不能建立也不能否定它）
-                    note('parent', name, 'drop', '归属名不在所引出处', parentClaim.ref, parent);
-                } else {
-                    item.parent = parent;
-                    if (evStrict) note('parent', name, 'keep', null, parentClaim.ref, null);
-                }
+                item.parent = parent;
+                if (evStrict) noteClaim('parent', name, parentClaim);
             }
             const f = sanitizeBookFields(it.fields, kind);
             if (f?.fields) item.fields = f.fields;
@@ -1770,7 +1705,7 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         }
     } else if (raw.bookEntities !== undefined) errors.push('bookEntities 非数组（已弃）');
 
-    // ★leg61：**属性+设定遍**交的条目（`entities`，键开放、值过出处闸）——形状与名册条目同构，多了 fields。
+    // ★leg61：**属性+设定遍**交的条目（`entities`，键开放、值照收）——形状与名册条目同构，多了 fields。
     //   为什么不复用 `bookEntities`：那一遍的职责是"名号一个不许漏"，这一遍是"属性逐字照抄"；
     //   分成两个键 ⇒ ①名册的产量不被属性摊薄 ②合并端能分别记账（哪一遍交的、交了多少）。
     //   下游（`extractWorldSetting`）把它**并入名册**：同名归并、**绝不新造实体**。
@@ -1783,15 +1718,15 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         const kind = it.kind === 'faction' ? 'faction' : it.kind === 'location' ? 'location' : it.kind === 'character' ? 'character' : undefined;
         const item = { name };
         if (kind) item.kind = kind;
+        // ★leg197：与名册遍同尺——**类别与所属照收**，出处核验只记账（旧法核不过就 `delete kind` / 不写 parent）。
         const ident = claim('identity', name, it.ev && typeof it.ev === 'object' ? it.ev : null);
-        if (kind && !ident.ok) {
-            delete item.kind;
-            note('kind', name, 'pending', ident.why, ident.ref, it.ev?.q ?? null);
-        }
-        // 描述仍完整保存；只有通过原有关系核验的所属才升为结构 parent。
+        if (kind) noteClaim('kind', name, ident);
+        else if (evStrict) note('kind', name, 'pending', '模型未给类别');
         const parent = normalizeParentName(it.parent || bookFieldTextOf(it.fields?.['所属']));
-        if (parent && (!evStrict || (ident.ok && presenceIn(ident.quote, parent)))) item.parent = parent;
-        else if (parent && evStrict) note('parent', name, ident.ok ? 'drop' : 'pending', ident.ok ? '归属名不在所引出处' : ident.why, ident.ref, parent);
+        if (parent) {
+            item.parent = parent;
+            if (evStrict) noteClaim('parent', name, ident);
+        }
         const f = sanitizeBookFields(it.fields, kind);
         if (f?.fields) item.fields = f.fields;
         if (item.fields && Object.keys(item.fields).length) canon.settings.push(item);   // 没属性的条目不收：这一遍不是名册（见 buildSettingPrompt 纪律 6）
@@ -1833,14 +1768,16 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         if (!text) { errors.push(`env.${key} 是空值（已弃该键，账面留空）`); continue; }
         const norm = normalizeParam(key, text);              // 只认本表档位词（**枚举格式校验**，不是词义判断）
         if (!norm) { errors.push(`env.${key} 不是本书档位词（已弃该键，账面留空；合法档位：${PARAM_GEARS[key].join('/')}）`); continue; }
-        // ★★★Task 3 复查（task-3-review.md ②）：**档位是模型的语义分类**——只校验枚举格式 + **真出处**，
+        // ★★★Task 3 复查（task-3-review.md ②）：**档位是模型的语义分类**——只校验枚举格式，
         //   **不要求档位词出现在中文原文里**（旧法 `presenceIn(sourceText, norm)` 把"模型有没有判断对"
         //   换成了"中文里有没有这个英文/固定词"，合法分类会被这条例行否掉）。
+        //   ★leg197：这里原先还有一道**真出处**（`verifyQuote` 核不过 ⇒ 丢该键）——**撤了**。
+        //     留下的那道是**枚举**（`normalizeParam`：只认本表档位词），它不是"找不到原文"，照旧拦。
         //   ★复查第二轮⑥：出处优先级 = 该键自己的 ev > `env.ev` > 顶层共用 ev。
         if (evStrict) {
             const v2 = verifyQuote(evidence.frozen, { ev: itemEvOf(v) || envEv || settingEvTop, scope: evScope, spanText: sourceText, cls: 'setting', subject: `env.${key}` });
-            if (!v2.ok) { note('setting', `env.${key}`, 'drop', v2.why, v2.ref, norm); continue; }
-            note('setting', `env.${key}`, 'keep', null, v2.ref, null);
+            if (v2.ok) note('setting', `env.${key}`, 'keep', null, v2.ref, null);
+            else note('setting', `env.${key}`, 'unverified', v2.why, v2.ref, norm);
         }
         env[key] = norm;
     }
@@ -1862,8 +1799,11 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
     //     关系网在收口处净化完才写回 `canon.relations`（见 `canon` 装配那一行）。
     // ★★★Task 3：**关系边的抽取依据在块级核**——`s` 必须在本次允许来源里、`quote` 必须逐字出现在
     //   所引来源**且出现在这一块**（拆半后的子块用的是子块自己的 `sourceText` ⇒ 借不到没见过的材料）。
-    //   ★核过的边带 `_swVerified`（不落账：收口处按既有口径把 quote/s 丢掉——用户 2026-09-27 裁示）。
-    //   legacy（没有允许来源）⇒ 一个字段都不动，交回收口处按既有全书口径核。
+    //   ★★★leg197：**这一层不再是闸门**——核过的边不再靠 `_swVerified` 才被放行；
+    //     每一条形状合法的边**一律带出去**，核的结果只记诊断（`keep` / `unverified`）。
+    //     `_swVerified` 这个标记**保留**（收口处照旧按它决定要不要丢掉 quote/s 凭证），
+    //     但它不再决定"这条边收不收"（收口处 `sanitizeBookRelations` 同步改了，见那里）。
+    //   legacy（没有允许来源）⇒ 一个字段都不动，交回收口处按既有全书口径处理。
     const rawRelationsRaw = Array.isArray(raw.relations)
         ? raw.relations.filter((x) => x && typeof x === 'object' && !Array.isArray(x))
         : [];
@@ -1874,8 +1814,9 @@ export function sanitizeCanon(raw, { sourceText = '', evidence = null } = {}) {
         // ★复查⑪：**规范形状 = `ev:{s,q}`**（提示词里写的就是它）；顶层 `s`+`quote` 是**旧口径的显式兼容**。
         const relEv = it.ev && typeof it.ev === 'object' && !Array.isArray(it.ev) ? it.ev : { s: it.s, q: it.quote };
         const v = verifyQuote(evidence.frozen, { ev: relEv, scope: evScope, spanText: sourceText, cls: 'relation', subject: edge });
-        if (v.ok) { rawRelations.push({ ...it, _swVerified: true }); note('relation', edge, 'keep', null, v.ref, null); }
-        else note('relation', edge, 'drop', v.why, v.ref, relEv?.q ?? null);
+        rawRelations.push(v.ok ? { ...it, _swVerified: true } : { ...it });
+        if (v.ok) note('relation', edge, 'keep', null, v.ref, null);
+        else note('relation', edge, 'unverified', v.why, v.ref, relEv?.q ?? null);
     }
     // ★★★leg150（甲案）：**"正在发生的事"原样带出去**（块级只负责"别把它丢了"）——与 `rawRelations` 同一个治法。
     //   ★为什么净化不在这里做：起根那道出处闸要"**这一块**的书文"（核原句真在这一块里）与**每块的条数上限**，
@@ -2509,13 +2450,14 @@ function mergeCleaned(a, b) {
 async function tryRosterChunk(extract, text, depth, probeState, { declared = [], onProgress = null, progressLog = null, buildPrompt = null, stopWhen = null, evidence = null, scope = null, rowIndexes = null, scopeOf = null, rootsPolicy = null } = {}) {
     const ev = evidence ? { ...evidence, scope } : null;
     const promptFor = buildPrompt || ((t, sc) => buildRosterPrompt(t, declared, ev ? { sources: ev.frozen, scope: sc } : {}));   // leg23：本块内按书声明给召回清单
-    // ★★★Task 4（integration boundaries · 复审 F3/接口①）：**根在这一次调用里就过闸**。
-    //   为什么必须在这里（而不是收口处拿父块整段去核）：
+    // ★★★Task 4（integration boundaries · 复审 F3/接口①）：**根在这一次调用里处理**。
+    //   为什么必须在"这一次调用"这一层（而不是收口处拿父块整段去核）：
     //     · 拆半后的子块只见过**自己那一半**——它的根只能引子块自己的来源编号与片段；
     //       拿到父块去核 = 把"没见过的材料"当成已展示（`task-3-evidence-boundary-red` 那条病）；
-    //     · 先核后并 ⇒ 合并只搬运**已经核过的**根，`mergeCleaned` 丢不掉它们（见 `mergeCanonChunks` 的留档）。
-    //   口径：`rootsPolicy.strict`（本次有允许来源）走 `verifyQuote`（编号 + 片段 + quote 在 ev.q 里）；
-    //   legacy ⇒ 与旧法逐字相同（`sourceText` = 这一块的文本，跑长判据）。
+    //     · 先处理再并 ⇒ 合并只搬运**已经过过一遍的**根，`mergeCleaned` 丢不掉它们。
+    //   ★★★leg197（用户令：全面撤销出处丢弃）：`rootsPolicy.strict` 那一支**不再丢任何一条根**——
+    //     `sanitizeSeedRoots` 现在照收，`verifyQuote` 的结果只进诊断（见那个函数的头注）。
+    //     这里留下的只有**形状与条数**：缺 title/缺当事人/重复/每块上限。
     const packRoots = (cleaned) => {
         if (!rootsPolicy || !cleaned) return { cleaned };
         if (!Array.isArray(cleaned.rawRoots) || !cleaned.rawRoots.length) return { cleaned, roots: [], rootsWarnings: [] };
@@ -2598,27 +2540,15 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
 // ★leg60 `compileInfo`：**编译完整性读数**（声明面探测结果）——落进 `setting.frozen.compile`（见 assembleSetting）。
 // 第十八棒：小书（≤ CANON_SRC_CHAR）单发全量；大书=**全条目分块多调用、一遍抽完**
 //   （leg60 起五件套与名册在同一批块里同生共死——旧法"五件套只读头 3 万"那一次已整条删除）。
-/**
- * ★★★本笔（用户令「**这个通道绝对不能有**」）：**全书级出处校验**——一个名字要进账，必须
- *   **真在书文里出现过**，或者**书自己把它当过名字**（题名面/声明面认过的那批）。
- * ★为什么提成一个函数（而不是在每条路上各写一遍）：这道校验现在要落在**多处**——
- *   大书路的 `bookEntities`（既有）与新补的 `settings`、以及**小书那条早返回的路**（另有一套装配）。
- *   写两遍必然漂移，而"同一件事两处口径"正是本仓最贵的病。**一把尺子，几处调用。**
- * ★它**只判名字在不在书里**（机械、零语义）：描述属性按用户新令完整保留，不参与本闸。
- * @param {object[]} list 条目数组（形如 `{name, …}`）
- * @param {object} opts `{ src, namedOk }`——`namedOk` = 书自己认过的名字集合（Set 或 null）
- * @returns `{{kept: object[], dropped: string[]}}`——`dropped` 是名字数组，调用方据此**如实报数**
- */
-function filterByBookEvidence(list, { src = '', namedOk = null } = {}) {
-    const kept = [];
-    const dropped = [];
-    for (const x of Array.isArray(list) ? list : []) {
-        const nm = String(x?.name ?? '').trim();
-        if (!nm) continue;                                   // 没名字的条目另有净化层管（这里不重复报）
-        if (src.includes(nm) || (namedOk && namedOk.has(nm))) kept.push(x); else dropped.push(nm);
-    }
-    return { kept, dropped };
-}
+//
+// ★★★leg197（用户令「…因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动…现在我要全面撤销」）：
+//   **`filterByBookEvidence` 整条删除**（函数 + 它在两条路上的四处调用）。
+//   它守的是"一个名字要进账，必须真在书文里出现过（或书自己把它当过名字）"——
+//   这正是"找不到原文就丢"，只是找的是**名号**而不是 `ev.q`。
+//   ⇒ 名册（`bookEntities`）与设定面（`settings`）现在**照收**；"书里有没有这个名号"
+//     降级成**诊断**（大书路另有一条按"类别未确认"报数的观察线，那条不丢东西、原样保留）。
+//   ★为什么连它一起撤：它是同一句话的另一半——`leg139` 那笔立的两道机械闸（起根"书里原话"必须真在
+//     书文里 · `canon.settings` 过名册那道出处校验）与 `ev` 那一套是**同一族**，用户这次要的是全面撤销。
 
 /**
  * ★★★Task 3 复查（task-3-review.md ⑧）：**名册里"已确认的叫法"全集**（正名 ∪ 别名）。
@@ -2665,33 +2595,33 @@ export function classifyBookEdge(edge) {
  * ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
  *   **书里关系网的净化闸**——把抽取那一轮给的边净化成"能落账的那几条"。
  *
- * ★它守的**只有一件事**：**这条边指得回书里**。四道机械判据（零语义、零词表、与任何一本书的方言无关）：
- *   ① 形状：两端 ＋ 关系本身都要有（缺一端 = 这条边没有意义）；
- *   ② 自己跟自己不成边（有向边的两端同名 ⇒ 无含义，与 `check-step` 那条 world-step 判据同口径）；
- *   ③ **两端都在名册里**（书里没抽到的名号，落账时解析不出实体 id ⇒ 收了也白收，不如当场说清）；
- *   ④ ★**那句原话必须真在书文里** —— 与起根（`seed-roots.js`）、名册/设定面（`filterByBookEvidence`）
- *      **同一把尺子**（`longestBookRun` ＋ `SEED_QUOTE_MIN_RUN`），**不另立第二把**。
+ * ★★★leg197（用户令「…找不到原文而丢弃模型提出的行动…现在我要全面撤销」）：
+ *   **"这条边指得回书里"那一层撤了。** 旧法有四道判据，其中三道与"找不到原文"有关，全部删除：
+ *     ~~④ 那句原话必须真在书文里（`longestBookRun` ＋ `SEED_QUOTE_MIN_RUN`）~~
+ *     ~~没带 quote ⇒ 丢（"指不回书里"）~~
+ *     ~~严格道下必须带 `_swVerified`（块级已核过）~~
+ *   留下的两道**都不是"找不到原文"**，照旧拦：
+ *     ① 形状：两端 ＋ 关系本身都要有（缺一端 = 这条边没有意义）；两端同名 = 自指，不成边；
+ *     ② **两端都在名册里**——这条不是出处判据，是**落账可行性**：名册里没有的名号解析不出实体 id，
+ *        收下也写不进账（`seedBookRelations` 一样会把它退回来）。★它是"引擎记不了"，不是"书里找不到"。
+ *   ⇒ 于是 `dropped` 里现在只剩"形状不全 / 自指 / 端点不在名册"三类；
+ *     出处那一类改成**照收 + 只留诊断**（块级 `sanitizeCanon` 里已经记过 `keep`/`unverified`）。
  *
- * ★★为什么"带原话"这道闸必须有，而且**只在抽取这一刻**：
- *   模型被要求"列出书里谁跟谁是什么关系"时，最容易干的事就是**按常识编**
- *   （"师徒""父子"这种关系在叙事里太顺了）。而**书里到底写没写**，引擎是**能机械核的**：
- *   让每条边附上它依据的那句原话，核不过就丢 —— **编的边过不去**。
- *   ★★核完之后**那句原话就丢掉、不落账**（用户 2026-09-27 当场裁的，见 `ssot.schema.js` 顶层
- *     `relations` 那一段）：账上那张网**不按出处分家**，边上也不挂出处章。
- *     出处闸的牙齿长在**这一刻**，不长在账本里。
+ * ★核完之后**那句原话不落账**（用户 2026-09-27 当场裁的，见 `ssot.schema.js` 顶层 `relations` 那一段）：
+ *   账上那张网不按出处分家，边上也不挂出处章。
  *
  * ★丢掉一律**留痕**（本仓那条"不许静默"）：返回 `dropped` 明细，调用方如实报数。
  * @param {object} raw 模型给的关系数组（或 `{relations:[…]}`）
- * @param {object} [opts] `{ sourceText, rosterNames }`——`sourceText` = **这一块的书文**（缺 ⇒ 核不了，如实记警告）
+ * @param {object} [opts] `{ sourceText, rosterNames }`——`sourceText` **leg197 起不再被读**
+ *   （留着只为调用方零改动）；`rosterNames` = 定稿名册的正名∪已确认别名
  * @returns `{{kept: object[], dropped: {edge: string, why: string}[], warnings: string[]}}`
  */
 export function sanitizeBookRelations(raw, { sourceText = '', rosterNames = null, evidence = null } = {}) {
+    void sourceText;                          // ★leg197：出处闸已撤，这个形参不再被读（只为调用方零改动而留）
+    void evidence;
     const warnings = [];
-    const strict = Boolean(evidence && evidence.strict === true && evidence.frozen);
     const list = Array.isArray(raw?.relations) ? raw.relations : (Array.isArray(raw) ? raw : []);
     if (!list.length) return { kept: [], dropped: [], warnings };
-    const bookText = String(sourceText ?? '');
-    if (!bookText) warnings.push('书里关系网：没有书文可比 ⇒ 本次**没有核对**"原话是否真在书里"（调用方要传 sourceText）');
     const seen = new Set();
     const kept = [];
     const dropped = [];
@@ -2700,42 +2630,21 @@ export function sanitizeBookRelations(raw, { sourceText = '', rosterNames = null
         const from = String(it.from ?? '').trim();
         const to = String(it.to ?? '').trim();
         const type = String(it.type ?? '').trim();
-        // ★★★Task 3 复查（task-3-review.md ⑪）：**关系出处只有一种形状 `ev:{s,q}`**；旧口径
-        //   `{s, quote}` 作为**显式兼容**照收（旧账/旧固定响应不许被打死）。块级核验已按 `ev` 优先做。
-        const quote = String(it.quote ?? (it.ev && typeof it.ev === 'object' ? it.ev.q : '') ?? '').trim();
         const edge = `${from || '?'} → ${to || '?'}（${type || '?'}）`;
         if (!from || !to || !type) { dropped.push({ edge, why: '缺一端或缺"是什么关系"' }); continue; }
         if (from === to) { dropped.push({ edge, why: '两端是同一个名号（自己跟自己不成边）' }); continue; }
-        // ★★★Task 3：严格道下这条边必须**已在块级过依据闸**（来源编号 + 原话 + 没引用块外材料）。
-        if (strict && it._swVerified !== true) {
-            dropped.push({ edge, why: '缺抽取依据（来源编号 + 逐字原话，块级未核过）' });
-            continue;
-        }
         if (rosterNames && (!rosterNames.has(from) || !rosterNames.has(to))) {
             dropped.push({ edge, why: '端点不在名册里（落账时解析不出实体）' });
             continue;
         }
-        if (!quote) { dropped.push({ edge, why: '没带书里那句原话（指不回书里）' }); continue; }
-        // ★★出处闸：与起根**逐字同一把尺子**（跳字免疫：模型抄书时常用省略号）
-        if (bookText) {
-            const run = longestBookRun(quote, bookText);
-            const need = Math.min(quote.replace(/[\s\u2026.]+/g, '').length, SEED_QUOTE_MIN_RUN);
-            if (run < need) {
-                dropped.push({ edge, why: `那句原话在书文里对不上（最长只连续对得上 ${run} 字，要 ≥ ${need}）——疑似编造` });
-                continue;
-            }
-        }
         const key = `${from}\u0000${to}\u0000${type}`;
         if (seen.has(key)) continue;          // 跨块/同块重复：同一条边只收一次（不是错，静默并）
         seen.add(key);
-        // ★★★Task 3 复查第二轮（finding ⑦）：**原话是过程凭证，核完即弃**——旧法把 `quote` 一起 push 进
-        //   `kept`，而 `kept` 就是写进 `canon.relations`（世界设置 + 抽取缓存）的那份 ⇒ 复审在
-        //   `setting.frozen.canon.relations` 上逐字读到了 `quote:'甲和乙是盟友。'`（报告"不落账"的说法与事实不符）。
-        //   现在只落 `{from,to,type}`（形状契约见 `classifyBookEdge`）；原话只出现在：①这条机械核验里，
-        //   ②`dropped` 明细 / `note()` 诊断（受 `debugDetails` 门控与脱敏）。
+        // ★★★Task 3 复查第二轮（finding ⑦）：**原话是过程凭证，核完即弃**——只落 `{from,to,type}`
+        //   （形状契约见 `classifyBookEdge`）；旧账里带 `quote` 的边由 `classifyBookEdge` 判成 `legacy` 照收。
         kept.push({ from, to, type });
     }
-    if (dropped.length) warnings.push(`书里关系网：${dropped.length} 条没通过出处闸（已弃，明细见 dropped）`);
+    if (dropped.length) warnings.push(`书里关系网：${dropped.length} 条没收下（形状不全 / 自指 / 端点不在名册；已弃，明细见 dropped）`);
     return { kept, dropped, warnings };
 }
 
@@ -2743,7 +2652,8 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const titled = (Array.isArray(extraDeclared) ? extraDeclared : [])
         .map((d) => ({ name: String(d?.name ?? '').trim() }))
         .filter((d) => d.name);
-    const titledNames = new Set(titled.map((d) => d.name));
+    // ★leg197：原先这里还有一个 `titledNames` 集合（喂给 `filterByBookEvidence` 当"书自己认过的名字"）。
+    //   那个函数整条删了 ⇒ 这个集合没有消费者，一并删（import 一个没人读的东西是本仓最讨厌的形状）。
     const src = String(sourceText ?? '');
     const fp = bookFingerprint(src, titled);
     const stamp = extractedAt || new Date().toISOString();
@@ -2863,22 +2773,12 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
             };
         }
         errors.push(...(r.shapeWarnings || []));   // leg24 片5：净化坏项上报（如 env 非法值弃键）
-        // ★★★本笔：**小书这条路是另一次装配**（早返回，见上面那条 `srcLen <= CANON_SRC_CHAR`）
-        //   ⇒ 设定面这道校验必须**同样落在这里**，否则"同一个规矩"会因书大书小而不同
-        //   （本仓最贵的病：规矩只长在一条路上，而判据恰好测的是另一条）。
-        //   名册也复用大书的名字级出处校验，有效作者题名仍作为允许的出处。
-        //   ★★Task 3：严格道下"全书"收窄成**本次允许材料**（选段之外/被排除的原文不参与出处校验）。
-        const evidenceText = strict ? frozen.text : src;
-        const smallSettingsEv = filterByBookEvidence(r.cleaned.canon.settings, { src: evidenceText, namedOk: titledNames });
-        if (smallSettingsEv.dropped.length) {
-            errors.push(`设定面全书级出处校验：${smallSettingsEv.dropped.length} 条名字原文未出现（疑似编造或外来内容，已弃）`);
-        }
-        const smallCanon = { ...r.cleaned.canon, settings: smallSettingsEv.kept };
+        // ★★★leg197：小书这条路原先也要把 `settings` 与 `bookEntities` 各过一遍"名字真在书里"的
+        //   全书级出处校验（两道 `filterByBookEvidence`）——**两处一并撤掉**（用户令：全面撤销出处丢弃）。
+        //   ⇒ 小书与大书两条路现在的口径重新一致：**净化层收下的，就是交出去的**。
+        const smallCanon = { ...r.cleaned.canon };
         const applied = applyDeclaredToRoster(smallCanon.bookEntities, mergeDeclared(smallDeclared, titled));
-        const smallRosterEv = filterByBookEvidence(smallCanon.bookEntities, { src: evidenceText, namedOk: titledNames });
-        smallCanon.bookEntities = smallRosterEv.kept;
-        if (smallRosterEv.dropped.length) errors.push(`书名录全书级出处校验：${smallRosterEv.dropped.length} 个名号原文未出现（疑似编造，已弃）`);
-        // ★Task 3：类别未确认的候选必须可观察（与上面那条同尺；落账侧另有 pendingKind 计数与警告）。
+        // ★Task 3：类别未确认的候选必须可观察（与下面大书路那条同尺；落账侧另有 pendingKind 计数与警告）。
         const smallPending = smallCanon.bookEntities.filter((b) => b.kind !== 'faction' && b.kind !== 'character' && b.kind !== 'location');
         if (smallPending.length) {
             errors.push(`书名录: ${smallPending.length} 个名号类别未确认（保留为待核对候选，不默认角色/势力）：`
@@ -2887,17 +2787,17 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         if (smallDeclared.length || titled.length) {
             errors.push(`照书办: 声明面 ${smallDeclared.length + titled.length} 个名号（标签 ${smallDeclared.length} / 题名 ${titled.length}；补入册 ${applied.added} / 改判类别 ${applied.fixed}）`);
         }
-        // ★★★leg141：**书里关系网在小书这条路上也要净化**（同一条规矩，不许因书短就换）——
-        //   与上面那条"设定面校验必须同样落在这里"是**同一条纪律**（本仓最贵的病：规矩只长在一条路上）。
+        // ★★★leg141：**书里关系网在小书这条路上也要净化**（同一条规矩，不许因书短就换）。
         //   ★名册用 `applyDeclaredToRoster` 之后的 `smallCanon.bookEntities`（照书办补进来的名号也算数）。
+        //   ★leg197：出处那一半撤了（`sourceText` 已不被读），只剩"端点要在名册里"这条落账可行性判据。
         const smallRelEv = sanitizeBookRelations(r.cleaned.rawRelations, {
-            sourceText: evidenceText,
+            sourceText: strict ? frozen.text : src,     // ★leg197：已不再被读（留着只为调用方零改动）
             // ★复查⑧：端点集合 = **正名 ∪ 已确认别名**（别名写的边不再在收口处被提前丢掉）。
             rosterNames: rosterEndpointNames(smallCanon.bookEntities),
             evidence: strict ? { frozen, strict: true, scope: smallEvidence?.scope ?? null } : null,
         });
         if (smallRelEv.dropped.length) {
-            errors.push(`书里关系网出处闸：${smallRelEv.dropped.length} 条已弃（原话对不上书文 / 端点不在名册 / 形状不全）`
+            errors.push(`书里关系网：${smallRelEv.dropped.length} 条没收下（形状不全 / 自指 / 端点不在名册）`
                 + `——明细：${smallRelEv.dropped.slice(0, 5).map((d) => `${d.edge}〔${d.why}〕`).join('；')}${smallRelEv.dropped.length > 5 ? ' …' : ''}`);
         }
         if (smallRelEv.kept.length) {
@@ -3144,9 +3044,12 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         const roots = Array.isArray(r2.roots) ? r2.roots : [];
         const rootsWarnings = Array.isArray(r2.rootsWarnings) ? r2.rootsWarnings : [];
         if (rootsAsked && !first && !Array.isArray(r2.roots) && (r2.cleaned.rawRoots || []).length) {
-            // 兜底（内部接线缺失：没把 rootsPolicy 递进 tryRosterChunk）⇒ **fail-closed**：如实报、丢掉，
-            //   绝不退回"拿父块整段核一遍"那条路（那正是本条要治的病）。
-            rootsWarnings.push('这一块的根没有过「本次展示片段」出处闸（接线缺失）⇒ 已丢（不许按父块整段放行）');
+            // 兜底（内部接线缺失：没把 `rootsPolicy` 递进 `tryRosterChunk`）。
+            // ★★★leg197：旧法是 **fail-closed**（"没核过 ⇒ 丢掉"）——现在**照收**：出处那一层已经不是闸门了，
+            //   因为"闸没跑"而丢根，等于让一条接线疏忽把模型提的事吞掉。改成**如实报 + 收下**
+            //   （原文就挂在 `cleaned.rawRoots` 上，直接搬过来即可）。
+            rootsWarnings.push('这一块的根没过「本次展示片段」出处核验（接线缺失）⇒ ★leg197 起**照收**，只如实报这条接线缺口');
+            roots.push(...r2.cleaned.rawRoots);
         }
         return { cleaned: r2.cleaned, chunkChars, roots, rootsWarnings };
     });
@@ -3219,50 +3122,35 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         errors.push(`照书办: 声明面 ${declared.length} 个名号（标签 ${tagDeclared.length} / 题名 ${titled.length}；补入册 ${declaredAdded} / 改判类别 ${declaredFixed}）`);
     }
 
-    // 全书级出处判定（v1 同款：块级只洗结构，出处全书级判一次；纯编造才丢）
-    // ★leg60：**"全书"要把题名面算进去**——书的正文明面上没提到某个名号、而**它就是一条条目的题名**时，
-    //   它仍然是"书里有据"的（三国实测：`控制器_张辽`/`张辽正史` 里的 `张辽` 正是以此入册的）。
-    //   这不是放宽：能进 `titledNames` 的名字，判据是"**它被作者当名字用过**（是某条条目的 key）"。
-    const rosterEv = filterByBookEvidence(bookNames, { src: strict ? frozen.text : src, namedOk: titledNames });
-    const finalNames = rosterEv.kept;
-    if (rosterEv.dropped.length) {
-        errors.push(`书名录全书级出处校验：${rosterEv.dropped.length} 个名号原文未出现（疑似编造，已弃）`);
-    }
-
-    // ★★★本笔（用户令「这个通道绝对不能有」）：**设定面也要过同一道出处校验**——它此前是**绕过承重墙的一条缝**。
-    //   病（真账实测，逐字对过）：`canon.settings` 622 个名字里**有 1 个在书文里一个字都没有**
-    //   （`玉爪儿`，`{kind:'character', fields:{身份:'灵兽'}}`）——它是**被别的扩展塞进那次调用里的记忆**
-    //   （通道在 HTTP 层，见 `transport-http.js` 的长注）。
-    //   `bookEntities` 上一行就有这道校验，而 `settings` 从来没有 ⇒ 外来内容可以从这一格**落进账**。
-    //   真账读数（同一份账、同一把尺子）：bookEntities 723 个名字 **0 个**对不上；
-    //   settings 622 个名字 **1 个**对不上 —— 就是它。
-    //   ★口径与名册**逐字相同**（同一个 `filterByBookEvidence`），不新立第二把尺子。
-    const settingsEv = filterByBookEvidence(canonBase.canon.settings, { src: strict ? frozen.text : src, namedOk: titledNames });
-    if (settingsEv.dropped.length) {
-        errors.push(`设定面全书级出处校验：${settingsEv.dropped.length} 条名字原文未出现（疑似编造或外来内容，已弃）`);
-    }
+    // ★★★leg197：**全书级出处判定整段撤掉**（用户令：全面撤销"引用找不到原文就丢"）。
+    //   撤掉的是两道 `filterByBookEvidence`：① 名册的名字要真在书文里（或书自己把它当过名字）；
+    //   ② 设定面的名字过同一道校验（那是 leg139 为"外来内容从 `settings` 这一格落账"补的缝）。
+    //   ⇒ `bookNames` 与 `canonBase.canon.settings` **原样交付**，一个名字都不再因为"书里找不到"被摘掉。
+    //   ★如实登记代价：`settings` 那道缝**重新敞开了**（别的扩展塞进那次调用的内容可以再落账）。
+    //     这是用户当次的明确选择；要收回来只需恢复这一段原有的两个函数调用。
+    const finalNames = bookNames;
 
     // leg24 片1（停抄书）：关系轮/属性轮/出处细节校验三处调用点一并删除——名册定稿即为交付态。
     //   ★leg62c：`skipRoster` 时名册遍没跑 ⇒ `finalNames` 为空 ⇒ 这里就是**空名册**
     //     （接线层必须保住账上那份，否则一换设定就把名册抹空——见 web 的 reextract-setting）。
     // ★★★leg141（用户令「**把抽象阶段的关系网抽象做出来，我才发现初始化的时候都没有关系网**」）：
-    //   **书里关系网的收口处** —— 到这一行，两样东西才齐：**全书书文**（`src`，核原话）
-    //   与**定稿名册**（`finalNames`，核两端在册）。⇒ 与名册/设定面同一条口径：**块级只洗结构，
-    //   出处全书级判一次**（同一个治法，不新立第二条路）。
+    //   **书里关系网的收口处** —— 到这一行，**定稿名册**（`finalNames`，核两端在册）才齐。
+    //   ★leg197：出处那一半（核原话）撤了，只剩"端点要在名册里"这条**落账可行性**判据
+    //     （见 `sanitizeBookRelations` 头注：它不是"书里找不到"，是"解析不出实体 id 就写不进账"）。
     //   ★`skipRoster` 时名册遍整遍没跑 ⇒ `rawRelationsAll` 恒空 ⇒ 本项**自然缺席**
     //     （与 `bookEntities` 同命：重抽设定不重抽名册，也就不重抽关系网——要补走「初始化」）。
     const relEv = sanitizeBookRelations(rawRelationsAll, {
-        sourceText: strict ? frozen.text : src,
+        sourceText: strict ? frozen.text : src,     // ★leg197：已不再被读（留着只为调用方零改动）
         // ★复查⑧：端点集合 = **正名 ∪ 已确认别名**（别名端点不再在收口处被提前丢掉）。
         rosterNames: rosterEndpointNames(finalNames),
         evidence: strict ? { frozen, strict: true, scope: scopeOfIndexes(allIndexes) } : null,
     });
     if (relEv.dropped.length) {
-        errors.push(`书里关系网出处闸：${relEv.dropped.length} 条已弃（原话对不上书文 / 端点不在名册 / 形状不全）`
+        errors.push(`书里关系网：${relEv.dropped.length} 条没收下（形状不全 / 自指 / 端点不在名册）`
             + `——明细：${relEv.dropped.slice(0, 5).map((d) => `${d.edge}〔${d.why}〕`).join('；')}${relEv.dropped.length > 5 ? ' …' : ''}`);
     }
-    if (relEv.kept.length) errors.push(`书里关系网：收下 ${relEv.kept.length} 条边（两端都在名册里，且每条的原文原话都核过）`);
-    const canon = { ...canonBase.canon, bookEntities: finalNames, settings: settingsEv.kept };
+    if (relEv.kept.length) errors.push(`书里关系网：收下 ${relEv.kept.length} 条边（两端都在名册里）`);
+    const canon = { ...canonBase.canon, bookEntities: finalNames, settings: canonBase.canon.settings };
     // ★只在真有边时才写这个键（空着就是空着：老账与"这本书没有可抽的关系"两种情形逐字节同形）
     if (relEv.kept.length) canon.relations = relEv.kept;
     // ★leg60：大小书合并后**没有"设定轮"这个独立失败面**了——设定与名册同一批调用同生共死，

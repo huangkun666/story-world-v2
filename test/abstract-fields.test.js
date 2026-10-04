@@ -135,6 +135,8 @@ test('★leg61 两遍抽取：名册遍只问名号 · 属性遍交属性 · 两
     // 夹具要点：名字**必须真的在书文里**（全书级出处校验会丢"原文未出现"的名号——这条我在第一版夹具上踩过，
     //   当时的 mock 自己造了「名号N」这种书里根本没有的名字，于是 40 个名号全被判编造丢掉：
     //   **判据是对的、夹具是假的**）。这里让每行的正文里就写着那个人名。
+    //   ★leg197：那道校验已删（书外名号照收）——本夹具**照旧**让正文里写着人名（它测的是两遍并册，不是出处），
+    //   上面那段留档说明的是"当年为什么这么造夹具"，不再是一条活着的判据。
     const names = Array.from({ length: 20 }, (_, i) => `角色${i}`);
     const src = names.map((n) => `【${n}】${n}：某职 · ` + '字'.repeat(4000)).join('\n');   // ≈ 8 万字符 ⇒ 2 块
     assert.ok(Array.from(src).length > 60000, '前置：确为分块路径');
@@ -441,29 +443,52 @@ test('★leg61 势力树：并列候选不硬选 · 跨类别不连', () => {
 //   （通道在 HTTP 层：别人换掉了页面的 fetch，见 `src/transport-http.js` 的长注）。
 //   `bookEntities` 早就有这道全书级出处校验，而 `settings` **从来没有** ⇒ 外来内容可以从这一格落进账。
 //   真账读数（同一份账、同一把尺子）：bookEntities 723 个名字 **0 个**对不上；settings 622 个名字 **1 个**对不上。
-test('★★★本笔·设定面出处校验：名字在书文里找不到的条目**不许留在 canon.settings**（与名册同一把尺子）', async () => {
+// ★★★leg197（用户令「把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了…」）：
+//   **这一笔整个反转**——那道"设定面全书级出处校验"（与名册共用 `filterByBookEvidence`）**连函数一起删了**。
+//   ⇒ 书文里找不到的名字**照收**；"对不上"只进诊断（`unverified` / 人话摘要「出处对不上 N（照收）」）。
+//   ★代价如实记在这里（源码 `src/abstract.js` 的同位注释也写了）：`settings` 那条"外来内容绕过承重墙"的缝
+//     按用户令**重新敞开**——要收回来只需恢复那两个函数调用。下面这条锁按新口径改写，病档留在此处不删。
+test('★★★本笔·设定面：书文里找不到的名字**照收**（leg197 撤销那道校验），只把"出处对不上"记进诊断（★leg197：出处不再丢，照收）', async () => {
     const src = '【角色甲】角色甲：某职。\n【角色乙】角色乙：某职。';
     const extract = async () => JSON.stringify({
         bookEntities: [{ name: '角色甲', kind: 'character' }, { name: '角色乙', kind: 'character' }],
         entities: [
             { name: '角色甲', kind: 'character', fields: { 表外属性: '某职' } },   // 值也在原文里 ⇒ 收
-            { name: '别处来的', kind: 'character', fields: { 身份: '灵兽' } },     // ★书文里一个字都没有
+            // ★leg197：夹具不变（书文里一个字都没有的那条），只给它一个"书里找不到的出处"——
+            //   旧法它被设定面全书级出处校验摘掉；现在照收，诊断里记 `unverified`。
+            { name: '别处来的', kind: 'character', fields: { 身份: '灵兽' }, ev: { s: 'S1', q: '书里一个字都没有的句子' } },
         ],
     });
-    const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
+    // ★leg197：走**严格道**（给了允许来源）——出处核验的结果才有诊断可看（legacy 道不产出出处记录）。
+    const records = [];
+    const r = await extractWorldSetting({
+        sourceText: src, extract, cache: null,
+        allowedSources: [{ sourceId: 'w1', text: src }],
+        onEvidence: (rec) => records.push(rec),
+    });
     assert.equal(r.ok, true, '★前置：这一轮整体是成的（不是"全失败恰好没有 settings"）');
     const names = r.setting.frozen.canon.settings.map((s) => s.name);
-    assert.deepEqual(names, ['角色甲'],
-        `★★★书文里没有的名字**不许留在设定面**（实测留下 ${JSON.stringify(names)}）——`
-        + '它就是"外来内容从这一格绕过承重墙"的那条缝');
-    assert.ok(r.errors.some((e) => e.includes('设定面全书级出处校验')),
-        '★丢弃要留痕（不许静默：面板/控制台看得见"有几条名字原文未出现"）');
+    // ★leg197：旧断言是 `deepEqual(names, ['角色甲'])`（书文里没有的名字不许留在设定面）——现在**照收**。
+    assert.deepEqual(names, ['角色甲', '别处来的'],
+        `★leg197：书文里没有的名字也照收（出处只记账、不拦人）——旧法它被"设定面全书级出处校验"摘掉，`
+        + `而那道校验连同 filterByBookEvidence 一起撤了（实测留下 ${JSON.stringify(names)}）`);
+    // ★leg197：对不上这件事仍要看得见——诊断里一条 `unverified`，人话摘要里一个「出处对不上 N（照收）」。
+    const outsiderRecs = records.filter((rec) => rec.subject === '别处来的');
+    assert.ok(outsiderRecs.length >= 1 && outsiderRecs.every((rec) => rec.action === 'unverified'),
+        `★leg197：出处对不上只记账（unverified），不丢项：${JSON.stringify(outsiderRecs)}`);
+    assert.match(String(outsiderRecs[0].why), /原话对不上/, '诊断要写明"原话对不上"（不许静默）');
+    assert.ok(r.evidence.summary.unverified >= 1 && r.evidence.summary.dropped === 0,
+        '★leg197：摘要里 dropped 恒 0，出处那一档计进 unverified');
+    assert.ok(r.errors.some((e) => e.includes('出处对不上')), `留痕：人话摘要里有「出处对不上 N（照收）」：${r.errors.join('; ')}`);
     // ① 名册那一侧一个字不变（两把尺子必须是同一把，不许连带改动名册口径）
     assert.deepEqual(r.setting.frozen.canon.bookEntities.map((b) => b.name).sort(), ['角色甲', '角色乙'].sort(),
-        '★名册照旧（本次只补设定面这一格，名册那条既有校验一个字没动）');
-    // ② ★反向自证：这条闸真的在咬 —— 把那个名字放进书文里，同一条就必须留下
+        '★名册照旧（`别处来的` 只从 entities 这一路进设定面；名册口径本笔不动）');
+    // ② ★反向自证改成"两边都收"：把那个名字放进书文里，同一条照样留下（这条路上已经没有"名字闸"了）
     const src2 = src + '\n【别处来的】别处来的：灵兽。';
-    const r2 = await extractWorldSetting({ sourceText: src2, extract, cache: null });
+    const r2 = await extractWorldSetting({
+        sourceText: src2, extract, cache: null,
+        allowedSources: [{ sourceId: 'w1', text: src2 }],
+    });
     assert.deepEqual(r2.setting.frozen.canon.settings.map((s) => s.name).sort(), ['别处来的', '角色甲'].sort(),
-        '★反向自证：书文里真有这个名字 ⇒ 照样留在设定面（否则这条闸是"一律杀"）');
+        '★leg197：书文里真有这个名字 ⇒ 照样留在设定面（撤销的是"找不到就丢"这条判据，不是"照收"这条口径）');
 });

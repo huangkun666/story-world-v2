@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "d649cc12-d7b6c977",
+  "fingerprint": "3be51136-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "d649cc12",
+  "sourceFingerprint": "3be51136",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -272,17 +272,18 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg196-map-mobile",
+    "panelBuild": "leg197-evidence-nodrop",
     "mainPromptV": "v2-agenda-t1-34",
     "cssVersion": "20261005-leg196-map-mobile",
     "version": "1.1.0",
     "srcModules": 68,
     "webModules": 38,
-    "tests": 167,
+    "tests": 168,
     "demos": 76,
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）",
       "e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）",
       "1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）",
       "0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）",
@@ -293,12 +294,11 @@
       "46158df leg192 map popup: geography facts into the round, map as a popup (local preview)",
       "81e0ef0 docs: design geography facts and map integration",
       "b137360 fix: allow new events to omit their location",
-      "a3c20f3 docs: hand off attribute retention and align cache metadata",
-      "b66c2ac Preserve extracted descriptive attributes and merge supplements"
+      "a3c20f3 docs: hand off attribute retention and align cache metadata"
     ]
   },
   "counts": {
-    "cards": 327,
+    "cards": 328,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
@@ -307,7 +307,7 @@
       "交接": 122,
       "细案": 33,
       "索引": 2,
-      "当前值": 19,
+      "当前值": 20,
       "怎么跑": 2,
       "代码地图": 107
     }
@@ -414,7 +414,7 @@
       "title": "STATE.md · 2. 红线与规矩（逐字搬家，不许改写）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 77,
+      "line": 78,
       "where": "> **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。**",
       "keys": [
         "STATE",
@@ -446,7 +446,7 @@
       "title": "STATE.md · 3.  未决事项（唯一一份活儿清单）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 139,
+      "line": 140,
       "where": "> 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写\"已办结（哪棒）\"。",
       "keys": [
         "STATE",
@@ -478,8 +478,8 @@
       "title": "STATE.md · 4. 当前工作",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 179,
-      "where": "leg196 已办结（用户 2026-10-05 真机报的 bug：「**手机端有bug点击地图显示不完整…在最顶上只有一点点框框，把这个bug修复后然后推送**」）：**病根在宿主页面**——酒馆给 `<html>` 加了 `-webki",
+      "line": 180,
+      "where": "leg197 已办结（用户 2026-10-05 令，逐字「**把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了，之前取消了属性相关的，现在我要全面撤销**」；同场第二道令「**顺便把文档移植到F盘的那个",
       "keys": [
         "STATE",
         "入口",
@@ -509,7 +509,7 @@
       "title": "STATE.md · 5. 现场（本机）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 185,
+      "line": 186,
       "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（仓库根是 `F:\\deepseek\\plugins`；分支 **`leg151-prefetch`**；",
       "keys": [
         "STATE",
@@ -561,7 +561,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 1264,
+      "line": 1282,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -6834,7 +6834,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 50,
-      "where": "**2039 / 2039 · fail 0 · skipped 0 · todo 0**（含地点关系契约与查询、地理抽取与来源核验、地图弹窗开关、当轮地理输入与预算裁剪、导出回档、「往事怎么找」各格现读设置，以及字数额度/整条进不截半条/ ｜ 复量：`node --test`（无参，在插件目录内）",
+      "where": "**2048 / 2048 · fail 0 · skipped 0 · todo 0**（含**出处只记账不拦人**那一族 9 条：`test/evidence-nodrop.test.js` 的记账层／五条净化路／**反向自证**／\"没 ｜ 复量：`node --test`（无参，在插件目录内）",
       "keys": [
         "当前值",
         "读数",
@@ -6901,7 +6901,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg196-map-mobile`** ｜ 复量：`src/render-base.js`；**手机端地图浮层从\"顶上一条缝\"变回\"整屏\"**（用户 2026-10-05 真机报「点击地图显示不完整…在最顶上只",
+      "where": "**`leg197-evidence-nodrop`** ｜ 复量：`src/render-base.js`；**\"引用找不到原文就丢\"整族撤销**（用户 2026-10-05 令「把抽象时因为引擎根据模型给的引用而找不到原文而",
       "keys": [
         "当前值",
         "读数",
@@ -6930,11 +6930,45 @@
       ]
     },
     {
+      "id": "value#★出处核验（le",
+      "title": "当前值 · ★出处核验（leg197 起）",
+      "kind": "当前值",
+      "src": "STATE.md",
+      "line": 53,
+      "where": "**只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped` 在出处这条路上* ｜ 复量：`src/abstract-evidence.js`（口径全文写在文件头）· `test/evidence-nodrop.test.js`",
+      "keys": [
+        "当前值",
+        "读数",
+        "判据",
+        "构建号",
+        "行数",
+        "★出处核验（leg1",
+        "STATE.md",
+        "STATE · story-world v2 现状（接手第一入口）",
+        "0. 三十秒版：这台东西是什么",
+        "0.5  活儿在哪（接手第一件事）",
+        "1.  当前权威读数（唯一出处）",
+        "2. 红线与规矩（逐字搬家，不许改写）",
+        "2.1 最高准则：没命令，不准动一个字节（用户 2026-09-11 立）",
+        "2.2 四条不可越的线",
+        "2.3 动手前的规矩（六条）",
+        "2.4 待办纪律（leg106 立，治\"任务堆积\"）",
+        "3.  未决事项（唯一一份活儿清单）",
+        "等你拍板的（2 条）",
+        "下一笔：待你点头（都是待选项、不是命令）",
+        "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
+        "新立的活儿（2026-09-30 用户点头「立项治」）",
+        "4. 当前工作",
+        "5. 现场（本机）",
+        "5.1 发布流程"
+      ]
+    },
+    {
       "id": "value#★「往事注入多少",
       "title": "当前值 · ★「往事注入多少字」出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 53,
+      "line": 54,
       "where": "**1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路合起来吃它）；★** ｜ 复量：`src/limits.js` · `web/inject.js`（`liveRetrievalParams`）",
       "keys": [
         "当前值",
@@ -6968,7 +7002,7 @@
       "title": "当前值 · ★主调用输出上限（出厂值）",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 54,
+      "line": 55,
       "where": "**`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** ⇒ 16,384  ｜ 复量：`src/transport-http.js`",
       "keys": [
         "当前值",
@@ -7002,7 +7036,7 @@
       "title": "当前值 · ★模型容量怎么来的",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 55,
+      "line": 56,
       "where": "取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** ｜ 复量：`src/transport-http.js` · `web/model-channel.js`",
       "keys": [
         "当前值",
@@ -7036,7 +7070,7 @@
       "title": "当前值 · ★手机端",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 56,
+      "line": 57,
       "where": "页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12px 小字**抬到  ｜ 复量：`web/style.css` 末尾两条",
       "keys": [
         "当前值",
@@ -7070,7 +7104,7 @@
       "title": "当前值 · ★抽取并发度",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 57,
+      "line": 58,
       "where": "**缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 1 路** ｜ 复量：`web/model-channel.js` · `src/parallel-run.js`",
       "keys": [
         "当前值",
@@ -7104,7 +7138,7 @@
       "title": "当前值 · 包预算 出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 58,
+      "line": 59,
       "where": "**50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js`",
       "keys": [
         "当前值",
@@ -7138,7 +7172,7 @@
       "title": "当前值 · ★往回看轮数 出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 59,
+      "line": 60,
       "where": "**50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两件事** ｜ 复量：`src/limits.js`（★`PANEL_WINDOW_TURNS`）",
       "keys": [
         "当前值",
@@ -7172,7 +7206,7 @@
       "title": "当前值 · ★leg136–leg156 各笔",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 60,
+      "line": 61,
       "where": "⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/done-archive.md`",
       "keys": [
         "当前值",
@@ -7206,8 +7240,8 @@
       "title": "当前值 · CSS_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 61,
-      "where": "**`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。leg196 改的是地图那张整屏遮罩（自己声明宽高 ＋ 手机档 `100dvh`）——病",
+      "line": 62,
+      "where": "**`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197 未升**（`web/style.css` 一个字节没动）；leg19",
       "keys": [
         "当前值",
         "读数",
@@ -7240,7 +7274,7 @@
       "title": "当前值 · MAIN_PROMPT_V",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 62,
+      "line": 63,
       "where": "**`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne",
       "keys": [
         "当前值",
@@ -7274,7 +7308,7 @@
       "title": "当前值 · web/index.js 行数",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 63,
+      "line": 64,
       "where": "**3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行）",
       "keys": [
         "当前值",
@@ -7308,8 +7342,8 @@
       "title": "当前值 · CACHE_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 64,
-      "where": "**`9`**（新增地理格式识别：没有地理输出的旧缓存不再冒充\"已有地图\"，旧缓存一并失效） ｜ 复量：`src/fp-hash.js`",
+      "line": 65,
+      "where": "**`10`**（★leg197 **9 → 10**：出处那一整套\"核不过就丢\"全面撤销 ⇒ 抽取的问法与净化口径都变了，同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效） ｜ 复量：`src/fp-hash.js`",
       "keys": [
         "当前值",
         "读数",
@@ -7342,7 +7376,7 @@
       "title": "当前值 · 发布仓 main",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 65,
+      "line": 66,
       "where": "**`395eb9c`** · 构建号 **`leg196-map-mobile`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端， ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
@@ -7376,7 +7410,7 @@
       "title": "当前值 · release tag",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 66,
+      "line": 67,
       "where": "**`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
       "keys": [
         "当前值",
@@ -7410,7 +7444,7 @@
       "title": "当前值 · 发布点读数的语义（leg124 立）",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 67,
+      "line": 68,
       "where": "**\"已发布到哪一版\"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8",
       "keys": [
         "当前值",
@@ -7444,7 +7478,7 @@
       "title": "当前值 · 版本号",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 68,
+      "line": 69,
       "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 下令发布，原话「我 ｜ 复量：`test/browser-compat.test.js`",
       "keys": [
         "当前值",
@@ -9116,7 +9150,7 @@
     },
     {
       "id": "test#all",
-      "title": "判据在哪（test/ 共 167 个 *.test.js）",
+      "title": "判据在哪（test/ 共 168 个 *.test.js）",
       "kind": "代码地图",
       "src": "test",
       "line": 1,
@@ -9176,6 +9210,7 @@
         "entity-writeback",
         "entropy",
         "event-close",
+        "evidence-nodrop",
         "extract",
         "fingerprint",
         "full-roster-smoke",
@@ -9240,8 +9275,7 @@
         "roster-toolbar",
         "rule-kinds",
         "scales-concept-table",
-        "scales-reextract",
-        "schema"
+        "scales-reextract"
       ]
     }
   ]

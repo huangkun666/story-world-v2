@@ -302,10 +302,11 @@ test('复查二轮④：混合来源别名（实体别名 vs 旧世界名册别�
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ⑤ 概念刻度：每个非空 `注` 也是照抄原文的取值（档位有效 ≠ 注可以编）
+// ⑤ 概念刻度：档位/注/子表/维度只做形状净化（★leg197：出处这一层整层撤了，核不过照收）
 // ══════════════════════════════════════════════════════════════════════════════
-test('复查二轮⑤：有效档位 + 编造的注 ⇒ 只丢注；注必须有它自己那份出处', async () => {
+test('复查二轮⑤：档位与注都不再按出处丢——编造的注照收（出处这一层整层撤了）（★leg197：出处不再丢，照收）', async () => {
     const text = '【战力】T1 感气境：初入门径。T2 筑基境：气贯全身。';
+    const records = [];
     const { r } = await runSmall({
         text, blocks: blocksOf([['w1', text]]),
         payload: {
@@ -316,17 +317,19 @@ test('复查二轮⑤：有效档位 + 编造的注 ⇒ 只丢注；注必须有
                 子表: [{ 名: '小境', 档位: ['T1|初入门径', 'T2|凭空捏造'] }],
             }],
         },
+        onEvidence: (x) => records.push(x),
     });
     const table = r.setting.frozen.canon.刻度?.[0];
     assert.ok(table, `有出处的概念表要收：${JSON.stringify(r.errors)}`);
     assert.equal(table.名, '修炼体系总纲', '表名是语义标签，不要求字面出现在原文里');
-    assert.deepEqual(table.档位, [{ 档: 'T1', 注: '感气境' }, { 档: 'T2' }],
-        `编造的注要丢、有效档位要留：${JSON.stringify(table.档位)}`);
-    assert.deepEqual(table.子表?.[0]?.档位, [{ 档: 'T1', 注: '初入门径' }, { 档: 'T2' }],
-        `子档的注同一把尺子：${JSON.stringify(table.子表)}`);
-    const errs = r.errors.join('|');
-    assert.match(errs, /编造修炼注释/, `编造的注要如实留痕：${errs}`);
-    assert.match(errs, /凭空捏造/, `子档编造的注也要留痕：${errs}`);
+    // ★leg197：`档`/`注` 一律不再过出处闸（`sanitizeScales` 那两层整层撤掉）⇒ 编造的注**照收**。
+    assert.deepEqual(table.档位, [{ 档: 'T1', 注: '感气境' }, { 档: 'T2', 注: '编造修炼注释' }],
+        `编造的注照收（旧法：丢注只留档位）：${JSON.stringify(table.档位)}`);
+    assert.deepEqual(table.子表?.[0]?.档位, [{ 档: 'T1', 注: '初入门径' }, { 档: 'T2', 注: '凭空捏造' }],
+        `子档的注同一把尺子（照收）：${JSON.stringify(table.子表)}`);
+    // ★leg197：刻度这一层不再产生"注对不上原文"的丢弃记录（`dropped` 恒 0；只有非出处原因才记 drop）。
+    assert.equal(r.evidence.summary.dropped, 0, '刻度不再因出处丢项');
+    assert.equal(records.filter((x) => x.action === 'drop').length, 0, '没有因为出处而丢的项');
     // 正向对照：注真在所引原话里 ⇒ 原样保留
     const good = await runSmall({
         text, blocks: blocksOf([['w1', text]]),
@@ -368,33 +371,42 @@ test('复查二轮⑥：society/techOrMagic/situation 与张力/环境各格可�
     assert.equal(Object.prototype.hasOwnProperty.call(canon.society, 'ev'), false);
 });
 
-test('复查二轮⑥：错误/缺失的出处只拒收对应那一项，不牵连别的项', async () => {
+test('复查二轮⑥：某一项出处对不上只记账、不牵连别的项（全部照收）（★leg197：出处不再丢，照收）', async () => {
     const A = '诸国林立。';
     const B = '法术依靠灵气。';
     const text = `${A}\n${B}`;
     const blocks = blocksOf([['w1', A], ['w2', B]]);
+    const wrongRecords = [];
     const wrong = await runSmall({
         text, blocks,
         payload: {
-            society: { 文: A, ev: { s: 'w2', q: A } },          // 编号指向 w2，而原话是 w1 的 ⇒ 这一项拒收
+            society: { 文: A, ev: { s: 'w2', q: A } },          // 编号指向 w2，而原话是 w1 的 ⇒ 核不过（★照收）
             techOrMagic: { 文: B, ev: { s: 'w2', q: B } },      // 正确 ⇒ 照收
         },
+        onEvidence: (x) => wrongRecords.push(x),
     });
-    assert.equal(wrong.r.setting.frozen.canon.society, '', '出处对不上的那一项拒收');
-    assert.equal(wrong.r.setting.frozen.canon.techOrMagic, B, '同一响应里别的项不受牵连');
+    // ★leg197：出处对不上的那一项**照收**（旧法：拒收）；"不牵连别的项"这条照旧成立。
+    assert.equal(wrong.r.setting.frozen.canon.society, A, '出处对不上的那一项照收（只记账）');
+    assert.equal(wrong.r.setting.frozen.canon.techOrMagic, B, '同一响应里别的项照收');
+    assert.ok(wrongRecords.some((x) => x.subject === 'society' && x.action === 'unverified' && /原话对不上/.test(String(x.why))),
+        `对不上仍要留诊断：${JSON.stringify(wrongRecords)}`);
+    const missingRecords = [];
     const missing = await runSmall({
         text, blocks,
         payload: {
             ev: { s: 'w2', q: B },                               // 顶层共用出处（旧口径的兜底）
-            society: { 文: A },                                  // 自己没有 ev ⇒ 退回顶层出处，而 A 不在 B 里 ⇒ 这一项拒收
+            society: { 文: A },                                  // 自己没有 ev ⇒ 退回顶层出处，而 A 不在 B 里 ⇒ 核不过（★照收）
             techOrMagic: B,                                      // 字符串 + 顶层出处 ⇒ 收
         },
+        onEvidence: (x) => missingRecords.push(x),
     });
-    assert.equal(missing.r.setting.frozen.canon.society, '', '与共用出处对不上的项拒收');
+    assert.equal(missing.r.setting.frozen.canon.society, A, '与共用出处对不上的项照收（只记账）');
     assert.equal(missing.r.setting.frozen.canon.techOrMagic, B, '字符串 + 顶层 ev 的旧口径仍要收');
+    assert.ok(missingRecords.some((x) => x.subject === 'society' && x.action === 'unverified' && /不在所引出处内/.test(String(x.why))),
+        `对不上仍要留诊断：${JSON.stringify(missingRecords)}`);
 });
 
-test('复查二轮⑥：大书分块流程里，逐项出处按**本块作用域**核（不许借没见过的块）', async () => {
+test('复查二轮⑥：大书分块里逐项出处仍按**本块作用域**核，但核不过只记账、照收（★leg197：出处不再丢，照收）', async () => {
     const A = '诸国林立。';
     const B = '法术依靠灵气。';
     const C = '大势将变。';
@@ -417,19 +429,24 @@ test('复查二轮⑥：大书分块流程里，逐项出处按**本块作用域
             bookEntities: [],
             society: { 文: A, ev: { s: 'src-a', q: A } },
             techOrMagic: { 文: B, ev: { s: 'src-b', q: B } },
-            situation: { 文: C, ev: { s: 'src-c', q: C } },     // ★丙条在**别的块**里 ⇒ 本块拒收
+            situation: { 文: C, ev: { s: 'src-c', q: C } },     // ★丙条在**别的块**里 ⇒ 本块核不过（★leg197：照收，只记账）
             env: { 民生度: { 文: '富足', ev: { s: 'src-a', q: A } }, 动乱度: { 文: '大乱', ev: { s: 'src-b', q: B } } },
         });
     };
-    const r = await extractWorldSetting({ sourceText: text, extract, allowedSources: blocks });
+    const records = [];
+    const r = await extractWorldSetting({ sourceText: text, extract, allowedSources: blocks, onEvidence: (x) => records.push(x) });
     assert.equal(r.ok, true, (r.errors || []).join('；'));
     const canon = r.setting.frozen.canon;
     assert.equal(canon.society, A, `本块里真有出处的要收：${JSON.stringify(r.errors)}`);
     assert.equal(canon.techOrMagic, B, '同一块里另一条来源的独立事实也要收');
-    assert.equal(canon.situation, '', '引了**别块**的来源 ⇒ 这一项拒收（不许借没见过的材料）');
+    // ★leg197：引了**别块**的来源 ⇒ 核不过只记账、**照收**（旧法：这一项拒收）。
+    assert.equal(canon.situation, C, '引了别块的来源 ⇒ 照收（核验差异进诊断）');
+    assert.ok(records.some((x) => x.subject === 'situation' && x.action === 'unverified' && /不在本次展示/.test(String(x.why))),
+        `核不过仍要留诊断：${JSON.stringify(records)}`);
+    assert.equal(r.evidence.summary.dropped, 0, '出处这一类不再有丢弃');
     assert.equal(r.setting.dynamic.env['民生度'], '富足');
     assert.equal(r.setting.dynamic.env['动乱度'], '大乱');
-    assert.match(r.errors.join('|'), /不在本次展示的材料内|不在本次展示的片段内/, '拒收要留原因');
+    assert.match(r.errors.join('|'), /不在本次展示的材料内|不在本次展示的片段内/, '核验差异要留原因（照收，不再拒收）');
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

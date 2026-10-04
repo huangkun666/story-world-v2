@@ -137,8 +137,10 @@ export function seedRootsBrief({ candidates = [], evidence = false } = {}) {
         ...(evidence ? [
             '',
             '★★**每条根都要带 `ev`（出处）**：`ev.s` = 下面「来源清单」里的编号，`ev.q` = 该编号来源里**逐字照抄**的那句原文；',
-            '  `quote`（书里那句话）必须能在自己的 `ev.q` 里**逐字找到**——找不到的根一律不收（引擎逐字核，核不过就丢）。',
-            '  编号只能引**本次这一块**列出的来源；引别的条目、或编一句原文，都会被拒。',
+            '  `quote`（书里那句话）必须能在自己的 `ev.q` 里**逐字找到**。',
+            '  编号只能引**本次这一块**列出的来源。',
+            '  ★leg197：引擎会逐字核一遍并把结果记进抽取诊断，**核不过不再丢掉这条根**——',
+            '    但"每条都要能指回书里的原话"这条纪律照旧（它是质量的抓手；指不回去的多半是推出来的）。',
         ] : []),
         ...listBlock,
     ];
@@ -186,28 +188,31 @@ export function buildSeedRootsPrompt(sourceText, { candidates = [], maxChars = S
 }
 
 /**
- * 净化（**机械判据，零语义判断**）：条数上限、字段类型、长度上限、去重、去掉指不回书里的项。
+ * 净化（**机械判据，零语义判断**）：条数上限、字段类型、长度上限、去重、缺 title/缺当事人的丢掉。
  * ★它**不判**"这条够不够好"（那是提示词的事，也是抽取者的事）——只判"形状是否可用"，
  *   与 `sanitizeCanon`/`sanitizeBookFields` 同一治法（净化坏项、如实上报，不静默）。
+ *
+ * ★★★leg197（用户令「把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为
+ *   全部取消了…现在我要全面撤销」）：**"指回书里"那一道闸整条撤掉。**
+ *   旧法（leg139 立、Task 4 收窄成"本次展示的片段"）要求每条根带 `ev:{s,q}`，且 `quote` 必须能在
+ *   自己的 `ev.q` 里逐字找到、`ev.q` 必须在本次展示的片段里——**对不上就丢这条根**。
+ *   现在：`verifyQuote` 照跑，**结果只记进 `warnings`（如实报"对不上"），根一律收下**。
+ *   留下的判据只有形状：非对象 · 缺 `title` · 标题重复 · **缺当事人（`parties` 空）** · 每块条数上限。
+ *   ★"缺当事人"不是出处判据，是**落账可行性**：`applySeedRoots` 要拿当事人去账上认实体，
+ *     一个都对不上这条根就起不了（它会如实进 `skippedParties`）。
  * @param {object} raw 模型给的 `{roots:[…]}`（或直接一个数组）
  * @param {object} [opts] `{ max, sourceText, frozen, scope, spanText }`
- *   · `sourceText` = **这一块的书文**（legacy 口径）：给了就核"书里原话真的在书里"
- *     （见 `SEED_QUOTE_MIN_RUN`）；不给 ⇒ 这一条**核不了**，如实记一条警告
- *     （**不许静默降级**：旧调用方零扰动，但"没核"这件事必须看得见）。
- *   · ★★★Task 4（严格道）：`frozen` = 本次允许来源（`freezeAllowedSources` 的产物）——
- *     给了它就**只认**"`ev.s` 在本次展示的来源里 + `ev.q` 在本次展示的片段里 + `quote` 在自己的 `ev.q` 里"，
- *     与属性/关系/设定**同一把尺子**（`verifyQuote`）。`scope`/`spanText` 二者给一个即可
- *     （`scope` 更精确：由调用方按**这一次调用真正展示的行号**算出；`spanText` 由 `verifyQuote` 反推）。
- *     严格道下**不再**退回"块内存在性"：算不出作用域 ⇒ 拒收（missing scope 不许当 legacy）。
+ *   · ★leg197 起 `sourceText` / `frozen` / `scope` / `spanText` **都不再决定收不收**（只为调用方零改动而留）；
+ *     给了 `frozen` 就照旧核一遍并把结果写进 `warnings`（"哪些根的原话对不上"仍然看得见）。
  */
 export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '', frozen = null, scope = null, spanText = null } = {}) {
     const warnings = [];
     const list = Array.isArray(raw?.roots) ? raw.roots : (Array.isArray(raw) ? raw : []);
     if (!list.length) return { roots: [], warnings: ['起根结果为空（无 roots 数组或数组为空）'] };
-    // ★严格道 = 有允许来源；此时出处闸由 `verifyQuote` 全权负责（见下），不再用"块内跑长"那条粗尺。
+    // ★leg197：这里原先分"严格道（有允许来源 ⇒ `verifyQuote`）"与"legacy（⇒ 块内跑长判据）"两支，
+    //   两支都会丢根。现在只剩一件事：**核一遍、记账**（`frozen` 给了才核；没给就什么都不核）。
     const strict = Boolean(frozen && Array.isArray(frozen.list) && frozen.list.length);
-    const bookText = strict ? '' : normalizeForQuoteMatch(sourceText);
-    if (!strict && !bookText) warnings.push('没有书文可比 ⇒ 本次**没有核对**"原话是否真在书里"（调用方要传 sourceText）');
+    void sourceText;
     const seen = new Set();
     const roots = [];
     for (const [i, r] of list.entries()) {
@@ -221,26 +226,13 @@ export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '', 
             .filter(Boolean)
             .slice(0, 3);
         const quote = String(r.quote ?? '').trim().slice(0, 120);
-        if (!quote) { warnings.push(`roots[${i}]: 没有书里原话（quote 空）⇒ 指不回书里，丢`); continue; }
         if (strict) {
-            // ★★★Task 4：**严格道的出处闸**（与关系边/属性值同一条）——编号必须在**本次展示的**来源里，
-            //   原话必须在**本次展示的片段**里；`quote` 还必须能在自己的 `ev.q` 里逐字找到
-            //   （"书里那句话"与被引的那句必须是同一处材料，不许借别处）。
+            // ★★★leg197：**只记账，不丢根**（旧法这里 `continue` 三次：缺 ev/编号对不上、原话不在所引片段里、
+            //   `quote` 不在自己的 `ev.q` 里）。诊断仍看得见"哪条的原话对不上"。
             const ev = (r.ev && typeof r.ev === 'object' && !Array.isArray(r.ev)) ? r.ev : null;
             const v = verifyQuote(frozen, { ev, scope: scope || null, spanText: spanText ?? null, cls: 'root', subject: title });
-            if (!v.ok) { warnings.push(`roots[${i}]: ${v.why} ⇒ 丢（严格道：起根也要来源编号 + 原话）`); continue; }
-            if (!presenceIn(v.quote, quote)) {
-                warnings.push(`roots[${i}]: "书里那句话"不在所引原话里（${v.ref}）⇒ 丢`);
-                continue;
-            }
-        } else if (bookText) {
-            // ★★★本笔新立：**"指回书里"必须真的核**（此前只判"非空" ⇒ 模型写什么句子都算数）
-            const run = longestBookRun(quote, sourceText);
-            const need = Math.min(normalizeForQuoteMatch(quote).length, SEED_QUOTE_MIN_RUN);
-            if (run < need) {
-                warnings.push(`roots[${i}]: "书里原话"在书文里最长只对得上 ${run} 个字（要 ≥ ${need}）⇒ 指不回书里，丢`);
-                continue;
-            }
+            if (!v.ok) warnings.push(`roots[${i}]（${title}）：出处核不过——${v.why}（★leg197：**照收**，只记这一条）`);
+            else if (quote && !presenceIn(v.quote, quote)) warnings.push(`roots[${i}]（${title}）："书里那句话"不在所引原话里（${v.ref}）（★leg197：**照收**）`);
         }
         if (!parties.length) { warnings.push(`roots[${i}]: 没有当事人（parties 空）⇒ 没人办的事起不了根，丢`); continue; }
         seen.add(title);

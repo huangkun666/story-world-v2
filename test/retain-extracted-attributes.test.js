@@ -124,7 +124,7 @@ for (const [first, second] of [['1','1.5'],['1','-1'],['T1','T1.5'],['1','+1'],[
 
 for (const key of ['bookEntities', 'entities']) {
     for (const linked of [false, true]) {
-        test(key + ' 所属描述保留，结构关系必须有出处：' + linked, () => {
+        test(key + ' 所属描述保留，结构关系不再要求出处：' + linked + '（★leg197：出处不再丢，照收）', () => {
             const q = linked ? '甲是乙的散修。' : '甲是散修。';
             const src = q + '乙是门派。';
             const proof = { strict: true, frozen: freezeAllowedSources([{ sourceId:'world', title:'世界', text:src }]), records:[] };
@@ -134,12 +134,14 @@ for (const key of ['bookEntities', 'entities']) {
             const r = sanitizeCanon(raw, {sourceText:src, evidence:proof});
             const items = key === 'entities' ? r.canon.settings : r.canon.bookEntities;
             assert.equal(items.find(x => x.name === '甲').fields.所属, '乙');
-            assert.equal(items.find(x => x.name === '甲').parent, linked ? '乙' : undefined);
+            // ★leg197：`所属` 升成结构 `parent` 不再要求"乙"出现在所引原话里 ⇒ 两种夹具都留 parent。
+            assert.equal(items.find(x => x.name === '甲').parent, '乙');
             if (key === 'bookEntities') {
                 const w = { entities:[], context:{setting:{frozen:{canon:r.canon}}} };
                 seedBookEntities(w);
                 assert.equal(w.entities.find(x => x.name === '甲').所属, '乙');
-                assert.equal(w.entities.find(x => x.name === '甲').parent, linked ? '乙' : undefined);
+                // ★leg197：种账这一步同样不再因出处核不过而丢 parent。
+                assert.equal(w.entities.find(x => x.name === '甲').parent, '乙');
             }
         });
     }

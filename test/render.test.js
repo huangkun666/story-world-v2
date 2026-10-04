@@ -2572,7 +2572,15 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   （`leg196-map-mobile`）——地图那张浮层从"顶上一条缝"变回"整屏"，玩家直接看得见。
     //   ★`CSS_VERSION` **同批升**（`web/style.css` 真动了：那一张遮罩自己声明宽高 ＋ 手机档 `100dvh`）
     //   ⇒ 下面 `CSS_PIN` 的号与指纹同批换掉。
-    assert.equal(PANEL_BUILD, 'leg196-map-mobile');
+    // ★★★leg197（2026-10-05 第五笔 · **用户令：全面撤销"引用找不到原文就丢"** · 原话「**把抽象时因为引擎
+    //   根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了，之前取消了属性相关的，
+    //   现在我要全面撤销**」）：`PANEL_BUILD` **升**（`leg197-evidence-nodrop`）——玩家直接看得见：
+    //   以前"模型提了、但书里找不到那句原话"的名号/类别/别名/所属/设定项/档位/关系边/开局事件/
+    //   地图地点/查书取值，现在**全都会出现在面板上**（以前它们根本到不了这一步）。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动，仍 `20261005-leg196-map-mobile`）
+    //   ⇒ 下面 `CSS_PIN` 的号与指纹**都不换**；`MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；
+    //     `CACHE_VERSION` **同批升 9 → 10**（抽取的问法与净化口径都变了）。
+    assert.equal(PANEL_BUILD, 'leg197-evidence-nodrop');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2637,7 +2645,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '196', '前置：本笔构建号为 leg196（手机端地图浮层整屏那一笔），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '197', '前置：本笔构建号为 leg197（全面撤销出处丢弃那一笔），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

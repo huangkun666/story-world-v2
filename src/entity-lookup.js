@@ -307,8 +307,10 @@ export async function runBatchLookup({ ssot, transport, bookText, ids = [], fiel
     const applied = applyLookup({ ssot, ids: idList, byName: res.byName, byId: res.byId, sources, tick, fields, rejected: res.rejected || null, rejectedById: res.rejectedById });
     out.stats = applied.stats;
     if (applied.stats.rejected) {
-        // ★Task 4：**第三种结局要看得见**——"模型回了但出处核不过"不许长得像"书里没有"。
-        warns.push(`${applied.stats.rejected} 条字段的出处核不过（已拒收、不落账；不算「书未明述」，下轮可重试）`);
+        // ★Task 4：**第三种结局要看得见**——"模型回了、但这一栏不收"不许长得像"书里没有"。
+        // ★★★leg197：出处核不过**不再是**这一支的来路（那种字段现在照收，只记 `unverified` 诊断）⇒
+        //   这里剩下的唯一来路是**同名多值冲突**（同一名号的几个叫法给出了互相矛盾的字段值）。
+        warns.push(`${applied.stats.rejected} 条字段没收下（同名号的几个叫法给出了互相矛盾的字段值；不算「书未明述」，下轮可重试）`);
     }
     if (warns.length) out.warning = warns.join('；');
     // 查书之后再跑一遍位置继承：本批查回来的"位置"若没能归一化进集，结构推断可以补上（只填空位）
@@ -334,8 +336,9 @@ export function buildLookupPrompt(world, targets, fields = ENTITY_LOOKUP_FIELDS,
         // ★Task 4：严格道——形状与引用纪律（与 `buildAttrsOnlyPrompt` 同一口径）。
         lines.push(
             '★★**每一条字段都要带 `ev`（出处）**：`ev.s` = 该名号下面「来源清单」里的编号，`ev.q` = 该编号来源里**逐字照抄**的那句原文；',
-            '  **字段值必须能在自己的 `ev.q` 里逐字找到**——找不到的字段**不要写**（引擎逐字核，核不过的一律不收）。',
-            '  编号只许引**该名号自己那几条**（每个名号下面各有一份清单）：引别的名号下面的编号、或引本次没给出的编号，都会被拒收。',
+            '  **字段值必须能在自己的 `ev.q` 里逐字找到**——找不到的字段**不要写**。',
+            '  ★leg197：引擎会逐字核一遍并把结果记进诊断，**核不过不再丢掉这一栏**——但"抄不出原话的就别写"这条纪律照旧（它是质量的抓手）。',
+            '  编号只许引**该名号自己那几条**（每个名号下面各有一份清单）：引别的名号下面的编号、或引本次没给出的编号，都会被记进诊断。',
             `输出严格 JSON：{ "<名号>": { ${fields.map((f) => `"${f}": {"文":"原文原话","ev":{"s":"S1","q":"原文依据"}}`).join(', ')} } }`,
         );
     } else {
@@ -433,9 +436,9 @@ export async function resolveBookSource(bookText, entity) {
  * ★★★Task 4：把一批 target 的条目冻成"**每个名号自己的一份来源清单**"，并算出各自的作用域。
  *
  * 为什么每个名号单独一份（而不是全书一份大清单）：查书这条路要能回答"这条字段值**凭哪一句**入账"，
- *   而模型最容易犯的错正是**拿别人的出处**（复审接口②：`{'陆青':{'实力':…}}` 这种无出处回文照落账；
- *   而 `甲的实力` 出现在乙的条目里时，模型会拿乙的编号去证明甲）。⇒ 每个名号的编号只覆盖它自己的条目，
- *   引擎核的时候也只认它自己的片段：**引别的名号的编号 = 本次没展示过 = 拒收**。
+ *   而模型最容易犯的错正是**拿别人的出处**。⇒ 每个名号的编号只覆盖它自己的条目，
+ *   引擎核的时候也只认它自己的片段。★leg197：**"引错编号"现在只记诊断**（`unverified`），
+ *   不再丢掉那一栏——但"每个名号只许引自己那几条"这条纪律照旧写给模型（见 `buildLookupPrompt`）。
  *
  * 作用域用 `scopeForRows`（与抽取/起根同一把尺子）：材料 = 所有条目按顺序 `\n` 相接，
  *   行号区间按条目累加 ⇒ 每个名号拿到的片段**恰好是它自己那几条的正文**。
@@ -474,17 +477,21 @@ function freezeLookupTargets(targets) {
 }
 
 /**
- * ★★★Task 4（复审接口②）：**严格道的回文核对**——别名/ID/正名先解析到 target，再逐字段核出处。
+ * ★★★Task 4（复审接口②）：**严格道的回文核对**——别名/ID/正名先解析到 target，再逐字段取回话。
  *
  * 三条口径（缺一条就是"没接上"）：
  *   ① **键解析用全仓唯一那把尺子**（`resolveEntityIdentityWithCanon`：正名优先、别名并集后判唯一）——
  *      模型用**已确认别名**（如 `青衣客`）或 id 回话时，必须能对到目标实体；不在本批/歧义 ⇒ 不收（不猜）。
- *   ② **每条字段要 `ev:{s,q}`**：`s` 必须属于**该名号自己**的来源清单、`q` 必须在该来源的展示文本里、
- *      **字段值必须出现在它自己的 `q` 里**（别人的值在别处出现不算）。
- *   ③ **多个叫法互相矛盾 ⇒ 拒收该字段**（不许"先到先得"——与名册合并同一条纪律）。
+ *   ② **每条字段带 `ev:{s,q}`**：`s` 该属于**该名号自己**的来源清单、`q` 该在该来源的展示文本里、
+ *      **字段值该出现在它自己的 `q` 里**。
+ *      ★★★leg197（用户令：全面撤销"引用找不到原文就丢"）：上面这一整套**只记账、不拦人**——
+ *      核的结果记成 `keep` / `unverified`（诊断面看得见），**字段值一律收下**。
+ *   ③ **多个叫法互相矛盾 ⇒ 不收该字段**（不许"先到先得"——与名册合并同一条纪律）。
+ *      ★这一条**照旧拦**：它不是出处判据，是"两个叫法给了两个不同的值"。
  *
  * @returns {{byName:object, rejected:object}} `byName` = 旧形状（`{名号:{字段:原话}}`）；
- *   `rejected` = `{名号:{字段:原因}}`（**不是 pending、不是 absent**——是"有回话但出处核不过"）。
+ *   `rejected` = `{名号:{字段:原因}}`（**不是 pending、不是 absent**——是"有回话但这一栏没收"；
+ *   ★leg197 起来路只剩"同名多值冲突"）。
  */
 function verifyLookupReplies(world, targets, obj, fields, onEvidence) {
     const entities = world?.entities || [];
@@ -524,19 +531,22 @@ function verifyLookupReplies(world, targets, obj, fields, onEvidence) {
                 note(evidenceRecord({ cls: 'lookup', subject: `${t.name}·${f}`, action: 'drop', why: rej[f], quote: distinct[0] }));
                 continue;
             }
-            let why = '出处核不过';
-            for (const c of claims) {
-                const v = verifyQuote(t.frozen, { ev: c.ev, scope: t.scope, cls: 'lookup', subject: `${t.name}·${f}` });
-                if (!v.ok) { why = v.why; continue; }
-                if (!presenceIn(v.quote, c.text)) { why = '字段值不在所引原话里（别处的原话不算）'; continue; }
-                kept[f] = c.text;
+            // ★★★leg197（用户令「…因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动…现在我要全面撤销」）：
+            //   **出处核验不再决定收不收**——取第一条回话作为该字段的值，核的结果只进诊断
+            //   （`keep` = 核过 / `unverified` = 给了出处但对不上，★照收）。
+            //   ★这一格留下的唯一一条"不收"是**同名多值冲突**（上面 `distinct.length > 1` 那一支）：
+            //     它不是出处判据，是"两个叫法给出了互相矛盾的字段值 ⇒ 不采先到者"。
+            const c = claims[0];
+            const v = verifyQuote(t.frozen, { ev: c.ev, scope: t.scope, cls: 'lookup', subject: `${t.name}·${f}` });
+            kept[f] = c.text;
+            if (v.ok && presenceIn(v.quote, c.text)) {
                 note(evidenceRecord({ cls: 'lookup', subject: `${t.name}·${f}`, action: 'keep', ref: v.ref, quote: c.text }));
-                why = null;
-                break;
-            }
-            if (!(f in kept)) {
-                rej[f] = why;
-                note(evidenceRecord({ cls: 'lookup', subject: `${t.name}·${f}`, action: 'drop', why, ref: claims[0].ev?.s ?? null, quote: claims[0].text }));
+            } else {
+                note(evidenceRecord({
+                    cls: 'lookup', subject: `${t.name}·${f}`, action: 'unverified',
+                    why: v.ok ? '字段值不在所引原话里（别处的原话不算）' : v.why,
+                    ref: v.ref ?? (c.ev?.s ?? null), quote: c.text,
+                }));
             }
         }
         byId[t.id] = Object.keys(kept).length ? kept : null;

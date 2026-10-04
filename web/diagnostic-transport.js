@@ -56,7 +56,10 @@ export function diagSettingOutcome(result) {
 export function diagEvidence(rec) {
     if (!rec || typeof rec !== 'object') return;
     const withQuote = details();
-    diagnostics.record('抽取依据', rec.action === 'drop' ? 'warn' : 'info', String(rec.why || rec.action || '记录'), {
+    // ★★★leg197：`unverified`（给了出处、对不上，★**照收**）与 `drop`（非出处原因的丢弃）都记 `warn`——
+    //   它们是维护者该看见的两类事；`keep`/`pending` 记 `info`。
+    const level = (rec.action === 'drop' || rec.action === 'unverified') ? 'warn' : 'info';
+    diagnostics.record('抽取依据', level, String(rec.why || rec.action || '记录'), {
         class: rec.class, subject: rec.subject, action: rec.action, ref: rec.ref,
         ...(withQuote ? { quote: rec.quote } : {}),
     });

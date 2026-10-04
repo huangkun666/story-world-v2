@@ -16,8 +16,8 @@
 //        **不按出处分成两张表、也不在屏幕上分两组**（"一条信息只许住在它该住的那一格"）；
 //     ② **边上不挂出处章**：落账的边**没有 `cause`**（书里就是这么写的，来路是"书随时可查"）；
 //        **也不给书里的边任何特殊权威** —— 权威能被玩的过程推翻，那正是模拟本身；
-//     ③ **防编造的牙齿长在"抽取那一刻"**，不长在账本里：每条边必须附**书里那句原话**，
-//        引擎逐字核过（与起根同一把尺子）**核完即弃**。
+//     ③ **防编造的牙齿长在"抽取那一刻"**，不长在账本里：每条边仍要求附**书里那句原话**，
+//        引擎逐字核过（与起根同一把尺子）**核完即弃**——★leg197：核不过**只记诊断、不再丢边**（用户令「全面撤销出处丢弃」）。
 //
 // ★★本文件最要紧的一条（**不对称是刻意的，不许"顺手抹平"**）：
 //   **账上那张表允许没有 `cause` 的边；而模型在玩的过程里提议新边时，仍然必须带因。**
@@ -60,25 +60,25 @@ const world = () => ({
 // ① 抽取那一刻的闸：`sanitizeBookRelations`（纯函数，真跑）
 // ══════════════════════════════════════════════════════════════════════════════
 
-test('leg141·㉓：★出处闸——原话真在书文里的收下；编的丢掉，且**必须留痕**（不许静默）', () => {
+test('leg141·㉓：★出处核不过的边**照收**（★leg197：出处不再丢，照收）；留下的三道形状/名册判据照旧拦', () => {
     const roster = new Set(['玄天宗', '凌霄', '苏问', '墨渊']);
     const r = sanitizeBookRelations([
         { from: '凌霄', to: '玄天宗', type: '掌门', quote: '凌霄乃玄天宗掌门。' },          // ✔ 逐字在书里
         { from: '苏问', to: '凌霄', type: '义结金兰', quote: '苏问与凌霄义结金兰' },          // ✔ 逐字在书里
         { from: '凌霄', to: '苏问', type: '师徒', quote: '凌霄收苏问为徒，授以剑法。' },       // ✘ 书里没这句（编的）
     ], { sourceText: BOOK, rosterNames: roster });
-    assert.equal(r.kept.length, 2, `★只有指得回书里的那两条该收下（实收 ${r.kept.length}）`);
-    assert.deepEqual(r.kept.map((x) => `${x.from}→${x.to}`), ['凌霄→玄天宗', '苏问→凌霄']);
+    // ★leg197：出处那一道闸撤了 ⇒ 原话对不上书文**不再丢边**，三条一律收下（旧法只收 2 条）
+    assert.equal(r.kept.length, 3, `★leg197：编的那条也照收（旧法只收指得回书里的那两条；实收 ${r.kept.length}）`);
+    assert.deepEqual(r.kept.map((x) => `${x.from}→${x.to}`), ['凌霄→玄天宗', '苏问→凌霄', '凌霄→苏问']);
     assert.deepEqual(r.kept[0], { from: '凌霄', to: '玄天宗', type: '掌门' },
         '★★复查第二轮（finding ⑦）：新账关系边只留语义端点/类型——原话是过程凭证，核完即弃，不落 canon');
-    // ★编的那条必须**有明细**地被丢掉（本仓"不许静默"）
-    assert.equal(r.dropped.length, 1, '★编的那条要丢掉');
-    assert.match(r.dropped[0].edge, /凌霄 → 苏问/, '明细要认得出是哪一条');
-    assert.match(r.dropped[0].why, /对不上|疑似编造/, '理由要说清是"原话对不上书文"');
-    assert.ok(r.warnings.some((w) => w.includes('没通过出处闸')), '★丢弃要出声（账面上少了东西却没有任何提示 = 病）');
+    // ★leg197：'对不上'不再进 `dropped`（它现在只装"形状不全 / 自指 / 端点不在名册"三类）；
+    //   "哪条的原话对不上"这条读数挪进了抽取诊断面（`evidence.summary.unverified`——见 ㉜ 那条判据）
+    assert.equal(r.dropped.length, 0, '★leg197：出处对不上 ⇒ 一条都不丢（旧法这里丢 1 条）');
+    assert.equal(r.warnings.length, 0, '★leg197：一条都没丢 ⇒ 也不再出"没通过出处闸"那句丢弃警告（不许留旧口径的假警告）');
 });
 
-test('leg141·㉔：★另外三道机械判据——缺一端 / 自己跟自己 / 端点不在名册，三条都丢', () => {
+test('leg141·㉔：★留下的三道机械判据——缺一端 / 自己跟自己 / 端点不在名册，三条都丢；**没带原话的照收**（★leg197：出处不再丢）', () => {
     const roster = new Set(['玄天宗', '凌霄', '苏问']);
     const r = sanitizeBookRelations([
         { from: '凌霄', to: '', type: '掌门', quote: '凌霄乃玄天宗掌门。' },                       // 缺 to
@@ -86,17 +86,26 @@ test('leg141·㉔：★另外三道机械判据——缺一端 / 自己跟自己
         { from: '凌霄', to: '没这个人', type: '掌门', quote: '凌霄乃玄天宗掌门。' },                 // 端点不在名册
         { from: '凌霄', to: '玄天宗', type: '', quote: '凌霄乃玄天宗掌门。' },                      // 缺 type
         { from: '凌霄', to: '玄天宗', type: '掌门', quote: '' },                                  // 没带原话
-        { from: '凌霄', to: '玄天宗', type: '掌门', quote: '凌霄乃玄天宗掌门。' },                   // ✔ 唯一合法的
+        { from: '凌霄', to: '玄天宗', type: '掌门', quote: '凌霄乃玄天宗掌门。' },                   // ✔ 合法
     ], { sourceText: BOOK, rosterNames: roster });
-    assert.equal(r.kept.length, 1, `★六条里只有一条合法（实收 ${r.kept.length}）`);
-    assert.equal(r.dropped.length, 5, '★另外五条全要丢，且各带理由');
+    // ★leg197：第 5、6 条是**同一条边**（同 from/to/type）⇒ 去重只收先到的那条；先到的正是"没带原话"的那条——
+    //   旧法它先被出处闸丢掉，于是"带原话"的第 6 条成了唯一收下的那条（收下条数不变，收下的**是哪条**变了）
+    assert.equal(r.kept.length, 1, `★六条里只有一条落账（实收 ${r.kept.length}）`);
+    assert.equal(r.dropped.length, 4, '★形状不全（2）/ 自指 / 端点不在名册 共四条要丢，且各带理由');
     const whys = r.dropped.map((d) => d.why).join(' | ');
-    for (const frag of ['缺一端', '同一个名号', '不在名册', '没带书里那句原话']) {
+    for (const frag of ['缺一端', '同一个名号', '不在名册']) {
         assert.ok(whys.includes(frag), `★理由要分得清是哪一种：少了「${frag}」（实际 ${whys}）`);
     }
-    // 没有书文可比 ⇒ **如实记一条警告**（不许静默降级成"全部通过"）
+    // ★leg197：'没带书里那句原话'这条理由整条撤了——它已经不在 `dropped` 的任何一条里
+    assert.ok(!whys.includes('没带书里那句原话'), '★leg197：缺 quote 不再是丢弃理由（出处那一道闸撤了）');
+    // ★leg197：单独喂那条"没带原话"的边 ⇒ 照收（上面 kept 仍是 1 条是"同一条边只收一次"的去重，不是出处闸）
+    const bare = sanitizeBookRelations([{ from: '凌霄', to: '玄天宗', type: '掌门', quote: '' }], { sourceText: BOOK, rosterNames: roster });
+    assert.equal(bare.kept.length, 1, '★leg197：没带原话的边照收（旧法这里丢它）');
+    assert.equal(bare.dropped.length, 0, '★leg197：它不再进 `dropped`');
+    // ★leg197：没给书文 ⇒ 一个字都不核（旧法那句"这次没核"的警告随出处闸一起撤）——留下的只有形状与名册判据
     const noSrc = sanitizeBookRelations([{ from: '凌霄', to: '玄天宗', type: '掌门', quote: '随便一句什么' }], { sourceText: '' });
-    assert.ok(noSrc.warnings.some((w) => w.includes('没有核对')), '★没书文可比 ⇒ 必须如实说"这次没核"');
+    assert.equal(noSrc.kept.length, 1, '★leg197：没有书文可比也照收（出处不是收不收的判据）');
+    assert.deepEqual(noSrc.warnings, [], '★leg197：`sourceText` 已不再被读 ⇒ 既不核、也不再报"这次没核"');
 });
 
 test('leg141·㉕：★同一对端点用两种说法各交一条 = 合法（不许替它判"这两条矛盾"）', () => {
@@ -238,7 +247,7 @@ test('leg141·㉛：★两条提示词都真有 `relations`，且都写明"每�
     }
 });
 
-test('leg141·㉜：★端到端——抽取真的把书里的边带进 `canon.relations`，编的那条当场被丢掉', async () => {
+test('leg141·㉜：★端到端——书里的边与编的边**都**带进 `canon.relations`（★leg197：出处不再丢，照收），诊断如实记"对不上…照收"', async () => {
     // 假模型：按形状交名册 + 两条关系（一条有书里原话、一条是编的）
     const extract = async () => JSON.stringify({
         bookEntities: [
@@ -255,15 +264,29 @@ test('leg141·㉜：★端到端——抽取真的把书里的边带进 `canon.r
     assert.equal(r.ok, true, `抽取应成功：${(r.errors || []).join('; ')}`);
     const rel = r.setting?.frozen?.canon?.relations;
     assert.ok(Array.isArray(rel), '★`canon.relations` 必须真有（否则落账那一步无料可种）');
-    assert.equal(rel.length, 1, `★编的那条要被出处闸丢掉（实收 ${rel.length}）`);
+    // ★leg197：编的那条**照收**（旧法被出处闸丢掉）——出处核不过不再决定收不收
+    assert.equal(rel.length, 2, `★leg197：两条都收下（旧法只收 1 条；实收 ${rel.length}）`);
     assert.equal(rel[0].from, '凌霄', '★两端是**名号**（落账时才解析成 id）');
     assert.equal(rel[0].type, '掌门');
-    assert.ok((r.errors || []).some((e) => e.includes('书里关系网出处闸')), '★丢弃要出现在 errors 里（如实报数）');
-    // ★★端到端接上：把这份 canon 交给 `seedBookRelations`，账上就该真长出那条边
+    assert.equal(rel[1].type, '杀父之仇', '★leg197：书里没有那句原话的边也在 canon 里（出处不再是闸）');
+    assert.ok((r.errors || []).some((e) => e.includes('书里关系网：收下 2 条边')), '★照收要出现在 errors 里（如实报数）');
+    assert.ok((r.errors || []).some((e) => e.includes('本次未做来源核验')),
+        '★legacy 路如实记"本次没核"（旧法那句"出处闸丢了几条"随闸一起撤）');
+    // ★leg197：诊断那一侧仍看得见"对不上"——同一份固定响应，把「允许来源」交出去（严格道）再跑一遍：
+    //   编的那条**照样收下**，但计数进 `unverified`（不再进 `dropped`）
+    const rs = await extractWorldSetting({
+        sourceText: BOOK, extract, cache: null,
+        allowedSources: [{ sourceId: 'src-1', title: '北境', text: BOOK }],
+    });
+    assert.equal(rs.setting.frozen.canon.relations.length, 2, '★leg197：严格道也照收（核不过 ≠ 丢弃）');
+    assert.ok((rs.evidence?.summary?.unverified ?? 0) >= 1, '★leg197：核不过的记进 `unverified`（诊断仍在，不许静默）');
+    assert.equal(rs.evidence?.summary?.dropped, 0, '★leg197：出处对不上 ⇒ `dropped` 恒 0（丢弃只留给非出处原因）');
+    assert.ok((rs.errors || []).some((e) => e.includes('出处对不上') && e.includes('照收')), '★errors 那行人话也要写"照收"');
+    // ★★端到端接上：把这份 canon 交给 `seedBookRelations`，账上就该真长出**两条**边
     const w = world();
     w.context.setting = r.setting;
     const seeded = seedBookRelations(w);
-    assert.equal(seeded.seeded, 1, '★抽取 → 落账 整条链真的通了（这一条才是"初始化就有关系网"）');
+    assert.equal(seeded.seeded, 2, '★leg197：抽取 → 落账 整条链真的通了，两条都落（旧法只落 1 条）');
     assert.equal(w.relations[0].from, 'e_bk_2', '★名号解析成了实体 id');
 });
 

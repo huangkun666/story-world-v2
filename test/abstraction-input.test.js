@@ -134,15 +134,30 @@ test('防御上限截掉题名文本时，题名不再进入下游和输入指�
     }
 });
 
-test('小书拒绝书外名册并用有效名册校验关系', async () => {
-    const r = await extractWorldSetting({ sourceText: '柳川与岳林一同守城。', extract: async () => JSON.stringify({
+test('小书书外名号**照收**（leg197 撤销名册出处校验），关系仍按名册校验端点（★leg197：出处不再丢，照收）', async () => {
+    const src = '柳川与岳林一同守城。';
+    // ★leg197：关系夹具里那个键扶正成 `type`（引擎认的键）——旧夹具写的是 `kind`，于是那条边当年
+    //   是按"缺关系类型"这条**形状**判据丢的，跟"端点不在名册"从来没关系（这条锁因此没咬到端点判据）。
+    //   本笔补上一条**真的端点不在名册**的边，让"端点要在名册里"这条留着的判据真的被咬一次。
+    const r = await extractWorldSetting({ sourceText: src, extract: async () => JSON.stringify({
         bookEntities: [{ name: '柳川' }, { name: '岳林' }, { name: '书外角色' }],
-        relations: [{ from: '柳川', to: '书外角色', kind: '同盟', quote: '柳川与岳林一同守城。' }],
+        relations: [
+            { from: '柳川', to: '书外角色', type: '同盟', quote: '柳川与岳林一同守城。' },
+            { from: '柳川', to: '从未出现的角色', type: '同盟', quote: '柳川与岳林一同守城。' },
+        ],
     }) });
     assert.equal(r.ok, true);
-    assert.deepEqual(r.setting.frozen.canon.bookEntities.map((e) => e.name), ['柳川', '岳林']);
-    assert.ok(!r.setting.frozen.canon.relations?.length);
-    assert.ok(r.errors.some((s) => s.includes('名号')));
+    // ★leg197：旧断言是 `['柳川', '岳林']`（书外名号被名册出处校验摘掉）——现在**照收**。
+    assert.deepEqual(r.setting.frozen.canon.bookEntities.map((e) => e.name), ['柳川', '岳林', '书外角色'],
+        '★leg197：书文里没有的名号也照收（出处只记账、不拦人）');
+    // 关系那一半没撤：**两端都要在名册里**（这不是出处判据，是"解析不出实体 id 就落不了账"）。
+    //   `书外角色` 现在**在册** ⇒ 指向它的边照收（旧法它因为名字被摘而落不了账）；真不在册的那条仍丢。
+    assert.deepEqual(r.setting.frozen.canon.relations, [{ from: '柳川', to: '书外角色', type: '同盟' }],
+        '★leg197：端点进册 ⇒ 边照收；两端在册这条判据照旧生效');
+    assert.ok(r.errors.some((s) => s.includes('端点不在名册')), `★端点不在名册的边仍要丢且留痕：${r.errors.join('; ')}`);
+    // ★leg197：收下的书外名号**在诊断面仍看得见**（"类别未确认"那一条点了它的名）——收下不等于无声。
+    assert.ok(r.errors.some((s) => s.includes('书外角色') && s.includes('名号')),
+        `★leg197：名号面的诊断照旧可见（书外名号也点了名）：${r.errors.join('; ')}`);
 });
 
 test('初始化入账的原文属性补缺也不能重新读入专用技术条目', () => {

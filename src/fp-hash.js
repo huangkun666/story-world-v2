@@ -24,7 +24,9 @@
 
 export const FNV1A_OFFSET = 0x811c9dc5;
 export const FNV1A_PRIME = 0x01000193;
-export const CACHE_VERSION = 9;        // 增加地理抽取，旧抽取形状缓存失效
+export const CACHE_VERSION = 10;       // ★leg197：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与
+                                     //   净化口径都变了（同一本书抽出来的东西不一样了）⇒ 旧缓存必须失效。
+                                     //   9（leg192）：增加地理抽取，旧抽取形状缓存失效。
                                      // v1→v2（K31）：缓存值由 canon 五件套扩展为 {canon, tension, env}
                                      //   ——同指纹命中需还原 dynamic 初值（张力/环境量），只存五件套会在
                                      //   命中路径丢初值；v2 无持久化缓存，版本抬升零迁移成本。

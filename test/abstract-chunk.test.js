@@ -1,6 +1,8 @@
 // story-world-v2/test/abstract-chunk.test.js
 // 第十八棒：大书分段多调用（v1 范本对齐——设定五件套=头 3 万单发；书名录=全条目分块多调用，
 // 拆半自适应 + 失败降级 + 全书级出处校验）。小书（≤3 万）单发行为零变化（abstract.test 基线）。
+// ★★★leg197：那条**全书级出处校验已整条删除**（`filterByBookEvidence` 连函数带调用一起撤）——
+//   "书里找不到这个名号"不再丢项，只降级成诊断；本文件里与它相关的锁已按新口径改写。
 // leg24 片1（停抄书）：关系轮/属性轮调用点已删——大书调用数 = 1 次五件套 + 每块 1 次；
 // 并新增两条锁：①两轮 prompt 不许过问书里的上级/所在/属性 ②抄书流水线的函数与常量确实退场（删除位锁）。
 
@@ -58,6 +60,8 @@ const EMPTY_CACHE = () => ({ map: new Map(), get(k) { return this.map.get(k) ?? 
 //   而题名面剥出来的名号**可能只出现在题名里、正文一个字都没有**（三国 `张辽正史` 这类条目是禁用的）。
 //   ⇒ 出处判定的口径扩成"src ∪ 题名面"：**题名也是这本书的一部分**（判据不是"我们觉得像名字"，
 //   而是"它被作者当名字用过"——是某条条目的 key）。
+//   ★leg197：那道校验已删 ⇒ 这条锁现在锁的是**并册那一半**（题名面剥出来的名号必须进册）；
+//   "正文里一个字都没有"不再是风险（没有闸了），但"并册不许漏"这条口径一个字没变。
 test('★leg60 题名面：大书路径下模型漏掉的名号也强制并册，且过全书级出处判定', async () => {
     const filler = Array.from({ length: 700 }, (_, i) => `【f${i}】` + '字'.repeat(200)).join('\n');
     const src = `${filler}\n【控制器_A】与名号无关的正文。`;
@@ -81,7 +85,7 @@ test('chunkRows：行级分块按累计字符，超长单行自成一块', () =>
     assert.deepEqual(chunkRows(rows, 100), [rows.join('\n')]);
 });
 
-test('★leg60 大书分块：调用 = **每块 1 次**（五件套与名册同轮一遍抽完），全量覆盖（尾部名号不丢）', async () => {
+test('★leg60 大书分块：调用 = **每块 1 次**（五件套与名册同轮一遍抽完），全量覆盖（尾部名号不丢）（★leg197：出处不再丢，照收）', async () => {
     const src = makeBook(2000); // ≈ 42 万字符（含尾部 字 填充）——超 3 万触发分块
     const lenA = Array.from(src).length;
     assert.ok(lenA > CANON_SRC_CHAR, '前置：确为大书');
@@ -108,7 +112,10 @@ test('★leg60 大书分块：调用 = **每块 1 次**（五件套与名册同�
     assert.equal(new Set(names).size, names.length, '合并去重');
     // 名号顺序 = 书序（k0 在前，k1999 在后）
     assert.equal(names[0], '名号0');
-    assert.equal(names[names.length - 1], '名号1999');
+    // ★leg197：mock 的属性遍恒定交一条书里没有的 `书内无名的世界`——旧法被"全书级出处校验"摘掉，
+    //   现在**照收**，于是它排在书序名号之后（书序名号仍全量覆盖到尾部，只是后面多了一条书外名号）。
+    assert.equal(names[names.length - 1], '书内无名的世界', '★leg197：书里找不到的名字照收（出处只记账、不拦人）');
+    assert.equal(names.indexOf('名号1999'), 1999, '书序名号全量覆盖到尾部（k1999 仍在第 1999 位，尾部名号不丢）');
     // ★leg60 新锁：mock 每块都交**同一条** powerScale/rules ⇒ 块间**并集去重**后必须只剩 1 条（不是 N 条）
     assert.equal(r.setting.frozen.canon.powerScale.length, 1, '块间并集去重（N 块交同一条 ⇒ 最终 1 条，且 note 不丢）');
     assert.equal(r.setting.frozen.canon.powerScale[0].note, '主宰一方。', 'note 随 level 一起留下');
@@ -289,20 +296,39 @@ test('全部失败（五件套坏 + 各块坏）：ok=false 世界不动', async
     assert.ok(r.errors.length >= 1);
 });
 
-test('全书级出处校验：原文没出现的名号弃（纯编造才丢，v1 同款）', async () => {
+test('书里没出现的名号**照收**（leg197 撤销全书级出处校验），只把"出处对不上"记进诊断（★leg197：出处不再丢，照收）', async () => {
     const src = makeBook(500); // ≈ 10.5 万字符 → 分块
+    // ★leg197：夹具不变（每块照旧塞一条编造名号），只把它的出处写成"书里找不到的那句话"——
+    //   旧法这条被"全书级出处校验"摘掉（纯编造才丢）；现在照收，诊断里记 `unverified`。
     const extract = async (prompt) => {
         const header = '———— 设定原文如下 ————';
         const part = prompt.slice(prompt.indexOf(header) + header.length);
         const bookEntities = parseNames(part);
-        bookEntities.push({ name: '凭空出现的尊者', kind: 'character' }); // 编造
+        const q = part.trimStart().split('\n')[0].slice(0, 20);   // 本块第一行的逐字原话：真名号的合法出处
+        for (const b of bookEntities) b.ev = { s: 'S1', q };
+        bookEntities.push({ name: '凭空出现的尊者', kind: 'character', ev: { s: 'S1', q: '这句话书里一个字都没有' } }); // 编造
         return JSON.stringify({ bookEntities, powerScale: [], rules: [], society: '', techOrMagic: '', historyNotes: [], tension: {}, env: {} });
     };
-    const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
+    // ★leg197：走**严格道**（给了允许来源）——出处核验的结果才有诊断可看（legacy 道不产出出处记录）。
+    const records = [];
+    const r = await extractWorldSetting({
+        sourceText: src, extract, cache: null,
+        allowedSources: [{ sourceId: 'book', text: src }],
+        onEvidence: (rec) => records.push(rec),
+    });
     assert.equal(r.ok, true);
     const names = r.setting.frozen.canon.bookEntities.map((b) => b.name);
-    assert.ok(!names.includes('凭空出现的尊者'), '编造名号被弃');
-    assert.ok(r.errors.some((e) => e.includes('出处校验')), '弃置留痕');
+    // ★leg197：旧断言是 `!names.includes('凭空出现的尊者')`（编造名号被弃）——现在**照收**。
+    assert.ok(names.includes('凭空出现的尊者'), '★leg197：编造名号不再被弃——出处只记账、不拦人');
+    const faked = records.filter((rec) => rec.subject === '凭空出现的尊者');
+    assert.ok(faked.length >= 1 && faked.every((rec) => rec.action === 'unverified'),
+        `★leg197：对不上只记 unverified（不丢项）：${JSON.stringify(faked.slice(0, 2))}`);
+    assert.ok(faked.every((rec) => /原话对不上/.test(String(rec.why))), '诊断写明"原话对不上"（这条夹具是"给了出处但找不到"）');
+    // ★尺子还在：书里真有、原话逐字对得上的名号照旧记 `keep`（撤的是闸门，不是核验本身）。
+    assert.ok(records.some((rec) => rec.action === 'keep'), '真名号仍记 keep（核验没有被一起撤掉）');
+    assert.equal(r.evidence.summary.dropped, 0, '★leg197：出处这一路 dropped 恒 0');
+    assert.ok(r.evidence.summary.unverified >= 1, '★leg197：计数搬到了 summary.unverified');
+    assert.ok(r.errors.some((e) => e.includes('出处对不上')), `留痕：人话摘要里有「出处对不上 N（照收）」：${r.errors[r.errors.length - 1]}`);
 });
 
 test('大书缓存命中：零调用（同一本书只抽一次，v1 拍板语义）', async () => {

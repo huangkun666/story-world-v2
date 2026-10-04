@@ -40,7 +40,7 @@ const world = () => ({
     entities: [], weights: {}, agendas: [], events: [], chronicle: [], milestones: [], meta: { tick: 0 },
 });
 
-// ───────────────────────── ① 净化层：紧凑串 / 出处闸 / 同名合表 / 子表 / 维度 ─────────────────────────
+// ───────────── ① 净化层：紧凑串 / 同名合表 / 子表 / 维度（★leg197：出处闸已撤，档位一律照收） ─────────────
 test('★leg62 净化：紧凑档位串 `档|注` 解回 {档,注}（用户令「紧凑序列化」）', () => {
     assert.deepEqual(parseScaleTier('甲级|最高一档'), { 档: '甲级', 注: '最高一档' });
     assert.deepEqual(parseScaleTier('甲级'), { 档: '甲级', 注: '' }, '没有分隔符 ⇒ 只有档位名，注留空');
@@ -52,7 +52,7 @@ test('★leg62 净化：紧凑档位串 `档|注` 解回 {档,注}（用户令�
     assert.deepEqual(parseScaleTier({ 档: '甲级', 注: '最高一档' }), { 档: '甲级', 注: '最高一档' });
 });
 
-test('★leg62 净化：档位名过**出处闸**（原文找不到即丢并留痕）；**表名不过**（允许描述性标题）', () => {
+test('★leg62 净化：档位名**不再过出处闸**（原文找不到也照收，★leg197：出处不再丢）；表名本来就不过（允许描述性标题）', () => {
     const src = '甲级 最强。乙级 次强。';
     const errors = [];
     const out = sanitizeScales([
@@ -60,8 +60,16 @@ test('★leg62 净化：档位名过**出处闸**（原文找不到即丢并留�
         { 名: '自造概念表名', 用途: '分级', 档位: ['甲级|最强', '乙级|次强', '丙级|编的（原文没有）'] },
     ], { sourceText: src }, errors);
     assert.equal(out.length, 1, '表名是描述性标题 ⇒ 收下');
-    assert.deepEqual(out[0].档位.map((x) => x.档), ['甲级', '乙级'], '★原文里查得到的档位留下、编的丢掉');
-    assert.ok(errors.some((e) => /丙级/.test(e) && /原文查不到/.test(e)), '★丢掉的不许静默（留痕）');
+    // ★leg197：档位那一层出处闸整条撤了 ⇒ 原文里查不到的"丙级"也照收（旧法丢它、并留一条"原文查不到"）
+    assert.deepEqual(out[0].档位.map((x) => x.档), ['甲级', '乙级', '丙级'], '★leg197：三条档位全收（出处不再是收不收的判据）');
+    assert.equal(errors.some((e) => /丙级/.test(e)), false, '★leg197：不再有"丙级 原文查不到"那条留痕（出处闸撤了，留痕一并撤）');
+    // ★leg197：`sourceText` 已不再被读——同一份输入、空原文 ⇒ 产出逐字相同（出处那一层真的撤了，不是"换了判据"）
+    const errorsB = [];
+    const outB = sanitizeScales([
+        { 名: '自造概念表名', 用途: '分级', 档位: ['甲级|最强', '乙级|次强', '丙级|编的（原文没有）'] },
+    ], { sourceText: '' }, errorsB);
+    assert.deepEqual(outB, out, '★leg197：空原文得到同一张表（`sourceText` 不再参与净化）');
+    assert.deepEqual(errorsB, [], '★leg197：空原文也不出任何出处留痕');
 });
 
 test('★leg62 净化：**同名表跨项合并**（同一把尺分几处写，不许拆成两张）', () => {

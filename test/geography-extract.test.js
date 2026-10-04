@@ -9,16 +9,22 @@ const evidence = { frozen, scope: scopeForText(frozen, text), records: [] };
 const ev = { s: 'S1', q: text };
 const raw = () => ({ places: [{ key: 'a', name: 'Alpha', ev }, { key: 'b', name: 'Beta', aliases: ['B'], ev }], links: [{ from: 'b', to: 'a', type: 'within', ev }] });
 
-test('geography checks source and scope, strips proof, rejects only bad proposals', () => {
+test('geography checks source and scope, strips proof, keeps citation failures and still rejects bad shapes（★leg197：出处不再丢，照收）', () => {
   assert.equal(typeof api.sanitizeGeography, 'function');
   const input = raw(); input.places.push({key: 'bad', name: 'Invented', ev: { s: 'S2', q: text }});
   input.links.push({from:'a',to:'bad',type:'passage',ev});
   const result = api.sanitizeGeography(input, {sourceText:text,evidence});
-  assert.equal(result.geography.places.length,2); assert.equal(result.geography.links.length,1);
-  assert.ok(result.dropped.length); assert.ok(!JSON.stringify(result.geography).includes('"ev"'));
+  // ★leg197：`S2` 不在本次用料里也不再丢这个地点/这条边——出处核不过只记诊断，形状合法的照收。
+  assert.equal(result.geography.places.length,3); assert.equal(result.geography.links.length,2);
+  assert.equal(result.dropped.length,0); assert.ok(result.warnings.some(w=>/出处核不过/.test(w)));
+  assert.ok(!JSON.stringify(result.geography).includes('"ev"'));
   assert.ok(!JSON.stringify(result.geography).includes(text));
-  assert.equal(api.sanitizeGeography(raw(),{sourceText:text}).geography.places.length,0);
-  assert.equal(api.sanitizeGeography(raw(),{sourceText:'Alpha',evidence:{frozen}}).geography.places.length,0);
+  // ★leg197：没给证据面 / 作用域对不上 ⇒ 同样只记账照收（旧法两处都返回 0 个地点）。
+  assert.equal(api.sanitizeGeography(raw(),{sourceText:text}).geography.places.length,2);
+  assert.equal(api.sanitizeGeography(raw(),{sourceText:'Alpha',evidence:{frozen}}).geography.places.length,2);
+  // 形状类仍照旧拦（它不是"找不到原文"）：缺 name 的地点一律不收。
+  const badShape = api.sanitizeGeography({places:[{key:'x'}],links:[]},{sourceText:text,evidence});
+  assert.equal(badShape.geography.places.length,0); assert.ok(badShape.dropped.length);
 });
 
 test('merge remaps chunk ids and removes every edge inside a containment cycle', () => {
@@ -50,13 +56,16 @@ test('canon and real world extraction carry optional geography without added cal
   assert.equal(Object.hasOwn(sanitizeCanon({society:'unchanged'}).canon,'geography'),false);
 });
 
-test('backfill uses string transport and refuses empty or unverified output', async () => {
+test('backfill uses string transport, refuses empty output but keeps uncited places（★leg197：出处不再丢，照收）', async () => {
   assert.equal(typeof api.extractGeography,'function');
   const args={sourceText:text,allowedSources:[{id:'book',text}]};
   const result=await api.extractGeography({...args,extract:async()=>JSON.stringify({geography:raw()})});
   assert.equal(result.ok,true);assert.equal(result.calls,1);assert.equal(result.geography.links.length,1);
   assert.equal((await api.extractGeography({...args,extract:async()=>''})).ok,false);
-  assert.equal((await api.extractGeography({...args,extract:async()=>JSON.stringify({geography:{places:[{key:'x',name:'Alpha'}],links:[]}})})).ok,false);
+  // ★leg197：没有出处的那个地名照收（旧法核不过 ⇒ places 为空 ⇒ ok=false），只留一条诊断。
+  const uncited=await api.extractGeography({...args,extract:async()=>JSON.stringify({geography:{places:[{key:'x',name:'Alpha'}],links:[]}})});
+  assert.equal(uncited.ok,true);assert.equal(uncited.geography.places.length,1);
+  assert.ok(uncited.errors.some(e=>/出处核不过/.test(e)));
 });
 
 test('source-confirmed qualifiers distinguish same names across chunks and previous ids', () => {
@@ -75,10 +84,16 @@ test('old complete extraction cache cannot skip map request but fresh optional a
   const second=await extractWorldSetting(args);assert.equal(second.cached,true);assert.equal(calls,1);
 });
 
-test('failed geography does not erase legitimate setting or roster and exceptions cannot leak credentials', async () => {
+test('uncited geography no longer erases legitimate setting or roster, and exceptions cannot leak credentials（★leg197：出处不再丢，照收）', async () => {
   const result=await extractWorldSetting({sourceText:text,allowedSources:[{id:'book',text}],extract:async()=>JSON.stringify({society:{text:'Alpha contains Beta.',ev},bookEntities:[{name:'Alpha',kind:'location',ev}],geography:{places:[{key:'x',name:'secret',ev:{s:'unknown',q:'token-secret'}}],links:[]}})});
   assert.equal(result.ok,true);assert.equal(result.setting.frozen.canon.society,'Alpha contains Beta.');
-  assert.equal(result.setting.frozen.canon.bookEntities.length,1);assert.equal(Object.hasOwn(result.setting.frozen.canon,'geography'),false);
+  assert.equal(result.setting.frozen.canon.bookEntities.length,1);
+  // ★leg197：出处核不过的地点照收（旧法 `Object.hasOwn(canon,'geography')===false`，整份地图被抹掉）。
+  assert.equal(result.setting.frozen.canon.geography.places.length,1);
+  assert.equal(result.setting.frozen.canon.geography.places[0].name,'secret');
+  // 凭证照旧不落账：核不过的那条原话一个字都不许进世界账（诊断面另受门控）。
+  assert.equal(JSON.stringify(result.setting.frozen.canon.geography).includes('"ev"'),false);
+  assert.equal(JSON.stringify(result.setting).includes('token-secret'),false);
   const backfill=await api.extractGeography({sourceText:text,allowedSources:[{id:'book',text}],extract:async()=>{throw new Error('Bearer token-secret');}});
   assert.equal(backfill.ok,false);assert.ok(!JSON.stringify(backfill).includes('token-secret'));
 });
@@ -106,7 +121,7 @@ test('real large-book extraction remaps geography while retaining its baseline c
   assert.equal(geo.places.length,3);assert.equal(geo.links.length,2);
 });
 
-test('checked quotation cannot license invented names, aliases, qualifiers or passage text', () => {
+test('unverified quotation no longer removes names, aliases, qualifiers or passage text——只记诊断（★leg197：出处不再丢，照收）', () => {
   const source='Gate stands within North. North Gate is also called Entrance. Gate leads to North via Tunnel when open.';
   const f=freezeAllowedSources([{id:'source',text:source}]);
   const proof={s:'S1',q:source};
@@ -116,12 +131,18 @@ test('checked quotation cannot license invented names, aliases, qualifiers or pa
     {key:'i',name:'InventedPlace',ev:proof},
   ],links:[{from:'g',to:'n',type:'passage',via:'ImaginaryRoad',condition:'ImaginaryCondition',ev:proof}]};
   const result=api.sanitizeGeography(input,{sourceText:source,evidence:{frozen:f,scope:scopeForText(f,source)}});
-  assert.equal(result.geography.places.length,2);
+  // ★leg197：`literal()`（名称/别名/身份说明/通道名要在所引原话里逐字出现）整条撤了 ⇒ 三个地点全收。
+  assert.equal(result.geography.places.length,3);
   const gate=result.geography.places.find(p=>p.name==='Gate');
-  assert.deepEqual(gate.aliases,['Entrance']);assert.equal(Object.hasOwn(gate,'qualifier'),false);
+  assert.deepEqual(gate.aliases,['Entrance','TotallyInventedAlias']);
+  assert.equal(gate.qualifier,'UnmentionedIdentity');
   assert.equal(result.geography.places.find(p=>p.name==='North').qualifier,'North Gate');
-  assert.deepEqual(Object.keys(result.geography.links[0]).sort(),['from','to','type']);
-  assert.ok(result.dropped.length>=5);
+  // ★leg197：`via`/`condition` 同样不再要求出现在所引原话里。
+  assert.deepEqual(Object.keys(result.geography.links[0]).sort(),['condition','from','to','type','via']);
+  assert.equal(result.geography.links[0].via,'ImaginaryRoad');
+  assert.equal(result.geography.links[0].condition,'ImaginaryCondition');
+  // ★leg197：一条都不因出处被丢（`dropped` 只留给形状类）。
+  assert.equal(result.dropped.length,0);
   const valid=api.sanitizeGeography({...input,links:[{from:'g',to:'n',type:'passage',via:'Tunnel',condition:'when open',ev:proof}]},{sourceText:source,evidence:{frozen:f,scope:scopeForText(f,source)}});
   assert.equal(valid.geography.links[0].via,'Tunnel');assert.equal(valid.geography.links[0].condition,'when open');
 });
