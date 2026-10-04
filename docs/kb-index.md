@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**328 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `3be51136-d7b6c977`（源文件 3be51136 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `864d60c7-d7b6c977`（源文件 864d60c7 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -273,7 +273,7 @@
 | 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
 | 当前值 · web/index.js 行数 | `STATE.md:64` | **3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\n').length`（★**别用 PowerS |
 | 当前值 · CACHE_VERSION | `STATE.md:65` | **`10`**（★leg197 **9 → 10**：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与净化口径都变了，同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效） ｜ 复量：`src/fp-hash.js` |
-| 当前值 · 发布仓 main | `STATE.md:66` | **`395eb9c`** · 构建号 **`leg196-map-mobile`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的 |
+| 当前值 · 发布仓 main | `STATE.md:66` | **`03e641b`** · 构建号 **`leg197-evidence-nodrop`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓 |
 | 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs` |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
 | 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 |
@@ -399,6 +399,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `d6e6d56 story-world-v2 leg197：抽象时"引用找不到原文就丢"整族撤销（出处只记账、不拦人）`
 - `3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）`
 - `e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）`
 - `1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）`
@@ -410,5 +411,4 @@
 - `46158df leg192 map popup: geography facts into the round, map as a popup (local preview)`
 - `81e0ef0 docs: design geography facts and map integration`
 - `b137360 fix: allow new events to omit their location`
-- `a3c20f3 docs: hand off attribute retention and align cache metadata`
 

@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "3be51136-d7b6c977",
+  "fingerprint": "864d60c7-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "3be51136",
+  "sourceFingerprint": "864d60c7",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -283,6 +283,7 @@
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "d6e6d56 story-world-v2 leg197：抽象时\"引用找不到原文就丢\"整族撤销（出处只记账、不拦人）",
       "3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）",
       "e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）",
       "1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）",
@@ -293,8 +294,7 @@
       "f8584f0 leg192: make the three retrieval knobs take effect, and rename them (local preview)",
       "46158df leg192 map popup: geography facts into the round, map as a popup (local preview)",
       "81e0ef0 docs: design geography facts and map integration",
-      "b137360 fix: allow new events to omit their location",
-      "a3c20f3 docs: hand off attribute retention and align cache metadata"
+      "b137360 fix: allow new events to omit their location"
     ]
   },
   "counts": {
@@ -7377,7 +7377,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 66,
-      "where": "**`395eb9c`** · 构建号 **`leg196-map-mobile`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端， ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`03e641b`** · 构建号 **`leg197-evidence-nodrop`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 mai ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",
