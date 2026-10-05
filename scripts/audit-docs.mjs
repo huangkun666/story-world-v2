@@ -64,7 +64,16 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg197-evidence-nodrop';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+const PUBLISHED_BUILD = 'leg199-blockonly';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+//   ★★leg199（2026-10-05）：用户令「**帮我推送更新吧，版本号变成1.1.1**」⇒ 发布仓 main `d5d70e2`
+//     （leg197）一次推到 **`79a91ce`**（构建号 `leg199-blockonly` · 版本号 **1.1.0 → 1.1.1**）：
+//     **leg198 ＋ leg199 两笔一次上线**（拆掉"没标签就拿词表猜"那一族 ＋ 删掉"块外裸标签"那条降级）。
+//     脚本自带核验 **8/8 ✔**（含 6 处逐字节）· 只读终检 `verify-release.mjs` **20/20 ✔**。
+//     ★★**tag/release 这一笔仍没动**（当次问定：只推 main ＋ 升号）——`v1.1.0` 仍指着 `e28be61`
+//       ⇒ 从 release 页下载的人拿到的仍是那一棵；**装仓库地址/走更新的人拿到的是这一版**。
+//     ★这一笔还顺手修了**发布脚本自己的一处真 bug**：`~/.git-credentials` 是**多主机共用**的，
+//       而那天 gitee 那行排到了第一行 ⇒ 原写法取到 11 位 gitee 密钥 ⇒ 401（详见 `publish-release.mjs`
+//       凭证那一段的留档）——**没有这一修，这一版根本推不出去**。
 //   ★★leg197（2026-10-05）：用户令「**改完后真跑一次抽象确认没问题后推送**」⇒ 发布仓 main
 //     `a754834` → **`03e641b`**（构建号 `leg197-evidence-nodrop` · 版本号仍 **`1.1.0`** —— 这一笔改的是
 //     **抽象时的净化口径**，不是发布，没升版本号）。脚本自带核验 **8/8 ✔**（含 6 处逐字节）。
@@ -89,11 +98,14 @@ const PUBLISHED_BUILD = 'leg197-evidence-nodrop';    // ★人核过的"当前�
 //   ★leg154 那一笔的留档（**发布点已前移，但那次撤正的教训照旧管用**）：第一次推 `2e066dc` 是"导出整棵树"
 //     ⇒ 把分支上还没在真机验过的几笔一起带了出去，用户当场点出来（「还没测试的功能放上去干嘛？
 //     要不然我新开分支的意义在哪？」）⇒ 改成"上个发布树 ＋ 只这一处修复"，用 REST 推成 `824abc5`。
-const PUBLISHED_COMMIT_REF = '03e641b9ff77c1ba32e83976a6af43a96367b65a';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）· leg197 那一笔
+const PUBLISHED_COMMIT_REF = '79a91ce0428d0567ef433bcf07161fffaa8b02dd';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）· leg199 那一笔
 // ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
 //   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
 //   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。
 //   ★**别把 `tagCommit` 接回 `PUBLISHED_COMMIT_REF`**——那会让生成物谎报"tag 指着 main 的尖端"。
+//   ★★leg199（2026-10-05）**没发新 tag**：用户当次只点了"推 main ＋ 升号"（推 main / 打 tag / 发 release
+//     是三件事、各要一次明令）⇒ 下面两格照旧是 leg195 那个 release。**版本号已是 `1.1.1`、而最近那个
+//     release 还是 `1.1.0` 那棵**——这是用户当次知情的取舍，**不是漏做**，别"顺手"把它对齐。
 const PUBLISHED_TAG = 'v1.1.0';                  // ★最近那个 release 的 tag（★**正式版**：`prerelease: false`）
 const PUBLISHED_TAG_COMMIT = 'e28be61';          // ★它**真的**指向哪一笔（= leg195 那一版，构建号 `leg194-original-line-gone`；更旧的 `v1.0.1` → `ec5416d`、`v1.0.0` → `778af70`、`v1.0.0-preview.2` → `2a86cfa`、`v1.0.0-preview.1` → `1a54424` 同样留着）
 //   ★本格**必然比远端 tip 落后至多一笔，这是设计使然**：它记的是"哪一笔把这一版送上线"，

@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "d795b26d-d7b6c977",
+  "fingerprint": "eb75ca47-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "d795b26d",
+  "sourceFingerprint": "eb75ca47",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -283,6 +283,7 @@
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "772aea5 story-world-v2 修发布脚本两处：凭据按主机挑行（★别取第一行）",
       "4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）",
       "a0b1ad2 story-world-v2 leg199：删掉\"块外裸标签\"那条降级 ＋ 标签规范第 7 条改值口径",
       "08d955f ﻿story-world-v2 leg198：拆掉\"没标签就拿词表猜\"那一族 ＋ 社区反馈四条",
@@ -293,8 +294,7 @@
       "1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）",
       "0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）",
       "0b2d4ef leg194: drop the raw inject readout line from the params card",
-      "f7104c0 leg193: inject readout row and a char budget that never cuts an event",
-      "be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)"
+      "f7104c0 leg193: inject readout row and a char budget that never cuts an event"
     ]
   },
   "counts": {
@@ -7377,7 +7377,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 66,
-      "where": "**`03e641b`** · 构建号 **`leg197-evidence-nodrop`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 mai ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`79a91ce`** · 构建号 **`leg199-blockonly`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",
@@ -7411,7 +7411,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 67,
-      "where": "**`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
+      "where": "**`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196／leg197／leg198／leg199 四笔都没动它**（1.1.1 这一 ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
       "keys": [
         "当前值",
         "读数",

@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**328 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `d795b26d-d7b6c977`（源文件 d795b26d · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `eb75ca47-d7b6c977`（源文件 eb75ca47 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -273,8 +273,8 @@
 | 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
 | 当前值 · web/index.js 行数 | `STATE.md:64` | **3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 * |
 | 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
-| 当前值 · 发布仓 main | `STATE.md:66` | **`03e641b`** · 构建号 **`leg197-evidence-nodrop`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓 |
-| 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs` |
+| 当前值 · 发布仓 main | `STATE.md:66` | **`79a91ce`** · 构建号 **`leg199-blockonly`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 |
+| 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196／leg197／leg198／leg199 四笔都没动它* |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
 | 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.1`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.0 → 1.1.1；用户 2026-10-05 |
 
@@ -399,6 +399,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `772aea5 story-world-v2 修发布脚本两处：凭据按主机挑行（★别取第一行）`
 - `4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）`
 - `a0b1ad2 story-world-v2 leg199：删掉"块外裸标签"那条降级 ＋ 标签规范第 7 条改值口径`
 - `08d955f ﻿story-world-v2 leg198：拆掉"没标签就拿词表猜"那一族 ＋ 社区反馈四条`
@@ -410,5 +411,4 @@
 - `0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）`
 - `0b2d4ef leg194: drop the raw inject readout line from the params card`
 - `f7104c0 leg193: inject readout row and a char budget that never cuts an event`
-- `be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)`
 
