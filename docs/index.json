@@ -18,12 +18,12 @@
     "webIndexLineLock": 3100
   },
   "docs": {
-    "stateBytes": 33348,
+    "stateBytes": 33350,
     "startHereBytes": 292796,
     "frozenIndexBytes": 326960,
     "ledgerFullBytes": 978029,
     "docsFiles": 271,
-    "docsBytesLf": 7228307,
+    "docsBytesLf": 7228491,
     "docsCountNote": "★不含生成物 docs/index.json 自己（自指计数会让文件永不收敛——见 §⑤ 留档）；★字节按 **LF 归一**数（读进来减掉 CRLF 的字节）：判据锁着它，而检出状态（CRLF/LF）因机而异，不该把\"结账机怎么结账\"算进文档体积（实测差异：leg105 交接 CRLF 12532B vs LF 12387B，正好差它的 145 个 CRLF）。",
     "handoffsRoot": 122,
     "handoffsArchive": 34,
@@ -34,11 +34,11 @@
     "repo": "huangkun666/story-world-v2",
     "sourceBuild": "leg200-prose-lists",
     "published": {
-      "build": "leg199-blockonly",
+      "build": "leg200-prose-lists",
       "tag": "v1.1.0",
       "tagCommit": "e28be61",
-      "commit": "79a91ce0428d0567ef433bcf07161fffaa8b02dd",
-      "commitRef": "79a91ce0428d0567ef433bcf07161fffaa8b02dd",
+      "commit": "bc1e98c65fada6b99293ac93d5885993dfaea4b1",
+      "commitRef": "bc1e98c65fada6b99293ac93d5885993dfaea4b1",
       "date": "2026-10-05"
     },
     "note": "★**\"已发布到哪一版\"这个读数只有 `STATE.md` §1 是人核过的真值**（本文件没有网络，也不知道远端现在是什么）。这里两格分得很清：`sourceBuild` = 源码现在的号（现读，随改随变）；`published` = 人上次核过的发布点（常数，改它 = 一次发布）。远端真值一律用 node scripts/verify-release.mjs 核。"
