@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**328 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `9d755ffa-d7b6c977`（源文件 9d755ffa · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**329 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `5cc9f8ec-d7b6c977`（源文件 5cc9f8ec · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,10 +11,10 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg200b-lists-only` |
+| 构建号 | `leg201-host-save-and-selfcheck` |
 | 提示词号 | `v2-agenda-t1-34` |
 | 版本 | `1.1.1`（ST 扩展） |
-| 规模 | src **68** · web **38** · 判据 **170** · 探针 **76** · 文档 **201** |
+| 规模 | src **68** · web **39** · 判据 **170** · 探针 **76** · 文档 **201** |
 | 最新交接 | `session-handoff-2026-10-02-leg173-panorama-reader.md` |
 
 ## 卡片（按类分组）
@@ -259,7 +259,7 @@
 |---|---|---|
 | 当前值 · 判据 | `STATE.md:50` | **2051 / 2051 · fail 0 · skipped 0 · todo 0**（★leg200b **净 −1**：用户指认"那枚总闸开关是多余的"（「**不写就不剥得了，你还非搞个这个按钮干嘛**」）⇒ * |
 | 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动"正文里认不认标签"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每 |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg200b-lists-only`** ｜ 复量：`src/render-base.js`；★leg200b：**"正文怎么读"那一组只剩两个名单框**——用户指认那枚「剥掉正文里的机器块」开关是**多余的** |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg201-host-save-and-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201（社区第三次报同一条「设定源不可用」之后定的）：玩家可见面变了三处——① **宿 |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
@@ -285,7 +285,7 @@
 | 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:50` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
 | 怎么发布（导出独立根树 → 仓外跑判据冒烟 → 推 → 远端逐字节核） | `scripts/publish-release.mjs:1` | node scripts/publish-release.mjs（推）· node scripts/verify-release.mjs（远端只读终检） |
 
-### 代码地图（107）
+### 代码地图（108）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -367,6 +367,7 @@
 | web/embed-channel.js | `web/embed-channel.js:1` | story-world-v2/web/embed-channel.js |
 | web/embed-runtime.js | `web/embed-runtime.js:1` |  |
 | web/entity-window.js | `web/entity-window.js:1` | story-world-v2/web/entity-window.js |
+| web/env-evidence.js | `web/env-evidence.js:1` | story-world-v2/web/env-evidence.js |
 | web/geography-wiring.js | `web/geography-wiring.js:1` | 用户触发的地图补抽：仍是同一份世界、来源和进度才写回。 |
 | web/hot-ledger.js | `web/hot-ledger.js:1` | story-world-v2/web/hot-ledger.js |
 | web/idb-backend.js | `web/idb-backend.js:1` | story-world-v2/web/idb-backend.js |
@@ -399,6 +400,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `adaa692 story-world-v2 leg200b 发布记账：发布点跟到 3fac63c / leg200b-lists-only（★纯记账笔，产品行为零变化）`
 - `fadf96d story-world-v2 leg200b：撤掉"剥掉正文里的机器块"那枚多余的开关（不写就不剥）`
 - `c3727dc story-world-v2 leg200 发布记账：发布点跟到 bc1e98c / leg200-prose-lists（★纯记账笔，产品行为零变化）`
 - `ef9ac88 story-world-v2 leg200：正文剥块改成玩家那两份名单 ＋ 撤掉"值必须在正文里找得到"那道闸`
@@ -410,5 +412,4 @@
 - `e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）`
 - `d6e6d56 story-world-v2 leg197：抽象时"引用找不到原文就丢"整族撤销（出处只记账、不拦人）`
 - `3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）`
-- `e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）`
 

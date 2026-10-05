@@ -7,6 +7,7 @@ import { composeInitSource } from '../src/init-source.js';
 import { macroNamesFromCtx } from '../src/macros.js';
 import { diagnostics } from '../src/diagnostics.js';
 import { collectWorldInfoEntries, ensureCharacterLoaded, pickCharacter, resetBookCache, captureSourceOwner, sourceOwnerSuperseded, sourceOwnerLoadingAdvanced } from './book-source.js';
+import { gatherEnvFacts } from './env-evidence.js';
 
 export function abstractSelectionFor(ctx) {
     return normalizeAbstractSelection(ctx?.extensionSettings?.story_world_v2?.abstractSelections?.[String(ctx?.chatId || 'default')]);
@@ -17,7 +18,14 @@ export function createPanelTools({ getCtx, getWorld, getSettings, writeSetting, 
     const sourceOwners = new WeakMap();
     /** 每个窗口一份的读取世代：晚到的旧读取不许把旧来源/旧迁移写到新聊天上。 */
     const sourceGenerations = new WeakMap();
-    const summary = () => ({ build, tick: getWorld()?.meta?.tick ?? '未加载', vectorEnabled: getSettings()?.embedEnabled === true,
+    // ★★★leg201：**环境自检并进摘要**（社区第三次报同一条「设定源不可用」之后定的）。
+    //   为什么并这里而不是新开一处（位置是选过的，别搬）：调试页的摘要**自动渲染任意键**，
+    //   而那一页已经有「复制报告」/「下载报告」⇒ 玩家一键就能把这份读数发出来；
+    //   **零新按钮、零新动作**（`web/index.js` 有 `<3100` 行硬锁，加一行就红）；
+    //   也**没有**放回参数页——那一页的自检卡是用户亲口撤掉的（「不要在参数界面出现」）。
+    //   ★放在最前：社区报告最需要的就是"这是什么环境"，让它成为调试页第一眼那几行。
+    const summary = () => ({ ...gatherEnvFacts({ ctx: getCtx(), character: pickCharacter(getCtx()), world: getWorld() }),
+        build, tick: getWorld()?.meta?.tick ?? '未加载', vectorEnabled: getSettings()?.embedEnabled === true,
         ...(getRuntime()?.lastStats?.() || {}), recentFrom: Math.max(0, Number(getWorld()?.meta?.tick || 0) - Number(getWorld()?.context?.setting?.dynamic?.env?.往事轮数 || 50) + 1),
         modules: ['模型', '网络', '注入', '记忆', '状态', '存储', '快照', '抽象来源'], injection: getInjector?.()?._last?.() || '尚未注入' });
 

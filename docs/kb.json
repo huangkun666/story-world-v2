@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "9d755ffa-d7b6c977",
+  "fingerprint": "5cc9f8ec-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "9d755ffa",
+  "sourceFingerprint": "5cc9f8ec",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -241,6 +241,7 @@
     "web/embed-channel.js",
     "web/embed-runtime.js",
     "web/entity-window.js",
+    "web/env-evidence.js",
     "web/geography-wiring.js",
     "web/hot-ledger.js",
     "web/idb-backend.js",
@@ -272,17 +273,18 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg200b-lists-only",
+    "panelBuild": "leg201-host-save-and-selfcheck",
     "mainPromptV": "v2-agenda-t1-34",
     "cssVersion": "20261005-leg200-prose-lists",
     "version": "1.1.1",
     "srcModules": 68,
-    "webModules": 38,
+    "webModules": 39,
     "tests": 170,
     "demos": 76,
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "adaa692 story-world-v2 leg200b 发布记账：发布点跟到 3fac63c / leg200b-lists-only（★纯记账笔，产品行为零变化）",
       "fadf96d story-world-v2 leg200b：撤掉\"剥掉正文里的机器块\"那枚多余的开关（不写就不剥）",
       "c3727dc story-world-v2 leg200 发布记账：发布点跟到 bc1e98c / leg200-prose-lists（★纯记账笔，产品行为零变化）",
       "ef9ac88 story-world-v2 leg200：正文剥块改成玩家那两份名单 ＋ 撤掉\"值必须在正文里找得到\"那道闸",
@@ -293,12 +295,11 @@
       "08d955f ﻿story-world-v2 leg198：拆掉\"没标签就拿词表猜\"那一族 ＋ 社区反馈四条",
       "e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）",
       "d6e6d56 story-world-v2 leg197：抽象时\"引用找不到原文就丢\"整族撤销（出处只记账、不拦人）",
-      "3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）",
-      "e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）"
+      "3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）"
     ]
   },
   "counts": {
-    "cards": 328,
+    "cards": 329,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
@@ -309,7 +310,7 @@
       "索引": 2,
       "当前值": 20,
       "怎么跑": 2,
-      "代码地图": 107
+      "代码地图": 108
     }
   },
   "cards": [
@@ -6901,7 +6902,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg200b-lists-only`** ｜ 复量：`src/render-base.js`；★leg200b：**\"正文怎么读\"那一组只剩两个名单框**——用户指认那枚「剥掉正文里的机器块」开关是**多余的**",
+      "where": "**`leg201-host-save-and-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201（社区第三次报同一条「设定源不可用」之后定的）：玩家可见面变了三处——① **宿主原话上状态条**（落盘",
       "keys": [
         "当前值",
         "读数",
@@ -8726,6 +8727,21 @@
         "web",
         "entity-window",
         "entity-window.js"
+      ]
+    },
+    {
+      "id": "file#web/env-evidence.js",
+      "title": "web/env-evidence.js",
+      "kind": "代码地图",
+      "src": "web/env-evidence.js",
+      "line": 1,
+      "where": "story-world-v2/web/env-evidence.js",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "env-evidence",
+        "env-evidence.js"
       ]
     },
     {

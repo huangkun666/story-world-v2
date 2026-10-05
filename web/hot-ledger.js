@@ -147,8 +147,42 @@ export function sw2ExplicitChatName() {
         return typeof id === 'string' && id.trim() ? id.trim() : null;
     } catch (_) { return null; }
 }
-/** 调一次 ST 的保存（显式带文件名）；返回 { ms, fast } —— `fast` 为真 = 疑似静默跳过。 */
+/**
+ * ★★★leg197（2026-10-05 · TT 实机：装上插件就弹「无法保存聊天」）：**宿主是不是 TauriTavern**。
+ *
+ * 为什么要有这一格（取证链，不是猜的）：
+ *   · TauriTavern（TT）= 把酒馆**后端用 Rust 重写**的第三方宿主，前端同步上游 1.18.0，
+ *     **保存那一层整个换过**（Tauri IPC 分帧；Android 用更小的 base64 帧）。
+ *   · 实机形状：**装上本插件就开始弹「无法保存聊天」**，停用即恢复；空聊天（没有世界）不弹，
+ *     **开始新世界生成后就弹**；回到有世界的卡继续弹。
+ *   · 本机复现 + 取 TT 的 dev bundle 后的两条硬读数：**后端日志里一条保存错误都没有**
+ *     （唯一那条 WARN 是扩展安装撞车），而聊天文件只有 **46 KB**
+ *     ⇒ 既不是"数据太大"，也不是 Rust 侧保存失败 —— 失败在 TT **前端**的 `runChatSave()`
+ *     （TT 自己的口径：「integrity 弹窗与强制完整保存恢复都留在同一次队列任务中，**其他失败提示并抛出**」）。
+ *   · 机理：本插件**只改 `chat_metadata`**，本该走 TT 那条轻路 `saveMetadata()`
+ *     （TT 文档：「只保存 header 的 `chat_metadata`…**不遍历或传输消息**」），
+ *     却在走 `saveChat()`（整份聊天的 commit session：逐记录序列化 + 分帧 IPC）。
+ *   ⇒ 定稿：**TT 上改用 `saveMetadata()`**；拿不到它才退回 `saveChat()`。
+ *   ★**官方 ST 一个字不动**——那条路已被实机验证过（见上面 ① ② 两条治法），别顺手"统一"掉。
+ *   ★认宿主的方式可靠：TT 文档写明前端经 `window.__TAURITAVERN__` 平台 ABI 与 Rust 后端通信
+ *     （`src/tauri/main/bootstrap.js` 安装），是它对外承诺的稳定符号，不是内部实现细节。
+ */
+function sw2HostIsTauriTavern() {
+    try { return typeof window !== 'undefined' && !!window.__TAURITAVERN__; } catch (_) { return false; }
+}
+
+/**
+ * 调一次宿主保存（显式带文件名）；返回 `{ ms, fast }` —— `fast` 为真 = 疑似静默跳过。
+ * ★TT 两支不同：①走 **header-only** 的 `saveMetadata()`；②**不做"太快"判定**——
+ *   那道闸是按官方 ST 的 fetch 往返校准的（10ms），TT 走 Tauri IPC，返回速度根本不是一回事
+ *   （在 TT 上它会**恒判失败** ⇒ 白跑满三次重试环，正是"每次落账都报一次错"的放大器）。
+ */
 async function sw2CallSaveChat(ctx) {
+    if (sw2HostIsTauriTavern() && typeof ctx.saveMetadata === 'function') {
+        const t0 = Date.now();
+        await ctx.saveMetadata();
+        return { ms: Date.now() - t0, fast: false };
+    }
     const chatName = sw2ExplicitChatName();
     const t0 = Date.now();
     await (chatName ? ctx.saveChat({ chatName }) : ctx.saveChat());
@@ -200,7 +234,10 @@ function reassertWrittenMetaIfClobbered(want) {
 export async function flushHotMeta() {
     const ctx = freshCtx();
     if (!ctx) return { ok: false, reason: 'no-ctx' };
-    if (typeof ctx.saveChat !== 'function') return { ok: false, reason: 'no-save-chat' };
+    // ★leg197：TT 上我们走 `saveMetadata()`（header-only）⇒ 有它也算"有可用的保存入口"。
+    if (typeof ctx.saveChat !== 'function' && typeof ctx.saveMetadata !== 'function') {
+        return { ok: false, reason: 'no-save-chat' };
+    }
     if (sw2HotMetaFlushing) {
         // 在飞：不假装成功、也不假装失败——排一次补写，如实回报"排队中"
         // ★要不要补写的判据 = **在飞的那次保存有没有带上最新的写**（`sw2HotMetaFlushedCurrent`）：
@@ -225,6 +262,12 @@ export async function flushHotMeta() {
     sw2HotMetaFlushing = true;
     sw2HotMetaFlushedCurrent = false;   // 这一次保存**还没**证明带上最新写（成功才置真）
     let lastErr = null;
+    // ★★★leg197（真缺陷，不是脚手架）：**宿主报的那句话必须带出去**。
+    //   原版把 `err.message` 只打进 console，然后压成一个四值枚举（`timeout/skipped/throw/replaced`）
+    //   ⇒ **在没有控制台的宿主上（手机、Tauri 原生应用），这个错就永远查不出来**——
+    //   而"状态条必须说清失败在哪一步"正是本模块自己立的规矩。
+    //   ⇒ 枚举照旧（`flushOutcomeText` 按它分派人话），原文另挂一格 `detail`，一路带到状态条。
+    let lastDetail = null;
     // ★冻结本次落盘的基线（见 `reassertWrittenMetaIfClobbered` 的 `want` 说明）
     const want = { fp: sw2HotMetaWrittenFp, meta: sw2HotMetaWrittenMeta };
     try {
@@ -251,7 +294,13 @@ export async function flushHotMeta() {
             } catch (err) {
                 const reason = String(err?.message || err);
                 lastErr = /未返回/.test(reason) ? 'timeout' : /静默跳过/.test(reason) ? 'skipped' : 'throw';
+                lastDetail = reason;   // ★leg197：原文带出去（见上面 `lastDetail` 那段）
                 console.warn('[story-world-v2] 热账落盘未确认', reason);
+                // ★★★leg197：**TT 上不重试**。重试环本来是给"官方 ST 静默跳过"用的（那才是需要多试几次的
+                //   情形）；TT 的失败是**响的**（它自己弹提示并抛出）⇒ 重试只是把**一次**报错变成**三次**弹窗，
+                //   而玩家能做的补救动作一模一样。★"账本被别的副本覆盖"那一支（下面的 `replaced`）照旧重试——
+                //   它要的是"抢回来再存一次"，与宿主响不响无关。
+                if (sw2HostIsTauriTavern()) break;
                 continue;   // 交给重试环（退避后再试）
             } finally {
                 clearTimeout(timer);
@@ -278,7 +327,7 @@ export async function flushHotMeta() {
             console.warn('[story-world-v2] 热账在我写完之后被换成了别的副本 —— 重存一次', { 期望: want.fp, 实际: after });
         }
         // 试完仍对不上 ⇒ **如实报**（世界这一笔可能只在内存里；参数不受影响——它有自己的家）
-        return { ok: false, reason: lastErr || 'replaced' };
+        return { ok: false, reason: lastErr || 'replaced', detail: lastDetail };
     } finally {
         // ★超时也必须**放出这一格**（自愈）：旧式的"在飞"标志在超时分支里若不放开，一次卡住的保存
         //   会把此后每一次改参数都变成"排队"⇒ **一次卡死永久卡死**（判据实测抓到过这一版：

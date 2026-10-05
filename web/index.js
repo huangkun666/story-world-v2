@@ -840,8 +840,8 @@ export const sw2ParamUndoState = () => paramApi.sw2ParamUndoState();
                 : r?.reason === 'skipped' ? 'ST 的保存通道没真写（回得太快，疑似静默跳过）'
                     // ★leg40c 续·二 / 续·六：账本被**别的副本**覆盖了（下一个 tick 拿旧世界回写是主要来路）
                     : r?.reason === 'replaced' ? `账本被别的副本覆盖了（试了 ${SW2_FLUSH_TRIES} 次没抢回来）`
-                        : '保存报错（见控制台）';
-    return ` · 注意：这次没能确认落盘（${why}）`;
+                        : '保存报错';
+    return ` · 注意：这次没能确认落盘（${why}${r?.detail ? ` —— 宿主原话：${r.detail}` : ''}）`;   // ★★★leg197：`detail` = **宿主报的那句原话**（TT 是原生应用、手机更没有控制台 ⇒ 不印出来，这个错就永远只能靠猜）
 }
 
 function volumeStore() {
@@ -1933,7 +1933,7 @@ export async function loadWorld() {
     if (changed || loc.inherited > 0 || migrated !== hot || migrated1 !== migrated || pieceSync.renamed || macroSync.merged > 0 || autoKeyAdded || replayedPendingEnv) {   // 两次清理各算各的（ref 判等，幂等不空写）
         writeHotMeta(hotAccountShape(world2));   // 账本已变：内存与盘上必须一致（导出/「全册 N」读的就是这里）
         const flushed = await flushHotMeta(); // 名册入账/旧账清理不该只活在页面内存——走既有显式落盘路径
-        if (!flushed.ok) console.warn('[story-world-v2] 账本写回未落盘', { reason: flushed.reason, seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited, 棋子校准: pieceSync, 补回本地档位: replayedPendingEnv });
+        if (!flushed.ok) { console.warn('[story-world-v2] 账本写回未落盘', { reason: flushed.reason, detail: flushed.detail, seeded: seed.seeded, seededDelta, backfilled, 位置: loc.inherited, 棋子校准: pieceSync, 补回本地档位: replayedPendingEnv }); setStatus(`注意：世界账没落盘${flushOutcomeText(flushed)}`); }   // ★★★leg197：落盘失败**也要上状态条**（原来只进控制台 ⇒ TT 实机上玩家那一屏一个字都不显示）；载入期每次都走这一笔（`ensureChronicleRotated` 无轮转也写回）⇒ 这一格就是那个症状的现身之处
         else if (backfilled > 0 || loc.inherited > 0 || pieceSync.renamed || macroSync.merged > 0 || autoKeyAdded || replayedPendingEnv) {
             console.info('[story-world-v2] 名册落账可重入：本次补齐', {
                 归属: seed.parentVerified ?? 0, 字段: seed.fieldsAttached ?? 0, 弃关系: seed.parentDemoted ?? 0, 位置: loc.inherited,

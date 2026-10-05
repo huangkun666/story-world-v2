@@ -11,19 +11,19 @@
   "current": {
     "tests": "2051/2051",
     "smokeBytes": 8351,
-    "panelBuild": "leg200b-lists-only",
+    "panelBuild": "leg201-host-save-and-selfcheck",
     "cssVersion": "20261005-leg200-prose-lists",
     "mainPromptV": "v2-agenda-t1-34",
     "webIndexLines": 3099,
     "webIndexLineLock": 3100
   },
   "docs": {
-    "stateBytes": 34233,
+    "stateBytes": 34411,
     "startHereBytes": 292796,
     "frozenIndexBytes": 326960,
     "ledgerFullBytes": 978029,
     "docsFiles": 271,
-    "docsBytesLf": 7228562,
+    "docsBytesLf": 7229254,
     "docsCountNote": "★不含生成物 docs/index.json 自己（自指计数会让文件永不收敛——见 §⑤ 留档）；★字节按 **LF 归一**数（读进来减掉 CRLF 的字节）：判据锁着它，而检出状态（CRLF/LF）因机而异，不该把\"结账机怎么结账\"算进文档体积（实测差异：leg105 交接 CRLF 12532B vs LF 12387B，正好差它的 145 个 CRLF）。",
     "handoffsRoot": 122,
     "handoffsArchive": 34,
@@ -32,7 +32,7 @@
   },
   "release": {
     "repo": "huangkun666/story-world-v2",
-    "sourceBuild": "leg200b-lists-only",
+    "sourceBuild": "leg201-host-save-and-selfcheck",
     "published": {
       "build": "leg200b-lists-only",
       "tag": "v1.1.0",

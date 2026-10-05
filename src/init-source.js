@@ -18,7 +18,7 @@
 //   机制、病灶与"为什么必须在源头换"⇒ `src/macros.js` 头注。一句话：**酒馆的宏不该变成世界里的人**。
 import { substituteMacros } from './macros.js';
 import { prepareAbstractEntry, abstractEntryKey, abstractEntryTitle } from './abstract-source.js';
-import { collectAbstractSources, resolveAbstractSources, probeAbstractDeclarations } from './abstract-input.js';
+import { collectAbstractSources, resolveAbstractSources, probeAbstractDeclarations, characterFieldText, CHARACTER_SOURCE_FIELDS } from './abstract-input.js';
 import { entrySelectionId } from './abstract-selection.js';
 
 export const INIT_PIECE_CAPS = {          // 卡四件套各自上限（字符 · 提案态 · v1 spend 同款）
@@ -396,6 +396,27 @@ export function probeBook(worldInfoEntries, character = null, { window = 30000 }
  * @returns {{ok:boolean, text?:string, label?:string, usedChars?:number, truncated?:boolean,
  *            worldName?:string, entryCount?:number, pieceCount?:number, catalog?:object, reason?:string}}
  */
+/**
+ * ★★★leg201（社区第三次报同一条 · 2026-10-05）：空卡那半句必须**自带证据**。
+ *
+ * 为什么（这一条被社区报了三次，每次都只能来回问三四轮，最后都停在"我这儿看不到"）：
+ *   · 原句只有「角色卡四件套全空」六个字，**它同时覆盖三种完全不同的病**——
+ *     卡真空 / 宿主把正文放在 `data` 层（我们的读法没跟上）/ 懒加载没取回来；
+ *   · 而**手机端没有控制台**（`console.warn` 那份诊断取不出来）⇒ 状态条这一句是**唯一的取证通道**；
+ *   · 社区用户"换一张卡也一样"就是被这一格卡住的——那句话分不出是卡的问题还是宿主的问题。
+ * ⇒ 把决定性的三个事实钉进消息里：**顶层几字 · `data` 层几字 · `shallow` 到底是什么**。
+ *   看到就能当场分类：`data` 层有字 = 宿主形状（我们的锅）；两边都 0 = 卡真空或不在角色聊天；
+ *   `shallow=true` = 懒加载（那条走另一支文案，不进本函数）。
+ */
+function emptyCardHint(character) {
+    try {
+        const len = (o) => CHARACTER_SOURCE_FIELDS.reduce((n, k) => n + (typeof o?.[k] === 'string' ? o[k].trim().length : 0), 0);
+        const shallow = character?.shallow;
+        return `（顶层 ${len(character)} 字 · data 层 ${len(character?.data)} 字`
+            + ` · shallow=${shallow === undefined ? '无' : String(shallow)} · 顶层键 ${Object.keys(character || {}).length}）`;
+    } catch (_) { return ''; }   // 取证失败绝不能把"报错"变成"抛错"
+}
+
 export function composeInitSource({ character = null, worldInfoEntries = [], worldSources = null, budget = INIT_SOURCE_HARD_CEILING, includeDeclared = true, macroNames = null, selection = null } = {}) {
     const sources = collectAbstractSources({ worldInfoEntries, character, worldSources });
     const rawEntries = sources.filter(s => s.kind === 'world-entry').map(s => s.entry);
@@ -598,13 +619,16 @@ export function composeInitSource({ character = null, worldInfoEntries = [], wor
         //   `extractWorldSetting({ allowedSources })`——抽取器**不再**回头读 `sourceItems` 或原书。
         allowedBlocks };
     if (!used.length) {
-        const pieces = ['description', 'scenario', 'personality', 'first_mes'].filter((k) => typeof character?.[k] === 'string' && character[k].trim());
+        // ★★★leg201：**取法与取料那一处共用**（`characterFieldText`：顶层与 `data` 层都看）。
+        //   旧法只看顶层 `character[k]` ⇒ 与 `abstract-input.js` 的读法**两把尺子**：
+        //   宿主把正文放在 `data` 层时，取料读到了、这一句却判"空"，于是报出与事实相反的话。
+        const pieces = CHARACTER_SOURCE_FIELDS.filter((k) => characterFieldText(character, k).trim());
         const bits = [];
         if (!character) bits.push('未读到角色卡（非角色聊天/群聊需另配）');
         // ★★★leg154：**两种空必须分形**——"卡还在懒加载（我们没取到）"与"卡里真没有"是两件事。
         //   旧法一律说「角色卡四件套全空」⇒ 用户拿着一本好书被告知"你的卡是空的"（社区用户就是这么被劝退的）。
         //   `shallow` 是 ST 自己那个键（`performance.lazyLoadCharacters`），它标着"这一份只是名册那一层"。
-        else if (!pieces.length) bits.push(character.shallow === true ? '角色卡还没加载完（ST 只交回了名册那一层，正文还没取）' : '角色卡四件套全空');
+        else if (!pieces.length) bits.push(character.shallow === true ? '角色卡还没加载完（ST 只交回了名册那一层，正文还没取）' : `角色卡四件套全空${emptyCardHint(character)}`);
         if (rawTotal === 0) bits.push('世界信息/内置书为空');
         else if (disabled === rawTotal) bits.push('世界书条目全部标记禁用');
         return { ok: false, reason: custom && !resolved.selection.selectedIds.length ? '自选来源为空，未读取任何正文' : diagnostics.excluded.length ? '排除技术内容后没有可用设定' : bits.length ? bits.join('；') : '没有可用设定（详见浏览器控制台诊断）', ...common,

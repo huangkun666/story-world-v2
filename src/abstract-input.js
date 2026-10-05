@@ -2,6 +2,28 @@ import { entrySelectionId, normalizeAbstractSelection } from './abstract-selecti
 import { prepareAbstractEntry, abstractEntryTitle } from './abstract-source.js';
 
 export const CHARACTER_SOURCE_FIELDS = ['description', 'scenario', 'personality', 'first_mes'];
+
+/**
+ * ★★★leg201（社区第三次报同一条「设定源不可用：角色卡四件套全空」· 2026-10-05）：**读卡那四格正文的唯一取法**。
+ *
+ * 病（`??` 的语义坑，不是猜的）：旧法写的是 `character[field] ?? character.data?.[field] ?? ''`——
+ *   **`??` 只在 `null`/`undefined` 时才往下一层找**。宿主若在顶层给一个**空串**（`description: ""`）
+ *   而正文躺在 `data.description` 里，那么 `""` **会赢** ⇒ `data` 层那份**永远读不到** ⇒
+ *   取料为空 ⇒ 面板报「角色卡四件套全空」，而玩家的卡明明是满的。
+ *   ★这正是"**换多少张卡都一样**"的形状：**空串是宿主给的，不是卡给的**（社区用户换卡无效，原因在此）。
+ *   （与 leg18「取数形状宽容」同一条纪律：ST 各版本与各家 fork 的卡形状不一，读法必须宽容。）
+ *
+ * 口径（**一处实现、两处共用**——`init-source.js` 那句"卡空不空"的判定必须用同一个取法，
+ *   否则会出现"取料说没有、判定说没有、而盘上明明有"那种自相矛盾；本仓最忌"一个数两把尺子"）：
+ *   **顶层与 `data` 层都看，取第一个"非空字符串"；两层都没有 ⇒ 空串。**
+ */
+export function characterFieldText(character, field) {
+    for (const v of [character?.[field], character?.data?.[field]]) {
+        if (typeof v === 'string' && v.trim()) return v;
+    }
+    return '';
+}
+
 const listOf = value => Array.isArray(value) ? value : value && typeof value === 'object' ? Object.values(value) : [];
 const titleOf = abstractEntryTitle;
 const FETCH_CALL_RE = /(?:getwi|getWorldInfo|getWorldInfoEntry|activewi|activateWorldInfo)\s*\(\s*(?:[^,()]*,\s*)?['"`]([^'"`\n]{1,80})['"`]/g;
@@ -74,7 +96,7 @@ export function collectAbstractSources({ worldInfoEntries = [], character = null
         _sw2Source: `character:${character?.name || ''}` });
     if (character) for (const field of CHARACTER_SOURCE_FIELDS) {
         add({ uid: field, _sw2Source: `character-fields:${character.avatar || character.name || character.data?.name || ''}`,
-            comment: `角色卡 ${field}`, content: character[field] ?? character.data?.[field] ?? '' }, 'character-field', field);
+            comment: `角色卡 ${field}`, content: characterFieldText(character, field) }, 'character-field', field);
         sources[sources.length - 1].loaded = character.shallow !== true;
     }
     return sources;

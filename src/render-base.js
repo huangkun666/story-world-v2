@@ -795,7 +795,13 @@
 //     ＋ 示例由过程式的「踏入元婴」改成状态式的「元婴期」（1349 → 1482 字）。
 //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动，仍 `20261005-leg196-map-mobile`）；
 //     `MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；`CACHE_VERSION` **不升**（仍 11：抽取的问法没变）。
-export const PANEL_BUILD = 'leg200b-lists-only';
+// ★★★leg201（2026-10-05 · 社区第三次报同一条「设定源不可用」之后定的）：**升 `PANEL_BUILD`**。
+//   玩家直接看得见的三件事：① **宿主原话上状态条**（落盘失败时印出宿主报的那句原文，不再只写"见控制台"）；
+//   ② **载入期落盘失败也会出声**（原来只进 console）；③ **调试页摘要多了"环境自检"那几行**
+//   （宿主/浏览器/在不在角色聊天/卡形状/世界书来源/世界账——社区报告一轮分类）。
+//   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动）；`MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；
+//     `CACHE_VERSION` **不升**（抽取的问法没变）。
+export const PANEL_BUILD = 'leg201-host-save-and-selfcheck';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },
