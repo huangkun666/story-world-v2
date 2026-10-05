@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "5cc9f8ec-d7b6c977",
+  "fingerprint": "352157d9-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "5cc9f8ec",
+  "sourceFingerprint": "352157d9",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -273,7 +273,7 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg201-host-save-and-selfcheck",
+    "panelBuild": "leg201b-report-only-selfcheck",
     "mainPromptV": "v2-agenda-t1-34",
     "cssVersion": "20261005-leg200-prose-lists",
     "version": "1.1.1",
@@ -284,6 +284,8 @@
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "0b3100b story-world-v2 leg201 发布记账：发布点跟到 05811c7 / leg201-host-save-and-selfcheck（★纯记账笔，产品行为零变化）",
+      "abe6a67 story-world-v2 leg201：宿主保存层 ＋ 卡形状读法 ＋ 环境自检（社区三次报同一条之后）",
       "adaa692 story-world-v2 leg200b 发布记账：发布点跟到 3fac63c / leg200b-lists-only（★纯记账笔，产品行为零变化）",
       "fadf96d story-world-v2 leg200b：撤掉\"剥掉正文里的机器块\"那枚多余的开关（不写就不剥）",
       "c3727dc story-world-v2 leg200 发布记账：发布点跟到 bc1e98c / leg200-prose-lists（★纯记账笔，产品行为零变化）",
@@ -293,9 +295,7 @@
       "4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）",
       "a0b1ad2 story-world-v2 leg199：删掉\"块外裸标签\"那条降级 ＋ 标签规范第 7 条改值口径",
       "08d955f ﻿story-world-v2 leg198：拆掉\"没标签就拿词表猜\"那一族 ＋ 社区反馈四条",
-      "e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）",
-      "d6e6d56 story-world-v2 leg197：抽象时\"引用找不到原文就丢\"整族撤销（出处只记账、不拦人）",
-      "3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）"
+      "e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）"
     ]
   },
   "counts": {
@@ -6902,7 +6902,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg201-host-save-and-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201（社区第三次报同一条「设定源不可用」之后定的）：玩家可见面变了三处——① **宿主原话上状态条**（落盘",
+      "where": "**`leg201b-report-only-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那十三格**只进报告、不",
       "keys": [
         "当前值",
         "读数",
@@ -7378,7 +7378,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 66,
-      "where": "**`3fac63c`** · 构建号 **`leg200b-lists-only`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端 ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`05811c7`** · 构建号 **`leg201-host-save-and-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地 ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",

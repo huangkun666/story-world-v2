@@ -36,6 +36,12 @@ export const DEBUG_DETAILS_ID = 'sw2_debug_details';
 const LEVEL_ORDER = ['info', 'warn', 'error'];
 const LEVEL_LABELS = { info: '信息', warn: '警告', error: '错误' };
 /** 摘要里常见事实的中文名（对不上就照原键名印——宁可印英文，也不假装认识）。 */
+// ★★leg201：**只进报告、不上屏**的那一格（用户 2026-10-05 当场裁：「**太多了，就放在复制报告里
+//   就行了，别展示出来**」）。理由：**摘要是给人扫一眼的，取证是给人复制的**——两者挤同一格，
+//   结果是那一页变成一面读数墙（实测：13 格环境事实把摘要撑成四行大卡，真正该看的那几个数被淹了）。
+//   ★它照样进 `diagnostics.report(摘要)`（报告走的是**整份 summary**，不经过这里的过滤）
+//     ⇒ 「复制报告 / 下载报告」一个字都不少。
+const REPORT_ONLY_KEYS = new Set(['modules', '环境自检']);
 const SUMMARY_LABELS = {
     build: '当前构建', version: '当前构建', panelBuild: '面板构建',
     tick: '轮次', round: '轮次', turn: '轮次',
@@ -100,7 +106,7 @@ function summaryHtml(summary, records) {
     const safe = summary && typeof summary === 'object' && !Array.isArray(summary) ? redact(summary) : {};
     const facts = [];
     for (const [key, value] of Object.entries(safe)) {
-        if (key === 'modules') continue;   // 只用来喂下拉，不占一行事实
+        if (REPORT_ONLY_KEYS.has(key)) continue;   // ★leg201：`modules` 只喂下拉；`环境自检` 只进报告（见上面那段）
         facts.push(factHtml(SUMMARY_LABELS[key] || key, fmtValue(key, value)));
     }
     facts.push(factHtml('本次显示', `${Array.isArray(records) ? records.length : 0} 条`));

@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**329 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `5cc9f8ec-d7b6c977`（源文件 5cc9f8ec · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `352157d9-d7b6c977`（源文件 352157d9 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,7 +11,7 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg201-host-save-and-selfcheck` |
+| 构建号 | `leg201b-report-only-selfcheck` |
 | 提示词号 | `v2-agenda-t1-34` |
 | 版本 | `1.1.1`（ST 扩展） |
 | 规模 | src **68** · web **39** · 判据 **170** · 探针 **76** · 文档 **201** |
@@ -259,7 +259,7 @@
 |---|---|---|
 | 当前值 · 判据 | `STATE.md:50` | **2051 / 2051 · fail 0 · skipped 0 · todo 0**（★leg200b **净 −1**：用户指认"那枚总闸开关是多余的"（「**不写就不剥得了，你还非搞个这个按钮干嘛**」）⇒ * |
 | 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动"正文里认不认标签"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每 |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg201-host-save-and-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201（社区第三次报同一条「设定源不可用」之后定的）：玩家可见面变了三处——① **宿 |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg201b-report-only-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那 |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
@@ -273,7 +273,7 @@
 | 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
 | 当前值 · web/index.js 行数 | `STATE.md:64` | **3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 * |
 | 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
-| 当前值 · 发布仓 main | `STATE.md:66` | **`3fac63c`** · 构建号 **`leg200b-lists-only`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装 |
+| 当前值 · 发布仓 main | `STATE.md:66` | **`05811c7`** · 构建号 **`leg201-host-save-and-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main`  |
 | 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发 |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
 | 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.1`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.0 → 1.1.1；用户 2026-10-05 |
@@ -400,6 +400,8 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `0b3100b story-world-v2 leg201 发布记账：发布点跟到 05811c7 / leg201-host-save-and-selfcheck（★纯记账笔，产品行为零变化）`
+- `abe6a67 story-world-v2 leg201：宿主保存层 ＋ 卡形状读法 ＋ 环境自检（社区三次报同一条之后）`
 - `adaa692 story-world-v2 leg200b 发布记账：发布点跟到 3fac63c / leg200b-lists-only（★纯记账笔，产品行为零变化）`
 - `fadf96d story-world-v2 leg200b：撤掉"剥掉正文里的机器块"那枚多余的开关（不写就不剥）`
 - `c3727dc story-world-v2 leg200 发布记账：发布点跟到 bc1e98c / leg200-prose-lists（★纯记账笔，产品行为零变化）`
@@ -410,6 +412,4 @@
 - `a0b1ad2 story-world-v2 leg199：删掉"块外裸标签"那条降级 ＋ 标签规范第 7 条改值口径`
 - `08d955f ﻿story-world-v2 leg198：拆掉"没标签就拿词表猜"那一族 ＋ 社区反馈四条`
 - `e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）`
-- `d6e6d56 story-world-v2 leg197：抽象时"引用找不到原文就丢"整族撤销（出处只记账、不拦人）`
-- `3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）`
 

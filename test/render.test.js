@@ -2605,7 +2605,9 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //     ② **载入期落盘失败也会出声**（原来只进 console）；
     //     ③ **调试页摘要多了"环境自检"那几行**（宿主/浏览器/在不在角色聊天/卡形状/世界书来源/世界账）。
     //     ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动，下面 `CSS_PIN` 同时咬两头）。
-    assert.equal(PANEL_BUILD, 'leg201-host-save-and-selfcheck');
+    //   ★★★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那十三格
+    //     **只进报告、不上屏** ⇒ 调试页摘要回到原来的大小（玩家可见面又变了一次）⇒ 再升一格。
+    assert.equal(PANEL_BUILD, 'leg201b-report-only-selfcheck');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2670,7 +2672,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '201', '前置：本笔构建号为 leg201（宿主原话上状态条 ＋ 环境自检并进调试页摘要），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '201b', '前置：本笔构建号为 leg201b（环境自检只进报告、不上屏），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);
