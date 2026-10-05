@@ -9,11 +9,15 @@
 //   他的裁法（逐字）：「**提取正文时采用白名单和黑名单机制，这俩名单由用户自己设置，
 //   白名单过滤程度最重代表只留这个名单，黑名单则代表过滤这个名单**」。
 //
-// ＝＝ 口径（三条，写死免得下一任改歪）＝＝
+// ＝＝ 口径（两条，写死免得下一任改歪）＝＝
 //   ① ★**名单由玩家填，插件一个内置词都没有** ⇒ 与红线 §4.8（禁"用词表判语义"）不冲突：
 //      那一条禁的是**插件拿内置词表替玩家判语义**；这里是玩家点名、插件只照办、不猜。
-//   ② **两个名单都空** ⇒ 回到"只按结构判"：**成对块照剥、HTML 注释不剥**
-//      （＝用户说的"不能杀光注释"；成对块那半是 leg136 实测曲线靠着的，不许顺手改）。
+//   ② ★★★**两个名单都空 ⇒ 一个字都不剥**（用户 2026-10-05 令：「**不写就不剥得了**」）。
+//      ★同批**撤掉了那枚「剥掉正文里的机器块」开关**——它存在的唯一理由就是"名单空着时还要剥成对块"
+//      （leg136 那条实测曲线），而那正是**同一个意思两处控制**（名单已经是那个控制了）。
+//      ⇒ 现在**只有名单说了算**：不填＝不剥，填黑名单＝只剥点名的，填白名单＝只留点名的。
+//      ★如实登记代价：leg136 那条实测（查询串空手率 35.3% → 13.2%）**从此只在玩家自己填了黑名单
+//      之后才拿得到**；默认回到"不剥"。这是用户当次知情的取舍（他要的是"插件不替玩家决定"）。
 //   ③ **两个都填** ⇒ **白名单优先**（它过滤最重：只留点名的，其余信封全剥）。
 //
 // ＝＝ 名字怎么匹配（两行名字，一行一条）＝＝
@@ -54,7 +58,7 @@ export function parseProseList(raw) {
  * @param {string} text 一条正文
  * @param {{black?: string|string[], white?: string|string[]}} [opts]
  *   `black` = 黑名单（要剥掉的名字）· `white` = 白名单（只留这些，其余信封全剥）。
- *   ★两个都空 ⇒ 成对块照剥、注释不剥（见头注口径②）。
+ *   ★★**两个都空 ⇒ 一个字都不剥**（口径②：不写就不剥）。
  * @returns {string} 剥掉机器块之后的正文（剥空了 ⇒ **原样返回**）
  */
 export function proseOnly(text, { black = '', white = '' } = {}) {
@@ -64,19 +68,20 @@ export function proseOnly(text, { black = '', white = '' } = {}) {
     const whiteList = parseProseList(white);
     const whiteMode = whiteList.length > 0;          // ★白名单优先（过滤最重那一档）
     const blackMode = !whiteMode && blackList.length > 0;
+    if (!whiteMode && !blackMode) return s;          // ★★口径②：不写就不剥（那枚开关已撤）
 
     // 成对块：`<名 …>…</名>`（反向引用 `\1` 保证同名；非贪婪 ⇒ 不跨块吃太多）
     //   ★名字那一格是"`<` 与 `>` 之间不含空白与斜杠的那段字"——**结构判，不是标签名清单**
     //     （leg198 放宽到中文名：社区那类块就叫 `<角色手机>`）。
     const afterBlocks = s.replace(/<([^\s/>]+)[^>]*>[\s\S]*?<\/\1\s*>/g, (m, name) => {
-        const strip = whiteMode ? !whiteList.includes(name) : (blackMode ? blackList.includes(name) : true);
+        const strip = whiteMode ? !whiteList.includes(name) : blackList.includes(name);
         return strip ? ' ' : m;
     });
-    // HTML 注释：`<!-- … -->`。★默认**不剥**（leg200）；点名了才剥（黑名单）／没点名才剥（白名单）。
+    // HTML 注释：`<!-- … -->`。注释**没有名字** ⇒ 按"它开头那几个字"认（前缀匹配）。
     const out = afterBlocks.replace(/<!--[\s\S]*?-->/g, (m) => {
         const body = m.slice(4, -3).trim();                       // 去掉 `<!--` 与 `-->`
         const hit = (list) => list.some((e) => body.startsWith(e));
-        const strip = whiteMode ? !hit(whiteList) : (blackMode ? hit(blackList) : false);
+        const strip = whiteMode ? !hit(whiteList) : hit(blackList);
         return strip ? ' ' : m;
     });
     if (!out.trim()) return s;                                    // 边界：剥空 ⇒ 退回原文

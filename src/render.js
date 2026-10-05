@@ -703,11 +703,10 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //      改成**他自己裁的两份名单**（逐字）：「白名单过滤程度最重代表只留这个名单，
         //      黑名单则代表过滤这个名单」——★名单**由玩家填，插件一个内置词都没有**
         //      （红线 §4.8 禁的是"插件拿**内置**词表替玩家判语义"；这里是玩家点名、插件照办、不猜）。
-        + `<div class="sw2-group-h">正文怎么读<em>一枚开关 ＋ 两份名单</em></div>`
-        + injSwitch('stripMachineBlocks', cfg.injectSwitches?.stripMachineBlocks, '剥掉正文里的机器块')
-        + paramHint('这一层只管一件事：<b>拿去账上找旧事的那串字</b>（别的扩展塞在正文里的机器块会把检索带偏）。'
+        + `<div class="sw2-group-h">正文怎么读<em>两份名单，不填就不剥</em></div>`
+        + paramHint('这一层只管一件事：<b>拿去账上找旧事的那串字</b>（别的扩展塞在正文里的块会把检索带偏）。'
             + '<br><b>它不影响"记不记得下来"</b>——提取标签只看 <code>&#96;&#96;&#96;tags</code> 块里面。'
-            + '<br>关掉 ＝ 一个字都不剥。')
+            + '<br>★<b>两个框都不填 ＝ 一个字都不剥</b>（照原文去检索）。')
         + `<div class="sw2-field"><div class="sw2-field-head"><label>黑名单 · 要剥掉的名字</label>`
         + `<textarea class="sw2-input" id="sw2_prose_black" data-settings-text="proseBlackList" rows="3" placeholder="一行一条" title="${attrText('点名要剥掉的信封：成对块写标签名（如 角色手机）；HTML 注释写它开头那几个字（如 抢话自查）')}">${escapeHtml(String(cfg.proseLists?.black ?? ''))}</textarea></div>`
         + paramHint('一行一条。<b>成对块</b>写标签名（<code>&lt;角色手机&gt;…&lt;/角色手机&gt;</code> ⇒ 写 <b>角色手机</b>）；'
@@ -716,7 +715,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         + `<div class="sw2-field"><div class="sw2-field-head"><label>白名单 · 只留这些</label>`
         + `<textarea class="sw2-input" id="sw2_prose_white" data-settings-text="proseWhiteList" rows="3" placeholder="一行一条" title="${attrText('只保留点名的信封，其余信封全剥（信封外面的正文照留）。过滤最重的那一档')}">${escapeHtml(String(cfg.proseLists?.white ?? ''))}</textarea></div>`
         + paramHint('过滤最重的那一档：<b>只留点名的信封，其余信封全剥</b>（信封<b>外面</b>的正文照留）。'
-            + '<br>两格都填 ⇒ <b>以白名单为准</b>。两格都空 ⇒ 成对块照剥、<b>HTML 注释不剥</b>（＝不再杀光注释）。') + `</div>`
+            + '<br>两格都填 ⇒ <b>以白名单为准</b>。') + `</div>`
         + `<div class="sw2-group-h">一次递多少 · 往事怎么找<em>五个数，直接填</em></div>`
         + `<div class="sw2-field sw2-field-inline"><div class="sw2-field-head"><label>一轮最多递多少条行动</label>`
         + `<input class="sw2-input" id="sw2_tag_max" data-settings="tagMaxActions" type="number" min="1" max="200" step="1" value="${escapeHtml(String(cfg.tagMaxActions ?? 12))}" title="${attrText('正文里的行动超过这个数就只递前几条（截断会在读数里如实报出来）')}"></div>`

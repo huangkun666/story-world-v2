@@ -37,16 +37,16 @@ export const EMBED_SETTINGS_INPUTS = {
 /**
  * ★★★leg200（2026-10-05 用户令）：**正文剥块那两份名单**（参数页「正文怎么读」那两格）——
  * 由**玩家自己填**：黑名单＝要剥掉的名字；白名单＝只留这些、其余信封全剥（过滤最重那一档）。
- * 口径全文在 `src/prose.js` 头注（含"两个都空 ⇒ 成对块照剥、HTML 注释不剥"那一档）。
+ * 口径全文在 `src/prose.js` 头注（★**两个都空 ⇒ 一个字都不剥**）。
  *
  * ★**住这里**（不住 `web/index.js`）：那个文件有 **<3100 行的硬锁**（它是接线层），
  *   而这一族是"设置怎么读"，与 `SETTINGS_INPUTS` 同一件事 ⇒ 搬过来正好落在同一个家里。
- * @param {{switchOn?: boolean, settings?: object|null}} [deps]
- *   `switchOn` ＝ 总闸（面板那枚「剥掉正文里的机器块」）；关着 ⇒ 返回 `null` ＝ **一个字都不剥**。
- * @returns {{black: string, white: string}|null}
+ * ★★★leg200b：**原来还有一枚"总闸"（`stripMachineBlocks`）——已撤**。用户原话：
+ *   「**不写就不剥得了，你还非搞个这个按钮干嘛**」⇒ 名单本身就是那个控制，"空着不剥"由它表达。
+ * @param {{settings?: object|null}} [deps]
+ * @returns {{black: string, white: string}}
  */
-export function proseStripLists({ switchOn = false, settings = null } = {}) {
-    if (!switchOn) return null;
+export function proseStripLists({ settings = null } = {}) {
     return { black: settings?.proseBlackList ?? '', white: settings?.proseWhiteList ?? '' };
 }
 

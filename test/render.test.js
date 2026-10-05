@@ -2598,7 +2598,9 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   而这一层的行为也真变了：**默认不再杀光 HTML 注释**（有的卡拿注释当正文的容器）。
     //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动——`.sw2-field textarea` 那套样式本来就在）；
     //     `MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；`CACHE_VERSION` **不升**（抽取的问法没变）。
-    assert.equal(PANEL_BUILD, 'leg200-prose-lists');
+    //   ★leg200b（用户指认"那枚总闸开关是多余的"：「**不写就不剥得了，你还非搞个这个按钮干嘛**」）：
+    //     **开关撤掉** ⇒ 面板上那一组只剩两个框 ⇒ 玩家可见面又变了一次 ⇒ 构建号再升一格。
+    assert.equal(PANEL_BUILD, 'leg200b-lists-only');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2663,7 +2665,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '200', '前置：本笔构建号为 leg200（正文剥块改成白/黑名单 ＋ 撤掉"值必须在正文里找得到"），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '200b', '前置：本笔构建号为 leg200b（正文剥块只由玩家那两份名单说了算，总闸开关已撤），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

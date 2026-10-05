@@ -885,12 +885,13 @@ let sw2LastTagFacts = null;
 let sw2Injector = null;
 /** 注入开关的人话名（状态条与那一卡共用；★玩家可见文本，零引擎术语）。★leg143：那一卡现住**参数页**。 */
 const INJECT_SWITCH_LABEL = { injectTagSpec: '让聊天模型按标签写行动', injectRoster: '把名号表递进对话',
-    injectWorldTide: '把上轮世界动向递进对话', injectLedgerRecall: '把账上往事递进对话', stripMachineBlocks: '剥掉正文里的机器块',};
+    injectWorldTide: '把上轮世界动向递进对话', injectLedgerRecall: '把账上往事递进对话',};
 // ★★★leg115：**第四段（账上往事）默认开**——另外三个"缺省=关"是当年**有意**定的，不许顺手翻过来
 //   （用户立的要求是「聊天llm**不知道**什么时候世界发生了什么事」⇒ 默认关就等于白做）；口径：**从没设过才算开**。
-//   ★leg198 起**"剥掉正文里的机器块"也默认开**（它不是注入开关，是"正文怎么读"那一格，实测曲线见 `src/prose.js`）。
+// ★★★leg200b（用户令「**不写就不剥得了，你还非搞个这个按钮干嘛**」）：**「剥掉正文里的机器块」那枚开关已撤**——
+//   正文剥块只由玩家那两份名单说了算（不填＝不剥）；旧设置里那个键成无主键（无读者）⇒ 旧账无害、不迁移。
 function injectSwitchOn(key) {
-    if (key === 'injectLedgerRecall' || key === 'stripMachineBlocks') return String(modelSettings()?.[key] ?? '1') === '1';
+    if (key === 'injectLedgerRecall') return String(modelSettings()?.[key] ?? '1') === '1';
     return String(modelSettings()?.[key] ?? '') === '1';   // 其余三个：**只有显式 '1' 算开**（全仓同口径）
 }
 // ★★★leg89：**"这条正文推进过了吗"的守卫**——一输入一推进。
@@ -1363,10 +1364,9 @@ function renderCfg(extra = {}) {
         injectSwitches: {
             injectTagSpec: injectSwitchOn('injectTagSpec'), injectRoster: injectSwitchOn('injectRoster'),
             injectWorldTide: injectSwitchOn('injectWorldTide'), injectLedgerRecall: injectSwitchOn('injectLedgerRecall'),
-            stripMachineBlocks: injectSwitchOn('stripMachineBlocks'),
         },
         tagMaxActions: (modelSettings() || {}).tagMaxActions ?? 12,
-        proseLists: proseStripLists({ switchOn: injectSwitchOn('stripMachineBlocks'), settings: modelSettings() }),
+        proseLists: proseStripLists({ settings: modelSettings() }),
         // ★★★（2026-10-05 · 用户令「**第二段话可以删了，这是用来调试的**」）：这里原来还画着
         //   「注入跑过 N 次 · 最后一次 …」／「注入器还没跑过（…若一直这样，把这条发我）」那一行——
         //   **整条撤掉**（它是排查话术，不是给玩家的读数）。⇒ `sw2LastInjectRuns` 这个副本也一并删了：
@@ -1696,7 +1696,7 @@ export function setupAsyncTicks(ctx) {
             getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
             getRuntime: () => embedRuntime,
             getVolumes: () => ledgerVolumes(),
-            queryTextOf: (ctx, depth) => sw2RecallQueryText(ctx, 400, depth, proseStripLists({ switchOn: injectSwitchOn('stripMachineBlocks'), settings: modelSettings() })),
+            queryTextOf: (ctx, depth) => sw2RecallQueryText(ctx, 400, depth, proseStripLists({ settings: modelSettings() })),
             params: () => liveRetrievalParams(modelSettings()),
         }),
     });

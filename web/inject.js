@@ -371,7 +371,8 @@ export function rosterText(world, { cap = ROSTER_CAP } = {}) {
  * @param {number} cap   **每一条正文**最多取几个字（默认 400）
  * @param {number} depth ★★★leg161：**取几条正文**＝「检索上下文深度」（默认 2 ＝ 本笔之前写死的那个行为）
  * @param {{black?: string, white?: string}|null} lists ★★★leg200：**剥什么由玩家的两份名单说了算**
- *   （参数页「正文怎么读」那两格）。★传 `null` ＝ 总闸关着 ⇒ **一个字都不剥**（照原文用）。
+ *   （参数页「正文怎么读」那两格）。★**两个都空 ⇒ 一个字都不剥**（那枚总闸开关 leg200b 已撤）。
+ *   （传 `null` 也照样不剥——留这条路只为老调用方零扰动。）
  * @returns {string} 形如「<原文尾巴> <剥后正文尾巴> <玩家这一轮打的>」（有重复时自动去重一截）
  */
 export function sw2RecallQueryText(ctx, cap = 400, depth = 2, lists = {}) {
@@ -401,7 +402,7 @@ export function sw2RecallQueryText(ctx, cap = 400, depth = 2, lists = {}) {
     if (prevRaw) parts.push(tail(prevRaw));
     // ★第二截＝**每条都补一截"剥掉机器块之后的"**（原来只对上一轮做；深度 >1 时那几轮同样要）
     //   ★★★leg200：剥什么**由玩家的两份名单说了算**（`lists = {black, white}`，口径全文在 `src/prose.js`）；
-    //     `lists === null` ＝ 总闸关着 ⇒ **一个字都不剥**（照原文用）。
+    //     ★**两个都空 ⇒ `proseOnly` 原样返回**（＝一个字都不剥）⇒ 下面那句 `prose !== raw` 自然跳过。
     for (const raw of proseParts) {
         const prose = (lists ? proseOnly(raw, lists) : raw).trim();
         if (prose && prose !== raw) parts.push(tail(prose));
