@@ -3,11 +3,13 @@
 //   聊天模型产出的**正文** → 结构化的"本轮已经发生过的事"。
 //
 // ============================ 为什么是它、不是老口径 ============================
-// 老口径 `extract.js` 的 `extractMove(text)` 读的是**玩家自己打的那句话**，靠一张 13 条正则的
-//   动词表硬猜"这一句是什么动作"。那条路在本仓有两个病（源码可证）：
-//   ① **表外的动作不存在**——"我拔剑冲上去"扫完 13 条一条都不中 ⇒ `verb = null`
-//      ⇒ `tick.js` 的 `move.verb ? move : null` 把**整条事实丢掉**（玩家做了什么一个字都进不了世界模型）；
-//   ② 它还得**归成一类**（"拔剑冲阵"被写成"迎战"），信息在这里降级一次。
+// 老口径（一张 13 条正则的**动词词表**：读"玩家自己打的那句话"，硬猜这一句是什么动作）
+//   **已按用户令整族拆掉**（2026-10-05：「这个词表按道理说早应该拆了…这个功能要猜，
+//   没标签就不进正文的行动即可」）。它当年在本仓有三个病（源码可证，留档免得有人把它请回来）：
+//   ① **表外的动作不存在**——"我拔剑冲上去"扫完 13 条一条都不中 ⇒ 动词空 ⇒ 那条事实丢掉；
+//   ② 它还得**归成一类**（"拔剑冲阵"被写成"迎战"），信息在这里降级一次；
+//   ③ ★更要紧的：**它读的输入从根上就不成立**——那张表是给"玩家自己打的那句话"设计的，
+//      而生产上喂进去的是**模型写的整段正文** ⇒ 正文里随便谁"问道""离开"都会被算成玩家这一轮的动作。
 // 新口径把结构交给**标签**：模型写正文时就把"谁做了什么、在哪、过了多久"标出来，插件只管切。
 //   ⇒ ★因此本模块**没有词表、不归一动词**（"动词不在表里"这个问题在这里不存在）。
 //
@@ -35,7 +37,8 @@ const RE_ELAPSED = /【时长】\s*([^\n【]+)/g;
 const RE_SCENE = /【场景\s*[:：]?\s*([^】\n]*)】/g;
 const RE_ACTION = /【行动】\s*([^\n【]+)/g;
 // ★★★leg123（细案 `docs/spec-tag-granularity.md`）：**三族新标签**。★**块口径与老族一条不改**
-//   （仍然只认 ` ```tags ` 块里的；块不在 ⇒ 退回逐行扫——见 `shellRange` 与 leg93 那条降级铁律）。
+//   （只认 ` ```tags ` 块里的；★leg199 起**块不在 ⇒ 零收获**，那条"退回逐行扫"的降级已整支撤掉——
+//    见 `shellRange` 与 `extractTags` 里那段留档）。
 //   · `【此刻】`＝**现在是什么时候**（一个**时间点**）——不是"过了多久"（那是 `【时长】`）。
 //     ⇒ 两格**分开记**：本族 → `at`（落事件/编年的 `timeMark`）、`【时长】` → `elapsed`（leg115 老通路）。
 //   · `【变化】`＝谁｜哪一格｜变成什么——**格名对齐实体账**（见下面 `CHANGE_FIELDS`），值照抄不换算。
@@ -108,6 +111,13 @@ function makeResolver(entities = [], canon = []) {
 const RE_FENCE_OPEN = /^```\s*tags\s*$/;
 /** 闭围栏：三个反引号或三个波浪号，同样要求整行只有它。 */
 const RE_FENCE_CLOSE = /^(?:```|~~~)\s*$/;
+// ★★★leg199：**"还原之后"那一档的开围栏**（只给 `extractTags` 的第二级尝试用，见 `shellRange` 的 `loose`）。
+//   病（本笔实测，装置 `F:/deepseek/tmp/leg198-audit/dbg3.mjs`）：模型把整块标签塞进 JSON 字符串时，
+//   还原真换行之后**第一行是 `{"tags":"```tags`**——围栏前面还挂着 JSON 的开头那几个字符。
+//   而 `RE_FENCE_OPEN` 那条"整行只有它"（leg93 定的，**不许放宽**）当场不认 ⇒ 还原这一级**白救**
+//   （leg137 那条静默失效会原样复发）。★为什么可以在这里松一档：这一档**只对"已经确认是 JSON 转义"
+//   的文本**开门（`RE_ESCAPED_FENCE_CLOSE` 那道门槛先过了），而那一档里的围栏前缀**必然是信封**、不是正文。
+const RE_FENCE_OPEN_LOOSE = /```\s*tags\s*$/;
 
 /**
  * ★★★leg93（用户裁示「**就甲吧**」）：**标签块口径**——正文里所有标签必须包在一个围栏块里，
@@ -121,14 +131,21 @@ const RE_FENCE_CLOSE = /^(?:```|~~~)\s*$/;
  *   ⇒ 根因：认不认得出标签**全看 `【` 在不在行首**——正文与标签**共用同一个语法空间**，中间没有边界。
  *
  *   修法：给标签一个**专属边界**（围栏块）。块外的 `【】` 再怎么写都落在扫描范围之外。
- *   ★★**降级铁律**：块不在 ⇒ 退回原来的逐行扫（`mode:'all'`，**老账、老聊天逐字节不变**）。
- *     为什么必须留：模型漏写围栏时，"**整轮零标签**"比"少认几条"严重得多。
+ *   ★★★leg199（用户令「**删掉降级吧**」）：**"块不在 ⇒ 退回逐行扫"那条降级铁律已整支撤掉。**
+ *     它当年立的理由（"模型漏写围栏时，整轮零标签比少认几条严重"）**被实测证伪**：
+ *     块不在时逐行扫全篇 ⇒ 正文里任何一行 `【行动】…`（引用字条/告示/解说格式）都成真行动，
+ *     写到玩家名上就**变成玩家的落子递给世界模型**（实跑见下面 `extractTags` 里那段留档）。
+ *     ⇒ 现在：**没有块 = 零收获**（与注入规范那句"块外写了也不作数"从此一致）。
+ *     代价（用户已知情）：漏写块的那一轮整轮零收获；leg93 之前的老聊天不再进账。
  *
+ * @param {string} text 一条正文
+ * @param {{loose?: boolean}} [opts] `loose` = **只给"还原过字面 `\n`"那一档用**（见 `RE_FENCE_OPEN_LOOSE`）
  * @returns {{start:number,end:number,closed:boolean}|null} 行号区间（**不含围栏行本身**）；没命中 ⇒ null
  */
-export function shellRange(text) {
+export function shellRange(text, { loose = false } = {}) {
+    const reOpen = loose ? RE_FENCE_OPEN_LOOSE : RE_FENCE_OPEN;
     const lines = String(text ?? '').split(/\r?\n/);
-    const open = lines.findIndex((l) => RE_FENCE_OPEN.test(String(l).trim()));
+    const open = lines.findIndex((l) => reOpen.test(String(l).trim()));
     if (open < 0) return null;
     // 闭围栏从开围栏**下一行**往回找（`closed` 如实标出"模型忘收尾"那种）；
     //   没闭合 ⇒ 吃到正文末尾——截断/漏收尾时标签仍然要能读出来。
@@ -176,10 +193,28 @@ const RE_ESCAPED_FENCE_CLOSE = /\\n[ \t]*(?:```|~~~)/;
  *   actions: Array, elapsed: string, elapsedParts: string[], count: number, parsed: number,
  *   unresolved: Array, player: object|null, playerDropped: number, malformed: string[],
  *   locations: string[],
- *   shell: {found: boolean, mode: 'shell'|'all', closed: boolean|null},
+ *   shell: {found: boolean, closed: boolean|null},   // ★leg199：`mode` 已撤（'all' 那一支整支删掉）
  *   restored: boolean,   ★leg137：这一遍是不是"把字面 `\n` 还原成真换行之后"的结果
  * }}
  */
+/**
+ * ★★★leg199：**"这一轮没有标签块"那一份空结果**——与"跑完一遍什么都没抽到"**同形**（一处定义）。
+ *   为什么要它（而不是让调用方各自拼一个空对象）：`hasTagFacts` / `tagReadoutLine` / 包那一栏
+ *   全按这个形状读 ⇒ 两处各拼一份就是本仓最忌的"同一件事两处表达"，迟早分叉。
+ *   ★`shell.found:false` 是**唯一的区别**：它如实说"连块都没有"，好让面板把原因说出来。
+ *   @returns {object} 与 `extractTags` 正常返回同形的空结果
+ */
+function emptyResult() {
+    return {
+        actions: [], elapsed: '', elapsedParts: [], at: null,
+        changes: [], changesBad: [], promises: [], promisesBad: [],
+        count: 0, parsed: 0, unresolved: [], notNoted: [],
+        player: null, playerDropped: 0, malformed: [], locations: [],
+        shell: { found: false, closed: null },
+        restored: false,
+    };
+}
+
 export function extractTags(text, ctx = {}) {
     const src = String(text ?? '');
     const { entities = [], canon = [], locations = [], playerId = null, maxActions = 12 } = ctx;
@@ -211,7 +246,7 @@ export function extractTags(text, ctx = {}) {
     //     逐条写在下面 `RE_LITERAL_NL_FENCE` 那个常量的注释里，**同一件事只许有一处**，这里不重抄。
     //   ★**门只开给"零收获"**：`hasTagFacts(pass1) === false` 是**最严的一档**——
     //     连一条"归不上名字""形状不合"都没有才试。宁可少救，不可改动读得出来的轮次。
-    const parse = (text0) => {
+    const parse = (text0, { loose = false } = {}) => {
     const elapsedParts = [];
     const malformed = [];
     const unresolved = new Map();          // 名字 → 条数（同一名字只报一次）
@@ -230,15 +265,26 @@ export function extractTags(text, ctx = {}) {
     let sceneText = null;                  // 当前场景原文（最近的 `【场景：…】`）
     let sceneId = null;                    // 归一到地点表的结果；null = 表里没有（或不在地点表口径里）
 
-    // ★逐行扫，**不是先把正文按块切开**：块切法在"模型漏写块头"时会把整块丢掉；
-    //   逐行扫的下限是"只丢那一行"，与"丢了什么要能被看见"这条口径一致。
-    // ★★★leg93：**先定扫描范围**——标签块在 ⇒ **只扫块里**（块外的 `【】` 落在范围外，
-    //   正文怎么引用标签格式都不会被当成行动）；块不在 ⇒ 退回逐行扫全篇（老行为逐字节不变）。
-    const shell = shellRange(text0);
-    const mode = shell ? 'shell' : 'all';
+    // ★★★leg199（用户令「**删掉降级吧**」）：**没有标签块 ⇒ 这一轮零收获**——整支"退回逐行扫全篇"拆掉。
+    //
+    //   拆它的两条理由（第一条是 leg198 体检实跑抓出来的，装置 `F:/deepseek/tmp/leg198-audit/probe.mjs`）：
+    //     ① ★**它是"猜"的最后一条路，而且比 leg198 拆掉的词表更狠**：块不在时逐行扫全篇 ⇒
+    //        正文里**只要有一行以 `【行动】` 开头**（引用一张字条、一份告示、解说格式、打比方）就被当成真行动。
+    //        实跑三档：`【行动】甲｜偷袭｜黄坤`（字条）⇒ 落账**一件真事件**；
+    //        而**写到玩家名上**时（`【行动】黄坤｜刺杀｜甲`）⇒ **变成玩家这一轮的落子**、原样递给世界模型
+    //        ⇒ 世界照它演下去。这正是 leg198 声称已治好的那个病（"拿别人的行动当玩家的落子"）换了个入口。
+    //     ② 它与注入给聊天模型的规范**正面冲突**：`web/inject.js` 的 `tagSpecText()` 向模型承诺
+    //        「**只有这个块里面的标签插件才看**；块外面写了也不作数」——而降级让这句话**是假的**。
+    //   ★口径从此一句话：**只扫 ` ```tags ` 块里；没有块 ⇒ 什么都没有**（与"没标签就不进正文的行动"同源）。
+    //   ★代价如实登记（用户已知情并拍板）：模型漏写块的那一轮**整轮零收获**（以前至少能捞到行）；
+    //     leg93 时代之前的老聊天（块还没立）此后不再进账。→ 由接线层那句「没有标签」的如实出声兜。
+    //   ★★为什么不能再"救"回去：任何"块不在就扫全篇"的写法都会把上面第①条那个病带回来。
+    //     要救只能救**围栏写法**（leg137 那两级尝试：字面 `\n` 还原，门只开给零收获），那条留着。
+    const shell = shellRange(text0, { loose });
+    if (!shell) return emptyResult();
     const lines = text0.split(/\r?\n/);
     for (let i = 0; i < lines.length; i += 1) {
-        if (mode === 'shell' && (i < shell.start || i >= shell.end)) continue;
+        if (i < shell.start || i >= shell.end) continue;
         const raw = lines[i].trim();
         if (!raw) continue;
 
@@ -436,8 +482,10 @@ export function extractTags(text, ctx = {}) {
         playerDropped: Math.max(0, playerSeen.length - 1),
         malformed: malformed.slice(0, 3),
         locations: [...new Set(kept.map((a) => a.location).filter(Boolean))],
-        // ★leg93：**这一次是按哪个口径扫的**——如实交出去（面板读数要用它把"没包块"说出来）。
-        shell: { found: Boolean(shell), mode, closed: shell ? shell.closed : null },
+        // ★leg93 起：**这一次有没有标签块**——如实交出去（面板读数要用它把"没包块"说出来）。
+        //   ★★★leg199：`mode` 那一格**已撤**（它只有 'shell'/'all' 两个值，而 'all' 整支已删 ⇒
+        //     留着它等于留一格"永远是同一个值"的假选择）。**"没有块"由 `found:false` 如实说**。
+        shell: { found: true, closed: shell.closed },
         // ★★★leg137：这一遍是不是"还原过字面 `\n` 之后"的结果（见本函数顶注那段两级尝试）。
         restored: false,
     };
@@ -446,9 +494,17 @@ export function extractTags(text, ctx = {}) {
     const first = parse(src);
     // ★门只开给"零收获"（最严的一档，见顶注）。★`hasTagFacts` 就是本模块自己那条"有没有料"的口径，
     //   直接复用它 ⇒ 不会出现"这里算没读到、别处算读到了"两把尺子。
+    //   ★★★leg199 复核（这一格**必须留着**，别顺手删）：`parse` 现在"没有块 ⇒ 零收获"，
+    //     而 **JSON 转义那种写法恰恰就是"原样看没有块"**（围栏被字面 `\n` 顶得不在行首）
+    //     ⇒ 这条降级**正是**它唯一的救法。删掉它 = leg137 治过的那条静默失效当场复发
+    //     （`test/tag-extract.test.js` 的 leg137① 就是咬这个的）。
+    //     ★它与"块不在就扫全篇"那条**不是一回事**：这里救的是**围栏写法**，不是取消边界。
     if (hasTagFacts(first) || src.indexOf(LITERAL_NL) < 0 || !RE_ESCAPED_FENCE_CLOSE.test(src)) return first;
     // ★`split().join()` 而不是正则替换：要替换的就是**字面反斜杠＋n 这两个字符**，不是转义序列。
-    const second = parse(src.split(LITERAL_NL).join('\n'));
+    //   ★★★leg199：这一级多带一个 `loose:true`——还原之后围栏前面还挂着 JSON 信封那几个字符
+    //     （`{"tags":"```tags`），不放宽这一档就等于**还原了也认不出块**（leg137 那条失效原样复发）。
+    //     见 `RE_FENCE_OPEN_LOOSE` 那条注释：只对"已确认是 JSON 转义"的文本开门。
+    const second = parse(src.split(LITERAL_NL).join('\n'), { loose: true });
     second.restored = true;
     return second;
 }

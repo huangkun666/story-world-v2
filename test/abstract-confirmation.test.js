@@ -16,7 +16,7 @@ import {
 } from '../src/abstract.js';
 import { freezeAllowedSources, summarizeEvidence } from '../src/abstract-evidence.js';
 import { createCache, bookFingerprint } from '../src/fp-hash.js';
-import { extractMove } from '../src/extract.js';
+import { extractTags } from '../src/tag-extract.js';
 import { resolveEntityName, resolveEntityIdentity } from '../src/entity-identity.js';
 
 const blocksOf = (pairs) => pairs.map(([sourceId, text]) => ({ sourceId, text }));
@@ -103,9 +103,11 @@ test('Task3 F5：别名走完 抽取→名册→实体→搜索/标签→关系�
     assert.equal(resolveEntityName(world.entities, '水手月亮')?.id, moon.id);
     assert.equal(resolveEntityName(world.entities, '月野兔')?.id, moon.id);
     assert.equal(resolveEntityIdentity(world.entities, '查无此人').status, 'unresolved');
-    // ② 标签提取（tag-extract 的真口径：`extractMove` 读玩家那句话，走 ctx.entityNames 的名字/别名）
-    const move = extractMove('我要用水手月亮的力量', { entityNames: world.entities });
-    assert.equal(move.object, '月野兔', `标签应按别名认人：${JSON.stringify(move)}`);
+    // ② 标签提取（★leg198 翻案：老口径那个提取器已随词表整族拆掉 ⇒ 这一格改测**标签那条路**，
+    //    它才是生产上唯一的落子来源；认人的那把尺子是同一条 `entity-identity`）
+    const facts = extractTags([`${'`'.repeat(3)}tags`, '【行动】水手月亮｜变身', '`'.repeat(3)].join('\n'),
+        { entities: world.entities, locations: [], playerId: null });
+    assert.equal(facts.actions[0]?.actorId, moon.id, `标签应按别名认人：${JSON.stringify(facts.actions)}`);
     // ③ 关系端点（seedBookRelations）
     const rel = seedBookRelations(world, { edges: [{ from: '水手月亮', to: '科学团', type: '同伴' }] });
     assert.equal(rel.seeded, 1, `别名端点必须解析得出：${rel.dropped.join('|')}`);

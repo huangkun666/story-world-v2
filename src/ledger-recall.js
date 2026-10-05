@@ -635,10 +635,10 @@ export function formatRecalled(ssot, items, { header = true, showKind = false, v
             lines.push(`【${timeBits.join(' · ')}】`);
         }
         for (const it of g.items) {
-            const text = plainTextOf(it);
-            if (!text) continue;
+            const line = recalledLineText(it);
+            if (!line) continue;
             const kind = showKind && it?.text ? `（${KIND_LABEL[chronicleKindOf(it)]}）` : '';
-            lines.push(`  · ${text}${kind}`);
+            lines.push(`${line}${kind}`);
         }
     }
     if (!lines.length) return '';
@@ -656,4 +656,16 @@ export function plainTextOf(item) {
     if (typeof item.title === 'string' && item.title) return item.title;
     if (typeof item.goal === 'string' && item.goal) return item.goal;
     return '';
+}
+
+/**
+ * ★★★leg198：**"一行往事长什么样"的唯一一处拼法**。
+ * 为什么必须只有一处：**量额度那一侧**（`web/inject.js` 的 `sizeOf`）与**印出来那一侧**
+ *   （本文件的 `formatRecalled`）此前是**两把尺子**——量的是"剥掉机器块之后的长度"、
+ *   印的是**原文** ⇒ 玩家填 1600 字，真塞进去的可能是 2600 字（"一个数两把尺子"是本仓付过账的形状）。
+ * 口径：**量什么就印什么**——两侧都走这一个函数。
+ */
+export function recalledLineText(item) {
+    const text = plainTextOf(item);
+    return text ? '  · ' + text : '';
 }

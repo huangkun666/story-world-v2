@@ -685,9 +685,23 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //     只是中间插了两行 `.sw2-group-h`；那 4 个数字框由 `.sw2-field-inline` 收窄（实测原宽 1329px）。
         + `<div class="sw2-group-h">往对话里递什么<em>四枚开关，关掉即恢复原样</em></div>`
         + injSwitch('injectTagSpec', cfg.injectSwitches?.injectTagSpec, '让聊天模型按标签写行动')
+        // ★★★leg198（社区反馈第 2/3 条）：这一枚的**后果**必须写在眼前——关着的时候，正文里谁做了什么
+        //   **一件都不会被记下来**（落子只剩标签这一条路：词表猜那一族已按用户令整族拆掉），
+        //   而实体页「事迹 · 他做的」那边就会显示"账上还没有他做过的事"。
+        //   旧文案把这件事藏着 ⇒ 玩家读到的是"这本书里没写他在做什么"（那是假话）。
+        + paramHint('关着的时候，<b>正文里谁做了什么不会被记下来</b>（插件不会去猜）。'
+            + '实体页「事迹 · 他做的」因此常常是空的——那不是"书里没写"，是这一轮没有标签。')
         + injSwitch('injectRoster', cfg.injectSwitches?.injectRoster, '把名号表递进对话')
         + injSwitch('injectWorldTide', cfg.injectSwitches?.injectWorldTide, '把上轮世界动向递进对话')
         + injSwitch('injectLedgerRecall', cfg.injectSwitches?.injectLedgerRecall, '把账上往事递进对话')
+        // ★★★leg198（社区反馈第 4 条）：**"正文怎么读"单立一组**——它不是"往对话里递什么"，
+        //   而是"提取之前先把不是正文的东西剥掉"（成对标签块 ＋ HTML 注释）。
+        //   为什么给开关：有的角色卡**故意**把正文整个包在成对块里（剥完就只剩机器块了）。
+        + `<div class="sw2-group-h">正文怎么读<em>一枚开关，默认开</em></div>`
+        + injSwitch('stripMachineBlocks', cfg.injectSwitches?.stripMachineBlocks, '剥掉正文里的机器块')
+        + paramHint('开着的时候，提取之前先剥掉别的扩展塞进来的<b>成对标签块</b>与<b>HTML 注释</b>'
+            + '（按结构判、不按标签名认）。剥完是空的、或者把 <code>&#96;&#96;&#96;tags</code> 块一起剥掉了，就退回原文。'
+            + '<br><b>什么时候要关掉它</b>：如果你的角色卡<b>故意</b>把正文整个包在成对块里。')
         + `<div class="sw2-group-h">一次递多少 · 往事怎么找<em>五个数，直接填</em></div>`
         + `<div class="sw2-field sw2-field-inline"><div class="sw2-field-head"><label>一轮最多递多少条行动</label>`
         + `<input class="sw2-input" id="sw2_tag_max" data-settings="tagMaxActions" type="number" min="1" max="200" step="1" value="${escapeHtml(String(cfg.tagMaxActions ?? 12))}" title="${attrText('正文里的行动超过这个数就只递前几条（截断会在读数里如实报出来）')}"></div>`

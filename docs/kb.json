@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "864d60c7-d7b6c977",
+  "fingerprint": "d795b26d-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "864d60c7",
+  "sourceFingerprint": "d795b26d",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -184,7 +184,6 @@
     "src/entity-identity.js",
     "src/entity-lookup.js",
     "src/entropy.js",
-    "src/extract.js",
     "src/fp-hash.js",
     "src/gate.js",
     "src/geography-extract.js",
@@ -206,6 +205,7 @@
     "src/params.js",
     "src/position.js",
     "src/prompts.js",
+    "src/prose.js",
     "src/ref-rules.js",
     "src/render-base.js",
     "src/render-subtabs.js",
@@ -272,17 +272,21 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg197-evidence-nodrop",
+    "panelBuild": "leg199-blockonly",
     "mainPromptV": "v2-agenda-t1-34",
     "cssVersion": "20261005-leg196-map-mobile",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "srcModules": 68,
     "webModules": 38,
-    "tests": 168,
+    "tests": 170,
     "demos": 76,
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）",
+      "a0b1ad2 story-world-v2 leg199：删掉\"块外裸标签\"那条降级 ＋ 标签规范第 7 条改值口径",
+      "08d955f ﻿story-world-v2 leg198：拆掉\"没标签就拿词表猜\"那一族 ＋ 社区反馈四条",
+      "e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）",
       "d6e6d56 story-world-v2 leg197：抽象时\"引用找不到原文就丢\"整族撤销（出处只记账、不拦人）",
       "3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）",
       "e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）",
@@ -290,11 +294,7 @@
       "0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）",
       "0b2d4ef leg194: drop the raw inject readout line from the params card",
       "f7104c0 leg193: inject readout row and a char budget that never cuts an event",
-      "be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)",
-      "f8584f0 leg192: make the three retrieval knobs take effect, and rename them (local preview)",
-      "46158df leg192 map popup: geography facts into the round, map as a popup (local preview)",
-      "81e0ef0 docs: design geography facts and map integration",
-      "b137360 fix: allow new events to omit their location"
+      "be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)"
     ]
   },
   "counts": {
@@ -479,7 +479,7 @@
       "kind": "入口/规矩",
       "src": "STATE.md",
       "line": 180,
-      "where": "leg197 已办结（用户 2026-10-05 令，逐字「**把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了，之前取消了属性相关的，现在我要全面撤销**」；同场第二道令「**顺便把文档移植到F盘的那个",
+      "where": "leg199 已办结（用户 2026-10-05 两道令 ＋ 一次更正，逐字：①「**不用管默认值的问题，删掉降级吧**」②「**提示词1300多字，我认为可能需要优化一下，之前我发现一个问题，就是正文标签里给一个角色修改实力字段，但是不是",
       "keys": [
         "STATE",
         "入口",
@@ -509,7 +509,7 @@
       "title": "STATE.md · 5. 现场（本机）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 186,
+      "line": 188,
       "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（仓库根是 `F:\\deepseek\\plugins`；分支 **`leg151-prefetch`**；",
       "keys": [
         "STATE",
@@ -6834,7 +6834,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 50,
-      "where": "**2048 / 2048 · fail 0 · skipped 0 · todo 0**（含**出处只记账不拦人**那一族 9 条：`test/evidence-nodrop.test.js` 的记账层／五条净化路／**反向自证**／\"没 ｜ 复量：`node --test`（无参，在插件目录内）",
+      "where": "**2050 / 2050 · fail 0 · skipped 0 · todo 0**（★leg199 **净 +5**：新增 5 条 —— `test/no-guess.test.js` **leg199①②③**（**块外的标签一个 ｜ 复量：`node --test`（无参，在插件目录内）",
       "keys": [
         "当前值",
         "读数",
@@ -6867,7 +6867,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 51,
-      "where": "**PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js`",
+      "where": "**PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动\"正文里认不认标签\"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每一轮 `dialog ｜ 复量：`node demo/smoke-demo.js`",
       "keys": [
         "当前值",
         "读数",
@@ -6901,7 +6901,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg197-evidence-nodrop`** ｜ 复量：`src/render-base.js`；**\"引用找不到原文就丢\"整族撤销**（用户 2026-10-05 令「把抽象时因为引擎根据模型给的引用而找不到原文而",
+      "where": "**`leg199-blockonly`** ｜ 复量：`src/render-base.js`；**删掉\"块外裸标签\"那条降级**（用户 2026-10-05 令「不用管默认值的问题，**删掉降级吧**」）⇒ **",
       "keys": [
         "当前值",
         "读数",
@@ -7241,7 +7241,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 62,
-      "where": "**`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197 未升**（`web/style.css` 一个字节没动）；leg19",
+      "where": "**`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197／leg198／leg199 均未升**（`web/style.css",
       "keys": [
         "当前值",
         "读数",
@@ -7309,7 +7309,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 64,
-      "where": "**3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行）",
+      "where": "**3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 **1 行**，下一笔 ｜ 复量：`split('\\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行）",
       "keys": [
         "当前值",
         "读数",
@@ -7343,7 +7343,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 65,
-      "where": "**`10`**（★leg197 **9 → 10**：出处那一整套\"核不过就丢\"全面撤销 ⇒ 抽取的问法与净化口径都变了，同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效） ｜ 复量：`src/fp-hash.js`",
+      "where": "**`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-hash.js`",
       "keys": [
         "当前值",
         "读数",
@@ -7479,7 +7479,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 69,
-      "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 下令发布，原话「我 ｜ 复量：`test/browser-compat.test.js`",
+      "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.1`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.0 → 1.1.1；用户 2026-10-05 令「帮我推送更新吧 ｜ 复量：`test/browser-compat.test.js`",
       "keys": [
         "当前值",
         "读数",
@@ -7874,21 +7874,6 @@
       ]
     },
     {
-      "id": "file#src/extract.js",
-      "title": "src/extract.js",
-      "kind": "代码地图",
-      "src": "src/extract.js",
-      "line": 1,
-      "where": "story-world-v2/src/extract.js",
-      "keys": [
-        "文件",
-        "代码",
-        "src",
-        "extract",
-        "extract.js"
-      ]
-    },
-    {
       "id": "file#src/fp-hash.js",
       "title": "src/fp-hash.js",
       "kind": "代码地图",
@@ -8201,6 +8186,21 @@
         "src",
         "prompts",
         "prompts.js"
+      ]
+    },
+    {
+      "id": "file#src/prose.js",
+      "title": "src/prose.js",
+      "kind": "代码地图",
+      "src": "src/prose.js",
+      "line": 1,
+      "where": "story-world-v2/src/prose.js",
+      "keys": [
+        "文件",
+        "代码",
+        "src",
+        "prose",
+        "prose.js"
       ]
     },
     {
@@ -9150,7 +9150,7 @@
     },
     {
       "id": "test#all",
-      "title": "判据在哪（test/ 共 168 个 *.test.js）",
+      "title": "判据在哪（test/ 共 170 个 *.test.js）",
       "kind": "代码地图",
       "src": "test",
       "line": 1,
@@ -9211,7 +9211,6 @@
         "entropy",
         "event-close",
         "evidence-nodrop",
-        "extract",
         "fingerprint",
         "full-roster-smoke",
         "gate",
@@ -9231,6 +9230,7 @@
         "ledger-recall",
         "ledger-shape",
         "ledger-vector",
+        "leg198-hygiene",
         "lens",
         "limits",
         "lines",
@@ -9245,6 +9245,7 @@
         "model-catalog",
         "model-channel",
         "module-layout",
+        "no-guess",
         "observatory",
         "optional-event-position",
         "pack-budget",
@@ -9261,6 +9262,7 @@
         "positions",
         "prompt-required-fields",
         "prompts",
+        "prose-extract",
         "recall-query",
         "recent-window",
         "ref-rules",
@@ -9273,9 +9275,7 @@
         "retrieval-params-live",
         "roster-merge",
         "roster-toolbar",
-        "rule-kinds",
-        "scales-concept-table",
-        "scales-reextract"
+        "rule-kinds"
       ]
     }
   ]

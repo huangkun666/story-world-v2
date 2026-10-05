@@ -7,6 +7,11 @@ import { diagnostics } from '../src/diagnostics.js';
 import { hotAccountShape } from '../src/storage.js';
 import * as diagnosticTransport from '../web/diagnostic-transport.js';
 
+// ★★★leg199（用户令「**删掉降级吧**」）：**没有 ` ```tags ` 块 ⇒ 零收获** ⇒ 要读出标签的夹具必须包块。
+const FENCE = '`'.repeat(3);
+/** 把若干行标签包进一个 ` ```tags ` 块（"只扫块里"这条口径的夹具入口）。 */
+const fenced = (...lines) => [FENCE + 'tags', ...lines, FENCE].join('\n');
+
 const world = () => ({
     version: 1, context: { world: '测试世界', tension: 0.5, positions: ['大营'] },
     entities: [{ id: 'e_a', kind: 'character', name: '甲', location: '大营', lastActiveTick: 0 }],
@@ -56,7 +61,7 @@ test('净化后仍非法：拒绝整步，不用空步替代和推进轮数', as
 test('失败演算不泄漏本轮正文事实或已展示标记到输入账', async () => {
     for (const reply of ['', JSON.stringify(badStep())]) {
         const w = world(), before = structuredClone(w);
-        const r = await runTick({ ssot: w, transport: async () => reply, dialogue: '【行动】甲｜守卫营门｜大营' });
+        const r = await runTick({ ssot: w, transport: async () => reply, dialogue: fenced('【行动】甲｜守卫营门｜大营') });
         assert.equal(r.ok, false);
         assert.ok(r.dialogueStats.events > 0, '确实处理了本轮正文事实');
         assert.deepEqual(w, before);
@@ -103,7 +108,7 @@ test('前置查书保存后失败：热账不泄漏演算事实，未查到新�
         w.meta.entityFields = {};
         let hot = hotAccountShape(w), writes = 0;
         const r = await runTick({
-            ssot: w, dialogue: '【行动】甲｜守卫营门｜大营', transport: async () => '',
+            ssot: w, dialogue: fenced('【行动】甲｜守卫营门｜大营'), transport: async () => '',
             preStep: async ({ ssot }) => ({ ssot: changed
                 ? { ...ssot, meta: { ...ssot.meta, entityFields: { e_a: { lookedUp: true } } } } : ssot }),
             onPreStep: async pre => {

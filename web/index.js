@@ -195,7 +195,7 @@ const NAMESPACE = 'STORY_WORLD_V2';
 // ★1.0.0（发布首版）：本常量与 `manifest.json` 的 `version` 是**同一个版本号的两处写法**，
 //   必须同批改——`test/browser-compat.test.js` 用 `sw2Version()` 锁住它，改一处不改另一处当场红。
 //   ⚠ 别把它当"内部构建号"用：内部构建号是 `src/render.js` 的 `PANEL_BUILD`（面板页脚印的那行）。
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const WINDOW_ID = 'story_world2_window';
 // ★leg93c：事件链**浮层**的容器 id（挂在 `document.body` 上、**不在面板窗口里** ⇒ 面板关着也能看）。
 //   一处定义、三处引用（建/收/查），免得又出现"同名副本 = 本仓最贵的病"。
@@ -885,12 +885,12 @@ let sw2LastTagFacts = null;
 let sw2Injector = null;
 /** 注入开关的人话名（状态条与那一卡共用；★玩家可见文本，零引擎术语）。★leg143：那一卡现住**参数页**。 */
 const INJECT_SWITCH_LABEL = { injectTagSpec: '让聊天模型按标签写行动', injectRoster: '把名号表递进对话',
-    injectWorldTide: '把上轮世界动向递进对话', injectLedgerRecall: '把账上往事递进对话',};
-// ★★★leg115：**第四段（账上往事）默认开**，而且只给它一个——另外三个"缺省=关"是当年**有意**定的，不许顺手翻过来。
-//   来路不同：用户立的要求是「聊天llm**不知道**什么时候世界发生了什么事」⇒ 默认关就等于白做。
-//   口径：**从没设过才算开**；玩家在面板按了「关」⇒ 存 '0' ⇒ 照关（不粘人）。★第四段唯一的特殊性就住在这里。
+    injectWorldTide: '把上轮世界动向递进对话', injectLedgerRecall: '把账上往事递进对话', stripMachineBlocks: '剥掉正文里的机器块',};
+// ★★★leg115：**第四段（账上往事）默认开**——另外三个"缺省=关"是当年**有意**定的，不许顺手翻过来
+//   （用户立的要求是「聊天llm**不知道**什么时候世界发生了什么事」⇒ 默认关就等于白做）；口径：**从没设过才算开**。
+//   ★leg198 起**"剥掉正文里的机器块"也默认开**（它不是注入开关，是"正文怎么读"那一格，实测曲线见 `src/prose.js`）。
 function injectSwitchOn(key) {
-    if (key === 'injectLedgerRecall') return String(modelSettings()?.[key] ?? '1') === '1';
+    if (key === 'injectLedgerRecall' || key === 'stripMachineBlocks') return String(modelSettings()?.[key] ?? '1') === '1';
     return String(modelSettings()?.[key] ?? '') === '1';   // 其余三个：**只有显式 '1' 算开**（全仓同口径）
 }
 // ★★★leg89：**"这条正文推进过了吗"的守卫**——一输入一推进。
@@ -1363,6 +1363,7 @@ function renderCfg(extra = {}) {
         injectSwitches: {
             injectTagSpec: injectSwitchOn('injectTagSpec'), injectRoster: injectSwitchOn('injectRoster'),
             injectWorldTide: injectSwitchOn('injectWorldTide'), injectLedgerRecall: injectSwitchOn('injectLedgerRecall'),
+            stripMachineBlocks: injectSwitchOn('stripMachineBlocks'),
         },
         tagMaxActions: (modelSettings() || {}).tagMaxActions ?? 12,
         // ★★★（2026-10-05 · 用户令「**第二段话可以删了，这是用来调试的**」）：这里原来还画着
@@ -1565,15 +1566,12 @@ async function advanceTick({ world, dialogue }) {
         return { ok: false, error: '模型通道未配置（设置页填写服务地址/密钥/模型）' };
     }
     const res = await runTick({
-        // ★★★leg88 撤回留档（原 leg87 那笔"名单从世界账现取"已撤）：这里曾是
-        //   `extractCtx: buildExtractCtx(world)`——服务的是"从你发的话里提取落子"。
-        //   用户裁示那不是他要的提取 ⇒ 连同 `web/dialogue.js` 整族撤回，恢复零参调用。
-        //   ★★★leg89 接线（**两个断点只接了一个，这是刻意的**）：
-        //     · `extractCtx: {}` **仍然写死不动**——它喂的是老口径（读玩家那一句），那是被否掉的方向；
-        //     · 新口径（标签）**不走 extractCtx**，它直接吃 `dialogue` 这个已经在的形参
-        //       （`runTick` 内部 `extractTags(dialogue, …)`）⇒ 两处断点里**只有传对话那一处要接**。
+        // ★★★leg88 撤回留档：这里曾是 `extractCtx: buildExtractCtx(world)`（"从你发的话里提取落子"）——
+        //   用户裁示那不是他要的提取 ⇒ 连同 `web/dialogue.js` 整族撤回。
+        // ★★★leg198：`extractCtx: {}` 那一格**随词表整族撤掉**（那个模块已删）：落子只剩
+        //   "正文里的标签"这一条路；新加的是 `stripBlocks`（提取前剥掉别的扩展的机器块，见 `src/prose.js`）。
         // ★★★leg119：`ledgerVolumes`（冷档里的旧编年）——不递它，轮转之后「纪事」栏会**悄悄少一半**，细案 `docs/spec-volumes-into-recall.md`。
-        transport: diagExtract(resolved), ssot: world, dialogue, extractCtx: {}, ledgerVolumes: ledgerVolumes(),
+        transport: diagExtract(resolved), ssot: world, dialogue, stripBlocks: injectSwitchOn('stripMachineBlocks'), ledgerVolumes: ledgerVolumes(),
         // ★★★leg161（接回来）：**世界模型那一栏的召回口**——`runTick` 在 `registerDialogueFacts`
         //   之后、`buildEvolutionPack` 之前调它（顺序是机制的一部分，判据 P7 钉着）。
         //   ★没配通道 / 抛错 ⇒ 那一栏不出现，世界照常推进（`recallForTick` 自己永不抛）。
@@ -1630,7 +1628,10 @@ async function advanceTick({ world, dialogue }) {
     }
     // ★★★leg89：标签读数**每轮从头写**（没标签的轮次就把上一轮那行清掉——绝不让它冒充本轮）。
     sw2LastTagFacts = res?.tagFacts || null;
+    // ★★★leg198（反馈第 2 条：**不许静默退化**）：**开关开着却没有标签** ⇒ 如实出声——那一档才是真问题
+    //   （"模型没按规范写"，且它会让"正文里的事"一整轮都记不下来）；开关关着是玩家自己的选择，不刷屏。
     if (res?.tagReadout) console.info(`[story-world-v2] ${res.tagReadout}`);
+    else if (res?.ok && injectSwitchOn('injectTagSpec')) setStatus('注意：这一轮正文里没有标签——正文里的事这一轮没记下来（模型没按标签规范写）');
     return res;
 }
 

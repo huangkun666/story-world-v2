@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
-import { extractMove } from '../src/extract.js';
 import { runTick } from '../src/tick.js';
 
 const WORLD = JSON.parse(readFileSync(new URL('./fixtures/live-world.json', import.meta.url), 'utf8'));
@@ -18,25 +17,10 @@ test('活演示世界：通过 SSOT schema（三实体三盘算，薛铁衣暗�
     assert.equal(WORLD.agendas.find((a) => a.id === 'a_xie').visibility, 'concealed', '薛铁衣在暗处（§4.4⑤ 明暗双流都在流）');
 });
 
-const CASES = [
-    ['我去大盘谷看看薛铁衣的动静', { verb: '探查', object: '薛铁衣', location: '大盘谷' }],
-    ['我想问偏将大人，灵脉交割的章程', { verb: '询问', object: '大虞偏将', location: null }],
-    ['薛铁衣，你究竟是什么来路', { verb: '盘问', object: '薛铁衣', location: null }],
-    ['万法阁的道友，带路吧', { verb: '跟随', object: '万法阁', location: null }],
-    ['我谋划拿下这条灵脉', { verb: '图谋', object: '灵脉', location: null }],
-    ['太岁残骨的事，我向万法阁询个价', { verb: '询价', object: '万法阁', location: null }],
-    ['此地煞气太重，我们离开这里', { verb: '离开', object: null, location: null }],
-    ['回黄府后，我要开始修炼了', { verb: '修炼', object: null, location: '黄府' }],
-];
-
-test('活演示世界：八条演示对话的落子提取命中', () => {
-    for (const [dialogue, exp] of CASES) {
-        const got = extractMove(dialogue, CTX);
-        assert.equal(got.verb, exp.verb, `${dialogue} → verb`);
-        assert.equal(got.object, exp.object, `${dialogue} → object`);
-        assert.equal(got.location, exp.location, `${dialogue} → location`);
-    }
-});
+// ★★★leg198 翻案：这里原来有 8 条"演示对话的落子提取命中"（对拍老口径那张 13 条动词表）——
+//   用户 2026-10-05 令「**这个词表按道理说早应该拆了…这个功能要猜，没标签就不进正文的行动即可**」
+//   ⇒ 那个模块整族删除，这 8 条**没有东西可测了**（不是放宽，是被测对象不存在了）。
+//   新口径的判据在 `test/no-guess.test.js`（无标签 ⇒ 落子为空；有标签 ⇒ 照旧成立）。
 
 test('活演示世界：多实体世界跑一个 tick（fake 空步）不炸', async () => {
     // leg25 c：世界步契约已无 `stateChanges`（四维浮点整条删除）——fake 空步不再拼它。

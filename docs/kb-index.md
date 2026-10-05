@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**328 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `864d60c7-d7b6c977`（源文件 864d60c7 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `d795b26d-d7b6c977`（源文件 d795b26d · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,10 +11,10 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg197-evidence-nodrop` |
+| 构建号 | `leg199-blockonly` |
 | 提示词号 | `v2-agenda-t1-34` |
-| 版本 | `1.1.0`（ST 扩展） |
-| 规模 | src **68** · web **38** · 判据 **168** · 探针 **76** · 文档 **201** |
+| 版本 | `1.1.1`（ST 扩展） |
+| 规模 | src **68** · web **38** · 判据 **170** · 探针 **76** · 文档 **201** |
 | 最新交接 | `session-handoff-2026-10-02-leg173-panorama-reader.md` |
 
 ## 卡片（按类分组）
@@ -28,8 +28,8 @@
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:43` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
 | STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:78` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
 | STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:140` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 当前工作 | `STATE.md:180` | leg197 已办结（用户 2026-10-05 令，逐字「**把抽象时因为引擎根据模型给的引用而找不到原文而丢弃模型提出的行动的这个行为全部取消了，之前取消了属性相关的，现在我要全面撤销**」；同场第二道令「**顺便把 |
-| STATE.md · 5. 现场（本机） | `STATE.md:186` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
+| STATE.md · 4. 当前工作 | `STATE.md:180` | leg199 已办结（用户 2026-10-05 两道令 ＋ 一次更正，逐字：①「**不用管默认值的问题，删掉降级吧**」②「**提示词1300多字，我认为可能需要优化一下，之前我发现一个问题，就是正文标签里给一个角色修 |
+| STATE.md · 5. 现场（本机） | `STATE.md:188` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
 
 ### 活儿（12）
 
@@ -257,9 +257,9 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:50` | **2048 / 2048 · fail 0 · skipped 0 · todo 0**（含**出处只记账不拦人**那一族 9 条：`test/evidence-nodrop.test.js` 的记账层／五条净化路／* |
-| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0** ｜ 复量：`node demo/smoke-demo.js` |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg197-evidence-nodrop`** ｜ 复量：`src/render-base.js`；**"引用找不到原文就丢"整族撤销**（用户 2026-10-05 令「把抽象时因为引擎根据模型给的引用而找不 |
+| 当前值 · 判据 | `STATE.md:50` | **2050 / 2050 · fail 0 · skipped 0 · todo 0**（★leg199 **净 +5**：新增 5 条 —— `test/no-guess.test.js` **leg199①②③** |
+| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动"正文里认不认标签"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每 |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg199-blockonly`** ｜ 复量：`src/render-base.js`；**删掉"块外裸标签"那条降级**（用户 2026-10-05 令「不用管默认值的问题，**删掉降级吧**」）⇒ ** |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
@@ -269,14 +269,14 @@
 | 当前值 · 包预算 出厂值 | `STATE.md:59` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
 | 当前值 · ★往回看轮数 出厂值 | `STATE.md:60` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
 | 当前值 · ★leg136–leg156 各笔 | `STATE.md:61` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
-| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197 未升**（`web/style.css` 一个字节没 |
+| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197／leg198／leg199 均未升**（`web/s |
 | 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
-| 当前值 · web/index.js 行数 | `STATE.md:64` | **3098 / 3100**（硬锁 `<3100`；地图弹窗、地理补抽接线、检索参数现读、注入读数行的措辞各自独立成模块或函数，入口只装配） ｜ 复量：`split('\n').length`（★**别用 PowerS |
-| 当前值 · CACHE_VERSION | `STATE.md:65` | **`10`**（★leg197 **9 → 10**：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与净化口径都变了，同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效） ｜ 复量：`src/fp-hash.js` |
+| 当前值 · web/index.js 行数 | `STATE.md:64` | **3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 * |
+| 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
 | 当前值 · 发布仓 main | `STATE.md:66` | **`03e641b`** · 构建号 **`leg197-evidence-nodrop`** · 版本号 **`1.1.0`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓 |
 | 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动 ｜ 复量：`node scripts/verify-release.mjs` |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
-| 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.0`**（两处，判据锁着第二处）。★**这一版升了号**（1.0.1 → 1.1.0；用户 2026-10-05 |
+| 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.1`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.0 → 1.1.1；用户 2026-10-05 |
 
 ### 怎么跑（2）
 
@@ -310,7 +310,6 @@
 | src/entity-identity.js | `src/entity-identity.js:1` | story-world-v2/src/entity-identity.js |
 | src/entity-lookup.js | `src/entity-lookup.js:1` | story-world-v2/src/entity-lookup.js |
 | src/entropy.js | `src/entropy.js:1` | story-world-v2/src/entropy.js |
-| src/extract.js | `src/extract.js:1` | story-world-v2/src/extract.js |
 | src/fp-hash.js | `src/fp-hash.js:1` | story-world-v2/src/fp-hash.js |
 | src/gate.js | `src/gate.js:1` | story-world-v2/src/gate.js |
 | src/geography-extract.js | `src/geography-extract.js:1` |  |
@@ -332,6 +331,7 @@
 | src/params.js | `src/params.js:1` | story-world-v2/src/params.js |
 | src/position.js | `src/position.js:1` | story-world-v2/src/position.js |
 | src/prompts.js | `src/prompts.js:1` | story-world-v2/src/prompts.js |
+| src/prose.js | `src/prose.js:1` | story-world-v2/src/prose.js |
 | src/ref-rules.js | `src/ref-rules.js:1` | story-world-v2/src/ref-rules.js |
 | src/render-base.js | `src/render-base.js:1` | story-world-v2/src/render-base.js |
 | src/render-subtabs.js | `src/render-subtabs.js:1` | View-only sections. Every control is rendered once; switching only changes visibility. |
@@ -395,10 +395,14 @@
 | web/window-shell.js | `web/window-shell.js:1` | story-world-v2/web/window-shell.js |
 | web/world-entity-migration.js | `web/world-entity-migration.js:1` | story-world-v2/web/world-entity-migration.js |
 | web/world-replace.js | `web/world-replace.js:1` | story-world-v2/web/world-replace.js |
-| 判据在哪（test/ 共 168 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
+| 判据在哪（test/ 共 170 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）`
+- `a0b1ad2 story-world-v2 leg199：删掉"块外裸标签"那条降级 ＋ 标签规范第 7 条改值口径`
+- `08d955f ﻿story-world-v2 leg198：拆掉"没标签就拿词表猜"那一族 ＋ 社区反馈四条`
+- `e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）`
 - `d6e6d56 story-world-v2 leg197：抽象时"引用找不到原文就丢"整族撤销（出处只记账、不拦人）`
 - `3782a51 story-world-v2 leg196 发布记账：发布点跟到 395eb9c / leg196-map-mobile（★纯记账笔，产品行为零变化）`
 - `e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）`
@@ -407,8 +411,4 @@
 - `0b2d4ef leg194: drop the raw inject readout line from the params card`
 - `f7104c0 leg193: inject readout row and a char budget that never cuts an event`
 - `be822d1 leg192: hints instead of new names, and the three knobs go live (local preview)`
-- `f8584f0 leg192: make the three retrieval knobs take effect, and rename them (local preview)`
-- `46158df leg192 map popup: geography facts into the round, map as a popup (local preview)`
-- `81e0ef0 docs: design geography facts and map integration`
-- `b137360 fix: allow new events to omit their location`
 

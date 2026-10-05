@@ -79,7 +79,8 @@ test('Task4·身份消费者：搜索 / 标签 / 查书 / 归属 / 关系端点 
     assert.deepEqual(selectEntityPage(world, { q: LONG }).rows.map((e) => e.id), [lu.id], '按别名搜索要查到人');
 
     // ② 标签路由（`extractTags` 走共用身份解析）
-    const tags = extractTags(`【行动】${LONG}｜修炼`, world);
+    //   ★★★leg199：**没有 ` ```tags ` 块 ⇒ 零收获** ⇒ 夹具必须包块（"只扫块里"这条口径）。
+    const tags = extractTags(['```tags', `【行动】${LONG}｜修炼`, '```'].join('\n'), world);
     assert.equal(tags.actions[0]?.actorId, lu.id, `★标签用别名认人：${JSON.stringify(tags.unresolved)}`);
 
     // ③ 归属（`seedBookEntities` 的 canon 父级解析：别名写的上级归到正名）
@@ -116,7 +117,8 @@ test('Task4·共享别名/跨类别同名仍是"歧义即未定"（不许先到�
     };
     assert.equal(resolveEntityIdentityWithCanon(world.entities, [], '大人').status, 'ambiguous');
     assert.equal(resolveEntityIdentityWithCanon(world.entities, [], '甲').status, 'ambiguous', '跨类别同名也不许合并');
-    const tags = extractTags('【行动】大人｜修炼', world);
+    // ★★★leg199：同样要包块（没有块 ⇒ 零收获，那时这条判据会变成空绿）
+    const tags = extractTags(['```tags', '【行动】大人｜修炼', '```'].join('\n'), world);
     assert.equal(tags.count, 0, '共享别名 ⇒ 不归给先到者');
     assert.ok(tags.unresolved.some((u) => u.name === '大人'), '归不上要如实报数');
     const rootWorld = { entities: [...world.entities], events: [], meta: { tick: 0 }, context: { playerId: 'player' } };

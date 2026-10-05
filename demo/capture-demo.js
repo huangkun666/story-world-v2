@@ -8,7 +8,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { runTick } from '../src/tick.js';
 import { runMainCall } from '../src/worldstep.js';
-import { extractMove } from '../src/extract.js';
 import { buildEvolutionPack } from '../src/pack.js';
 import { resolveWorldTransport } from '../src/st-preset.js';
 
@@ -50,7 +49,9 @@ const capTransport = async (prompt) => {
 const lines = [];
 
 for (const [i, dialogue] of TURNS.entries()) {
-    const move = extractMove(dialogue || '', CTX);
+    // ★★★leg198：那张 13 条动词表的老口径已按用户令整族拆掉 ⇒ 落子只剩"正文里的标签"这一条路。
+    //   本演示脚本当年靠它复现"落子轮"，现在如实传 `null`（没有标签就是没有落子）。
+    const move = null;
     const record = { tick: i + 1, dialogue, raw: null, step: null, gate: null, warnings: [] };
     const r = await runTick({ transport: capTransport, ssot: world, dialogue, extractCtx: CTX });
     if (!r.ok) {

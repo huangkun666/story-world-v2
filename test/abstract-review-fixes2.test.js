@@ -23,6 +23,11 @@ import { extractTags } from '../src/tag-extract.js';
 import {
     resolveEntityIdentityWithCanon, resolveEntityIdentityPreferred,
 } from '../src/entity-identity.js';
+
+// ★★★leg199（用户令「**删掉降级吧**」）：**没有 ` ```tags ` 块 ⇒ 零收获** ⇒ 要读出标签的夹具必须包块。
+const FENCE = '`'.repeat(3);
+/** 把若干行标签包进一个 ` ```tags ` 块（"只扫块里"这条口径的夹具入口）。 */
+const fenced = (...lines) => [FENCE + 'tags', ...lines, FENCE].join('\n');
 import { applyLookup } from '../src/entity-lookup.js';
 import { createCache } from '../src/fp-hash.js';
 import { makeSnapshot } from '../src/snapshot.js';
@@ -269,7 +274,7 @@ test('复查二轮④：同一个名字在标签/关系/查书三处结论必须
         { id: 'c', name: '甲', kind: 'character' },
     ];
     // ① 标签：唯一正名 ⇒ a（旧实现这条是对的）
-    const tag = extractTags('【行动】小娥｜回话', { entities });
+    const tag = extractTags(fenced('【行动】小娥｜回话'), { entities });
     assert.equal(tag.actions[0]?.actorId, 'a');
     // ② 关系端点：与标签**同一结论**（旧实现走"只认正名 ∪ 别名"的合体索引 ⇒ 判成歧义、丢掉这条边）
     const world = { context: { tension: 0.5, positions: ['未明'] }, entities, weights: {} };
@@ -287,14 +292,14 @@ test('复查二轮④：同一个名字在标签/关系/查书三处结论必须
 
 test('复查二轮④：混合来源别名（实体别名 vs 旧世界名册别名）⇒ 未定，不选先到者', () => {
     // 复审原载荷（mixedTag）：账上「甲」的别名「先生」与名册里「乙」的别名「先生」
-    const mixed = extractTags('【行动】先生｜修炼', {
+    const mixed = extractTags(fenced('【行动】先生｜修炼'), {
         entities: [{ id: 'a', name: '甲', aliases: ['先生'] }, { id: 'b', name: '乙' }],
         canon: [{ name: '乙', aliases: ['先生'] }],
     });
     assert.equal(mixed.actions.length, 0, `跨来源同档撞车 ⇒ 未定（旧实现归给了甲）：${JSON.stringify(mixed.actions)}`);
     assert.deepEqual(mixed.unresolved, [{ name: '先生', n: 1 }], '未定要如实报数');
     // 旧世界兼容：账上实体没有 aliases、别名只在名册里 ⇒ 仍要认得出
-    const legacy = extractTags('【行动】水手月亮｜变身', {
+    const legacy = extractTags(fenced('【行动】水手月亮｜变身'), {
         entities: [{ id: 'a', name: '月野兔' }],
         canon: [{ name: '月野兔', aliases: ['水手月亮'] }],
     });

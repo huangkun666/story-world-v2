@@ -734,7 +734,9 @@ function dialogueReadout(r, world, chronicleBefore) {
         不在名册也给看: f.notNoted?.length ?? 0,
         形状不合: f.malformed?.length ?? 0,
         此刻: f.at ?? null, 时长: f.elapsed || null,
-        围栏: f.shell ? `${f.shell.found ? '有' : '没有'}（按${f.shell.mode}扫）` : null,
+        // ★★★leg199：`mode` 那一格已撤（只有 'shell' 一个值了）——现在**没有块 = 零收获**，
+        //   所以读数只需要说"有没有块"（"没有"就是这一轮白跑，正是要看的那一格）。
+        围栏: f.shell ? `${f.shell.found ? '有' : '没有（零收获）'}${f.shell.found && !f.shell.closed ? '（没闭合）' : ''}` : null,
         // ── 落账那一段（`registerDialogueFacts` 的 stats）──
         落账事件: r.dialogueStats?.events ?? 0, 落格: r.dialogueStats?.updates ?? 0,
         落账丢: r.dialogueStats?.dropped ?? 0, 落账封顶: r.dialogueStats?.capped ?? 0,

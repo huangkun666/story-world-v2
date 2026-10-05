@@ -2580,7 +2580,19 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动，仍 `20261005-leg196-map-mobile`）
     //   ⇒ 下面 `CSS_PIN` 的号与指纹**都不换**；`MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；
     //     `CACHE_VERSION` **同批升 9 → 10**（抽取的问法与净化口径都变了）。
-    assert.equal(PANEL_BUILD, 'leg197-evidence-nodrop');
+    // ★★★leg198（社区反馈四条 ＋ 用户令「这个词表按道理说早应该拆了…没标签就不进正文的行动即可」）：
+    //   `PANEL_BUILD` **升**（`leg198-noguess`）——玩家直接看得见的三件事：① 实体页「事迹 · 他做的」空文案
+    //   改成实话；② 「参数」页注入卡多了**一枚开关**（剥掉正文里的机器块，默认开）＋ 它那一句说明；
+    //   ③ 「让聊天模型按标签写行动」那一行旁边多了一句实话（关着的时候，正文里的事不会被记下来）。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动，仍 `20261005-leg196-map-mobile`）
+    //   ⇒ 下面 `CSS_PIN` 的号与指纹**都不换**；`MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；
+    //   `CACHE_VERSION` **升到 11**（起根那一问的问法变了：title 立时态纪律 ＋ 撤掉死格 `why`）。
+    // ★★★leg199（用户两道令：「**不用管默认值的问题，删掉降级吧**」＋「**提示词…我认为可能需要优化一下**」）：
+    //   `PANEL_BUILD` **升**（`leg199-blockonly`）——玩家直接看得见的一件事：**"这一轮没有标签"那一档的后果变了**
+    //   （以前块外的裸标签照样读得出来，现在**整轮零收获**）；规范第 7 条也改了值口径（第三格＝新状态不是过程）。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动）；`MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；
+    //     `CACHE_VERSION` **不升**（仍 11：抽取的问法没变）。
+    assert.equal(PANEL_BUILD, 'leg199-blockonly');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2645,7 +2657,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '197', '前置：本笔构建号为 leg197（全面撤销出处丢弃那一笔），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '199', '前置：本笔构建号为 leg199（删掉"块外裸标签"那条降级），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

@@ -14,7 +14,8 @@
 //
 // 前置：
 //   · 工作区干净（导出=已提交状态，逐字节可复现）
-//   · 本机有 `%USERPROFILE%\.git-credentials`（token 在里面，**不打印、不进日志**）
+//   · 本机有 `%USERPROFILE%\.git-credentials`，**里面要有 `@github.com` 那一行**
+//     （★按主机挑行、不取第一行——它可能装的是 gitee；token **不打印、不进日志**）
 // 跑法：
 //   node scripts/publish-release.mjs              # 真推
 //   node scripts/publish-release.mjs --dry-run    # 只导出 + 仓外跑判据，不推（推荐先跑这个）
@@ -47,11 +48,19 @@ const gitT = (args, opts = {}) => git(args, opts).trim();
 const gitQ = (args, opts = {}) => { try { return { ok: true, out: gitT(args, opts) }; } catch (e) { return { ok: false, out: wash(String(e.stdout || '') + String(e.stderr || '')) }; } };
 
 // ── 凭证（只在本进程环境里用；★永不进日志、不落盘） ──────────────────
+// ★★2026-10-05（发布 1.1.1 时当场撞上）**别取"第一行"**：`~/.git-credentials` 是**多主机共用**的，
+//   本机实测 3 行（gitee 一行 ＋ github 两行），而那天 **gitee 那行排到了第一行**
+//   ⇒ 原写法取到的是 **11 位的 gitee 密钥** ⇒ 三个 API 全 `401 Bad credentials`，
+//   而报错只说"取不到远端状态（网络？token？）"——**把"凭据认错了主机"误报成"网络问题"**
+//   （本仓最贵的那类病：报错指向一个不是病灶的地方，下一棒会照着"网络"去修）。
+//   ⇒ 定稿：**按主机挑行**（只认 `@github.com`），并优先 `x-access-token` 那一行（本脚本要的就是它）。
 const credFile = path.join(os.homedir(), '.git-credentials');
 if (!fs.existsSync(credFile)) die(`读不到 ${credFile}（token 存放处）`);
-const cred = fs.readFileSync(credFile, 'utf8').trim().split(/\r?\n/).filter(Boolean)[0];
+const credLines = fs.readFileSync(credFile, 'utf8').trim().split(/\r?\n/).filter(Boolean);
+const ghCredLines = credLines.filter((l) => /@github\.com(:\d+)?\/?$/.test(l.trim()));
+const cred = ghCredLines.find((l) => /^https?:\/\/x-access-token:/.test(l)) || ghCredLines[0] || '';
 const token = (/^https?:\/\/[^:]+:([^@]*)@/.exec(cred) || [])[1];
-if (!token) die('从 .git-credentials 里解析不出 token');
+if (!token) die(`从 ${credFile} 里挑不出 github.com 那行的 token（共 ${credLines.length} 行 · github ${ghCredLines.length} 行）★别退回"取第一行"——那可能是别的主机（gitee 等）`);
 const url = `https://x-access-token:${token}@github.com/${REPO}.git`;
 // ★把 credential helper 清空：Git Credential Manager 会**抢答**并要求交互，
 //   在非交互环境里表现为 `could not read Username for 'https://github.com'`（leg106 踩到并留档）。

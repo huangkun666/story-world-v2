@@ -194,7 +194,8 @@ async function runVariant(baseWorld, variant) {
         ssot: baseWorld,
         ticks: TICKS,
         stepGen: makeStepGen(state),
-        // ★对话给空串：`extractMove` 拿实体名做**子串匹配**找"落子对象"，'（继续）' 会命中玩家（叫"你"）
+        // ★对话给空串：老口径那个提取器拿实体名做**子串匹配**找"落子对象"，'（继续）' 会命中玩家（叫"你"）
+        //   ——★leg198 起那一族已整族拆掉（这一条留档；本探针照旧给空串）。
         //   ⇒ 每轮给玩家开一次口子，污染门控③。测量要的是"只看门控"，对话噪声必须清零。
         dialogueGen: () => '',
         onTick: (_loopIndex, w) => {

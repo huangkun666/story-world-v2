@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs';
 import { checkWorldStep } from '../src/check-step.js';
 import { runMainCall } from '../src/worldstep.js';
 import { buildEvolutionPack, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
-import { extractMove } from '../src/extract.js';
 import { validate } from '../src/schema.js';
 import { ssotSchema } from '../src/schemas/ssot.schema.js';
 import { worldStepSchema } from '../src/schemas/world-step.schema.js';
@@ -14,7 +13,6 @@ import { gateWorldStep } from '../src/gate.js';
 import { RIPPLE_TARGET_CAP } from '../src/weight.js';
 
 const GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/golden-world.min.json', import.meta.url), 'utf8'));
-const EXTRACT_FIX = JSON.parse(readFileSync(new URL('./fixtures/extract-samples.json', import.meta.url), 'utf8'));
 
 // 合法世界步（黄金世界语境）
 // leg25 c（单维删除）：原先这里还有一条 `stateChanges: [{entity, attr:'network', delta, cause}]`。
@@ -199,8 +197,10 @@ test('演化上下文：已结算盘算不再入包（防满步重播）', () =>
 // ---------- 样例 tick 集成（S4 验收） ----------
 
 test('样例 tick：黄金世界 + l91 落子事实 → 演化上下文预算内 → 世界步过全部校验', async () => {
-    const s = EXTRACT_FIX.samples.find((x) => x.id === 'l91');
-    const move = extractMove(s.dialogue, EXTRACT_FIX.context);
+    // ★★★leg198 翻案：原来这里用老口径那个提取器现算落子（那一族已整族拆掉）。
+    //   本用例要锁的是"**落子事实进原料**"（`pack.playerMove`），与它从哪来无关 ⇒ 手写一条即可
+    //   （形状与标签那条路一致：`source: 'tag'`；无标签时 `runTick` 给的是 `null`）。
+    const move = { verb: '收服', object: '龙蛋', location: null, attempt: true, note: null, dropped: [], source: 'tag' };
     assert.equal(move.verb, '收服');
 
     const pack = buildEvolutionPack(GOLDEN, move);

@@ -7,7 +7,6 @@
 // 门控审计（gate.silent/lifted）依赖当时的夹具状态，现夹具已变 → gate 锁言不可复现，降级仅锁 warnings）；
 // 'post'（其余——修补后夹具，gate 可锁）。
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { extractMove } from '../src/extract.js';
 
 const WORLD_META = {
     live: { world: 'live-world.json', ctx: 'live-ctx.json' },
@@ -35,7 +34,9 @@ for (const file of readdirSync(new URL('../snapshots/', import.meta.url)).filter
         }
         rec.step.newAgendas = rec.step.newAgendas ?? [];
         rec.step.agendaCancels = rec.step.agendaCancels ?? [];
-        const move = extractMove(rec.dialogue || '', ctx);
+        // ★★★leg198：词表猜那一族（整族）已拆掉 ⇒ 转制出来的 `moveFact` 一律 `null`
+        //   （历史快照里那些值照旧留在已有 fixture 里，本脚本只负责"以后再转制时怎么算"）。
+        const move = null;
         steps.push({
             tick: rec.tick,
             step: rec.step,

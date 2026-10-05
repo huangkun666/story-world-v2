@@ -88,11 +88,17 @@ export function longestBookRun(quote, bookText) {
  *   而漂移之后**没有任何判据会红**——两边的模型行为会悄悄不一样。
  */
 export const SEED_ROOT_ITEM_SHAPE = {
-    title: '一句话说清这件事（20 字以内，用书里的说法）',
+    // ★★★leg198（社区反馈第 1 条）：**title 立时态纪律**——他抓对了字段、抓错了格子：
+    //   真进世界模型的是**这一格**（线头/线捆只带 `id/title/position/people`，见 `src/pack.js`），
+    //   而判据 4 的"能往下走"说的是**这件事有下一步可写**，不是让你把下一步写进标题里。
+    title: '一句话说清这件事**此刻正在发生**的那一步（20 字以内，用书里的说法；**不许写它接下来会怎样**）',
     position: '书里明述的地点（照抄原文；没写就空着）',
     parties: ['书里明述的当事人名（门派/势力/人物，1–3 个）'],
     quote: '书里那句话（照抄原文，60 字以内）',
-    why: '一句话：为什么它算「正在发生」（可省）',
+    // ★★★leg198：`why` 那一格**撤掉**（原话是「一句话：为什么它算「正在发生」（可省）」）——
+    //   它是个**死格**：写了没人读（全仓只有面板读 `seedFrom.quote`，模型那一侧从来不读它），
+    //   而它的措辞专门招"预判"（模型会把"接下来将…"写进去）。
+    //   ★契约里那一格**留着**（`ssot.schema.js` 的 `seedFrom.why`）⇒ 老账零迁移、照旧合法。
 };
 
 /**
@@ -129,8 +135,9 @@ export function seedRootsBrief({ candidates = [], evidence = false } = {}) {
         '1. 它**有地点**：发生在书里某个说得出的地方（地名照抄书中原文）。',
         '2. 它**有当事人**：有一方或几方**有名有姓**的人在办它（门派/势力/人物名，照抄书中原文）。',
         '3. 它**还没了结**：书中写它是"正在进行／刚刚开始／悬而未决"的，不是已经写完结局的往事。',
-        '4. 它**能往下走**：由它可以合理推出"接下来会怎样"——不是一句静态描述（如"此界分九州"），',
-        '   也不是数值档位（如"T1 感气境"），更不是一段地理志。',
+        '4. 它**能往下走**：由它可以合理推出"接下来会怎样"——★**但"接下来"不许写进 `title`**：',
+        '   `title` 只写**此刻正在发生**的那一步（"能往下走"是给你挑事的尺子，不是让你把下一步写进标题）。',
+        '   也不是一句静态描述（如"此界分九州"），也不是数值档位（如"T1 感气境"），更不是一段地理志。',
         '',
         '**不要发明**：每条都要能指回书里的原话。书里没写地点就不写地点；书里没写谁在办就不要编一个人出来。',
         '宁可少给（4 条扎实的，胜过 8 条含糊的）。',
@@ -236,9 +243,10 @@ export function sanitizeSeedRoots(raw, { max = SEED_ROOTS_MAX, sourceText = '', 
         }
         if (!parties.length) { warnings.push(`roots[${i}]: 没有当事人（parties 空）⇒ 没人办的事起不了根，丢`); continue; }
         seen.add(title);
-        // ★落账形状**一个字不改**：`{title, position, parties, quote, why}`——原始凭证（`ev`/来源编号）
-        //   是过程材料，核完即弃（与关系边的 `_swVerified` 同一条：**不进世界账、不进缓存**）。
-        roots.push({ title, position, parties, quote, why: String(r.why ?? '').trim().slice(0, 80) });
+        // 落账形状**一个字不改**（leg197 那一笔的口径）：`{title, position, parties, quote}`——
+        //   原始凭证（`ev`/来源编号）是过程材料，核完即弃（与关系边的 `_swVerified` 同一条：
+        //   **不进世界账、不进缓存**）。★leg198：`why` 同批撤掉（死格，见上面形状那一处）。
+        roots.push({ title, position, parties, quote });
         if (roots.length >= Math.min(max, SEED_ROOTS_MAX)) break;
     }
     return { roots, warnings };
@@ -284,7 +292,8 @@ export function applySeedRoots(ssot, roots, { fingerprint = '', at = '', tick = 
             position: r.position || undefined,
             ripples,
             closed: false,
-            seedFrom: { quote: r.quote, why: r.why || undefined, fingerprint, at, tick: tickNow },
+            // ★★★leg198：`why` 不再落账（死格 + 招预判）——账上只留**书里那句话**（可核查的那一半）。
+            seedFrom: { quote: r.quote, fingerprint, at, tick: tickNow },
         });
     }
     return { seeded: ids.length, skippedParties, ids };

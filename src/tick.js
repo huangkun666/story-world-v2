@@ -1,8 +1,8 @@
 // story-world-v2/src/tick.js
 // 完整 tick 编排（S6）：对话 → 落子提取 → 演化上下文 → 主调用（真 schema）→ 结算 → 双流。
 // 这就是"最小活棋盘跑通一次完整 tick"的入口。
-import { extractMove } from './extract.js';
 import { extractTags, hasTagFacts, tagReadoutLine } from './tag-extract.js';
+import { proseOnly } from './prose.js';   // ★leg198：提取之前先剥掉"不是正文"的东西
 import { buildEvolutionPack, lineRootsOfPack, recordShownLines, windowFromTick, RECENT_WINDOW_TURNS } from './pack.js';
 import { runMainCall } from './worldstep.js';
 import { settleTick, registerDialogueFacts } from './settle.js';
@@ -179,15 +179,18 @@ function reasonOf(d) {
 //   ★**代价也如实登记**：拔掉之后，**世界模型这一侧再没有任何"来自正文"的输入**
 //     （标签那条路是用户有意关的）⇒ 它此后**只按账自己的状态演**。这不是意外，是本棒量出来的后果。
 
-export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null }) {
-    // ★★两条提取路并存，**互不影响**（口径不同、消费面不同）：
-    //   ① `extractMove(dialogue, extractCtx)` = **老口径**：读"玩家自己打的那句话"，靠 13 条动词词表归一。
-    //      ★生产上恒 null（`extractCtx: {}` 是接线占位）——**保留不动**：那是被用户否掉的方向的留档，
-    //        撤它要单独一笔，且它现在还担着"没有标签时 playerMove 从哪来"这一格。
-    //   ② `extractTags(dialogue, …)` = **新口径**（leg89）：读**聊天模型产出的正文**里的标签，
-    //      抽"各角色（含主角）这一轮已经做了什么、在哪、过了多久"。见 `src/tag-extract.js` 头注。
-    const move0 = extractMove(dialogue || '', extractCtx || {});
-    const tagFacts = extractTags(dialogue || '', {
+export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null, stripBlocks = false }) {
+    // ★★★leg198（用户令「**这个词表按道理说早应该拆了，这是很久之前的设计了，早就不适用了，
+    //   这个功能要猜，没标签就不进正文的行动即可**」）：**落子只剩一条路——正文里的标签**。
+    //   拆掉的老口径（那张 13 条正则的动词表）病在两处，都能指到行：
+    //     ① 那张表是给"**玩家自己打的那句话**"设计的，而这里喂进去的是**模型写的整段正文**
+    //        ⇒ 正文里随便谁"问道""离开"，都会被算成**玩家**这一轮的动作；
+    //     ② 它猜出来的东西会经 `move` 进 settle（玩家记成"活跃"）与 streams（印成【你的行迹】）。
+    //   ⇒ 新口径：**没有玩家标签 ⇒ 这一轮玩家没有落子**（不猜、也不拿别人的行动顶，见下面 `moveFact`）。
+    // ★★★leg198：提取之前先剥掉"不是正文"的东西（成对标签块 ＋ HTML 注释，口径与边界见 `src/prose.js`）。
+    //   `stripBlocks` 由编排层按面板那一枚开关递进来；**缺省 false** ⇒ 老调用方逐字节零扰动。
+    const prose = stripBlocks ? proseOnly(dialogue || '', { keepTagsFence: true }) : (dialogue || '');
+    const tagFacts = extractTags(prose, {
         entities: ssot?.entities || [],
         // ★★★leg89（用户拍板「模型认得出那就直接按照插件的正名来看」）：**别名从书里取**——
         //   账上实体**不带别名**（播种时只拷 id/kind/name/location/parent/实力…，别名留在书名录里）。
@@ -198,12 +201,12 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
         playerId: ssot?.context?.playerId || null,
         maxActions: tagMaxActions,
     });
-    // ★主角槽（承重墙）：标签里主角那一条走 `playerMove`，**绝不进 turnFacts.actions**。
-    //   为什么与老口径不冲突：l91 那类老用例的正文（玩家的话）里没有标签 ⇒ `tagFacts.player` 为 null
-    //   ⇒ 走原样那条路，既有判据逐字节不变（`worldstep.test.js:208` 那条锁的就是它）。
+    // ★主角槽（承重墙）：标签里主角那一条走 `playerMove`，**绝不进 `turnFacts.actions`**。
+    //   ★leg198：**没有主角标签 ⇒ `null`**（"没标签就不进正文的行动"）——老口径那条"没有标签就走词表猜"
+    //     已经整族拆掉；既有判据里那几条"无标签 ⇒ 落子为空"就是照这条新口径翻案的。
     const move = tagFacts.player
         ? { verb: tagFacts.player.verb, object: tagFacts.player.targetText, location: tagFacts.player.location, attempt: true, note: null, dropped: [], source: 'tag' }
-        : move0;
+        : null;
     // 细案 spec-entity-field-lookup §3：**前置步**（① LLM 选本轮上场实体 → ② 只对缺字段者查书 →
     //   ③ 引擎回写查书标记）必须在 buildEvolutionPack 之前跑——否则这一轮主调用看不到刚查回来的字段。
     //   失败零阻塞：preStep 抛错/失败一律继续（世界推进优先，字段是附加信息）。
@@ -223,23 +226,20 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     // 后续正文事实和已展示标记不许泄漏到输入账或前置保存持有的引用。
     world = structuredClone(world);
     // ★★★leg122：**检索注入那一步已拔**（原来是这里调 `injectWorldBookRecall`，见 `runTick` 前那一大段留档）。
-    //   ★`recall` / `recallStore` 两个形参**留着但没人读了**——照 `extractCtx` 的先例留档，撤它们要单独一笔；
+    //   ★`recall` / `recallStore` 两个形参**留着但没人读了**——留档，撤它们要单独一笔
+    //     （`extractCtx` 那一格已在 leg198 随词表整族撤掉：它喂的那个模块已经不存在了）；
     //     调用方仍可以照旧传（`recall: false` 之类），只是**不再有任何效果**。
     //   ★本步拔掉之后，出包之前**不再有"从正文/书里取料"的动作**——世界模型这一轮拿到的东西，
     //     全部来自**账自己的状态**（包）＋ 本轮的落子提取（标签，用户有意关着）。
     // 未提取落子（OOC/无可提取动作）不拦 tick：世界以自身状态为原料，照常结算（§3②）；
     // moveFact 为空则注入无行迹行。诚实未提取由调用方/度量记录。
-    // ★★leg89 更正：判据从 `move.verb ? move : null` 改成"**末条事实在 ⇒ 就在**"。
-    //   旧判据的尺子是"老口径的词表命中"——而标签口径下**没有词表**：动词可以空着
-    //   （模型只写了两格"某人｜做了一件事"），但那仍是**已经发生的事实**，不该被丢掉。
-    //   为什么这次放宽是安全的：`streams.js` 与 `settle.js` 都拿 `moveFact.verb` 当真值判
-    //   （空 ⇒ 不印行迹、不记玩家活跃）⇒ 空动词那条事实**照样进不了注入行**，行为不变。
-    const lastFact = tagFacts.actions.length ? tagFacts.actions[tagFacts.actions.length - 1] : null;
-    const moveFact = move.verb
-        ? move
-        : (lastFact
-            ? { verb: lastFact.verb, object: lastFact.targetText, location: lastFact.location, attempt: true, note: null, dropped: [], source: 'tag' }
-            : null);
+    // ★★★leg198：**"末条事实"那支回退已拆**（它是 leg89 那一笔留下的真病，社区反馈把它照出来了）——
+    //   `tagFacts.actions` 按 `src/tag-extract.js` 的口径**只装非主角的行**（`:319-320`），
+    //   所以"玩家没有标签时拿末条顶上" = **把别人的行动当成玩家的落子**递给世界模型（`pack.playerMove`）。
+    //   口径：**有动词才算落子**；没有 ⇒ 空着（红线 2：空着就是空着）。
+    //   ★空动词那条主角事实并没有丢：它照旧经 `move` 进 settle/streams，并经 `turnFacts.player` 进包
+    //     （见下面那一族），所以世界模型照样看得见"他被标签点到、只是没写做了什么"。
+    const moveFact = move?.verb ? move : null;
     // ★注入包只带"有料的那部分"（照 `recalled` 口径）：没抽到东西 ⇒ 键不出现。
     //   ★写法纪律：**不用"条件展开"那种简写**（`{...cond ? {a} : {}}` 不是合法 JS——
     //     leg89 当场被解析器咬住："Unexpected identifier"）。这里显式建对象、逐键按条件 add。
@@ -280,7 +280,9 @@ export async function runTick({ transport, ssot, dialogue, extractCtx, calls = 1
     //   ★★leg153：这个轮次**只有一处算**（`dialogueTick`）——查询串要按它去认"聊天侧这一轮交上来的事"，
     //     两处各算一次就会在"同一轮两把尺子"上再栽一跤（本仓为这个形状付过账）。
     const dialogueTick = (world?.meta?.tick ?? 0) + 1;
-    const dialogueStats = registerDialogueFacts(world, { facts: tagFacts, dialogue, tick: dialogueTick });
+    //   ★★★leg198：喂进去的是**剥掉机器块之后的那一份**（`prose`）——本仓"同一轮只用一份文本"那条口径：
+    //     提取读它、落账那条"值必须在正文里找得到"的校验（`settle.js`）也读它，两处不许各拿一份。
+    const dialogueStats = registerDialogueFacts(world, { facts: tagFacts, dialogue: prose, tick: dialogueTick });
     // ★★★leg119：`ledgerVolumes` = **编年进了冷档的那些段（卷）**，由编排层取好递进来
     //   （与 `recallStore` 同一条路：引擎不碰存储，浏览器侧的东西一律从选项进来）。
     //   ★不传 ⇒ `null` ⇒ 与接线之前**逐字节相同**（旧调用方零扰动）。★leg153 起它多一个消费者：

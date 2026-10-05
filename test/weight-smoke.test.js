@@ -114,7 +114,10 @@ test('玩家冒烟 100 tick：玩家衰减同尺（OOC 单调 → 落子回升 �
     // 摘除常驻 state 事件对三方阵营的点名（ev_0 波及——常驻点名语义已由 gated 曲线锁定），聚焦玩家曲线
     const world0 = structuredClone(PLAYER_WORLD);
     world0.events[0].ripples = [];
-    const PLAY_DIALOGUE = EXTRACT_FIX.samples.find((s) => s.id === 'l61').dialogue;   // 词表命中 verb=修炼 → 落子轮
+    // ★★★leg198 翻案：原来靠"词表命中 verb=修炼"造落子轮（那一族已按用户令整族拆掉）⇒ 改成**正文里的标签**
+    //   （生产上唯一的落子来源）。玩家名从夹具的玩家槽取——标签要认得出来才算玩家的那一条。
+    const pname = (PLAYER_WORLD.entities || []).find((e) => e.id === PLAYER_WORLD.context?.playerId)?.name || '';
+    const PLAY_DIALOGUE = [`${'`'.repeat(3)}tags`, `【行动】${pname}｜修炼`, '`'.repeat(3)].join('\n');   // 标签 ⇒ 落子轮
     const dialogueGen = (t) => (t >= 40 && t <= 49 ? PLAY_DIALOGUE : '（静默）');
     const { world, metrics } = await runSmoke({
         ssot: world0, extractCtx: EXTRACT_FIX.context, ticks: 100,
@@ -228,7 +231,11 @@ test('玩家冒烟 100 tick：玩家衰减同尺（OOC 单调 → 落子回升 �
     assert.ok(series[10].e_player < series[20].e_player * 2, '玩家在 OOC 段一路下探（t10 → t20 继续衰）');
     // 世界干净：无静默滤除、仅 t2/t3 玩家被点名应答、零警告、输入恒在预算
     assert.equal(metrics.droppedTotal, 0);
-    assert.equal(metrics.liftedTotal, 2);
+    // ★★★leg198 翻案：`liftedTotal` **2 → 3**——玩家这一轮的行动现在是一条**真事件**
+    //   （`dialogue` 型，主语是他，由标签落账），于是门控那一侧在 **t40 那一轮**多一次"被点名可应答"：
+    //   门控读的是**这一轮之前**的账，那时他还在闲置名单里 ⇒ 抬一次；t41 起他已是"活跃"⇒ 不再抬。
+    //   （旧口径下玩家的落子来自词表猜，**不落事件**，所以那一轮没人点到他。）
+    assert.equal(metrics.liftedTotal, 3);
     assert.equal(metrics.warningsTotal, 0);
     assert.ok(metrics.maxPackTokens <= EVOLUTION_BUDGET_TOKENS, `输入峰 ${metrics.maxPackTokens}`);
     console.log(`[K11 曲线·leg25 c] 玩家 100t: 影响通道 0 条（随四维删除） · 衰减同尺 t10 ${series[10].e_player.toFixed(4)} → t20 ${series[20].e_player.toFixed(4)} → t30 ${series[30].e_player.toFixed(4)} → 落子回升 t40 ${series[40].e_player.toFixed(4)} → t60 ${series[60].e_player.toFixed(4)} → t100 ${series[100].e_player.toFixed(4)}`);

@@ -31,7 +31,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { buildEvolutionPack, packTextOf } from '../src/pack.js';
 import { runMainCall } from '../src/worldstep.js';
 import { settleTick } from '../src/settle.js';
-import { extractMove } from '../src/extract.js';
 
 // ★探针必须走真源（leg32/leg33 立的现场纪律：`node --check` 给假绿、判语法必须真导入）。
 import { QUIET_TICKS } from '../src/gate.js';
@@ -575,7 +574,9 @@ async function liveArm(arnName, world0, transport) {
         //   挂在世界副本上 ⇒ 真账零接触；且派生出的锚**当轮就在池里**（settle 认得它的 id，K13 能过）。
         const derived = arm.derive ? arm.derive(world) : [];
         // ★玩家不模拟：dialogue 传空串 ⇒ moveFact=null（用户令：模拟器不许模拟玩家的行动）
-        const move = extractMove('', {});
+        // ★★★leg198：这里当年调的是老口径那个提取器（空串 ⇒ 恒返回"空落子"）⇒ 现在直接写 `null`
+        //   （词表那一族已按用户令整族拆掉；这个探针本来就没有落子可传）。
+        const move = null;
         const { pack, base } = arm.make(world, null);
         const inv = invariantOf(base, pack.pack);
         // pack.text 已按本臂重出（见 asVariant）；text 为空时兜底重算

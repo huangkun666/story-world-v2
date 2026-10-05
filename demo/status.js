@@ -19,7 +19,9 @@ const TEST_MAP = {
     'schema.js': ['schema.test.js'],
     'schemas/ssot.schema.js': ['schema.test.js', 'setting.test.js', 'golden-slice.test.js', 'live-world.test.js', 'bystander-world.test.js', 'entity-governance.test.js'],
     'schemas/world-step.schema.js': ['schema.test.js', 'entity-governance.test.js'],
-    'extract.js': ['extract.test.js'],
+    // ★leg198：`extract.js` 那一行**整条删掉**（模块与它的判据都随词表那一族撤了）；
+    //   新模块 `prose.js`（"正文"这一层）的判据在下面那一行。
+    'prose.js': ['prose-extract.test.js'],
     'fp-hash.js': ['fingerprint.test.js'],   // ★leg159c 改名：原名 `fingerprint.js` 撞 EasyPrivacy 那条规则
     'player-inject.js': ['player-inject.test.js'],
     'pack.js': ['worldstep.test.js', 'smoke.test.js', 'birth.test.js', 'backdrop-smoke.test.js', 'entity-governance.test.js', 'observatory.test.js'],

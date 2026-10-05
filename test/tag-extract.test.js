@@ -39,7 +39,14 @@ const ENTITIES = [
 const LOCATIONS = ['未明', '忘川渡口', '孟婆庄'];
 const CTX = { entities: ENTITIES, locations: LOCATIONS, playerId: 'e_p1', maxActions: 12 };
 
-const FULL = [
+// ★★★leg199（用户令「**删掉降级吧**」）：**没有 ` ```tags ` 块 ⇒ 这一轮零收获**。
+//   ⇒ 本文件里凡是"要读出标签"的夹具**必须包块**（这正是本笔的代价面：模型漏写块 = 整轮白跑）。
+//   ★本文件里刻意**不包块**的那些用例（㉔/㉔b/㉔d/137③）是**边界判据**，它们要的就是"零收获"。
+const FENCE_ = '`'.repeat(3);
+/** 把若干行标签包进一个 ` ```tags ` 块——**只扫块里**这条口径的夹具入口。 */
+const fenced = (...lines) => [FENCE_ + 'tags', ...lines, FENCE_].join('\n');
+
+const FULL = fenced(
     '【时长】三天',
     '【场景：忘川渡口】',
     '【行动】薛铁衣｜迎战｜黄坤',
@@ -48,10 +55,10 @@ const FULL = [
     '【时长】一炷香',
     '【场景：孟婆庄】',
     '【行动】黄坤｜搜刮｜阴阳玉',
-].join('\n');
+);
 
 // ── §11①　四族正则命中全部形状 ────────────────────────────────────────────────
-test('leg89①：四族正则命中——三格／两格／少对象／全角冒号／半角冒号／块外行动', () => {
+test('leg89①：四族正则命中——三格／两格／少对象／全角冒号／半角冒号', () => {
     const f = extractTags(FULL, CTX);
     assert.equal(f.actions.length, 2, '非主角的两条进 actions');
     assert.equal(f.actions[0].actorId, 'e_xue');
@@ -62,13 +69,13 @@ test('leg89①：四族正则命中——三格／两格／少对象／全角冒
     assert.equal(f.actions[1].targetText, '灵脉', '★但对不上账的原文要留着（不静默丢）');
 
     // 两格（缺对象）与半角冒号 —— 模型真会这么写
-    const f2 = extractTags('【场景: 忘川渡口】\n【行动】孟婆｜探查', CTX);
+    const f2 = extractTags(fenced('【场景: 忘川渡口】', '【行动】孟婆｜探查'), CTX);
     assert.equal(f2.actions.length, 1);
     assert.equal(f2.actions[0].targetText, null, '两格 ⇒ 没有对象');
     assert.equal(f2.actions[0].location, '忘川渡口', '★半角冒号的场景同样认（模型两个都会写）');
 
-    // 块外行动：地点算空（不是"在上一处"）
-    const f3 = extractTags('【行动】孟婆｜探查', CTX);
+    // 没有场景头的行动：地点算空（不是"在上一处"）
+    const f3 = extractTags(fenced('【行动】孟婆｜探查'), CTX);
     assert.equal(f3.actions[0].location, null, '★没有场景头的行动 ⇒ 地点空着（不猜、不继承上一处）');
 });
 
@@ -86,28 +93,28 @@ test('leg89③：场景继承——行动的地点 = 上面最近的【场景：
     const f = extractTags(FULL, CTX);
     assert.equal(f.actions[0].location, '忘川渡口');
     assert.equal(f.actions[0].locationDerived, true, '场景在册 ⇒ derived');
-    const f2 = extractTags('【场景：书里没写的地方】\n【行动】孟婆｜探查', CTX);
+    const f2 = extractTags(fenced('【场景：书里没写的地方】', '【行动】孟婆｜探查'), CTX);
     assert.equal(f2.actions[0].location, '书里没写的地方', '★表外地名照留（位置不是闸，本仓 leg33c 同口径）');
     assert.equal(f2.actions[0].locationDerived, false, '★但要如实标"这不是账上的地名"');
 });
 
 // ── §11④　归不上的名字：不进包、不造实体、如实报数 ────────────────────────────
 test('leg89④：归不上的主语——**不进包、绝不新建实体**，只进 unresolved 如实报数', () => {
-    const f = extractTags('【场景：忘川渡口】\n【行动】船夫｜划船\n【行动】船夫｜靠岸\n【行动】孟婆｜探查', CTX);
+    const f = extractTags(fenced('【场景：忘川渡口】', '【行动】船夫｜划船', '【行动】船夫｜靠岸', '【行动】孟婆｜探查'), CTX);
     assert.equal(f.actions.length, 1, '两条"船夫"都不进包');
     assert.deepEqual(f.unresolved, [{ name: '船夫', n: 2 }], '★同一个名字只报一次（带条数）');
     assert.equal(f.parsed, 3, '★parsed 数的是**正文里解析出的行动条数**（含归不上名字的、含主角的）');
     // 别名归一：写"铁衣"也要认出来（实测过"小娥 ≠ 白小娥"那类坑）
-    const alias = extractTags('【行动】铁衣｜迎战', CTX);
+    const alias = extractTags(fenced('【行动】铁衣｜迎战'), CTX);
     assert.equal(alias.actions[0].actorId, 'e_xue', '★别名必须归一到同一个 id');
-    const alias2 = extractTags('【行动】坤哥｜拔剑', CTX);
+    const alias2 = extractTags(fenced('【行动】坤哥｜拔剑'), CTX);
     assert.equal(alias2.player?.verb, '拔剑', '★主角的别名同样认（认不出主角＝主角那一条会丢）');
 });
 
 // ── §11④b　读数行：两笔"丢了"各说各的（不混成一笔账） ────────────────────────
 test('leg89④b：读数行把"入包/截断/归不上"分开报（★丢了什么必须看得见）', () => {
     // 15 条解析出、12 条入包 ⇒ 印"15 条（入包 12）"
-    const many = Array.from({ length: 15 }, (_, i) => `【行动】孟婆｜动作${i}`).join('\n');
+    const many = fenced(...Array.from({ length: 15 }, (_, i) => `【行动】孟婆｜动作${i}`));
     const line = tagReadoutLine(extractTags(many, { ...CTX, maxActions: 12 }));
     assert.ok(line.includes('15 条') && line.includes('入包 12'), `★截断必须报出来：${line}`);
     // 空输入 ⇒ 不该有读数行（不许印一行全 0 的假自证）
@@ -118,14 +125,14 @@ test('leg89④b：读数行把"入包/截断/归不上"分开报（★丢了什�
 test('leg89④c：模型把四格写成三格时，主语取哪一格**由"认不认得出来"决定**（不许丢事）', () => {
     // 病（本笔端到端实测）：模型写「谁｜做了什么｜针对谁」而插件按"两格=无对象"读
     //   ⇒ 把**动词当成主语** ⇒ 归不上 ⇒ **整条行动静默丢掉**（这一轮发生的事少一件，而读数只报"归不上"）。
-    const swapped = extractTags('【行动】薛铁衣｜迎战｜黄坤', CTX);
+    const swapped = extractTags(fenced('【行动】薛铁衣｜迎战｜黄坤'), CTX);
     assert.equal(swapped.actions.length, 1, '★三格写法不许被丢');
     assert.equal(swapped.actions[0].actorId, 'e_xue', '★主语要认得出（不许把"迎战"当主语）');
     assert.equal(swapped.actions[0].verb, '迎战');
     assert.equal(swapped.actions[0].targetId, 'e_p1');
     assert.equal(swapped.unresolved.length, 0, '★读对了就不该有"归不上"的噪声');
     // 反向（防过度修正）：规范读法**认得出来**时，第三个字段就是对象——哪怕它对不上账
-    const normal = extractTags('【行动】薛铁衣｜迎战｜船夫', CTX);
+    const normal = extractTags(fenced('【行动】薛铁衣｜迎战｜船夫'), CTX);
     assert.equal(normal.actions[0].actorId, 'e_xue');
     assert.equal(normal.actions[0].targetText, '船夫', '★三格读法只是兜底，不许抢走正常读法');
 });
@@ -137,7 +144,7 @@ test('leg89⑤：主角那条**绝不进 actions**，只占 playerMove 槽；多
     assert.equal(f.player.verb, '搜刮');
     assert.equal(f.player.targetText, '阴阳玉');
     assert.equal(f.player.location, '孟婆庄');
-    const many = extractTags('【行动】黄坤｜拔剑\n【行动】黄坤｜格挡', CTX);
+    const many = extractTags(fenced('【行动】黄坤｜拔剑', '【行动】黄坤｜格挡'), CTX);
     assert.equal(many.player.verb, '拔剑', 'playerMove 是单事实形状（契约 v1）⇒ 取第一条');
     assert.equal(many.playerDropped, 1, '★丢了 1 条要**报出来**（不静默）');
 });
@@ -145,19 +152,19 @@ test('leg89⑤：主角那条**绝不进 actions**，只占 playerMove 槽；多
 // ── §11⑥⑦⑧　动词／形状不合／封顶 ────────────────────────────────────────────
 test('leg89⑥⑦⑧：动词原样保留 · 形状不合留痕 · 封顶可见', () => {
     // ⑥ 表外动词原样保留（"拔剑冲阵"不许被写成"迎战"）
-    const v = extractTags('【行动】孟婆｜拔剑冲阵', CTX);
+    const v = extractTags(fenced('【行动】孟婆｜拔剑冲阵'), CTX);
     assert.equal(v.actions[0].verb, '拔剑冲阵', '★不归一、不降级');
-    const noVerb = extractTags('【行动】孟婆', CTX);
+    const noVerb = extractTags(fenced('【行动】孟婆'), CTX);
     assert.equal(noVerb.actions.length, 1, '★连动词都没有也仍是"某人做了一件事"这条事实');
     assert.equal(noVerb.actions[0].verb, null);
 
     // ⑦ 形状不合的行要留痕（不静默吞）
-    const bad = extractTags('【行动】\n【时长】\n【场景】\n孟婆走过来，看了他一眼。', CTX);
+    const bad = extractTags(fenced('【行动】', '【时长】', '【场景】', '孟婆走过来，看了他一眼。'), CTX);
     assert.equal(bad.actions.length, 0);
     assert.equal(bad.malformed.length, 3, '★空标签三行都留痕（第四行是正文，不算形状问题）');
 
     // ⑧ 封顶：parsed > count 必须可见
-    const many = Array.from({ length: 15 }, (_, i) => `【行动】孟婆｜动作${i}`).join('\n');
+    const many = fenced(...Array.from({ length: 15 }, (_, i) => `【行动】孟婆｜动作${i}`));
     const capped = extractTags(many, { ...CTX, maxActions: 12 });
     assert.equal(capped.count, 12);
     assert.equal(capped.parsed, 15, '★截断必须能被算出来（15 条解析出、12 条入包）');
@@ -308,11 +315,33 @@ test('leg89⑪：标签规范与名册是**纯函数**（逐字锁得住，且�
     assert.ok(spec.includes('没有这个块 = 这一轮没达标'), '★自检要有明确的合格判据');
     assert.ok(spec.includes('这个块必须有'), '★收尾再钉一次（与"文风自由"并存，但块是硬要求）');
     // ★★★leg93（用户裁示「**就甲吧**」）：规范必须把"**块**"讲到不可能误解——
-    //   提取器从此**只扫块里**（`shellRange`），块外一律当正文。规范若不说清，模型不包块 ⇒
-    //   退回逐行扫（老行为，见下面那条降级判据）⇒ 用户问的那个病**照旧**。
+    //   提取器**只扫块里**（`shellRange`），块外一律当正文。规范若不说清，模型不包块 ⇒
+    //   ★leg199 起那一档的后果是**整轮零收获**（"退回逐行扫"那条降级已按用户令撤掉）⇒ 更要说清。
     assert.ok(spec.includes('```tags'), '★规范必须给出块的开围栏原文（模型照抄的那个形状）');
     assert.ok(spec.includes('一个标签占一整行'), '★必须写明"一个标签一行"（行首不许有杂物，否则整行丢）');
     assert.ok(spec.includes('只有这个块里面的标签插件才看'), '★必须写明"只认块里的"（这是甲案的边界本身）');
+    // ★★★leg199（用户实机报的病：「**给一个角色修改实力字段，但是不是写从筑基到金丹这样修改，
+    //   而是写获取了资源然后大幅提升了当前实力**」）：第 7 条必须把**值 ≠ 过程**讲死。
+    //   ★为什么这是判据而不是文案喜好：机械层**拦不住**过程句（"值必须在正文里找得到"那条判据
+    //     对"获取了资源然后大幅提升了当前实力"是**放行**的——那句话确实在正文里，见 G18b 那一档）
+    //     ⇒ **规范那一句话是唯一的闸**，它一松，账上那一格就变空话。这一条与 G18b 是一对，缺一不可。
+    assert.ok(spec.includes('变完之后那一格的值'), '★第 7 条要明写"第三格 = 变完之后那一格的值"');
+    assert.ok(spec.includes('新状态') && spec.includes('过程'), '★并且要把"状态"与"过程"对起来讲（缺一个就分不开）');
+    assert.ok(spec.includes('获取了资源'), '★反面例子要用用户实机报的那句（"获取了资源"）——否则模型照写不误');
+    assert.ok(spec.includes('没点出那个新档位就别写这一行') || spec.includes('没点出那个新状态就别写这一行'),
+        '★要给"戏里没点出新档位/新状态"留一条出路：留空，不许拿过程凑');
+    // ★★★leg199 补（用户第二次更正 · 逐字：「**实力按道理来说如果有境界那么应该是境界的变化，
+    //   而不是一句抽象的实力大增**」）：只讲"状态 vs 过程"**还不够**——模型可以不写过程、
+    //   改写成「实力大增」这种**抽象的变强总结**，那一格照样说不出他什么水平。
+    //   ⇒ 规范必须点名：**变强/突破时第三格要写书里那套档位的名字**。
+    //   ★为什么只能靠规范：引擎侧**判不出**"金丹"与"实力大增"哪个是档位名（红线：不许用词表判语义）。
+    assert.ok(spec.includes('书里那套档位的名字'), '★★要明写"第三格写书里那套档位的名字"（境界/等级/品阶/军阶）');
+    assert.ok(spec.includes('实力大增'), '★★反面例子要点名「实力大增」——用户第二次更正说的就是这一句');
+    assert.ok(spec.includes('筑基') && spec.includes('金丹'), '★★示例要给出档位阶梯的样子（筑基 → 金丹）');
+    // ★示例本身不许是过程式的（改前那条 `【变化】黄坤｜实力｜踏入元婴` 正是"踏入"这种**过程**写法，
+    //   等于规范自己在教模型写错——用户报的那个病的根就在这一行）
+    assert.ok(spec.includes('【变化】黄坤｜实力｜元婴期'), '★示例要示范**状态**（元婴期），不是过程（踏入元婴）');
+    assert.ok(!spec.includes('踏入元婴'), '★过程式的旧示例不许回潮');
 });
 
 // ── §11⑭　★别名的真源在**书**里（用户拍板「认得出就按插件的正名来看」） ──────────
@@ -337,19 +366,19 @@ test('leg89⑭：书名录里的别名要认得出来，且**正名优先**（�
         { name: '白小娥', aliases: ['小娥'] },      // ★「小娥」只是别人的别名（书里没有它自己的条目）
     ];
     const ctx2 = { ...CTX, canon: canon2 };
-    const byAlias = extractTags('【行动】婆子｜搜刮', ctx2);
+    const byAlias = extractTags(fenced('【行动】婆子｜搜刮'), ctx2);
     assert.equal(byAlias.actions.length, 1, '★别名要认得出来（否则这一条会被当"归不上"丢掉）');
     assert.equal(byAlias.actions[0].actorId, 'e_po', '★认出来要落到**账上那个实体的 id**（正名 = 孟婆 = e_po）');
     assert.equal(byAlias.unresolved.length, 0);
     // ② ★别名照认：主角的别名也要认得出（认不出主角 ⇒ 主角那条会掉进 NPC 那堆里）
-    const playerAlias = extractTags('【行动】坤哥｜拔剑', ctx2);
+    const playerAlias = extractTags(fenced('【行动】坤哥｜拔剑'), ctx2);
     assert.equal(playerAlias.player?.verb, '拔剑', '★主角的别名同样要认（正名 = 黄坤 = e_p1）');
     assert.equal(playerAlias.actions.length, 0, '认出来是主角 ⇒ 不许进 actions 那堆');
     // ②b ★正名优先（本判据的核心）：书里**另有一条正名就叫「小娥」**时，它不许被
     //    「白小娥的别名」抢走 —— 抢走的后果是**把动作记到另一个人头上**（比丢掉更坏）。
     //   ⚠这条只能断言"没被记给白小娥"：账上本来就没有「白小娥」这个人（CTX 里只有薛铁衣/孟婆/黄坤），
     //     所以正确结果是**不进 actions**，而是进 notNoted（名字留着、事留着，只是没入账）。
-    const collide = extractTags('【行动】小娥｜传讯｜孟婆', {
+    const collide = extractTags(fenced('【行动】小娥｜传讯｜孟婆'), {
         ...CTX,
         canon: [{ name: '白小娥', aliases: ['小娥'] }, { name: '小娥', aliases: [] }],
     });
@@ -357,12 +386,12 @@ test('leg89⑭：书名录里的别名要认得出来，且**正名优先**（�
     assert.deepEqual(collide.unresolved, [{ name: '小娥', n: 1 }], '如实报数，不猜');
     assert.equal(collide.notNoted[0].name, '小娥', '★但这条行动要留着（见 ⑯）');
     // ③ 别名指向的人**在账上（已是主角）** ⇒ 认得出，且**只走 playerMove**（承重墙同样适用于别名）
-    const playerByAlias = extractTags('【行动】坤哥｜拔剑｜孟婆', ctx2);
+    const playerByAlias = extractTags(fenced('【行动】坤哥｜拔剑｜孟婆'), ctx2);
     assert.equal(playerByAlias.player?.verb, '拔剑', '★别名认出主角 ⇒ 走主角槽');
     assert.equal(playerByAlias.actions.length, 0, '★认出来是主角 ⇒ 绝不许进 actions');
     assert.equal(playerByAlias.unresolved.length, 0);
     // ④ 不传 canon ⇒ 别名那一档是死的（如实报数）——★但**行动仍然不丢**（只进 notNoted）
-    const noCanon = extractTags('【行动】婆子｜搜刮｜阴阳玉', CTX);
+    const noCanon = extractTags(fenced('【行动】婆子｜搜刮｜阴阳玉'), CTX);
     assert.deepEqual(noCanon.unresolved, [{ name: '婆子', n: 1 }], '没喂书名录 ⇒ 认不出别名（如实报数）');
     assert.equal(noCanon.actions.length, 0, '不进"账上实体的行动"那一栏');
 });
@@ -371,7 +400,7 @@ test('leg89⑭：书名录里的别名要认得出来，且**正名优先**（�
 test('leg89⑯：不在名册上的人——**不造人、不进账，但行动必须原样递下去**', () => {
     // 病（本笔第一版做错了，用户当场指出）：主语查不到就 `continue` ⇒ 这条行动**彻底消失**，
     //   世界模型只知道"有个名字归不上"，**不知道他干了什么** ⇒ "这个人该不该入局"永远没证据。
-    const f = extractTags('【场景：忘川渡口】\n【行动】船夫｜划船｜孟婆\n【行动】船夫｜靠岸\n【行动】孟婆｜探查', CTX);
+    const f = extractTags(fenced('【场景：忘川渡口】', '【行动】船夫｜划船｜孟婆', '【行动】船夫｜靠岸', '【行动】孟婆｜探查'), CTX);
     // ① 账上的那条照常
     assert.equal(f.actions.length, 1, '账上的人照常进 actions');
     assert.equal(f.actions[0].actorId, 'e_po');
@@ -399,7 +428,7 @@ test('leg89⑰：注入的名册**不封顶**——砍掉名字 = 自己制造"�
     assert.ok(t.includes('角色0') && t.includes('角色399'), '★第 399 个也必须列出来（不封顶）');
     assert.ok(!t.includes('未列出'), '★没有"另有 N 位未列出"这种话（那说明还在砍）');
     // 账上真有的名字，注入之后必须**认得出**（这才是"名册够用"的判据）
-    const all = extractTags('【行动】角色399｜探查', { entities: many, locations: [], playerId: null });
+    const all = extractTags(fenced('【行动】角色399｜探查'), { entities: many, locations: [], playerId: null });
     assert.equal(all.actions.length, 1, '★列出来的名字必须真认得出（否则名册是白给的）');
     assert.equal(all.actions[0].actorId, 'e_399');
 });
@@ -603,7 +632,10 @@ test('leg90㉓：③段要说**大白话**（内部词 `盘算` 不许进聊天�
 //   ② 正文里一句**以 `【时长】` 开头**的叙述 ⇒ `elapsed` **收下一整句话**
 //      （实测「这个词表示时间流逝。」），而**引擎一个字都不校验这个值**，它原样进世界模型的 prompt。
 // ★根因：认不认得出标签**全看 `【` 在不在行首**——正文与标签**共用同一个语法空间**。
-// ⇒ 甲案：给标签一个**专属边界**（```tags 围栏块），**只扫块里**；块不在 ⇒ 退回逐行扫（老行为）。
+// ⇒ 甲案：给标签一个**专属边界**（```tags 围栏块），**只扫块里**。
+//   ★★★leg199（用户令「**删掉降级吧**」）：甲案当年那条"块不在 ⇒ 退回逐行扫全篇"的**降级已整支撤掉**
+//     ⇒ 现在**没有块 = 零收获**（与注入规范那句"块外写了也不作数"从此一致）。
+//     下面 ㉔b 那条判据就是**按新口径翻案的**（它原来锁的是老降级行为）。
 const FENCE = '`'.repeat(3);
 
 test('★★★leg93㉔：正文里的【行动】/【时长】不再被当成标签——**只认块里的**', () => {
@@ -617,7 +649,7 @@ test('★★★leg93㉔：正文里的【行动】/【时长】不再被当成�
         FENCE,
     ].join('\n');
     const f = extractTags(prose, CTX);
-    assert.equal(f.shell.mode, 'shell', '★有块 ⇒ 走"只扫块里"');
+    assert.equal(f.shell.found, true, '★有块 ⇒ 只扫块里');
     assert.deepEqual(f.unresolved, [], '★★块外那句「【行动】…」**一条都不许进**（这就是甲案要治的病①）');
     assert.deepEqual(f.notNoted, [], '★它也不许递下去（块外的是正文，不是行动）');
     assert.equal(f.elapsed, '半炷香', '★★块外那句「【时长】…」不许当成本轮时长（病②——垃圾会进世界模型的 prompt）');
@@ -629,41 +661,48 @@ test('★★★leg93㉔：正文里的【行动】/【时长】不再被当成�
     assert.deepEqual(inside.unresolved, [], '★更不许把它当成一条行动');
 });
 
-test('★★★leg93㉔b：块不在 ⇒ **退回逐行扫**（老账、老聊天逐字节不变）', () => {
-    // ★这条是甲案的**安全绳**：模型漏写围栏时不许"整轮零标签"（那比"少认几条"严重得多）。
-    //   证据口径：与 leg89 的夹具**同一段文本**，块在/块不在，抽出来的东西必须**一模一样**。
-    const bare = FULL;
-    const wrapped = `${FENCE}tags\n${FULL}\n${FENCE}`;
+test('★★★leg199①：块不在 ⇒ **零收获**（降级已删——这是本笔的代价面，锁住让维护者看得见）', () => {
+    // ★用户令（2026-10-05，逐字）：「**删掉降级吧**」。
+    //   为什么非删不可（两条，第一条是 leg198 体检**实跑**抓出来的，装置 `F:/deepseek/tmp/leg198-audit/probe.mjs`）：
+    //     ① 逐行扫全篇 ⇒ 正文里**只要有一行以 `【行动】` 开头**（引用字条／告示／解说格式）就成真行动；
+    //        实跑三档里最狠的一档是**写到玩家名上**（`【行动】黄坤｜刺杀｜甲`）⇒ **变成玩家这一轮的落子**、
+    //        原样递给世界模型（`pack.playerMove`）⇒ 世界照它演下去。那是 leg198 声称已治好的病换了个入口。
+    //     ② 它与注入给聊天模型的规范**正面冲突**：`web/inject.js` 的 `tagSpecText()` 向模型承诺
+    //        「**只有这个块里面的标签插件才看**；块外面写了也不作数」——降级让这句话是假的。
+    //   ★★代价（用户已知情并拍板）：模型漏写块的那一轮**整轮零收获**；leg93 之前的老聊天不再进账。
+    //     兜底是接线层那句如实出声（「这一轮正文里没有标签」）——**不许静默**。
+    const bare = FULL.replace(`${FENCE_}tags\n`, '').replace(`\n${FENCE_}`, '');   // 同一条内容，剥掉围栏
     const a = extractTags(bare, CTX);
-    const b = extractTags(wrapped, CTX);
-    assert.equal(a.shell.mode, 'all', '★没块 ⇒ mode=all（老行为）');
-    assert.equal(a.shell.found, false);
-    assert.equal(b.shell.mode, 'shell');
-    assert.deepEqual(b.actions, a.actions, '★★包块与不包块抽出来的 actions **逐字段相同**（甲案不许改变正常路径的结果）');
-    assert.deepEqual(b.elapsedParts, a.elapsedParts);
-    assert.deepEqual(b.locations, a.locations);
-    assert.equal(b.count, a.count);
+    assert.equal(a.shell.found, false, '★没块 ⇒ `found:false`（面板据此把原因说出来）');
+    assert.equal(a.count, 0, '★★块不在 ⇒ **一条都不认**（降级已删）');
+    assert.equal(a.parsed, 0, '★读数也不许被污染（`parsed` 是"这一轮发生了几件事"）');
+    assert.equal(hasTagFacts(a), false, '★零收获 ⇒ 连"有料"都不算（键不出现，照 `recalled` 那条口径）');
+    // ★反向自证：同一段内容**包上块**就读得出来 ⇒ 上面那个 0 是"边界"造成的，不是夹具坏了
+    const b = extractTags(FULL, CTX);
+    assert.equal(b.shell.found, true);
+    assert.equal(b.count, 2, '★包上块 ⇒ 照常读出两条（证明上面那个 0 是边界判出来的）');
 });
 
 test('★★★leg93㉔c：块没闭合 ⇒ 吃到文末，标签照样读出来（模型忘收尾不许整轮白跑）', () => {
     const unclosed = [`${FENCE}tags`, '【时长】半炷香', '【行动】薛铁衣｜格挡防御｜黄坤'].join('\n');
     const f = extractTags(unclosed, CTX);
-    assert.equal(f.shell.mode, 'shell', '开围栏在 ⇒ 仍然是"只扫块里"');
+    assert.equal(f.shell.found, true, '开围栏在 ⇒ 只扫块里');
     assert.equal(f.shell.closed, false, '★如实标出"没闭合"（不许假装它闭合了）');
     assert.equal(f.count, 1, '★没闭合也要把标签读出来');
     assert.equal(f.elapsed, '半炷香');
     // 围栏行**必须整行只有它**才算开壳：` ```tags 后面跟字 ` 不算（否则正文里一句"用 ```tags 开头"就开了壳）
+    //   ★leg199 起这一档的后果变了：不算开壳 ⇒ 没有块 ⇒ **零收获**（以前是"退回逐行扫"）。
     const notAShell = [`${FENCE}tags 这是说明`, '【行动】薛铁衣｜格挡防御｜黄坤'].join('\n');
     const g = extractTags(notAShell, CTX);
-    assert.equal(g.shell.mode, 'all', '★围栏行不干净 ⇒ 不算开壳，退回逐行扫');
-    assert.equal(g.count, 1);
+    assert.equal(g.shell.found, false, '★围栏行不干净 ⇒ 不算开壳');
+    assert.equal(g.count, 0, '★不算开壳 ⇒ 零收获（降级已删：宁可这一轮白跑，不许把正文当标签读）');
 });
 
 test('★★★leg93㉔d：空块 vs 块外真标签——边界生效（块空着就一个都不认）', () => {
     // ★这是甲案的**代价面**，必须锁住让维护者看得见：模型的标签若写在块外，就是**不认**。
     //   它由注入规范那条硬要求（`tagSpecText`）兜——所以这条与规范判据是一对，缺一不可。
     const f = extractTags([`${FENCE}tags`, FENCE, '【行动】薛铁衣｜格挡防御｜黄坤'].join('\n'), CTX);
-    assert.equal(f.shell.mode, 'shell');
+    assert.equal(f.shell.found, true, '★块在（只是空着）⇒ `found:true`——与"压根没有块"要分得开');
     assert.equal(f.count, 0, '★块空着 ⇒ 块外那条标签不认（边界就是这么定的）');
     assert.equal(hasTagFacts(f), false, '★空块 ⇒ 键不出现（照 `recalled` 那条口径）');
 });

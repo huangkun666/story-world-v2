@@ -21,9 +21,14 @@ const SUBTREE = path.basename(ROOT);
 const REPO = 'huangkun666/story-world-v2';
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
-const cred = fs.readFileSync(path.join(os.homedir(), '.git-credentials'), 'utf8').trim().split(/\r?\n/).filter(Boolean)[0];
+// ★★2026-10-05：**按主机挑行，别取第一行**——`~/.git-credentials` 是**多主机共用**的，
+//   那天 gitee 那行排在第一行 ⇒ 取到 11 位密钥 ⇒ 三个 API 全 `401 Bad credentials`
+//   （同一处的完整留档在 `scripts/publish-release.mjs` 的凭证那一段）。
+const credLines = fs.readFileSync(path.join(os.homedir(), '.git-credentials'), 'utf8').trim().split(/\r?\n/).filter(Boolean);
+const ghCredLines = credLines.filter((l) => /@github\.com(:\d+)?\/?$/.test(l.trim()));
+const cred = ghCredLines.find((l) => /^https?:\/\/x-access-token:/.test(l)) || ghCredLines[0] || '';
 const token = (/^https?:\/\/[^:]+:([^@]*)@/.exec(cred) || [])[1];
-if (!token) { console.log('✘ 从 .git-credentials 里解析不出 token ⇒ 停下'); process.exit(2); }
+if (!token) { console.log(`✘ 从 .git-credentials 里挑不出 github.com 那行的 token（共 ${credLines.length} 行 · github ${ghCredLines.length} 行）⇒ 停下`); process.exit(2); }
 
 const api = async (p) => {
     const r = await fetch('https://api.github.com' + p, {

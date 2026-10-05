@@ -24,7 +24,10 @@
 
 export const FNV1A_OFFSET = 0x811c9dc5;
 export const FNV1A_PRIME = 0x01000193;
-export const CACHE_VERSION = 10;       // ★leg197：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与
+export const CACHE_VERSION = 11;       // ★leg198：**起根那一问的问法变了**（title 立时态纪律：
+                                     //   "只写此刻正在发生的那一步、不许写接下来会怎样" ＋ 撤掉死格 `why`）
+                                     //   ⇒ 同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效。
+                                     //   10（leg197）：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与
                                      //   净化口径都变了（同一本书抽出来的东西不一样了）⇒ 旧缓存必须失效。
                                      //   9（leg192）：增加地理抽取，旧抽取形状缓存失效。
                                      // v1→v2（K31）：缓存值由 canon 五件套扩展为 {canon, tension, env}

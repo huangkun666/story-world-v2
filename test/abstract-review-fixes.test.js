@@ -20,6 +20,11 @@ import { extractTags } from '../src/tag-extract.js';
 import { entsSearchTextOf, selectEntityPage } from '../src/render.js';
 import { resolveEntityName } from '../src/entity-identity.js';
 
+// ★★★leg199（用户令「**删掉降级吧**」）：**没有 ` ```tags ` 块 ⇒ 零收获** ⇒ 要读出标签的夹具必须包块。
+const FENCE = '`'.repeat(3);
+/** 把若干行标签包进一个 ` ```tags ` 块（"只扫块里"这条口径的夹具入口）。 */
+const fenced = (...lines) => [FENCE + 'tags', ...lines, FENCE].join('\n');
+
 const blocksOf = (pairs) => pairs.map(([sourceId, text]) => ({ sourceId, text }));
 const fixed = (payload, calls = null) => async (prompt) => {
     if (calls) calls.push(prompt);
@@ -478,7 +483,7 @@ test('复查④/⑤：大书跨块同名冲突走完整抽取→合并→实体�
     assert.equal(world.entities.length, 0, '未确认类别不入账');
 });
 test('复查⑥：实际标签路由用共用身份解析——共享别名不许先到先得', () => {
-    const shared = extractTags('【行动】大人｜修炼', {
+    const shared = extractTags(fenced('【行动】大人｜修炼'), {
         entities: [
             { id: 'a', name: '甲', kind: 'character', aliases: ['大人'] },
             { id: 'b', name: '乙', kind: 'character', aliases: ['大人'] },
@@ -487,18 +492,18 @@ test('复查⑥：实际标签路由用共用身份解析——共享别名不�
     assert.equal(shared.count, 0, `共享别名指向两个实体 ⇒ 不许归给先到的那个：${JSON.stringify(shared.actions)}`);
     assert.ok(shared.unresolved.some((u) => u.name === '大人'), '归不上要如实报数');
     // 正向：唯一命中照旧解析（含只住在账上的别名）
-    const unique = extractTags('【行动】大人｜修炼', {
+    const unique = extractTags(fenced('【行动】大人｜修炼'), {
         entities: [{ id: 'a', name: '甲', kind: 'character', aliases: ['大人'] }],
     });
     assert.equal(unique.actions[0]?.actorId, 'a');
     // 旧世界兼容：账上实体没有 aliases，别名只在书名录里
-    const legacy = extractTags('【行动】水手月亮｜变身', {
+    const legacy = extractTags(fenced('【行动】水手月亮｜变身'), {
         entities: [{ id: 'a', name: '月野兔' }],
         canon: [{ name: '月野兔', aliases: ['水手月亮'] }],
     });
     assert.equal(legacy.actions[0]?.actorId, 'a', '旧账只有名册别名时仍要认得出');
     // 正名优先于别名（leg89 口径不变）：别名与别人的正名撞车时，正名那个人胜
-    const primary = extractTags('【行动】小娥｜回话', {
+    const primary = extractTags(fenced('【行动】小娥｜回话'), {
         entities: [{ id: 'a', name: '小娥' }, { id: 'b', name: '白小娥', aliases: ['小娥'] }],
     });
     assert.equal(primary.actions[0]?.actorId, 'a', '书里正名优先于他人的别名');

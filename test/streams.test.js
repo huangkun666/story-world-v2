@@ -39,7 +39,30 @@ test('双流：观棋三行齐备（动态流/位置/格局），注入带世界
     assert.ok(obs.includes('▣ 当前格局：张力 0.5 · 未决事件 1 · 在飞盘算 1（「打通边关商路」2/4）'), '格局行（tick 后推进 1 步，2/4）');
     const inj = r.streams.injection;
     assert.ok(inj.includes('【世界动向】事件「守将允诺通关」'), '注入：世界动向');
-    assert.ok(inj.includes('【你的行迹】收服向 龙蛋'), '注入：行迹（落子已记，兑现待结算）');
+    // ★★★leg198 翻案：原来这里断言 `【你的行迹】收服向 龙蛋`——它当时靠的是**词表猜**（l91 那句命中"收服"）。
+    //   词表那一族已按用户令整族拆掉 ⇒ 行迹**只可能来自正文里的标签**，而这一轮的正文没有标签
+    //   ⇒ 这里改成断言"没有行迹"；"有标签就有行迹"由下面那条新用例锁（两边都咬）。
+    assert.ok(!inj.includes('【你的行迹】'), '没有标签 ⇒ 没有行迹行（leg198 新口径）');
+});
+
+test('★leg198：行迹只来自**正文里的标签**（真跑一轮，两边都咬）', async () => {
+    // 病（社区反馈第 2 条照出来的那一族）：没有标签时，旧口径拿正文里的动词猜一个动作当**玩家**的落子
+    //   ⇒ 世界模型读到一行"你的行迹"（其实玩家什么都没做）。新口径：有标签才有落子。
+    const w = structuredClone(GOLDEN);
+    // ★黄金夹具**只有一个实体**（`e_merchant`），而那一轮的假 step 写的正是它
+    //   ⇒ 拿它当玩家会当场撞红线 1「模型禁写玩家」（那是另一条判据的事，别在这里误伤）。
+    //   ⇒ 给这个克隆体**加一个自己的玩家棋子**。
+    w.entities = [...(w.entities || []), { id: 'e_p_leg198', kind: 'character', name: '阿罗', location: '临渊城', status: 'active' }];
+    w.context = { ...(w.context || {}), playerId: 'e_p_leg198' };
+    const first = { id: 'e_p_leg198', name: '阿罗' };
+    const fenced = [`${'`'.repeat(3)}tags`, `【行动】${first.name}｜收服｜龙蛋`, '`'.repeat(3)].join('\n');
+    const on = await runTick({ transport: fakeTransport, ssot: w, dialogue: fenced });
+    assert.equal(on.ok, true, on.error);
+    assert.equal(on.move?.source, 'tag', '★落子来源如实标成标签');
+    assert.ok(on.streams.injection.includes('【你的行迹】收服向 龙蛋'), '★有标签 ⇒ 行迹照旧印出来');
+    const off = await runTick({ transport: fakeTransport, ssot: structuredClone(w), dialogue: '他看了看天色，什么也没说。' });
+    assert.equal(off.move, null, '★没有标签 ⇒ 落子为空（不猜）');
+    assert.ok(!off.streams.injection.includes('【你的行迹】'), '★没有标签 ⇒ 一个字都不印');
 });
 
 test('双流：波及实体渲染为名（"棋好看"）', async () => {
@@ -52,7 +75,7 @@ test('双流：波及实体渲染为名（"棋好看"）', async () => {
 test('tick 编排：OOC 对话 → 落子为空但世界照常结算（世界以自身状态为原料）', async () => {
     const r = await runOne('（继续）');
     assert.equal(r.ok, true);
-    assert.equal(r.move.verb, null, '落子未提取');
+    assert.equal(r.move, null, '★没有标签 ⇒ 落子为空（leg198：不再拿词表猜）');
     assert.equal(r.ssot.meta.tick, 1, 'tick 照常推进');
     assert.equal(r.ssot.meta.simLog.length, 1, '台账照记');
     assert.ok(r.streams.injection.includes('【世界动向】'), '世界动向照常注入');
