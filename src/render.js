@@ -694,14 +694,29 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         + injSwitch('injectRoster', cfg.injectSwitches?.injectRoster, '把名号表递进对话')
         + injSwitch('injectWorldTide', cfg.injectSwitches?.injectWorldTide, '把上轮世界动向递进对话')
         + injSwitch('injectLedgerRecall', cfg.injectSwitches?.injectLedgerRecall, '把账上往事递进对话')
-        // ★★★leg198（社区反馈第 4 条）：**"正文怎么读"单立一组**——它不是"往对话里递什么"，
-        //   而是"提取之前先把不是正文的东西剥掉"（成对标签块 ＋ HTML 注释）。
-        //   为什么给开关：有的角色卡**故意**把正文整个包在成对块里（剥完就只剩机器块了）。
-        + `<div class="sw2-group-h">正文怎么读<em>一枚开关，默认开</em></div>`
+        // ★★★leg198（社区反馈第 4 条）：**"正文怎么读"单立一组**。
+        // ★★★leg200（2026-10-05 用户令）：这一组**重做**（三件事）——
+        //   ① **提取那一趟不再剥**（用户当场问「提取tag的时候为什么要剥？难道正则提取不到tag？」
+        //      —— 答案是"对，不需要"：提取只扫 ` ```tags ` 围栏**里面的行**，围栏外面一个字都不读）；
+        //   ② 剥只剩**一个**消费者：**检索查询串**（拿去账上找旧事的那串字）；
+        //   ③ "**杀光 HTML 注释**"那一条撤了（用户报「正文有时也会包裹在html注释，所以不能这样」），
+        //      改成**他自己裁的两份名单**（逐字）：「白名单过滤程度最重代表只留这个名单，
+        //      黑名单则代表过滤这个名单」——★名单**由玩家填，插件一个内置词都没有**
+        //      （红线 §4.8 禁的是"插件拿**内置**词表替玩家判语义"；这里是玩家点名、插件照办、不猜）。
+        + `<div class="sw2-group-h">正文怎么读<em>一枚开关 ＋ 两份名单</em></div>`
         + injSwitch('stripMachineBlocks', cfg.injectSwitches?.stripMachineBlocks, '剥掉正文里的机器块')
-        + paramHint('开着的时候，提取之前先剥掉别的扩展塞进来的<b>成对标签块</b>与<b>HTML 注释</b>'
-            + '（按结构判、不按标签名认）。剥完是空的、或者把 <code>&#96;&#96;&#96;tags</code> 块一起剥掉了，就退回原文。'
-            + '<br><b>什么时候要关掉它</b>：如果你的角色卡<b>故意</b>把正文整个包在成对块里。')
+        + paramHint('这一层只管一件事：<b>拿去账上找旧事的那串字</b>（别的扩展塞在正文里的机器块会把检索带偏）。'
+            + '<br><b>它不影响"记不记得下来"</b>——提取标签只看 <code>&#96;&#96;&#96;tags</code> 块里面。'
+            + '<br>关掉 ＝ 一个字都不剥。')
+        + `<div class="sw2-field"><div class="sw2-field-head"><label>黑名单 · 要剥掉的名字</label>`
+        + `<textarea class="sw2-input" id="sw2_prose_black" data-settings-text="proseBlackList" rows="3" placeholder="一行一条" title="${attrText('点名要剥掉的信封：成对块写标签名（如 角色手机）；HTML 注释写它开头那几个字（如 抢话自查）')}">${escapeHtml(String(cfg.proseLists?.black ?? ''))}</textarea></div>`
+        + paramHint('一行一条。<b>成对块</b>写标签名（<code>&lt;角色手机&gt;…&lt;/角色手机&gt;</code> ⇒ 写 <b>角色手机</b>）；'
+            + '<b>HTML 注释</b>没有名字 ⇒ 写它<b>开头那几个字</b>（<code>&lt;!--抢话自查: …--&gt;</code> ⇒ 写 <b>抢话自查</b>）。'
+            + '<br>填了这一格 ＝ <b>只剥点名的</b>，别的信封一律不碰。') + `</div>`
+        + `<div class="sw2-field"><div class="sw2-field-head"><label>白名单 · 只留这些</label>`
+        + `<textarea class="sw2-input" id="sw2_prose_white" data-settings-text="proseWhiteList" rows="3" placeholder="一行一条" title="${attrText('只保留点名的信封，其余信封全剥（信封外面的正文照留）。过滤最重的那一档')}">${escapeHtml(String(cfg.proseLists?.white ?? ''))}</textarea></div>`
+        + paramHint('过滤最重的那一档：<b>只留点名的信封，其余信封全剥</b>（信封<b>外面</b>的正文照留）。'
+            + '<br>两格都填 ⇒ <b>以白名单为准</b>。两格都空 ⇒ 成对块照剥、<b>HTML 注释不剥</b>（＝不再杀光注释）。') + `</div>`
         + `<div class="sw2-group-h">一次递多少 · 往事怎么找<em>五个数，直接填</em></div>`
         + `<div class="sw2-field sw2-field-inline"><div class="sw2-field-head"><label>一轮最多递多少条行动</label>`
         + `<input class="sw2-input" id="sw2_tag_max" data-settings="tagMaxActions" type="number" min="1" max="200" step="1" value="${escapeHtml(String(cfg.tagMaxActions ?? 12))}" title="${attrText('正文里的行动超过这个数就只递前几条（截断会在读数里如实报出来）')}"></div>`

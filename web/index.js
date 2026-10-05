@@ -65,7 +65,7 @@ import { createActionRouter, readPayload } from './action-router.js';
 // ★★★leg142（用户令「把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下」）：
 //   **模型通道那一族的新家** —— 设置表单的写通道（原住本文件）＋ 两枚新按钮的接线。
 //   搬的理由见那个文件头（本文件只剩 1 行；而那两个新功能本来就属于这一族）。
-import { createModelChannelHub, SETTINGS_INPUTS } from './model-channel.js';
+import { createModelChannelHub, SETTINGS_INPUTS, proseStripLists } from './model-channel.js';
 import { readEmbedConfig } from '../src/embed-client.js';
 // ★★★leg161（用户令「**那就让 chat 侧也接上向量检索呗**」）：**记忆通道（向量）那一族接回来**，
 //   ★作用面本笔扩了：原来只喂"世界模型那一栏"，现在**聊天侧那一段也吃向量路**。
@@ -299,7 +299,7 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //     最底部滚轮就失效、拉不上去"）：★**真动了样式**（grid 高度改由 flex 分配 ＋ 并页改 flex 列 ＋ 一条 `contain`）⇒ 同批升。为什么非改不可（`100%` 看着没毛病、其实让页多出 249px **够不着**的滚动）⇒ `web/style.css` 的 leg157 注释。
 //   ★★★leg160 → **`20261001-leg160-panel-window`**（用户令「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」）：★**真动了样式**——`.sw2-pan-range` 那两条规则整块撤掉、手机档名单里两格一并删 ⇒ 同批升。
 //   ★★★leg196 → **`20261005-leg196-map-mobile`**（手机端真机报的 bug：地图浮层"只在最顶上露一小块框"）：**真动了样式**——`.sw2-map-mask` 从"只有 `inset:0`"改成**自己声明 `width:100%;height:100%`**，手机档补 `height:100dvh`。为什么非改不可（宿主给 `<html>` 加了 transform/perspective ⇒ 固定定位的包含块变成那个 0 高的盒子 ⇒ 遮罩实测塌成 12px）⇒ 全量读数在 `web/style.css` 那一处 leg196 注释里。
-const CSS_VERSION = '20261005-leg196-map-mobile'; // 地图浮层整屏：那一张遮罩自己声明宽高 ＋ 手机档 dvh。
+const CSS_VERSION = '20261005-leg200-prose-lists'; // 正文剥块改成玩家那两份名单（参数页两个多行框）——注入卡里那条 96px 不吃多行框。
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;
@@ -1366,6 +1366,7 @@ function renderCfg(extra = {}) {
             stripMachineBlocks: injectSwitchOn('stripMachineBlocks'),
         },
         tagMaxActions: (modelSettings() || {}).tagMaxActions ?? 12,
+        proseLists: proseStripLists({ switchOn: injectSwitchOn('stripMachineBlocks'), settings: modelSettings() }),
         // ★★★（2026-10-05 · 用户令「**第二段话可以删了，这是用来调试的**」）：这里原来还画着
         //   「注入跑过 N 次 · 最后一次 …」／「注入器还没跑过（…若一直这样，把这条发我）」那一行——
         //   **整条撤掉**（它是排查话术，不是给玩家的读数）。⇒ `sw2LastInjectRuns` 这个副本也一并删了：
@@ -1568,10 +1569,9 @@ async function advanceTick({ world, dialogue }) {
     const res = await runTick({
         // ★★★leg88 撤回留档：这里曾是 `extractCtx: buildExtractCtx(world)`（"从你发的话里提取落子"）——
         //   用户裁示那不是他要的提取 ⇒ 连同 `web/dialogue.js` 整族撤回。
-        // ★★★leg198：`extractCtx: {}` 那一格**随词表整族撤掉**（那个模块已删）：落子只剩
-        //   "正文里的标签"这一条路；新加的是 `stripBlocks`（提取前剥掉别的扩展的机器块，见 `src/prose.js`）。
+        // ★★★leg200：`stripBlocks` 撤了（提取那一趟不再剥块——它只扫围栏里面的行）；★剥只剩**一个**消费者：检索查询串（见下 `queryTextOf`）。
         // ★★★leg119：`ledgerVolumes`（冷档里的旧编年）——不递它，轮转之后「纪事」栏会**悄悄少一半**，细案 `docs/spec-volumes-into-recall.md`。
-        transport: diagExtract(resolved), ssot: world, dialogue, stripBlocks: injectSwitchOn('stripMachineBlocks'), ledgerVolumes: ledgerVolumes(),
+        transport: diagExtract(resolved), ssot: world, dialogue, ledgerVolumes: ledgerVolumes(),
         // ★★★leg161（接回来）：**世界模型那一栏的召回口**——`runTick` 在 `registerDialogueFacts`
         //   之后、`buildEvolutionPack` 之前调它（顺序是机制的一部分，判据 P7 钉着）。
         //   ★没配通道 / 抛错 ⇒ 那一栏不出现，世界照常推进（`recallForTick` 自己永不抛）。
@@ -1696,7 +1696,7 @@ export function setupAsyncTicks(ctx) {
             getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
             getRuntime: () => embedRuntime,
             getVolumes: () => ledgerVolumes(),
-            queryTextOf: (ctx, depth) => sw2RecallQueryText(ctx, 400, depth),
+            queryTextOf: (ctx, depth) => sw2RecallQueryText(ctx, 400, depth, proseStripLists({ switchOn: injectSwitchOn('stripMachineBlocks'), settings: modelSettings() })),
             params: () => liveRetrievalParams(modelSettings()),
         }),
     });

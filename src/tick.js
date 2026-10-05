@@ -2,7 +2,6 @@
 // 完整 tick 编排（S6）：对话 → 落子提取 → 演化上下文 → 主调用（真 schema）→ 结算 → 双流。
 // 这就是"最小活棋盘跑通一次完整 tick"的入口。
 import { extractTags, hasTagFacts, tagReadoutLine } from './tag-extract.js';
-import { proseOnly } from './prose.js';   // ★leg198：提取之前先剥掉"不是正文"的东西
 import { buildEvolutionPack, lineRootsOfPack, recordShownLines, windowFromTick, RECENT_WINDOW_TURNS } from './pack.js';
 import { runMainCall } from './worldstep.js';
 import { settleTick, registerDialogueFacts } from './settle.js';
@@ -179,7 +178,7 @@ function reasonOf(d) {
 //   ★**代价也如实登记**：拔掉之后，**世界模型这一侧再没有任何"来自正文"的输入**
 //     （标签那条路是用户有意关的）⇒ 它此后**只按账自己的状态演**。这不是意外，是本棒量出来的后果。
 
-export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null, stripBlocks = false }) {
+export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null }) {
     // ★★★leg198（用户令「**这个词表按道理说早应该拆了，这是很久之前的设计了，早就不适用了，
     //   这个功能要猜，没标签就不进正文的行动即可**」）：**落子只剩一条路——正文里的标签**。
     //   拆掉的老口径（那张 13 条正则的动词表）病在两处，都能指到行：
@@ -187,9 +186,12 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     //        ⇒ 正文里随便谁"问道""离开"，都会被算成**玩家**这一轮的动作；
     //     ② 它猜出来的东西会经 `move` 进 settle（玩家记成"活跃"）与 streams（印成【你的行迹】）。
     //   ⇒ 新口径：**没有玩家标签 ⇒ 这一轮玩家没有落子**（不猜、也不拿别人的行动顶，见下面 `moveFact`）。
-    // ★★★leg198：提取之前先剥掉"不是正文"的东西（成对标签块 ＋ HTML 注释，口径与边界见 `src/prose.js`）。
-    //   `stripBlocks` 由编排层按面板那一枚开关递进来；**缺省 false** ⇒ 老调用方逐字节零扰动。
-    const prose = stripBlocks ? proseOnly(dialogue || '', { keepTagsFence: true }) : (dialogue || '');
+    // ★★★leg200（2026-10-05 用户令）：**提取不再剥块**——理由见 `src/prose.js` 末那条留档：
+    //   提取只扫 ` ```tags ` 围栏**里面的行**（`if (i < shell.start || i >= shell.end) continue`），
+    //   围栏外面一个字都不读 ⇒ 剥没有用，只会把住在信封里的标签块一起剥掉
+    //   （旧代码为此专门立过一条"保围栏"边界去救它——那条边界随消费者一起消失）。
+    //   `stripBlocks` 形参**已撤**；调用方仍传着也无害（多余键，JS 直接忽略）。
+    const prose = dialogue || '';
     const tagFacts = extractTags(prose, {
         entities: ssot?.entities || [],
         // ★★★leg89（用户拍板「模型认得出那就直接按照插件的正名来看」）：**别名从书里取**——
@@ -280,8 +282,9 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     //   ★★leg153：这个轮次**只有一处算**（`dialogueTick`）——查询串要按它去认"聊天侧这一轮交上来的事"，
     //     两处各算一次就会在"同一轮两把尺子"上再栽一跤（本仓为这个形状付过账）。
     const dialogueTick = (world?.meta?.tick ?? 0) + 1;
-    //   ★★★leg198：喂进去的是**剥掉机器块之后的那一份**（`prose`）——本仓"同一轮只用一份文本"那条口径：
-    //     提取读它、落账那条"值必须在正文里找得到"的校验（`settle.js`）也读它，两处不许各拿一份。
+    //   ★★★leg200：喂进去的就是**原文**（不再剥，见上面那条留档）。旧注释写着"提取读它、
+    //     落账那条'值必须在正文里找得到'的校验（`settle.js`）也读它"——而**那条校验已按用户令撤掉**
+    //     （它是恒真式：值就是从这段文本里切出来的，见 `src/settle.js` 的留档）⇒ 这一格现在只剩一个读者。
     const dialogueStats = registerDialogueFacts(world, { facts: tagFacts, dialogue: prose, tick: dialogueTick });
     // ★★★leg119：`ledgerVolumes` = **编年进了冷档的那些段（卷）**，由编排层取好递进来
     //   （与 `recallStore` 同一条路：引擎不碰存储，浏览器侧的东西一律从选项进来）。

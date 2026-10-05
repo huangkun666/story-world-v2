@@ -1098,14 +1098,22 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
 //     ① 世界模型这一轮要**看得见**这些既成事实（它们进的是**账**，而包读账）；
 //     ② 【变化】落格之后，世界模型看到的是**新状态**（否则它照旧样子演）。
 //
-//   ★★**写账权仍在引擎手里**：下面四道**机械**校验一道都不少（细案 §2.7）——
+//   ★★**写账权仍在引擎手里**：下面三道**机械**校验一道都不少（细案 §2.7）——
 //     ① 实体**在册**（解析器已归一，这里再核一次"账上真有这个 id"——不信上游是本仓惯例）；
 //     ② 格**在册**（`CHANGE_FIELDS` ＋ 驻点。★驻点由解析器过地名归一）；
-//     ③ 值**必须在正文里找得到**（找不到 ⇒ 不收）：这是"不许把词换算成数"唯一能做成的**机械**判据
-//        ——词表判语义是红线明禁的（`ANCHOR.md` §4.8），所以只能靠"照抄"来核；
-//     ④ **必带因**：因 = 本轮注册的那条 `dialogue` 事件；同轮同实体同格**只落一次**。
-//     ⑤ ★★★leg159 新增：**跨轮也不许落空转**——账上那一格已经等于新值（逐字比）⇒ **不落事件、不写编年**，
-//        只记一格 `noop`（用户令「值没变就不落账」；★①–④ 管的是"这一条是不是真的"，⑤ 管的是"这事是不是新发生"）。
+//     ③ **必带因**：因 = 本轮注册的那条 `dialogue` 事件；同轮同实体同格**只落一次**。
+//   ★★★leg200（2026-10-05 用户令「**不要搞这个校验了**」）：**原第③道"值必须在正文里找得到"已撤**。
+//     撤它的两条理由（用户当场问出来的，两条都站得住）：
+//       · **它是恒真式**：值就是从标签行里切出来的（`src/tag-extract.js` 的 `cells.slice(2).join(…)`），
+//         而标签行就在被搜的那段文本里 ⇒ 这个 `includes` **必然为真、不可能失败**。它宣称要防的
+//         "换算／编出来的值"，在**提取那一步就已经防死了**（值只可能是原文里的字）。
+//       · **唯一它会真咬的地方恰恰是误伤**：`所在` 那一格的值由引擎自己过地名归一
+//         （`tag-extract.js` 的 `resolvePlace`），归一出来的名字**可能不在正文里** ⇒
+//         那时它会把一条**合法的**变化丢掉。⇒ **"找不到"不等于"是错的"**。
+//     ⇒ 撤了之后，"不许换算成数"只剩**规范那一句话**管着——而机械层本来也判不了语义
+//       （词表判语义是红线明禁的，`ANCHOR.md` §4.8）⇒ 少了一道**恒真**的闸，**没有**少一道真闸。
+//     ④ ★★★leg159 新增：**跨轮也不许落空转**——账上那一格已经等于新值（逐字比）⇒ **不落事件、不写编年**，
+//        只记一格 `noop`（用户令「值没变就不落账」；★①–③ 管的是"这一条是不是真的"，④ 管的是"这事是不是新发生"）。
 //
 //   ★**玩家格可以走这条路**（用户 2026-09-24 裁定：「聊天肯定能落他这边所有更改过的所有角色属性」）——
 //     红线 1 禁的是**世界步替玩家写**（`check-step.js:319-321` 那条**原样不动**），
@@ -1138,8 +1146,9 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
     const stats = { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0 };
     if (!world || !facts) return stats;
     const t = Number.isFinite(tick) ? tick : (world.meta?.tick ?? 0);
-    // ★"值必须在正文里找得到"的比对面：**去空白后的正文**（照抄的是同一段字，空白差异不算差异）。
-    const bare = String(dialogue ?? '').replace(/\s+/g, '');
+    // ★★★leg200：`dialogue` 这一格**已无读者**（原来只有下面那道"值必须在正文里找得到"读它）——
+    //   照 `recall`/`recallStore` 那条先例**留着但留档**：撤形参会动调用面（`src/tick.js` 与判据都在传），
+    //   要撤得单独一笔。★调用方仍可以照旧传，只是不再有任何效果。
     const ents = world.entities || [];
     const byId = new Map(ents.filter((e) => e?.id).map((e) => [e.id, e]));
     const nameOf = (id) => byId.get(id)?.name || id;
@@ -1203,8 +1212,9 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
         //   根因：本函数原来**只在同一轮内**去重（下面那张 `wrote` 表，键＝`实体|格`）——跨轮一道都没有。
         //   口径（逐字照用户那句）：**该实体该格的值已经等于新值 ⇒ 不落事件、不写编年、不进 `wrote`**，
         //     只在 `stats` 里记一格 `noop`（读数行据此告诉玩家"模型把同一句话又说了几遍"）。
-        //   ★比法是**逐字**比（两侧都先 `trim`）：与"值必须在正文里找得到"那条同一个口径——
-        //     本仓不把词换算成数、也不替账判"意思一样"（词表判语义是红线明禁的，ANCHOR §4.8）。
+        //   ★比法是**逐字**比（两侧都先 `trim`）——本仓不把词换算成数、也不替账判"意思一样"
+        //     （词表判语义是红线明禁的，ANCHOR §4.8）。★leg200 起不再引"值必须在正文里找得到"
+        //     那条（它已撤），比法本身一个字没变。
         //   ★`ent[c.field]` 是**账上此刻的值**：世界步那条路（`applyEntityUpdates`）写的就是它 ⇒ 两处同一格。
         //   ★**没值**（undefined）≠ 空串：那是"这一格还没有过值"（红线 2 明写"空着就是空着"），
         //     拿空串去顶它会把"第一次"判成"没变" ⇒ 只许"原来真有值、且与新值逐字相同"才算空转。
@@ -1213,10 +1223,9 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
         //     正是本仓最忌的"两个真相"（交接 §4.1 明写）。
         const cur = ent[c.field];
         if (typeof cur === 'string' && cur.trim() === val) { stats.noop += 1; continue; }
-        // ③ **值必须在正文里找得到**（找不到 ⇒ 它是换算/编出来的，不收）
-        if (!bare.includes(val.replace(/\s+/g, ''))) { stats.dropped += 1; continue; }
+        // ★★★leg200：原第③道"值必须在正文里找得到"**已按用户令撤掉**（恒真式，见函数头留档）。
         const pair = `${c.entityId}|${c.field}`;
-        if (wrote.has(pair)) { stats.dropped += 1; continue; }             // ④ 同轮同格只一次
+        if (wrote.has(pair)) { stats.dropped += 1; continue; }             // ③ 同轮同格只一次
         if (stats.updates >= DIALOGUE_UPDATE_CAP) { stats.capped += 1; continue; }   // 配额（★整条不进：不许"记了事实却没落格"）
         const title = `${ent.name}的${c.field === CHANGE_PLACE_FIELD ? '所在' : c.field}变成了「${val}」`;
         const node = addFact(title, [c.entityId], c.raw || null, 'major', c.location, 'change');

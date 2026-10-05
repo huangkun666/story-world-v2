@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**328 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `eb75ca47-d7b6c977`（源文件 eb75ca47 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `31e7dea8-d7b6c977`（源文件 31e7dea8 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,7 +11,7 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg199-blockonly` |
+| 构建号 | `leg200-prose-lists` |
 | 提示词号 | `v2-agenda-t1-34` |
 | 版本 | `1.1.1`（ST 扩展） |
 | 规模 | src **68** · web **38** · 判据 **170** · 探针 **76** · 文档 **201** |
@@ -28,8 +28,8 @@
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:43` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
 | STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:78` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
 | STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:140` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 当前工作 | `STATE.md:180` | leg199 已办结（用户 2026-10-05 两道令 ＋ 一次更正，逐字：①「**不用管默认值的问题，删掉降级吧**」②「**提示词1300多字，我认为可能需要优化一下，之前我发现一个问题，就是正文标签里给一个角色修 |
-| STATE.md · 5. 现场（本机） | `STATE.md:188` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
+| STATE.md · 4. 当前工作 | `STATE.md:180` | leg200 已办结（用户 2026-10-05 两道令 ＋ 两次当场追问，逐字：①「**不要搞这个校验了**」②「**把检索用的正文提取杀光html注释的设计改成我跟你说的白名单和黑名单的设计**」③「**提取tag的 |
+| STATE.md · 5. 现场（本机） | `STATE.md:190` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
 
 ### 活儿（12）
 
@@ -257,9 +257,9 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:50` | **2050 / 2050 · fail 0 · skipped 0 · todo 0**（★leg199 **净 +5**：新增 5 条 —— `test/no-guess.test.js` **leg199①②③** |
+| 当前值 · 判据 | `STATE.md:50` | **2052 / 2052 · fail 0 · skipped 0 · todo 0**（★leg200 **净 +2**：**正文剥块改成玩家那两份名单**（白/黑名单）＋ **提取那一趟不再剥** ＋ **撤掉"值 |
 | 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动"正文里认不认标签"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每 |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg199-blockonly`** ｜ 复量：`src/render-base.js`；**删掉"块外裸标签"那条降级**（用户 2026-10-05 令「不用管默认值的问题，**删掉降级吧**」）⇒ ** |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg200-prose-lists`** ｜ 复量：`src/render-base.js`；★leg200：**参数页「正文怎么读」那一组重做**——两枚开关说明改成**两份名单**（黑名单＝要剥掉的名字／白名 |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
@@ -269,7 +269,7 @@
 | 当前值 · 包预算 出厂值 | `STATE.md:59` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
 | 当前值 · ★往回看轮数 出厂值 | `STATE.md:60` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
 | 当前值 · ★leg136–leg156 各笔 | `STATE.md:61` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
-| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197／leg198／leg199 均未升**（`web/s |
+| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261005-leg200-prose-lists`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg200 升了**（`web/style.css` 真动了： |
 | 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
 | 当前值 · web/index.js 行数 | `STATE.md:64` | **3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 * |
 | 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
@@ -399,6 +399,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `7b60983 story-world-v2 leg199 发布记账：发布点跟到 79a91ce / leg199-blockonly / 1.1.1（★纯记账笔，产品行为零变化）`
 - `772aea5 story-world-v2 修发布脚本两处：凭据按主机挑行（★别取第一行）`
 - `4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）`
 - `a0b1ad2 story-world-v2 leg199：删掉"块外裸标签"那条降级 ＋ 标签规范第 7 条改值口径`
@@ -410,5 +411,4 @@
 - `1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）`
 - `0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）`
 - `0b2d4ef leg194: drop the raw inject readout line from the params card`
-- `f7104c0 leg193: inject readout row and a char budget that never cuts an event`
 

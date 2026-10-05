@@ -34,6 +34,22 @@ export const EMBED_SETTINGS_INPUTS = {
     embedBaseUrl: 'sw2_emb_base', embedApiKey: 'sw2_emb_key', embedModel: 'sw2_emb_model',
 };
 
+/**
+ * ★★★leg200（2026-10-05 用户令）：**正文剥块那两份名单**（参数页「正文怎么读」那两格）——
+ * 由**玩家自己填**：黑名单＝要剥掉的名字；白名单＝只留这些、其余信封全剥（过滤最重那一档）。
+ * 口径全文在 `src/prose.js` 头注（含"两个都空 ⇒ 成对块照剥、HTML 注释不剥"那一档）。
+ *
+ * ★**住这里**（不住 `web/index.js`）：那个文件有 **<3100 行的硬锁**（它是接线层），
+ *   而这一族是"设置怎么读"，与 `SETTINGS_INPUTS` 同一件事 ⇒ 搬过来正好落在同一个家里。
+ * @param {{switchOn?: boolean, settings?: object|null}} [deps]
+ *   `switchOn` ＝ 总闸（面板那枚「剥掉正文里的机器块」）；关着 ⇒ 返回 `null` ＝ **一个字都不剥**。
+ * @returns {{black: string, white: string}|null}
+ */
+export function proseStripLists({ switchOn = false, settings = null } = {}) {
+    if (!switchOn) return null;
+    return { black: settings?.proseBlackList ?? '', white: settings?.proseWhiteList ?? '' };
+}
+
 // 数字型设置键的范围（唯一真源：reading 端——渲染层只画 min/max 提示，**拦截在这里**）。
 //   ★为什么拦：这两个数直接进引擎（`resolveBrowserTransport` → `createHttpTransport` 的
 //     `timeoutMs`/`maxTokens`）⇒ 落一个 NaN 或负数进去 = 每轮调用当场失败，而玩家只会看到"演算失败"。
@@ -281,6 +297,16 @@ export function createModelChannelHub(deps = {}) {
                     return;
                 }
                 write(key, v);
+                return;
+            }
+            // ★★★leg200：**文本型设置**（正文剥块那两份名单）走这一格——`data-settings-text="键名"`。
+            //   为什么不复用 `data-settings`：那一格是**数字**专用（紧接着就是
+            //   `sw2NormalizeNumericSetting`，非法值当场拒收）——名单是自由文本，进去会被当数字判非法。
+            //   ★存的是**原文**（不 trim、不拆行）：面板那个框正在被人编辑，落盘要保持他打的形状；
+            //     拆成条目是**读的时候**的事（`src/prose.js` 的 `parseProseList`）。
+            const textKey = e.target?.getAttribute?.('data-settings-text');
+            if (textKey) {
+                write(textKey, String(e.target.value ?? ''));
                 return;
             }
             // ★★★leg87：数字型设置（单轮超时/输出上限）走**声明式**这一格（`data-settings="键名"`）。

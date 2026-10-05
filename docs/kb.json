@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "eb75ca47-d7b6c977",
+  "fingerprint": "31e7dea8-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "eb75ca47",
+  "sourceFingerprint": "31e7dea8",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -272,9 +272,9 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg199-blockonly",
+    "panelBuild": "leg200-prose-lists",
     "mainPromptV": "v2-agenda-t1-34",
-    "cssVersion": "20261005-leg196-map-mobile",
+    "cssVersion": "20261005-leg200-prose-lists",
     "version": "1.1.1",
     "srcModules": 68,
     "webModules": 38,
@@ -283,6 +283,7 @@
     "docs": 201,
     "latestHandoff": "session-handoff-2026-10-02-leg173-panorama-reader.md",
     "lastCommits": [
+      "7b60983 story-world-v2 leg199 发布记账：发布点跟到 79a91ce / leg199-blockonly / 1.1.1（★纯记账笔，产品行为零变化）",
       "772aea5 story-world-v2 修发布脚本两处：凭据按主机挑行（★别取第一行）",
       "4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）",
       "a0b1ad2 story-world-v2 leg199：删掉\"块外裸标签\"那条降级 ＋ 标签规范第 7 条改值口径",
@@ -293,8 +294,7 @@
       "e3f9a06 story-world-v2 leg196：手机端点地图只露出顶上一条缝（宿主给 <html> 加了 transform ⇒ 固定定位的包含块变成那个 0 高的盒子）",
       "1d32ad3 story-world-v2 leg195 发布记账：发布点跟到 e28be61 / v1.1.0（★纯记账笔，产品行为零变化）",
       "0c4102a story-world-v2 leg195 发布：把 leg161–leg194 那 51 笔发出去（版本号 1.0.1 → 1.1.0）",
-      "0b2d4ef leg194: drop the raw inject readout line from the params card",
-      "f7104c0 leg193: inject readout row and a char budget that never cuts an event"
+      "0b2d4ef leg194: drop the raw inject readout line from the params card"
     ]
   },
   "counts": {
@@ -479,7 +479,7 @@
       "kind": "入口/规矩",
       "src": "STATE.md",
       "line": 180,
-      "where": "leg199 已办结（用户 2026-10-05 两道令 ＋ 一次更正，逐字：①「**不用管默认值的问题，删掉降级吧**」②「**提示词1300多字，我认为可能需要优化一下，之前我发现一个问题，就是正文标签里给一个角色修改实力字段，但是不是",
+      "where": "leg200 已办结（用户 2026-10-05 两道令 ＋ 两次当场追问，逐字：①「**不要搞这个校验了**」②「**把检索用的正文提取杀光html注释的设计改成我跟你说的白名单和黑名单的设计**」③「**提取tag的时候为什么要剥？难道",
       "keys": [
         "STATE",
         "入口",
@@ -509,7 +509,7 @@
       "title": "STATE.md · 5. 现场（本机）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 188,
+      "line": 190,
       "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（仓库根是 `F:\\deepseek\\plugins`；分支 **`leg151-prefetch`**；",
       "keys": [
         "STATE",
@@ -6834,7 +6834,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 50,
-      "where": "**2050 / 2050 · fail 0 · skipped 0 · todo 0**（★leg199 **净 +5**：新增 5 条 —— `test/no-guess.test.js` **leg199①②③**（**块外的标签一个 ｜ 复量：`node --test`（无参，在插件目录内）",
+      "where": "**2052 / 2052 · fail 0 · skipped 0 · todo 0**（★leg200 **净 +2**：**正文剥块改成玩家那两份名单**（白/黑名单）＋ **提取那一趟不再剥** ＋ **撤掉\"值必须在正文里找得到\" ｜ 复量：`node --test`（无参，在插件目录内）",
       "keys": [
         "当前值",
         "读数",
@@ -6901,7 +6901,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg199-blockonly`** ｜ 复量：`src/render-base.js`；**删掉\"块外裸标签\"那条降级**（用户 2026-10-05 令「不用管默认值的问题，**删掉降级吧**」）⇒ **",
+      "where": "**`leg200-prose-lists`** ｜ 复量：`src/render-base.js`；★leg200：**参数页「正文怎么读」那一组重做**——两枚开关说明改成**两份名单**（黑名单＝要剥掉的名字／白名",
       "keys": [
         "当前值",
         "读数",
@@ -7241,7 +7241,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 62,
-      "where": "**`20261005-leg196-map-mobile`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg197／leg198／leg199 均未升**（`web/style.css",
+      "where": "**`20261005-leg200-prose-lists`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg200 升了**（`web/style.css` 真动了：名单那两个多行框要",
       "keys": [
         "当前值",
         "读数",

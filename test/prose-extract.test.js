@@ -1,28 +1,27 @@
 // story-world-v2/test/prose-extract.test.js
-// ★★★leg198：**提取正文之前，先把"不是正文"的东西剥掉**。
+// ★★★leg200（2026-10-05 用户令）：**"剥什么"由玩家的两份名单说了算** ＋ **提取那一趟不再剥**。
 //
-// 这是社区反馈第 4 条（作者原话：「建议给「提取正文」也加一层**排除**（注释 ／ 成对标签块）」），
-// 病（他给的现象，本仓源码可证）：正文里混着两类**不是正文**的东西——
-//   ① 别的扩展的状态栏块（`<角色手机>…</角色手机>`，里面还套着一整套状态/动态/备忘）；
-//   ② 给自己看的 HTML 注释（`<!--抢话自查: …-->`）。
-// 而提取那一趟拿的是**整条消息原文，一个字符都不剥**（`web/index.js` 取最后一条 → `runTick` 的 `dialogue`）。
+// 用户 2026-10-05 三道令（逐字）：
+//   ①「**正文有时也会包裹在html注释，所以不能这样**」⇒ 撤掉 leg198 那一刀"杀光 HTML 注释"
+//     （有的卡就是拿注释当正文的容器，一刀切会把正文本身剥走）；
+//   ②「**提取正文时采用白名单和黑名单机制，这俩名单由用户自己设置，白名单过滤程度最重代表
+//      只留这个名单，黑名单则代表过滤这个名单**」⇒ 名单机制，两个框住参数页「正文怎么读」；
+//   ③（他当场问出来的）「**提取tag的时候为什么要剥？难道正则提取不到tag？**」
+//     ⇒ 提取那一趟的剥块**整个摘掉**：`extractTags` 只扫 ` ```tags ` 围栏**里面的行**，
+//       围栏外面一个字都不读 ⇒ 剥没有用，只会把住在信封里的标签块一起剥掉。
 //
-// 仓库里本来就有这一层（`proseOnly`，住在 `web/inject.js`，只服务"找旧事的查询串"）——
-// 本笔把它**搬进 `src/`（提取链在引擎这一层，而 `src/` 不许 import `web/`）**，
-// 并**加两条**：① HTML 注释也剥；② ★**围栏被成对块包住时整段退回原文**
-//   （否则会把 ```tags 块一起剥掉 ⇒ 一整轮标签全丢，那是最坏的失效形状）。
-//
-// 口径三条（照反馈者的建议，也照本仓自己的纪律）：
-//   · **结构判**（同名开闭成对），**不是标签名清单**——`ANCHOR.md` §4.8 明禁"用词表判语义"；
-//   · **剥完为空 ⇒ 退回原文**（与 `proseOnly` 现有边界一致，不会比今天更坏）；
-//   · ★**不剥三反引号块**——` ```tags ` 块正是提取要读的料，谁都不许剥它。
+// ＝＝ 口径（三条，全文在 `src/prose.js` 头注）＝＝
+//   · **两个名单都空** ⇒ 只按结构判：**成对块照剥、HTML 注释不剥**；
+//   · **黑名单填了** ⇒ **只剥点名的**（成对块写标签名；HTML 注释写它开头那几个字）；
+//   · **白名单填了** ⇒ **只留点名的，其余信封全剥**（信封**外面**的正文照留）；两个都填 ⇒ 白名单优先。
+//   ★名单**由玩家填，插件一个内置词都没有**（红线 §4.8 禁的是"插件拿**内置**词表替玩家判语义"）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { proseOnly } from '../src/prose.js';
+import { proseOnly, parseProseList } from '../src/prose.js';
 import { runTick } from '../src/tick.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,87 +48,96 @@ const run = (dialogue, extra = {}) => runTick({
     ssot: mkWorld(), dialogue, recall: false, ...extra,
 });
 
-// ── ① 老口径逐字不变（对照组：查询串那一侧靠它，动它就是动实测曲线）────────────────
-test('leg198⑦（对照组）：`proseOnly` 的成对块口径照旧（拉丁名那一档一个字节没变）', () => {
+// ── ① 对照：两个名单都空 ⇒ 老口径一个字没变（成对块照剥；查询串那一侧的实测曲线靠它）──────
+test('leg200①（对照）：两格都空 ⇒ 成对块照剥 · 剥空退回原文 · 代码块有意不剥', () => {
     assert.equal(proseOnly('<status>机器块</status>正文在这里。'), ' 正文在这里。',
-        '★同名开闭成对的那一段剥掉、正文照留（老口径）');
+        '★同名开闭成对的那一段剥掉、正文照留（leg136 起的老口径）');
     assert.equal(proseOnly('<status>整条都包住了</status>'), '<status>整条都包住了</status>',
-        '★剥完是空的 ⇒ **退回原文**（不会比今天更坏）');
+        '★剥完是空的 ⇒ **退回原文**（不会比不剥更坏）');
     const code = [FENCE + 'tags', '【行动】甲｜离开', FENCE].join('\n');
-    assert.equal(proseOnly(code), code, '★三反引号块**有意不剥**（那正是提取要读的料）');
-});
-
-test('leg198⑦b：★名字那一格放宽到**中文名**（社区反馈里那类块就叫 `<角色手机>`）', () => {
-    // 病：旧正则要求"名字以拉丁字母开头"⇒ `<角色手机>…</角色手机>` **一个都剥不掉**，
-    //   而那正是反馈者手上那类块的名字（`<角色手机>` 里套着一整套 `<status>`／`<SNS>`／`<memo>`）。
+    assert.equal(proseOnly(code), code, '★三反引号块**有意不剥**（那正是检索要用的料）');
     assert.equal(proseOnly('<角色手机>机器块</角色手机>正文在这里。'), ' 正文在这里。',
-        '★中文名的成对块也要剥（结构判：同名开闭成对，不是标签名清单）');
+        '★中文名的成对块也剥（结构判：同名开闭成对，不是标签名清单）');
 });
 
-// ── ② 新口径：注释也剥 ＋ 围栏保命 ──────────────────────────────────────────────
-test('leg198⑧：提取这一趟把「成对块 ＋ HTML 注释」都剥掉（结构判，不用标签名清单）', () => {
-    const text = '开头。<!--抢话自查: 本段描写甲的反应 --><状态栏>机器</状态栏>结尾。';
-    const got = proseOnly(text, { keepTagsFence: true });
-    assert.ok(!got.includes('抢话自查'), '★HTML 注释不是正文，要剥掉');
-    assert.ok(!got.includes('机器'), '★成对块照旧剥掉');
-    assert.ok(got.includes('开头。') && got.includes('结尾。'), '★正文一个字都不许少');
+// ── ② ★用户报的那个病：HTML 注释**默认不再剥**（正文可能就是包在注释里的）─────────────
+test('leg200②：★两个名单都空时，HTML 注释**不剥**（用户报：「正文有时也会包裹在html注释」）', () => {
+    const wrapped = '<!--黄坤走进渡口，甲在那里等他。-->';
+    assert.equal(proseOnly(wrapped), wrapped, '★注释里的正文不许被剥走——leg198 那一刀已撤');
+    assert.equal(proseOnly('<!--抢话自查: 甲的反应--><状态栏>机器</状态栏>结尾。'), '<!--抢话自查: 甲的反应--> 结尾。',
+        '★成对块照剥，而注释原样留着（两条各按各的规矩）');
 });
 
-test('leg198⑨：★围栏被成对块包住 ⇒ **整段退回原文**（不许把标签一起剥掉）', () => {
-    // 这是本笔最要紧的一条保命规则：` ```tags ` 不是 HTML 标签、本身不会被那个正则命中，
-    //   但**它可能住在别的扩展的信封里**（`<角色手机>…```tags…```…</角色手机>`）。
-    //   只按"成对块剥掉"办，就会把**一整轮的标签全剥没**，而且一声不响。
-    const wrapped = ['<信封>', '正文在这里。', fenced('【行动】甲｜离开'), '</信封>'].join('\n');
-    const got = proseOnly(wrapped, { keepTagsFence: true });
-    assert.equal(got, wrapped, '★原文里有围栏、剥完没了 ⇒ 退回原文（宁可少剥，不许把标签剥没）');
+// ── ③ 黑名单：**只剥点名的** ────────────────────────────────────────────────────
+test('leg200③：黑名单 ＝ 只剥点名的（成对块写标签名；HTML 注释写开头那几个字）', () => {
+    const text = '<角色手机>状态栏</角色手机><!--抢话自查: 甲的反应--><status>别的块</status>正文在这里。';
+    const got = proseOnly(text, { black: '角色手机\n抢话自查' });
+    assert.ok(!got.includes('状态栏'), '★点名的成对块剥掉');
+    assert.ok(!got.includes('抢话自查'), '★点名的注释剥掉（按**开头那几个字**认）');
+    assert.ok(got.includes('<status>别的块</status>'), '★没点名的成对块**一律不碰**（黑名单＝只剥点名的）');
+    assert.ok(got.includes('正文在这里。'), '★正文一个字都不许少');
 });
 
-// ── ③ 接线：真跑一轮，证明"剥这一层"真的在起作用 ────────────────────────────────
-//   ★★★leg199 翻案（用户令「**删掉降级吧**」）：这条判据原来拿"**块外的**一行裸标签"当对照，
-//     而 leg199 起"没有 ` ```tags ` 块 ⇒ 零收获" ⇒ 那个对照**两头都是 0**、判据变成空绿。
-//     ⇒ 拆成两面，各锁一件**真能观察到**的事（不造一个"看起来有差别"的假对照）：
-//       ① ★**保围栏那条边界真的在兜底**：标签块住在信封里时，剥完围栏没了 ⇒ **整段退回原文**
-//          （宁可少剥，不许把一整轮的标签剥没——`src/prose.js` 边界③）；
-//       ② ★**剥掉的确实是信封里的字**（这一层真的动了文本，不是空转）——而正文一个字不少。
-test('leg198⑩：剥这一层真的在起作用（保围栏兜底 ＋ 信封里的字确实被剥掉）', async () => {
-    const envelope = ['<状态栏>', fenced('【行动】甲｜离开'), '</状态栏>'].join('\n');
-    const dialogue = envelope + '\n正文在这里。';
+// ── ④ 白名单：**只留点名的，其余信封全剥**（过滤最重那一档）──────────────────────────
+test('leg200④：白名单 ＝ 只留点名的信封，其余信封全剥；信封**外面**的正文照留', () => {
+    const text = '<角色手机>状态栏</角色手机><!--正文-->黄坤走进渡口。<!--/正文--><status>别的块</status>收尾。';
+    const got = proseOnly(text, { white: '正文' });
+    assert.ok(got.includes('黄坤走进渡口。'), '★点名的信封留下（连同里面的字）');
+    assert.ok(!got.includes('状态栏'), '★没点名的成对块剥掉');
+    assert.ok(!got.includes('别的块'), '★没点名的成对块剥掉');
+    assert.ok(got.includes('收尾。'), '★★信封**外面**的正文照留（白名单不是"只从块里取正文"）');
+});
 
-    // ① ★边界③：围栏被信封包住 ⇒ 整段退回原文（`proseOnly` 只认这一个函数，行为即引擎读到的文本）
-    const kept = proseOnly(dialogue, { keepTagsFence: true });
-    assert.equal(kept, dialogue, '★原文里有围栏、剥完没了 ⇒ **退回原文**（否则一整轮标签全丢）');
-    //   代价如实锁住：这一档下信封**照旧留着**（那是"宁可少剥"的价钱，不是 bug）
-    assert.ok(kept.includes('<状态栏>'), '★如实登记：这一档下信封留着（保围栏优先于剥干净）');
+// ── ⑤ 两个都填 ⇒ 白名单优先（过滤最重那一档说了算）────────────────────────────────
+test('leg200⑤：两个都填 ⇒ **白名单优先**（黑名单不再单独生效）', () => {
+    const text = '<甲>一号</甲><乙>二号</乙>';
+    assert.equal(proseOnly(text, { black: '甲', white: '乙' }), ' <乙>二号</乙>',
+        '★按白名单办：只留 `乙`，`甲` 照剥（黑名单那一条被白名单接管）');
+});
 
-    // ② ★对照：信封里**没有**围栏 ⇒ 那一层真的被剥掉，而正文一个字不少
-    const plain = ['<状态栏>', '【行动】甲｜离开', '</状态栏>', '正文在这里。'].join('\n');
-    const stripped = proseOnly(plain, { keepTagsFence: true });
-    assert.ok(!stripped.includes('【行动】甲｜离开'), '★信封里的那行确实被剥掉了（这一层不是空转）');
-    assert.ok(stripped.includes('正文在这里。'), '★正文一个字都不许少');
+// ── ⑥ 名单怎么解析（一行一条；逗号也认；去重保序）──────────────────────────────────
+test('leg200⑥：名单文本的解析口径（一行一条 · 逗号也认 · 去空白 · 去重 · 保序）', () => {
+    assert.deepEqual(parseProseList('甲\n乙\n甲'), ['甲', '乙'], '一行一条、去重、保序');
+    assert.deepEqual(parseProseList('甲, 乙，丙'), ['甲', '乙', '丙'], '半角/全角逗号都认');
+    assert.deepEqual(parseProseList('  \n\n '), [], '空白 ⇒ 空表（＝那一档没填）');
+    assert.deepEqual(parseProseList(null), [], '没填过 ⇒ 空表');
+});
 
-    // ③ 真跑一轮：正文里那个**真块**照旧读得出（剥这一层不许误伤正常路径）
-    const r = await run(plain + '\n' + fenced('【行动】甲｜离开'), { stripBlocks: true });
+// ── ⑦ ★提取那一趟**不再剥**（用户当场问出来的那条）──────────────────────────────────
+test('leg200⑦：★提取不再剥块——标签块住在注释里、外面还有别的围栏，照读得到', async () => {
+    // 这一档是旧口径唯一真会出事的地方：标签块住在注释里，而**外面还有一个围栏**
+    //   ⇒ 旧代码的"保围栏"边界不触发（剥完还剩那个围栏）⇒ 标签块被静默剥掉。
+    //   新口径**根本不剥** ⇒ 没有这一档。
+    const dialogue = ['<!--', fenced('【行动】黄坤｜修炼'), '-->', '```json', '{"a":1}', '```'].join('\n');
+    const r = await run(dialogue);
     assert.equal(r.ok, true, r.error);
-    assert.equal(r.dialogueStats.events, 1, '★信封剥掉之后，正文末尾那个真块照旧记下一件事');
+    assert.equal(r.move?.verb, '修炼', '★标签块住在注释里也照读得到（提取不剥 ⇒ 不会被连注释一起剥走）');
 });
 
-test('leg198⑪：剥完之后，正文里的标签照旧读得到（不许误伤）', async () => {
-    const dialogue = ['<状态栏>机器</状态栏>', '正文在这里。', fenced('【行动】黄坤｜修炼')].join('\n');
-    const r = await run(dialogue, { stripBlocks: true });
+test('leg200⑦b：正文包在注释里、标签块在外面 ⇒ 照旧读得到（对照组）', async () => {
+    const dialogue = ['<!--黄坤走进渡口，甲在那里等他。-->', fenced('【行动】甲｜偷袭')].join('\n');
+    const r = await run(dialogue);
     assert.equal(r.ok, true, r.error);
-    assert.equal(r.move?.verb, '修炼', '★机器块剥掉之后，玩家自己的标签照旧成立');
-    assert.equal(r.dialogueStats.events, 1, '★正文里那一件事照旧记下来');
+    assert.equal(r.dialogueStats.events, 1, '★正文里那个真块照旧记下一件事');
 });
 
-// ── ④ 接线与开关：源码锁（这一层必须有开关，且默认开着）──────────────────────────
-test('leg198⑫：开关接在线上（接线层传值 ＋ 面板那一枚 ＋ 默认开）', () => {
+// ── ⑧ 接线与面板：源码锁（名单必须真接在线上，且提取那一趟真的不剥了）─────────────────
+test('leg200⑧：名单接在线上（面板两个框 ＋ 递进查询串 ＋ 提取不再剥）', () => {
     const web = readFileSync(path.join(ROOT, 'web', 'index.js'), 'utf8');
     const render = readFileSync(path.join(ROOT, 'src', 'render.js'), 'utf8');
-    assert.match(web, /stripBlocks:/, '★接线层必须把开关的真值递给 `runTick`（否则这一层永远不开）');
-    assert.match(web, /stripMachineBlocks/, '★开关名要有一处定义（读设置那口）');
-    assert.match(render, /stripMachineBlocks/, '★面板上要有这一枚开关（玩家得能关掉它）');
-    const src = readFileSync(path.join(ROOT, 'src', 'tick.js'), 'utf8');
-    assert.match(src, /stripBlocks = false/, '★引擎侧的形参缺省必须是"不剥"（老调用方零扰动）');
-    assert.match(src, /proseOnly\(dialogue \|\| '', \{ keepTagsFence: true \}\)|keepTagsFence: true/,
-        '★提取那一趟必须走"保围栏"的那一档');
+    const mc = readFileSync(path.join(ROOT, 'web', 'model-channel.js'), 'utf8');
+    const inject = readFileSync(path.join(ROOT, 'web', 'inject.js'), 'utf8');
+    const tick = readFileSync(path.join(ROOT, 'src', 'tick.js'), 'utf8');
+    // ① 面板上真有两个框（玩家得能填）
+    assert.match(render, /data-settings-text="proseBlackList"/, '★参数页要有黑名单那个框');
+    assert.match(render, /data-settings-text="proseWhiteList"/, '★参数页要有白名单那个框');
+    // ② 那两个键真被读、真被写（读＝proseStripLists；写＝onField 的文本分支）
+    assert.match(mc, /proseBlackList/, '★名单键要有一处读法（`proseStripLists`）');
+    assert.match(mc, /data-settings-text/, '★文本型设置的写通道要在（`data-settings-text` 分支）');
+    // ③ 名单真递进了查询串那一路（否则填了也不生效）
+    assert.match(web, /sw2RecallQueryText\(ctx, 400, depth, proseStripLists\(/, '★接线层要把名单递给查询串');
+    assert.match(inject, /lists \? proseOnly\(raw, lists\) : raw/, '★查询串那一路要按名单剥（`null` ⇒ 一个字都不剥）');
+    // ④ ★提取那一趟真的不剥了（用户那道令的落点）
+    assert.ok(!/proseOnly/.test(tick), '★★提取那一趟不许再 import/调用 `proseOnly`（它只扫围栏里面的行）');
+    assert.ok(!/stripBlocks/.test(tick.replace(/`stripBlocks` 形参/g, '')), '★`stripBlocks` 形参已撤（注释里提它是留档）');
 });

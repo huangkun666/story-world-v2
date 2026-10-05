@@ -1729,6 +1729,13 @@
 .sw2-params-grid .sw2-inject-box > .sw2-field > .sw2-field-head{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:center;}
 .sw2-params-grid .sw2-inject-box > .sw2-field > .sw2-field-head > label{width:auto;font-size:13px;color:var(--sw2-text-body);}
 .sw2-params-grid .sw2-inject-box > .sw2-field .sw2-input{width:96px;text-align:left;}
+/* ★★★leg200（2026-10-05 用户令）：名单那两格是**多行框**，不吃上面那条 96px——
+   那条是给四个**数字**框定的（一屏四框、右对齐）；多行框一行一条，要写得下。
+   ★★关键在 `grid-column:1/-1`：`.sw2-field-head` 是个**两列栅格**（`minmax(0,1fr) 96px`），
+     多行框若留在第二列里，无论自己写多宽都会被那一列**压成 96px**（实测：96px、高度撑到 82px）。
+     跨两列之后它自成一行，宽度才说了算。
+   ★它**真动了样式** ⇒ `CSS_VERSION` 同批升（判据 `CSS_PIN` 同时咬"该升"与"不该升"两头）。 */
+.sw2-params-grid .sw2-inject-box > .sw2-field > .sw2-field-head > textarea.sw2-input{grid-column:1/-1;width:min(520px,92vw);max-width:100%;min-height:76px;text-align:left;box-sizing:border-box;resize:vertical;line-height:1.6;}
 /* ★★★（2026-10-05 · 用户令「**把图片的第一段话中的关键信息抽取出来展示在参数页**」）：
    **上一次注入的经过**那一行（哪几段、各多少字、往事怎么找回来的）。★形状是"小格流"——
    一格一个"哪一段 多少字"，读的人一眼扫过去，不用读一整句（旧形状是一整条长句）。

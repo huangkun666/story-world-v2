@@ -795,7 +795,7 @@
 //     ＋ 示例由过程式的「踏入元婴」改成状态式的「元婴期」（1349 → 1482 字）。
 //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动，仍 `20261005-leg196-map-mobile`）；
 //     `MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；`CACHE_VERSION` **不升**（仍 11：抽取的问法没变）。
-export const PANEL_BUILD = 'leg199-blockonly';
+export const PANEL_BUILD = 'leg200-prose-lists';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

@@ -249,19 +249,24 @@ test('G18c（leg199）：★有境界的书——突破要落**书里那一档�
         '★它落进去，这一格从此说不出他什么水平——判据把病照出来');
 });
 
-test('G19：★★值必须在正文里找得到——找不到的（换算/编出来的）一律不收', () => {
+test('G19：★★原"值必须在正文里找得到"那道闸**已撤**——值照收（用户 2026-10-05 令「不要搞这个校验了」）', () => {
     const w = mkWorld();
-    // ★这一条是"不许把词换算成数"唯一能做成的**机械**判据：
-    //   值连正文里都没有 ⇒ 一定不是照抄来的。
+    // ★★leg200 翻案：这一则原来锁的是"值连正文里都没有 ⇒ 一定不是照抄来的 ⇒ 不收"。
+    //   用户 2026-10-05 当场问出来的两条理由，把它整条否掉了（全文见 `src/settle.js` 函数头留档）：
+    //     ① **它是恒真式**：值就是从标签行里切出来的（`tag-extract.js` 的 `cells.slice(2).join(…)`），
+    //        而标签行就在被搜的那段文本里 ⇒ 那个 `includes` **必然为真、不可能失败**；
+    //     ② **唯一它会真咬的地方恰恰是误伤**：`所在` 那一格的值由引擎自己过地名归一
+    //        （`tag-extract.js` 的 `resolvePlace`），归一出来的名字**可能不在正文里**。
+    //   ⇒ 口径：**值照收**；"不许换算成数"只剩**规范那一句话**管着（机械层本来也判不了语义）。
     const st = registerDialogueFacts(w, {
         facts: { changes: [{ entityId: 'e_xue', field: '实力', value: '9999', raw: '【变化】薛铁衣｜实力｜9999' }] },
         dialogue: '他只是站着，什么也没说。',
         tick: 7,
     });
-    assert.equal(st.updates, 0, '★值在正文里找不到 ⇒ 不落格');
-    assert.equal(st.dropped, 1, '★丢了什么必须能被看见（不许静默）');
-    assert.equal(w.entities.find((e) => e.id === 'e_xue').实力, undefined, '账上一个字节都没动');
-    assert.equal(w.events.length, 0, '★也不给它注册事件：不许"记了事实却没落格"（账与自己说的话要一致）');
+    assert.equal(st.updates, 1, '★值照收（那道闸已撤）');
+    assert.equal(st.dropped, 0, '★不再因为"正文里找不到"丢东西');
+    assert.equal(w.entities.find((e) => e.id === 'e_xue').实力, '9999', '★照收，落进那一格');
+    assert.equal(w.events.length, 1, '★照旧给它注册事件（记了事实就要落格：账与自己说的话要一致）');
 });
 
 // ★★★leg136（用户令「不要搞那么多闸了」）：**这一则随 `DIALOGUE_UPDATE_CAP` 作废而重造**。

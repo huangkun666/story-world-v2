@@ -2592,7 +2592,13 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   （以前块外的裸标签照样读得出来，现在**整轮零收获**）；规范第 7 条也改了值口径（第三格＝新状态不是过程）。
     //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动）；`MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；
     //     `CACHE_VERSION` **不升**（仍 11：抽取的问法没变）。
-    assert.equal(PANEL_BUILD, 'leg199-blockonly');
+    // ★★★leg200（用户两道令：「**不要搞这个校验了**」＋「**把检索用的正文提取杀光html注释的设计改成
+    //   我跟你说的白名单和黑名单的设计**」）：`PANEL_BUILD` **升**（`leg200-prose-lists`）——
+    //   参数页「正文怎么读」那一组**重做**（两份名单：黑名单/白名单两个多行框 ＋ 各自的说明），
+    //   而这一层的行为也真变了：**默认不再杀光 HTML 注释**（有的卡拿注释当正文的容器）。
+    //   ★`CSS_VERSION` **不升**（`web/style.css` 零改动——`.sw2-field textarea` 那套样式本来就在）；
+    //     `MAIN_PROMPT_V` **不升**（`src/prompts.js` 没碰）；`CACHE_VERSION` **不升**（抽取的问法没变）。
+    assert.equal(PANEL_BUILD, 'leg200-prose-lists');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2633,7 +2639,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   **自己声明 `width:100%;height:100%`** ＋ `box-sizing:border-box`，手机档补 `height:100dvh`）。
     //   病与全量读数见 `web/style.css` 那一处 leg196 注释（手机端真机报的"地图只在最顶上露一小块框"）。
     //   ★指纹在**全部改动落地之后**现算再填（它是"浏览器吃没吃到旧样式表"的唯一机械闸）。
-    const CSS_PIN = { ver: '20261005-leg196-map-mobile', sha: '197715b65836ef8425eb9990c5c17baaf8276d3a237a0aab211ae9ae32b8f2b9' };
+    const CSS_PIN = { ver: '20261005-leg200-prose-lists', sha: '6724b14fb30946463d4fcb1664d9d9a832c041338531d9fe5cf19ec1eacd8bc2' };
     const styleSha = createHash('sha256')
         .update(readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     assert.equal(cssVer, CSS_PIN.ver,
@@ -2657,7 +2663,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '199', '前置：本笔构建号为 leg199（删掉"块外裸标签"那条降级），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '200', '前置：本笔构建号为 leg200（正文剥块改成白/黑名单 ＋ 撤掉"值必须在正文里找得到"），继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);
