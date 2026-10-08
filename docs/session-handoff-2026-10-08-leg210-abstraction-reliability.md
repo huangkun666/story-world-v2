@@ -155,5 +155,10 @@
 ⇒ 走本仓唯一那条路 `node scripts/publish-release.mjs` 推**发布仓 main**；
 构建号 **`leg210-abstraction-reliability`**（`PANEL_BUILD` **不升**）、版本号仍 **`1.1.2`**、**tag/release 未动**。
 这一笔**三样一起上线**：五条体检修复 ＋ `1eb9718`（leg210b 两处跨块裸引用）＋ 本次"归档可引用"。
-发布仓 main：`（推送后记账，权威值见 STATE.md §1）`。
+发布仓 main：**`73f7f85` → `d84448e`**（脚本自带核验 **8/8 ✔** · 只读终检 `verify-release.mjs` **20/20 ✔**）。
+同批上线的另两样：**五条体检修复**（本文件上面那一节）＋ **`1eb9718`**（leg210b 两处跨块裸引用
+`SW2_FLUSH_TRIES` / `resolveLimits`）——已核它在日常项目历史里（`codex/f-drive-home` HEAD 的祖先），
+故随本笔一起上线。★**没升版本号**（用户当次只点"推送"）⇒ 社区那侧 `manifest` 仍是 `1.1.2`，
+但面板「构建 …」会从 `leg209-character-protection-cleanup` 变成 **`leg210-abstraction-reliability`**
+——用户硬刷新后看那一行就知道新版真载入了。
 

@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**390 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `cb5d7209-d7b6c977`（源文件 cb5d7209 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `ca08e5eb-d7b6c977`（源文件 ca08e5eb · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -29,14 +29,14 @@
 | STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:79` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
 | STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:141` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
 | STATE.md · 4. 当前工作 | `STATE.md:181` | 已按用户批准范围完成抽取可靠性与社区文档：块大小可设置，接口错误停止无效请求，调试台给出配置、真实调用数和具体失败，中止后及失败后均可重新运行；初始化/重抽保存候选副本，旧载入不能回写新聊天。保留日常项目并发完成的两处裸 |
-| STATE.md · 5. 现场（本机） | `STATE.md:197` | - **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`， |
+| STATE.md · 5. 现场（本机） | `STATE.md:198` | - **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`， |
 
 ### 活儿（12）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` | **2026-10-09 继续收尾**：「继续」；「你能快点吗？不要做太多无效的验证」 |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1440` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1457` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -313,7 +313,7 @@
 |---|---|---|
 | 当前值 · 判据 | `STATE.md:50` | **2310 / 2310 · fail 0 · skipped 0 · todo 0**；覆盖可调块大小、请求止损、HTTP 事实诊断、中止/失败后重试、缓存提交、保存回滚与旧载入返回保护；★2026-10-09 新增 |
 | 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-smok |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg210-abstraction-reliability`** ｜ 复量：`src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断；本地预览，公开发布点仍见下方。 |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg210-abstraction-reliability`** ｜ 复量：`src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断。★2026-10-09 夜已**公开推送**（用户 |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
@@ -328,7 +328,7 @@
 | 当前值 · MAIN_PROMPT_V | `STATE.md:64` | **`v2-agenda-t1-37`** ｜ 复量：`src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
 | 当前值 · web/index.js 行数 | `STATE.md:65` | **2766 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\n').length`；抽取操作、进度和任务生命周期整族搬到独立 web 模块，载入返回检查聊天范围与版本；★2026-10- |
 | 当前值 · CACHE_VERSION | `STATE.md:66` | **`11`**；问法未变，不升。抽取缓存同时匹配来源、块大小和严格来源信息；整项任务成功保存才提交新缓存，中止/失败丢弃本项暂存，保留原有效缓存。 ｜ 复量：`src/fp-hash.js` · `src/abstra |
-| 当前值 · 发布仓 main | `STATE.md:67` | **`2a71ba5`**（代码发布点；远端含后续文档记账，2026-10-08 本轮只读复核实际 HEAD 为 `73f7f85`，证据 `F:/deepseek/tmp/abstraction-reliability |
+| 当前值 · 发布仓 main | `STATE.md:67` | **`d84448e`**（代码发布点 · 2026-10-09 夜推的；上一发布点 `73f7f85`） · 构建号 **`leg210-abstraction-reliability`** · 版本号 **`1.1. |
 | 当前值 · release tag | `STATE.md:68` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发 |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:69` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
 | 当前值 · 版本号 | `STATE.md:70` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 |
@@ -466,6 +466,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `70c48dd fix: 已归档的事件可以引用（带因复活不再拒归档号 ＋ 净化器不再改写归档来路）＋ 五条体检修复一并提交`
 - `12a7e05 Docs: record verified local extraction reliability preview`
 - `6f67e1a fix: give extraction timeout guidance without ineffective settings`
 - `3c64e1b Docs: correct extraction cancellation guidance and final validation scope`
@@ -477,5 +478,4 @@
 - `c0df71c fix: leg210b stale-scope 也给它一句人话（原先落到兜底那句「保存报错」，指错方向）`
 - `1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据`
 - `2ee1162 Fix settings guidance and model probe success text`
-- `6968fc4 Add extract chunk size setting and cancel action`
 

@@ -49,7 +49,7 @@
 |---|---|---|
 | 判据 | **2310 / 2310 · fail 0 · skipped 0 · todo 0**；覆盖可调块大小、请求止损、HTTP 事实诊断、中止/失败后重试、缓存提交、保存回滚与旧载入返回保护；★2026-10-09 新增**「已归档的事件可以引用」**（带因复活不再拒归档号；净化器不再把归档号当"本轮位次别名"改写）；保留角色保护、保存事务与并发裸引用修复。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-doc-validation.json`、`final-receipt-audit.log`（守门内置无参全量）；此前整合验证见 `final-validation.json`；浏览器见 `after-browser-verification.json`；★本笔红/绿与上线读数见 `F:/deepseek/tmp/archive-ref-2026-10-09/verification.json`（改前同批判据 **fail 2**）。 | `node --test`（插件目录内） |
 | 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-smoke.log` | `node demo/smoke-demo.js` |
-| `PANEL_BUILD` | **`leg210-abstraction-reliability`** | `src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断；本地预览，公开发布点仍见下方。 |
+| `PANEL_BUILD` | **`leg210-abstraction-reliability`** | `src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断。★2026-10-09 夜已**公开推送**（用户令「帮我推送，不更新版本号」⇒ 号**不升**，公开位见下方"发布仓 main"那一行）。 |
 | ★出处核验（leg197 起） | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped` 在出处这条路上**恒为 0**（它只装"非出处原因"的丢弃）。★**没撤的**：形状（缺名/缺 title/缺当事人/自指/端点不在名册）· 冲突墓碑 · 枚举白名单（`PARAM_GEARS`）· 查书同名多值冲突 · 酒馆宏占位符不当名号 | `src/abstract-evidence.js`（口径全文写在文件头）· `test/evidence-nodrop.test.js` |
 | ★「往事注入多少字」出厂值 | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路合起来吃它）；★**装不下的往事整条不进、绝不截半条**（用户 2026-10-05：「字额度切忌把事件截掉」） | `src/limits.js` · `web/inject.js`（`liveRetrievalParams`） |
 | ★主调用输出上限（出厂值） | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** ⇒ 16,384 上第 11 轮起「返回空」/「非法 JSON」交替。★设置页那两个框**现读**、玩家可自己填 | `src/transport-http.js` |
@@ -64,7 +64,7 @@
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-37`** | `src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
 | `web/index.js` 行数 | **2766 / 3100**（硬锁 `<3100`） | Node `split('\n').length`；抽取操作、进度和任务生命周期整族搬到独立 web 模块，载入返回检查聊天范围与版本；★2026-10-09 五条体检修复各加几行（链浮层收口 `closeChainPopup()`、切聊天复位快照链 `resetChainState()`）。 |
 | `CACHE_VERSION` | **`11`**；问法未变，不升。抽取缓存同时匹配来源、块大小和严格来源信息；整项任务成功保存才提交新缓存，中止/失败丢弃本项暂存，保留原有效缓存。 | `src/fp-hash.js` · `src/abstract.js` · `web/extraction-task.js` |
-| 发布仓 main | **`2a71ba5`**（代码发布点；远端含后续文档记账，2026-10-08 本轮只读复核实际 HEAD 为 `73f7f85`，证据 `F:/deepseek/tmp/abstraction-reliability-2026-10-08/public-refs-verification.txt`） · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg209 推的（用户 2026-10-08 令「**帮我推送并更新版本号**」；当次问定**只推 main ＋ 升号**）：**leg202–leg209 八棒一次上线**（上一发布点 `a075423` / leg201b），脚本自带核验 **8/8 ✔**、只读终检 **20/20 ✔**；本机酒馆安装位克隆已按 §10.0 收尾 `fetch` ＋ `reset --hard origin/main` 到这一笔 | `node scripts/verify-release.mjs` |
+| 发布仓 main | **`d84448e`**（代码发布点 · 2026-10-09 夜推的；上一发布点 `73f7f85`） · 构建号 **`leg210-abstraction-reliability`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★这一笔推的（用户 2026-10-09 令「**帮我推送**」＋「**不更新版本号**」＋「1eb9718 若在当前项目就一起推」）：**三样一次上线**——五条体检修复 ＋ `1eb9718`（leg210b 两处跨块裸引用）＋ **「已归档的事件可以引用」**（带因复活不再拒归档号；净化器不再把归档号当"本轮位次别名"改写）；脚本自带核验 **8/8 ✔**、只读终检 **20/20 ✔**（证据 `F:/deepseek/tmp/archive-ref-2026-10-09/verification.json`）；★**没升版本号**（用户当次只点"推送"）⇒ 1.1.2 仍指着这一版 | `node scripts/verify-release.mjs` |
 | release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发新 tag）⇒ **点 release 下载的仍是那一棵** | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 令「帮我推送并更新版本号」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑）。★**tag/release 这一版没动**（用户当次只点了"推 main ＋ 升号"）⇒ 点 release 下载的仍是 `v1.1.0` 那棵 | `test/browser-compat.test.js` |
@@ -180,7 +180,8 @@
 
 ## 4. 当前工作
 
-已按用户批准范围完成抽取可靠性与社区文档：块大小可设置，接口错误停止无效请求，调试台给出配置、真实调用数和具体失败，中止后及失败后均可重新运行；初始化/重抽保存候选副本，旧载入不能回写新聊天。保留日常项目并发完成的两处裸引用和 stale-scope 提示修复。最终本地安装记录见 §5；授权原话见 `docs/work-current.md` §1，交接 `docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md`。未调用真实模型、修改真实聊天/世界书或公开发布。
+已按用户批准范围完成抽取可靠性与社区文档：块大小可设置，接口错误停止无效请求，调试台给出配置、真实调用数和具体失败，中止后及失败后均可重新运行；初始化/重抽保存候选副本，旧载入不能回写新聊天。保留日常项目并发完成的两处裸引用和 stale-scope 提示修复。最终本地安装记录见 §5；授权原话见 `docs/work-current.md` §1，交接 `docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md`。本笔实施期间未调用真实模型、未修改真实聊天/世界书。
+★**2026-10-09 夜补一笔（已上线）**：按用户令把口径改成**「已归档的事件可以引用」**——带因复活那一支不再拒归档号（原先"如实拒"作废），净化器也不再把它当"本轮位次别名"悄悄改写；同批把此前只在工作区的**五条体检修复**与 **`1eb9718`**（leg210b 两处跨块裸引用）一起推上发布仓 main（`73f7f85` → **`d84448e`**），**没升版本号**（仍 1.1.2）、tag/release 未动。判据先红后绿（改前同批 fail 2 ⇒ 2310 / 2310 · fail 0），记录见同一份交接文末新增的那一节。
 
 用户要求参数页运行与注入更清楚，并批准四块布局。已重排为自动运行、聊天如何影响世界、聊天模型能看到什么、往事怎么找；直接显示用途和调整后的影响，向量参数与正文黑白名单收进高级设置。保留参数原名、原值和全部接线。验证、独立审查及本地安装证据见 §1、§5；授权见 `docs/work-current.md` §1，交接 `docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md`。先前快照合并、诊断范围和聊天提示词改动保留。真实宿主和实体手机现场仍由用户刷新后试用。
 

@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "cb5d7209-d7b6c977",
+  "fingerprint": "ca08e5eb-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "cb5d7209",
+  "sourceFingerprint": "ca08e5eb",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -344,6 +344,7 @@
     "docs": 244,
     "latestHandoff": "session-handoff-2026-10-08-leg210-abstraction-reliability.md",
     "lastCommits": [
+      "70c48dd fix: 已归档的事件可以引用（带因复活不再拒归档号 ＋ 净化器不再改写归档来路）＋ 五条体检修复一并提交",
       "12a7e05 Docs: record verified local extraction reliability preview",
       "6f67e1a fix: give extraction timeout guidance without ineffective settings",
       "3c64e1b Docs: correct extraction cancellation guidance and final validation scope",
@@ -354,8 +355,7 @@
       "2c095e3 fix: guard abstraction task cancellation and chat loading",
       "c0df71c fix: leg210b stale-scope 也给它一句人话（原先落到兜底那句「保存报错」，指错方向）",
       "1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据",
-      "2ee1162 Fix settings guidance and model probe success text",
-      "6968fc4 Add extract chunk size setting and cancel action"
+      "2ee1162 Fix settings guidance and model probe success text"
     ]
   },
   "counts": {
@@ -571,7 +571,7 @@
       "title": "STATE.md · 5. 现场（本机）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 197,
+      "line": 198,
       "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（**唯一实际项目根**；仓库根 `F:\\deepseek\\plugins`，",
       "keys": [
         "STATE",
@@ -603,7 +603,7 @@
       "kind": "活儿",
       "src": "docs/work-current.md",
       "line": 14,
-      "where": "**2026-10-09 继续收尾**：「继续」；「你能快点吗？不要做太多无效的验证」",
+      "where": "",
       "keys": [
         "现在做什么",
         "当前活儿",
@@ -623,7 +623,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 1440,
+      "line": 1457,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -8092,7 +8092,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg210-abstraction-reliability`** ｜ 复量：`src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断；本地预览，公开发布点仍见下方。",
+      "where": "**`leg210-abstraction-reliability`** ｜ 复量：`src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断。★2026-10-09 夜已**公开推送**（用户令「帮我推送，不更新版本",
       "keys": [
         "当前值",
         "读数",
@@ -8602,7 +8602,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 67,
-      "where": "**`2a71ba5`**（代码发布点；远端含后续文档记账，2026-10-08 本轮只读复核实际 HEAD 为 `73f7f85`，证据 `F:/deepseek/tmp/abstraction-reliability-2026-10-0 ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`d84448e`**（代码发布点 · 2026-10-09 夜推的；上一发布点 `73f7f85`） · 构建号 **`leg210-abstraction-reliability`** · 版本号 **`1.1.2`**（★leg1 ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",

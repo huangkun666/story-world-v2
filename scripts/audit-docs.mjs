@@ -64,7 +64,13 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg209-character-protection-cleanup';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+const PUBLISHED_BUILD = 'leg210-abstraction-reliability';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+//   ★★★leg210（2026-10-09 夜）：用户令「**帮我推送**」＋「**不更新版本号**」＋「1eb9718 若在当前项目就一起推」
+//     ⇒ 发布仓 main `73f7f85`（leg209）推到 **`d84448e`**（构建号 `leg210-abstraction-reliability` ·
+//     版本号仍 **`1.1.2`** —— 这一笔**没升号**）。**三样一次上线**：五条体检修复 ＋ `1eb9718`
+//     （leg210b 两处跨块裸引用）＋ **「已归档的事件可以引用」**（带因复活不再拒归档号；
+//     净化器不再把归档号当"本轮位次别名"改写）。脚本自带核验 **8/8 ✔** · 只读终检 **20/20 ✔**。
+//     ★tag/release 仍未动：`v1.1.0` 仍指着 `e28be61`。
 //   ★★★leg209（2026-10-08）：用户令「**帮我推送并更新版本号**」（当次问定：**只推 main ＋ 升号**，
 //     不打 tag、不发 release）⇒ 发布仓 main `a075423`（leg201b）一次推到 **`2a71ba5`**
 //     （构建号 `leg209-character-protection-cleanup` · 版本号 **1.1.1 → 1.1.2**）：**leg202–leg209 八棒一次上线**
