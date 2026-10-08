@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "ca08e5eb-d7b6c977",
+  "fingerprint": "8d028378-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "ca08e5eb",
+  "sourceFingerprint": "8d028378",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -344,6 +344,7 @@
     "docs": 244,
     "latestHandoff": "session-handoff-2026-10-08-leg210-abstraction-reliability.md",
     "lastCommits": [
+      "e6e5825 Docs: 记账本次上线（发布仓 main d84448e · 构建号 leg210-abstraction-reliability）",
       "70c48dd fix: 已归档的事件可以引用（带因复活不再拒归档号 ＋ 净化器不再改写归档来路）＋ 五条体检修复一并提交",
       "12a7e05 Docs: record verified local extraction reliability preview",
       "6f67e1a fix: give extraction timeout guidance without ineffective settings",
@@ -354,8 +355,7 @@
       "966c7ce fix: inherit initialization locations before saving candidate",
       "2c095e3 fix: guard abstraction task cancellation and chat loading",
       "c0df71c fix: leg210b stale-scope 也给它一句人话（原先落到兜底那句「保存报错」，指错方向）",
-      "1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据",
-      "2ee1162 Fix settings guidance and model probe success text"
+      "1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据"
     ]
   },
   "counts": {

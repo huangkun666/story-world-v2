@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
 > 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**390 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `ca08e5eb-d7b6c977`（源文件 ca08e5eb · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 指纹 `8d028378-d7b6c977`（源文件 8d028378 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -466,6 +466,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
+- `e6e5825 Docs: 记账本次上线（发布仓 main d84448e · 构建号 leg210-abstraction-reliability）`
 - `70c48dd fix: 已归档的事件可以引用（带因复活不再拒归档号 ＋ 净化器不再改写归档来路）＋ 五条体检修复一并提交`
 - `12a7e05 Docs: record verified local extraction reliability preview`
 - `6f67e1a fix: give extraction timeout guidance without ineffective settings`
@@ -477,5 +478,4 @@
 - `2c095e3 fix: guard abstraction task cancellation and chat loading`
 - `c0df71c fix: leg210b stale-scope 也给它一句人话（原先落到兜底那句「保存报错」，指错方向）`
 - `1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据`
-- `2ee1162 Fix settings guidance and model probe success text`
 
