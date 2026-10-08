@@ -25,7 +25,8 @@ import {
  *   · `allowedSources` = 发射端（`composeInitSource`）自己产出的**最终接收块**（来源 ID + 逐字文本）；
  *   · `evidencePolicy:'strict'` = 显式要求"编号 + 原话"；**没有允许来源 ⇒ 明确拒绝**，不许静默回落 legacy。
  */
-export async function seedRootsForWorld(hotWorld, { sourceText = '', extract = null, fresh = false, minRoots = 3, chunkChars = SEED_CHUNK_CHAR, candidates = null, onProgress = null, concurrency = 1, allowedSources = null, evidencePolicy = null } = {}) {
+export async function seedRootsForWorld(hotWorld, { sourceText = '', extract = null, fresh = false, minRoots = 3, chunkChars = SEED_CHUNK_CHAR, candidates = null, onProgress = null, concurrency = 1, allowedSources = null, evidencePolicy = null, signal = null } = {}) {
+    if (signal?.aborted) throw Object.assign(new Error('用户已中止抽取'), { sw2Cancelled: true });
     if (typeof extract !== 'function') return { ok: false, skipped: true, reason: '没有可用的抽取通道' };
     const src = String(sourceText ?? '');
     // ★leg150：指纹与"每块几条"两件事都搬进了 `src/seed-roots.js`（**两条路共用一处**）——
@@ -48,7 +49,7 @@ export async function seedRootsForWorld(hotWorld, { sourceText = '', extract = n
     const r = await seedRootsChunked({
         ssot: hotWorld, chunks, extract, candidates: pool, fingerprint: fp, at: new Date().toISOString(),
         maxPerChunk: maxRootsPerChunk(chunks.length),
-        onProgress, concurrency,
+        onProgress, concurrency, signal,
         sourceText: src,          // ★Task 4：整份书文（块的行号在它里面定位）
         allowedSources,           // ★Task 4：来源身份 + 逐字文本（发射端的最终接收块）
         evidencePolicy,           // ★Task 4：strict（有来源）/ legacy（**只许显式**）

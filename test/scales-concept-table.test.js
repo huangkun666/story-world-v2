@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/scales-concept-table.test.js
 // ★★leg62（用户令「粒度不要太细了，换成概念表怎么样」）：**刻度 · 概念表**全链路判据。
 //
@@ -283,7 +284,7 @@ test('★leg62b 只重抽设定：按钮在位 + 处理器注册 + **接线里�
     assert.match(html, /名册\/进度不动/, '★按钮旁就写明"名册/进度不动"（用户要一眼看出按哪个不会把世界重开）');
     assert.match(html, /data-action="extract-scales"/, '瞄一眼那条通道还在（两条通道不是互相替换）');
     // ★核心：接线里必须**只换 setting**，不许把名册种进实体账（那就是"重开世界"了）
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const web = readHostSource();
     const start = web.indexOf("bus['reextract-setting']");
     // ★切片必须**以"下一个 bus[...] 声明"为界**——用 `bus['extract-scales']` 当右界会划过头，
     //   把文件顶部的 import 行也包进来（那里正好有 `seedBookEntities`，于是判据假红）。实测踩过。
@@ -340,12 +341,13 @@ test('★leg62 直抽刻度（用户令「独立抽取设定的入口」）：�
 });
 
 test('★leg62 直抽通道的提示词在生产源码里真的被用上（防"函数写好了、没人调"）', () => {
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const web = readHostSource();
     assert.match(web, /buildScalePrompt\(/, '★web 接线真的调了 buildScalePrompt');
     assert.match(web, /sanitizeScales\(/, '★web 接线真的调了 sanitizeScales（档位出处闸在直抽通道里也生效）');
     assert.match(web, /__scaleDraft/, '★草稿落在会话态字段上（结果不入账）');
     // 直抽**一次调用**（不走名册遍/属性遍）——用户要的就是"快"
-    assert.ok(!/extractWorldSetting\(/.test(web.slice(web.indexOf("bus['extract-scales']"), web.indexOf("bus['clear-scale-draft']"))),
+    const extractStart = web.indexOf("bus['extract-scales']");
+    assert.ok(!/extractWorldSetting\(/.test(web.slice(extractStart, web.indexOf('bus[', extractStart + 1))),
         '★直抽通道不许顺手跑整条抽取管线（那就不是"快速看效果"了）');
 });
 

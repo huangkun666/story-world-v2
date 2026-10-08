@@ -398,7 +398,8 @@ test('★leg61 重试判据：瞬时错（524/fetch failed）重试 · 超时与
     const r = await extractWorldSetting({ sourceText: filler, extract: alwaysTimeout, cache: null });
     assert.equal(r.ok, false, '全块超时 ⇒ 如实失败（不假装成功）');
     // 每块只试 1 次、每块两遍（名册 + 属性）⇒ 恰好 2×块数；若超时被重试则是 4×块数
-    assert.equal(n, chunkCount * 2, `★超时不许重试（实际 ${n} 次 / 块数 ${chunkCount} ⇒ 应为 ${chunkCount * 2}；重试的话是 ${chunkCount * 4}）`);
+    assert.equal(n, 1, '超时不重试、不拆半，并停止本次抽取后续请求');
+    assert.equal(r.timing.calls, n);
 });test('★leg61 势力树甲类边：名字里写着上级的连边 · 多候选取最长 ⇒ 直接上级是"最近的那一层"', () => {
     const mk = (names) => names.map((n) => ({ id: `f-${n}`, kind: 'faction', name: n }));
     const ents = mk(['曹魏', '曹魏军', '曹魏西线军', '曹魏远征军', '蜀汉军', '关羽军', '袁绍军']);

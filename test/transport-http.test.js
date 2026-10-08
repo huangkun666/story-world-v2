@@ -5,6 +5,25 @@ import assert from 'node:assert/strict';
 import { createHttpTransport, createEnvTransport, PROPOSED_CALL_LIMITS, EXTRACTION_MAX_TOKENS, EXTRACTION_TIMEOUT_MS } from '../src/transport-http.js';
 import { isTransientCallError } from '../src/abstract.js';
 
+for (const content of ['', '{"society":', '{"society":"city","bookEntities":[]}']) {
+    test(`HTTP length throws a typed truncation error for ${JSON.stringify(content)}`, async () => {
+        const transport = createHttpTransport({
+            baseUrl: 'https://fake.invalid', apiKey: 'fake', model: 'fake',
+            fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [
+                { finish_reason: 'length', message: { content } },
+            ] }) }),
+        });
+        await assert.rejects(transport('fixture'), err => {
+            assert.equal(err.name, 'Sw2TruncationError');
+            assert.equal(err.sw2Truncated, true);
+            assert.deepEqual(err.sw2CallFailure, { type: 'truncation', finishReason: 'length' });
+            assert.match(err.message, /截断/);
+            assert.equal(isTransientCallError(err), false);
+            return true;
+        });
+    });
+}
+
 test('HTTP 传输：请求形状正确（URL/鉴权/payload）且透传内容', async () => {
     let captured;
     const fakeFetch = async (url, opts) => {

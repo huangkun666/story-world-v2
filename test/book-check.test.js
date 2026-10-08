@@ -257,6 +257,39 @@ function fakeDeps({ stored = 'fnv1a_old_1', fresh = 'fnv1a_new_2' } = {}) {
     return { deps, log, worldOf: () => world };
 }
 
+test('late rejected load check cannot clear a newer chat result or status', async () => {
+    const { deps, log } = fakeDeps(); let rejectOld;
+    const first = new Promise((_, reject) => { rejectOld = reject; }); let calls = 0, stale = false;
+    deps.checkCurrentBook = () => ++calls === 1 ? first : Promise.resolve({ changed: false, fresh: 'new' });
+    const hub = createBookRebaselineHub(deps);
+    const old = hub.runLoadCheck({}, { assertCurrent() { if (stale) throw Object.assign(new Error('old scope'), { sw2Cancelled: true }); } });
+    const current = await hub.runLoadCheck({}); stale = true; rejectOld(new Error('late book load failed'));
+    await assert.rejects(old, error => error.sw2Cancelled === true);
+    assert.equal(hub.result(), current); assert.deepEqual(log.status, []);
+});
+
+test('candidate book read leaves current hub unchanged until a guarded synchronous publish', async () => {
+    const { deps, log } = fakeDeps(); let checked = { changed: true, stored: 'old', fresh: 'current' }, options;
+    deps.checkCurrentBook = async (_, opts) => { options = opts; return checked; };
+    const hub = createBookRebaselineHub(deps), prior = await hub.runLoadCheck({}); log.status.length = 0;
+    checked = { changed: false, stored: 'current', fresh: 'current' };
+    const ctx = {}, candidate = await hub.readCheck({}, null, { ctx });
+    assert.equal(options.ctx, ctx); assert.equal(candidate, checked); assert.equal(hub.result(), prior);
+    assert.deepEqual(log.status, []);
+    assert.throws(() => hub.publishCheck(candidate, { assertCurrent() { throw Object.assign(new Error('old task'), { sw2Cancelled: true }); } }), error => error.sw2Cancelled);
+    assert.equal(hub.result(), prior);
+    assert.equal(hub.publishCheck(candidate), candidate); assert.equal(hub.result(), candidate); assert.deepEqual(log.status, []);
+});
+
+test('late successful book read cannot publish over a newer result', async () => {
+    const { deps } = fakeDeps(); let releaseOld, stale = false, calls = 0;
+    deps.checkCurrentBook = () => ++calls === 1 ? new Promise(r => { releaseOld = r; }) : Promise.resolve({ changed: false, fresh: 'new' });
+    const hub = createBookRebaselineHub(deps);
+    const old = hub.runLoadCheck({}, { assertCurrent() { if (stale) throw Object.assign(new Error('old scope'), { sw2Cancelled: true }); } });
+    const current = await hub.runLoadCheck({}); stale = true; releaseOld({ changed: true, fresh: 'old' });
+    await assert.rejects(old, error => error.sw2Cancelled === true); assert.equal(hub.result(), current);
+});
+
 test('★★leg112 ④-a：载入期发现换了书 ⇒ **状态条收到那一句**（接线真跑）', async () => {
     const { deps, log } = fakeDeps({ stored: 'fnv1a_old_1', fresh: 'fnv1a_new_2' });
     const hub = createBookRebaselineHub(deps);
@@ -336,11 +369,11 @@ test('★★leg112 ⑤：接线层必须真的注入了依赖、挂上了动作�
     const { readFileSync } = await import('node:fs');
     const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
     assert.match(web, /injectBookRebaseline\(\{/, '★注入口必须有人用（"建了注入口但没人用" = leg25f 那条病历）');
-    assert.match(web, /await runBookLoadCheck\(world2\)/, '★载入期必须真的量一次');
+    assert.match(web, /await runBookLoadCheck\(world2, transaction\)/, '★载入期必须真的量一次');
     assert.match(web, /bus\[REBASELINE_ACTION\] = rebaselineHandler/, '★按钮的动作必须挂在总线上（否则点了没反应）');
     assert.match(web, /bookCheck: bookCheckResult\(\)/, '★渲染层必须拿到读数（否则那一行与按钮画不出来）');
     // ★顺序自证：量必须在 refreshWorld **之前**（否则"书换了"要等下一次重绘才出现）
-    const at = web.indexOf('await runBookLoadCheck(world2)');
+    const at = web.indexOf('await runBookLoadCheck(world2, transaction)');
     const rw = web.indexOf('refreshWorld(world2, { oldVolumes: LISTED_VOLUMES })');
     assert.ok(at > 0 && rw > 0 && at < rw, '★★必须先量后画（本仓"接线晚一拍"的老病）');
 });

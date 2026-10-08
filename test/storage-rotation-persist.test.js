@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/storage-rotation-persist.test.js
 // 审计修复 E1/E2/E4 的编排执行序面（编排层，web/index.js 浏览器侧；本文件在 Node 侧如实重演
 // 同一执行序——浏览器模块顶层零 DOM 但 loadWorld 内部要摸 document/ST ctx，无法在 Node 里整条
@@ -301,7 +302,7 @@ test('web/index.js 接线回归锁：模块可加载（顶层零 DOM 守卫不�
     assert.equal(typeof mod.sw2Version(), 'string');
 
     // ②三处修复点的存在性（文本断言写得宽一点：这文件同时被别的工作流改，不锁死措辞）
-    const src = await readFile(new URL('../web/index.js', import.meta.url), 'utf8');
+    const src = readHostSource();
     assert.match(src, /planChronicleRotation\(/, 'E1：上线走 planChronicleRotation（不再是裸 rotateChronicle 缺省卷号）');
     assert.doesNotMatch(src, /rotateChronicle\(world\)/, 'E1：旧缺陷调用形态（从不传卷号）已消失');
     assert.match(src, /nextVolume/, 'E1：热账卷号在接线里被读/写');

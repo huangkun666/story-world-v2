@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createModelChannelHub, sw2NormalizeNumericSetting, SETTINGS_INPUTS } from '../web/model-channel.js';
+import { createModelChannelHub, sw2NormalizeNumericSetting, extractChunkCharsOf, SETTINGS_INPUTS } from '../web/model-channel.js';
+import { SETTING_CHUNK_CHAR } from '../src/abstract-limits.js';
 import { renderSettingsHtml } from '../src/render.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -173,8 +174,8 @@ test('★★★leg157：点一个**自己报了输出上限**的模型 ⇒ 顺�
 // ─────────── ③ 测试连通 ───────────
 
 
-test('★★`probeModelAction`：通了 ⇒ 结论行只有「通 · 模型 · 秒」——**不写"模型回了几个字"**（用户当场裁的）', async () => {
-    const { hub, seen } = harness({ reply: { status: 200, json: { choices: [{ message: { content: 'pong!!' } }] } } });
+test('★★`probeModelAction`：成功结论在实际渲染结果中说明正式抽取 JSON 参数未验证', async () => {
+    const { hub, seen, nodes } = harness({ reply: { status: 200, json: { choices: [{ message: { content: 'pong!!' } }] } } });
     const r = await hub.probeModelAction();
     assert.equal(r.ok, true);
     const line = hub.renderState().modelProbe.line;
@@ -186,7 +187,10 @@ test('★★`probeModelAction`：通了 ⇒ 结论行只有「通 · 模型 · �
     assert.match(line, /通/);
     assert.match(line, /m-a/, '★要报出测的是哪个模型');
     assert.match(line, /秒/, '★要报出耗时');
-    assert.ok(!/字/.test(line), '★★用户 2026-09-27 当场裁的：**不写"回了几个字"**（那是内部噪声）');
+    assert.match(line, /正式抽取.*JSON 参数.*未验证/, '★成功行须限定最小请求没有验证正式抽取参数');
+    assert.match(nodes['#sw2_probe'].innerHTML, /通.*m-a.*秒.*正式抽取.*JSON 参数.*未验证/,
+        '★生产 hub 的成功结果必须把限定显示在实际渲染区域，而不是仅写在按钮 title');
+    assert.ok(!/回了几个字/.test(line), '★★不写模型返回文本长度（那是内部噪声）');
     assert.match(seen.status.at(-1), /连通/);
 });
 
@@ -325,6 +329,31 @@ test('相似度阈值通过真实表单委托保存小数，非法值提示小�
             assert.equal(form.settings[key], kept);
             assert.match(form.statuses.at(-1), /相似度阈值.*0–1.*小数.*没有写入/);
             assert.ok(!form.statuses.at(-1).includes('整数'));
+        }
+    }
+});
+
+test('抽取每块字符数使用 Task 1 归一化默认值，并通过真实表单持久化安全正整数', () => {
+    assert.equal(extractChunkCharsOf({}), SETTING_CHUNK_CHAR);
+    assert.equal(sw2NormalizeNumericSetting('extractChunkChars', '10000'), 10000);
+    assert.equal(sw2NormalizeNumericSetting('extractChunkChars', '1.5'), null);
+    assert.equal(sw2NormalizeNumericSetting('extractChunkChars', '9007199254740992'), null);
+
+    const form = settingsForm('extractChunkChars', SETTING_CHUNK_CHAR);
+    for (const type of ['input', 'change']) {
+        const before = form.writes.length;
+        form.submit(type, '12000');
+        assert.deepEqual(form.writes.at(-1), ['extractChunkChars', 12000]);
+        assert.equal(form.writes.length, before + 1);
+        assert.equal(form.settings.extractChunkChars, 12000);
+
+        const kept = form.settings.extractChunkChars;
+        const count = form.writes.length;
+        for (const raw of ['', '0', '-1', '1.5', '9007199254740992']) {
+            form.submit(type, raw);
+            assert.equal(form.writes.length, count, `${type} 不应保存 ${raw}`);
+            assert.equal(form.settings.extractChunkChars, kept);
+            assert.match(form.statuses.at(-1), /抽取每块字符数.*整数.*没有写入/);
         }
     }
 });

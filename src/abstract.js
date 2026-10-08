@@ -35,7 +35,7 @@
 import { bookFingerprint } from './fp-hash.js';   // ★leg159c：原名 `fingerprint.js`，撞上 EasyPrivacy 那条规则（见该文件抬头）
 import { sanitizeGeography, mergeGeography, geographyShape } from './geography-extract.js';
 import { GEOGRAPHY_VERSION } from './schemas/geography.schema.js';
-import { SETTING_CHUNK_CHAR } from './abstract-limits.js';
+import { SETTING_CHUNK_CHAR, normalizeExtractChunkChars } from './abstract-limits.js';
 export { SETTING_CHUNK_CHAR } from './abstract-limits.js';
 import { isMacroPlaceholder } from './macros.js';   // ★leg148：酒馆占位符不是一个名字（实体名那一格）
 import { prepareAbstractEntry } from './abstract-source.js';
@@ -1869,10 +1869,63 @@ export function assembleSetting({ canon, tension, env, legacyTension, fingerprin
 //   重试次数有界（`EXTRACT_RETRY_TIMES`），且只对"瞬时"那一类重试，不放大 401/403 这类配置错的代价。
 export const EXTRACT_RETRY_TIMES = 2;
 export const EXTRACT_RETRY_WAIT_MS = 3000;
+function cancelledError() {
+    return Object.assign(new Error('用户已中止抽取'), { name: 'AbortError', sw2Cancelled: true });
+}
+function withExtractSignal(work, signal) {
+    if (signal?.aborted) return Promise.reject(cancelledError());
+    if (!signal) return Promise.resolve().then(work);
+    return new Promise((resolve, reject) => {
+        const abort = () => { signal.removeEventListener('abort', abort); reject(cancelledError()); };
+        signal.addEventListener('abort', abort, { once: true });
+        Promise.resolve().then(() => {
+            if (signal.aborted) throw cancelledError();
+            return work();
+        }).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    });
+}
+export async function extractWorldSetting(options = {}) {
+    const { signal = null, extract, cache } = options;
+    const chunkChars = normalizeExtractChunkChars(options.chunkChars);
+    const started = Date.now();
+    const steps = [];
+    let calls = 0, live = 0, peak = 0, failure = null;
+    const check = () => { if (signal?.aborted) throw cancelledError(); if (failure) throw Object.assign(new Error('抽取调用失败: ' + String(failure.message || failure)), { sw2Stopped: true, cause: failure }); };
+    const wrapped = prompt => withExtractSignal(async () => {
+        // Count only callbacks entered after the final queued-work guard.
+        check(); calls++; live++; peak = Math.max(peak, live);
+        try { return await extract(prompt, { signal }); }
+        finally { live--; }
+    }, signal);
+    wrapped.stop = err => { failure ||= err; };
+    wrapped.wait = ms => withExtractSignal(() => new Promise(resolve => {
+        const timer = setTimeout(done, ms);
+        function done() { clearTimeout(timer); signal?.removeEventListener('abort', done); resolve(); }
+        signal?.addEventListener('abort', done, { once: true });
+    }), signal).then(check);
+    let pendingCache = null;
+    const scopedCache = cache && {
+        get: key => { check(); const hit = cache.get(key); return hit && (hit.extractChunkChars ?? SETTING_CHUNK_CHAR) === chunkChars ? hit : null; },
+        set: (key, value, stamp, meta) => { check(); pendingCache = [key, value, stamp, { ...meta, extractChunkChars: chunkChars }]; },
+    };
+    let result;
+    try {
+        check();
+        result = await extractWorldSettingInner({ ...options, chunkChars, cache: scopedCache, extract: typeof extract === 'function' ? wrapped : extract, onProgress: ev => { steps.push(ev); if (typeof options.onProgress === 'function') options.onProgress(ev); } });
+        check();
+        if (result.ok && pendingCache) cache.set(...pendingCache);
+    } catch (err) {
+        const cause = failure || err;
+        result = { timing: result?.timing, ok: false, ...(err.sw2Cancelled ? { cancelled: true } : {}), errors: [...(result?.errors || []), String(err.message || err)], callFailure: cause.sw2CallFailure || { type: err.sw2Cancelled ? 'cancelled' : cause.sw2Timeout ? 'timeout' : 'request', status: cause.status, bodySnippet: cause.bodySnippet } };
+    }
+    result.timing = { ...result.timing, steps, calls, ms: Date.now() - started, srcChars: Array.from(String(options.sourceText ?? '')).length, chunkChars, concurrency: options.concurrency ?? 1, peakConcurrency: peak };
+    return result;
+}
 // 瞬时错判据（形态判据，不是"看心情"）：网关 5xx/524/522 · 链路断 · 无响应。
 //   ★反向判据同样重要：401/403/404/429 与"超时"一律不重试（前三个是配置错、429 是限流、超时是止损）。
 export function isTransientCallError(err) {
     if (!err) return false;
+    if (err.sw2Cancelled || err.sw2Stopped || err.sw2Truncated) return false;
     if (err.sw2Timeout === true) return false;                       // 超时 = 止损，不重试
     const s = `${err.message || err}`;
     if (/\b(401|403|404|429)\b/.test(s)) return false;               // 配置错 / 限流：重试只会白烧
@@ -1889,12 +1942,15 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 async function callOnce(extract, text, buildPrompt = buildAbstractPrompt, evidence = null) {
     let rawText;
     let lastErr = null;
+    let attempts = 0;
     for (let attempt = 1; attempt <= EXTRACT_RETRY_TIMES; attempt += 1) {
         try {
+            attempts += 1;
             rawText = await extract(buildPrompt(text));
             lastErr = null;
             break;
         } catch (err) {
+            if (err.sw2Cancelled || err.sw2Stopped) throw err;
             lastErr = err;
             // leg27：**超时与瞬时错必须分开**（旧法一律并成一句"抽取调用失败"⇒ 白烧 62 分钟/块，见 transport-http 文件头）
             //   `timeout: true` 是给 `tryRosterChunk` 的判据：超时不许对半拆、不许重试——**这条对重试同样成立**。
@@ -1904,16 +1960,21 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt, eviden
             //   定稿：**超时 = 立刻交给拆半逻辑**（拆小才是对症的降级：输出长度随块变小而变短，
             //   而"再问一次同样大的块"只是把同一个超时重演一遍）。
             if (attempt < EXTRACT_RETRY_TIMES && isTransientCallError(err)) {
-                await sleep(EXTRACT_RETRY_WAIT_MS * attempt);
+                await (extract.wait ? extract.wait(EXTRACT_RETRY_WAIT_MS * attempt) : sleep(EXTRACT_RETRY_WAIT_MS * attempt));
                 continue;
             }
             break;
         }
     }
     if (lastErr) {
+        // Explicit output truncation is a content failure: discard it and let
+        // the existing bounded content retry/split path request fresh content.
+        const contentFailure = lastErr.sw2ContextLength || lastErr.sw2Truncated;
+        if (!contentFailure && extract.stop) extract.stop(lastErr);
         return {
-            callError: `抽取调用失败${EXTRACT_RETRY_TIMES > 1 ? `（已试 ${EXTRACT_RETRY_TIMES} 次）` : ''}: ${lastErr?.message || lastErr}`,
+            callError: `抽取调用失败（已试 ${attempts} 次）: ${lastErr?.message || lastErr}`,
             timeout: lastErr?.sw2Timeout === true,
+            terminal: !contentFailure,
         };
     }
     if (typeof rawText !== 'string' || !rawText.trim()) return { callError: '抽取输出为空' };
@@ -2475,8 +2536,8 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
     if (!r.callError) return stopWhen && stopWhen(r.cleaned) ? { cleaned: null, satisficed: true } : packRoots(r.cleaned);
     probeState.failures += 1;
     // ★leg27：**超时 = 止损**（不拆半、不重试）——理由见上方注释；失败如实进 progressLog，供界面显形。
-    if (r.timeout) {
-        if (progressLog) progressLog.push({ step: `chunk@depth${depth}`, kind: 'timeout', chars: Array.from(text).length, error: r.callError });
+    if (r.timeout || r.terminal) {
+        if (progressLog) progressLog.push({ step: `chunk@depth${depth}`, kind: r.timeout ? 'timeout' : 'transport', chars: Array.from(text).length, error: r.callError });
         return { cleaned: null };
     }
     // ★★leg62c（用户实机日志逼出来的）：**传输层失败也不拆半**——它压根不是"输入太大"那个病。
@@ -2485,7 +2546,7 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
     //     **全部 0.3 秒失败（Failed to fetch）、该块一次都没成功**，而总表停在"已 0 段"跑了 1600+ 秒。
     //   判据（只看形态，不问是哪家网关）：`Failed to fetch` / `NetworkError` / `ERR_` 这类
     //     **请求根本没送达**的错 ⇒ 把输入切一半**不会**让它送达（切的是负载，病在通路）。
-    //   拆半真正治的是"**模型吐不完**"（输出超预算 ⇒ JSON 截断）；那种错进不到这一支。
+    //   拆半真正治的是"**模型吐不完**"（输出超预算 ⇒ JSON 截断）；显式截断也按内容失败走拆半。
     //   ⇒ 遇到传输层失败：**如实记一笔就放弃这一块**（不递归、不重试），把调用预算留给别的块。
     if (/Failed to fetch|NetworkError|network error|ERR_|fetch failed|Load failed/i.test(String(r.callError || ''))) {
         if (progressLog) progressLog.push({ step: `chunk@depth${depth}`, kind: 'transport', chars: Array.from(text).length, error: r.callError });
@@ -2648,7 +2709,7 @@ export function sanitizeBookRelations(raw, { sourceText = '', rosterNames = null
     return { kept, dropped, warnings };
 }
 
-export async function extractWorldSetting({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null, skipRoster = false, concurrency = 1, seedRoots = null, allowedSources = null, evidencePolicy = null, onEvidence = null }) {
+async function extractWorldSettingInner({ sourceText, extract, cache, force = false, extractedAt, legacyTension, onProgress = null, extraDeclared = [], compileInfo = null, skipRoster = false, concurrency = 1, seedRoots = null, allowedSources = null, evidencePolicy = null, onEvidence = null, chunkChars = SETTING_CHUNK_CHAR }) {
     const titled = (Array.isArray(extraDeclared) ? extraDeclared : [])
         .map((d) => ({ name: String(d?.name ?? '').trim() }))
         .filter((d) => d.name);
@@ -2740,7 +2801,7 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     if (!strict) {
         errors.push('抽取依据: 本次未做来源核验（legacy：调用方没有提供「允许来源」清单）——结果一律按未核实记账');
     } else {
-        evidence.smallBook = srcLen <= CANON_SRC_CHAR;   // 小书单发：属性也走这一次调用（见 buildRosterPrompt 的 fields 支）
+        evidence.smallBook = srcLen <= chunkChars;   // 小书单发：属性也走这一次调用（见 buildRosterPrompt 的 fields 支）
     }
     // ★★★Task 3 复查（task-3-review.md ③④）：**行 → 材料字符区间**只算一次（分块与作用域共用同一份）。
     //   分块是行级的（`chunkRows`），所以"这一块展示了哪些行"正好是它的块号区间；
@@ -2750,7 +2811,7 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     const allIndexes = materialRows.map((_, i) => i);
 
     // 小书：单发全量（现语义零变化）；空/失败自动重试一次（v1 教训：网关对长输入偶发空回复，director 注释实证）
-    if (srcLen <= CANON_SRC_CHAR) {
+    if (srcLen <= chunkChars) {
         // leg23 照书办：小书同过声明扫描（同书同口径——不因书短就换规矩）
         const { declares: smallDeclared, usesLabelTerms: smallTerms } = scanBookDeclarations(src);
         if (smallTerms.length) errors.push('照书办: 检测到词表判据参与声明扫描（应为形态判据，请核查）');
@@ -2760,13 +2821,13 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
         const smallCall = () => skipRoster
             ? callOnce(extract, src, t => buildSettingOnlyPrompt(t, smallDeclared, smallEvidence ? { sources: frozen, scope: smallEvidence.scope } : {}), smallEvidence)
             : callOnceWithDeclared(extract, src, smallDeclared, smallEvidence);
-        const r = await smallCall().then(first => first.callError ? smallCall() : first); // 空/失败重试一次。
+        const r = await smallCall().then(first => first.callError && !first.terminal ? smallCall() : first); // 空/失败重试一次。
         progress.finish('canon', 1, 1, srcLen, !r.callError, r.callError);
         if (r.callError) {
             flushEvidence();
             return {
                 ok: false,
-                errors: [`抽取失败（已重试一次）：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`],
+                errors: [`抽取失败${r.terminal ? '' : '（已重试一次）'}：${r.callError}——可再点重试；反复出现请检查模型通道或换小源验证`],
                 settingReport: reportOf(), evidence: evidenceOf(),
                 timing: { mode: 'small', srcChars: srcLen, ms: null, steps: progress.events },
                 progress: progress.events,
@@ -2830,7 +2891,7 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     //   现在：**同一批块、一遍抽完**——块里有什么就抽什么（这一块的名号 + 档位表/法则/体系/史略 + 属性原话）。
     //   ★块数与名册轮**逐字相同**（同一把 60000 的尺子）：不新增机制，总输入反而更小
     //     （旧法 30000 + 198063 = 228063 字 → 新法 198063 字）。三国 4 块 · 大荒 5 块 · re0 2 块。
-    //   ★★同时取消**大小书的分叉**：小书那条路（`srcLen <= CANON_SRC_CHAR`）此前用的是"只问名号"的
+    //   ★★同时取消**大小书的分叉**：小书那条路（`srcLen <= chunkChars`）此前用的是"只问名号"的
     //     提示词 ⇒ 四本 ≤3 万的真书（Eldoria 4168 / Global 438 / 实教 9158 / 综漫 14557）**canon 恒空**
     //     （`powerScale`/`rules`/`society` 一个值都没有，实测复现）。同一件事两个尺寸两条路，就是这个洞的根。
     //     现在**大小书共用同一份合并提示词**，小书 = 1 块（调用次数不变）。
@@ -2860,7 +2921,10 @@ export async function extractWorldSetting({ sourceText, extract, cache, force = 
     //     但**每次调用都短**、不再有"烧满超时再拆"的浪费；总调用数与"级联拆半"同量级或更少。
     //   ★口径不变：仍是"读全 + 块间纯函数合并"，只是块更小（`chunkRows` 同一把行级尺子）。
     //   ★复查③④：改成**带行号**的分块——每一块的作用域（本次展示了哪几块的哪一段）由它的行号区间算出来。
-    const chunks = chunkRowsWithRanges(rows, srcLen > CANON_SRC_CHAR ? SETTING_CHUNK_CHAR : ROSTER_CHUNK_CHAR);
+    const chunks = chunkRowsWithRanges(rows, chunkChars);
+    for (const [i, chunk] of chunks.entries()) {
+        if (rows.slice(chunk.from, chunk.to + 1).some(row => Array.from(row).length > chunkChars)) errors.push(`第 ${i + 1}/${chunks.length} 块含超长原文行，完整保留（超过 ${chunkChars} 字符）`);
+    }
     const chunkIndexes = (c) => {
         const out = [];
         for (let i = c.from; i <= c.to; i += 1) out.push(i);

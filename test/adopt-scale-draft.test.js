@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/adopt-scale-draft.test.js
 // ★★leg70（A6 · 「只抽刻度」抽完**能存**）：采用通道的全链路判据。
 //
@@ -55,7 +56,7 @@ const DRAFT = {
 };
 
 /** 生产源码（`web/index.js`） */
-const webSrc = () => readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+const webSrc = () => readHostSource();
 const renderSrc = () => readFileSync(new URL('../src/render.js', import.meta.url), 'utf8');
 // ★★★leg73（丙-web 第二格）：快照族（含 `restoreSnapshot`）已整族搬进 `web/snapshot-store.js`
 //   ⇒ 下面那条"锚点唯一性/全仓计数"判据必须**跟着 `web/` 目录走**，而不是只看 `index.js`。
@@ -259,7 +260,9 @@ test('★★leg70 锚点唯一性：本文件用来取切片的那几行，全�
     //   ⑧ **「就按现在这本算」**（`web/book-rebaseline.js` 的 `handler`，leg112 新加的；它同样"写账 + 显式落盘"）。
     //   ★为什么它必须落盘：这一笔改的是**账上那一格"来路"**，不落盘 ⇒ 刷新就回滚、下次载入又报"书换了"
     //     （玩家会看到"我明明按了"）——与上面 7 处同一条理由，不是顺手加的。
-    assert.equal(webAll.split('const flushed = await flushHotMeta();').length - 1, 8,
+    // Task 3 initializes/reextracts through verified transactional commits.
+    assert.equal(webAll.split('const flushed = await task.commit(').length - 1, 2);
+    assert.equal(webAll.split('const flushed = await flushHotMeta();').length - 1, 6,
         '★这一行（不带注释）在 `web/` 全部模块里现在共 8 处：载入 / 导出 / 导入 / 重抽设定 / 初始化 / 清演化层'
         + ' / **采用草稿** ＋ **快照恢复**（已搬去 snapshot-store.js，仍在这个扫描面里）'
         + ' ＋ **换书检测重新定基**（leg112，住 book-rebaseline.js）'
@@ -310,7 +313,8 @@ test('★★leg70 只换刻度那三格：`刻度`/`powerScale`/`dims` 进 canon
 test('★★leg70 硬锁仍在：采用必须**另起动作**，不许塞进直抽那条路（`extractWorldSetting` 不许出现）', () => {
     const web = webSrc();
     // 原锁（scales-concept-table.test.js:323）的同一口径，在这里再咬一次"新加的动作也没破它"
-    const extractSlice = web.slice(web.indexOf("bus['extract-scales']"), web.indexOf("bus['clear-scale-draft']"));
+    const extractStart = web.indexOf("bus['extract-scales']");
+    const extractSlice = web.slice(extractStart, web.indexOf('bus[', extractStart + 1));
     assert.ok(!/extractWorldSetting\(/.test(extractSlice), '★直抽那条路上仍不许跑整条抽取管线');
     assert.ok(!/adopt-scale-draft/.test(extractSlice), '★采用**不能**塞在直抽那一段里（本仓最贵的病：抽与存接成一条）');
     assert.ok(!/extractWorldSetting\(/.test(adoptBody()),

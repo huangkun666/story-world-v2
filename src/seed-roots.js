@@ -526,8 +526,14 @@ export function seedRootsFromPass(ssot, { perChunk = [], fingerprint = '', at = 
 export async function seedRootsChunked({
     ssot, chunks = [], extract, fingerprint = '', at = '', candidates = [], seedChunkChar = SEED_CHUNK_CHAR,
     maxPerChunk = Math.ceil(SEED_ROOTS_MAX / 2), onProgress = null, mergeExisting = true, concurrency = 1,
-    sourceText = '', allowedSources = null, evidencePolicy = null,
+    sourceText = '', allowedSources = null, evidencePolicy = null, signal = null,
 } = {}) {
+    let stopped = null;
+    const assertRunning = () => {
+        if (signal?.aborted) throw Object.assign(new Error('用户已中止抽取'), { sw2Cancelled: true });
+        if (stopped) throw stopped;
+    };
+    assertRunning();
     if (!ssot?.meta) return { ok: false, errors: ['无世界账（ssot.meta 缺失）'] };
     if (typeof extract !== 'function') return { ok: false, errors: ['未提供抽取调用（extract 注入缺失）'] };
     // ★★★Task 4（integration boundaries）：**起根的严格道**——与 `extractWorldSetting` 同一条政策口径：
@@ -592,6 +598,7 @@ export async function seedRootsChunked({
     let degraded = false;
     const concurrencyNow = () => (degraded ? 1 : concurrency);
     const results = await runParallel(list, concurrencyNow, async (chunk, i) => {
+        assertRunning();
         const sliced = String(chunk.text);
         const scope = scopeOfChunk(chunk);
         const chars = Array.from(sliced).length;
@@ -600,10 +607,24 @@ export async function seedRootsChunked({
         let err = null;
         try {
             // ★leg60：**传 Infinity**——块已经由 `chunkBookText` 切好，这里不许再切（见 buildSeedRootsPrompt 头注）
-            const raw = await extract(buildSeedRootsPrompt(sliced, {
-                candidates, maxChars: Number.POSITIVE_INFINITY,
-                ...(strict ? { sources: frozen, scope } : {}),     // ★Task 4：来源清单 = 这一块真正见到的那几条
-            }));
+            let raw;
+            try {
+                raw = await extract(buildSeedRootsPrompt(sliced, {
+                    candidates, maxChars: Number.POSITIVE_INFINITY,
+                    ...(strict ? { sources: frozen, scope } : {}),
+                }));
+            } catch (error) {
+                if (error?.sw2Cancelled || signal?.aborted) throw error;
+                // Response content failures remain optional; request failures stop
+                // the whole initialization, including queued root requests.
+                if (!['truncation', 'filter'].includes(error?.sw2CallFailure?.type)) {
+                    stopped = Object.assign(error instanceof Error ? error : new Error(String(error)), { sw2Stopped: true });
+                    if (!stopped.sw2CallFailure) stopped.sw2CallFailure = { type: stopped.sw2Timeout ? 'timeout' : 'request', status: stopped.status };
+                    throw stopped;
+                }
+                throw error;
+            }
+            assertRunning();
             const parsed = typeof raw === 'string' ? safeJson(raw) : raw;
             if (!parsed) throw new Error('返回的不是合法 JSON');
             // ★Task 4：严格道把"编号 + 原话"核到**这一块真正展示的片段**上（legacy 逐字旧行为）。
@@ -614,6 +635,7 @@ export async function seedRootsChunked({
             roots = clean.roots;
             warnings = clean.warnings;
         } catch (e) {
+            if (e?.sw2Cancelled || e?.sw2Stopped || signal?.aborted) throw e;
             err = String(e?.message || e);
             degraded = true;   // ★失败即退回串行（与抽取那两遍同一把尺子——见上）
         }
@@ -622,6 +644,7 @@ export async function seedRootsChunked({
         }
         return { chars, roots, warnings, err };
     });
+    assertRunning();
     // 按块序收口（★次序的唯一出处：跨块去重 + 留痕 + 收集，三件都在这里按块号做）
     for (const [i, res] of results.entries()) {
         if (!res) continue;

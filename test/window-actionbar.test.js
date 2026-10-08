@@ -2,7 +2,7 @@
 // ★★★leg162（用户令「**上移就是独立于设置页了，不是只有在设置页显示，而是整个窗口的上方**」）：
 //   **窗口外壳动作条**那一笔的正面锁。细案：`docs/spec-leg162-window-actionbar.md`。
 //
-// 这一笔把两枚世界级动作（开始新世界 / 推进一轮）从「设置」页底部那张「操作」卡
+// 这一笔把世界级操作放进窗口外壳（开始新世界 / 推进一轮 / 中止抽象）
 //   升进**窗口外壳**（`settings.html`，八页常驻）。本文件锁的是**"它真的在外壳、且只有一份"**
 //   这半件无法由"页面渲染产物"证明的事——它的三条来路：
 //     ① 页体是 `el.innerHTML = out[name]` 逐页整块替换 ⇒ 按钮住页里会被反复销毁重建；
@@ -45,6 +45,8 @@ test('★★★leg162·①：动作条住**窗口外壳**（八页常驻），�
         '★外壳模板必须有那条动作条（它是八页常驻的那一份）');
     assert.match(SHELL, /data-action="init-world"/, '★「开始新世界」在外壳里');
     assert.match(SHELL, /data-action="advance-world"/, '★「推进一轮」在外壳里');
+    assert.match(SHELL, /<button[^>]*data-action="cancel-extraction"[^>]*disabled[^>]*aria-disabled="true"[^>]*>中止抽象<\/button>/,
+        '★外壳里必须有初始禁用的「中止抽象」按钮');
     // ★位置（用户第二句令「**把这两个放在右边和页签同一行要不然太丑了太突兀了**」）：
     //   两者必须在**同一个 `.sw2-navrow` 里**，且动作条排在页签**右边**（`margin-left:auto` 推右）。
     //   ★为什么不能并进 `.sw2-tabs` 里面：手机档 `.sw2-tabs` 是 `overflow-x:auto` 的横滑容器
@@ -68,25 +70,27 @@ test('★★★leg162·①：动作条住**窗口外壳**（八页常驻），�
 });
 
 // ─────────────────── ② 回退壳同形：模板取不到时也不许少东西 ───────────────────
-test('★★leg162·②：回退壳（模板取不到时那一个）**同形**——两枚按钮一个不少', () => {
+test('★★leg162·②：回退壳（模板取不到时那一个）**同形**——三枚按钮一个不少', () => {
     // 本仓既有纪律：回退路不许比正路少东西（"模板不可用"是玩家真会遇到的一格）。
     const m = /const FALLBACK_WINDOW = `([\s\S]*?)`;/.exec(FALLBACK);
     assert.ok(m, '前置：取得到 `FALLBACK_WINDOW` 那段模板（取不到 ⇒ 本条空绿）');
     const fb = m[1];
     assert.ok(fb.includes('data-action="init-world"'), '★回退壳里也要有「开始新世界」');
     assert.ok(fb.includes('data-action="advance-world"'), '★回退壳里也要有「推进一轮」');
+    assert.match(fb, /<button[^>]*data-action="cancel-extraction"[^>]*disabled[^>]*aria-disabled="true"[^>]*>中止抽象<\/button>/,
+        '★回退壳也必须有初始禁用的「中止抽象」按钮');
     assert.ok(fb.includes(`id="${ACTIONBAR_STATE_ID}"`), '★那一格状态也要在（否则回退态下它永远是空的）');
 });
 
 // ─────────────────── ③ 只许一份：全仓只有外壳那一处按钮定义 ───────────────────
-test('★★leg162·③：两枚按钮**只许有一处定义**（外壳那一份；渲染层一枚都不许再画）', () => {
+test('★★leg162·③：三枚按钮**只许有一处定义**（外壳那一份；渲染层一枚都不许再画）', () => {
     const settings = renderSettingsHtml(world(), { config: {} });
     const params = renderParamsHtml(world(), { config: {} });
     assert.ok(!settings.includes('data-action="init-world"'), '★设置页不许再画「开始新世界」');
     assert.ok(!settings.includes('data-action="advance-world"'), '★设置页不许再画「推进一轮」');
     assert.ok(!params.includes('data-action="advance-world"'), '★参数页照旧不许画（leg52 那一条没撤）');
     // ★注释里提到旧话是留档、不是回潮 ⇒ 只判**模板与渲染产物**，不判源码注释。
-    assert.ok(!/<h4>操作<\/h4>/.test(settings), '★设置页那张「操作」卡整张已撤（卡里只剩那两枚按钮）');
+    assert.ok(!/<h4>操作<\/h4>/.test(settings), '★设置页那张「操作」卡整张已撤');
 });
 
 // ─────────────────── ④ ★状态那格读真源：先证红（写死一句话当场咬住） ───────────────────

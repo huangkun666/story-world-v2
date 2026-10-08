@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/long-task.test.js
 //
 // ★★★leg109 判据：**长活儿"正在跑"要看得见、连点第二下不许发第二串**
@@ -20,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createLongTask, LONG_TASK_LABELS, BUSY_TEXT } from '../web/long-task.js';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const webSrc = () => readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+const webSrc = () => readHostSource();
 
 /**
  * 只剥**注释**、保留字符串字面量（照本仓既有形状：`test/retired-controls.test.js:78`、
@@ -130,7 +131,7 @@ test('★leg109 ① 闸：第一次还在飞的时候，第二次立刻返回，
 test('★★leg109 ② 反向对照：跑完之后再调必须放行（防"闸一开就再也打不开"，那会把功能锁死）', async () => {
     const { task } = fixture();
     let calls = 0;
-    const wrapped = task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => { calls += 1; return calls; });
+    const wrapped = task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async (task) => { calls += 1; return calls; });
 
     assert.equal(await wrapped(), 1, '第一次照常跑');
     assert.equal(await wrapped(), 2, '★★第二次（玩家真的又点了一次）必须放行——内层被调 2 次');
@@ -186,7 +187,7 @@ test('★leg109 ⑤ 看得见：按钮置灰 + 文字改成「正在跑…」，
     const { task } = fixture({ 'extract-scales': [btnA, btnB] });
     let release;
     const gate = new Promise((r) => { release = r; });
-    const wrapped = task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => { await gate; });
+    const wrapped = task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async (task) => { await gate; });
 
     const running = wrapped();
     await sleep(0);
@@ -205,7 +206,7 @@ test('★leg109 ⑤-b 零阻塞：找不到按钮 / 没有窗口 ⇒ 一个字�
     // 反向对照之一：面板上根本没有这枚按钮
     const empty = fixture({});
     let ran = 0;
-    const noBtn = empty.task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => { ran += 1; return 'ok'; });
+    const noBtn = empty.task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async (task) => { ran += 1; return 'ok'; });
     assert.equal(await noBtn(), 'ok', '★找不到按钮不许影响长活儿本身（零阻塞）');
     assert.equal(ran, 1, '★长活儿照跑');
     assert.deepEqual(empty.said, [], '★没被挡住 ⇒ 一句都不许说');
@@ -218,7 +219,7 @@ test('★leg109 ⑤-b 零阻塞：找不到按钮 / 没有窗口 ⇒ 一个字�
     // 反向对照之三：按钮被重绘换掉了（`isConnected === false`）⇒ 不许去碰它、更不许猜新节点该写什么
     const gone = fakeButton('只抽刻度');
     const f = fixture({ 'extract-scales': [gone] });
-    const w2 = f.task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => { gone.isConnected = false; gone.textContent = '重绘换掉的新节点'; });
+    const w2 = f.task.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async (task) => { gone.isConnected = false; gone.textContent = '重绘换掉的新节点'; });
     await w2();
     assert.equal(gone.textContent, '重绘换掉的新节点', '★已被换掉的旧节点**一个字都不许改**（如实登记：那一下"看得见"是尽力而为）');
 });
@@ -230,7 +231,8 @@ test('★★leg109 ⑥ 接线：三个长动作都真的被 `longTask.wrap` 包�
     // ★★★leg144：**把「初始化」也纳入这条锁**（它此前不在名单里 ⇒ "包了没有"没人验）。
     //   这正是本条锁存在的理由："模块写好了没人用"那一族病历——现在它有据可查了。
     for (const action of ['reextract-setting', 'extract-scales', 'adopt-scale-draft', 'init-world']) {
-        const anchor = `bus['${action}'] = longTask.wrap('${action}', LONG_TASK_LABELS['${action}'], async () => {`;
+        const argument = action === 'adopt-scale-draft' ? '' : 'task';
+        const anchor = `bus['${action}'] = longTask.wrap('${action}', LONG_TASK_LABELS['${action}'], async (${argument}) => {`;
         assert.equal(web.split(anchor).length - 1, 1,
             `★★\`${action}\` 必须**恰好一处**写成「包起来」的样子（模块写好了没人用 = leg25f 那条病历；`
             + `两处 = 下面这条源码锁会读到错的那一段）`);
@@ -255,11 +257,11 @@ test('★★leg109 ⑥ 接线：三个长动作都真的被 `longTask.wrap` 包�
 test('★★leg109 ⑥-b 反向对照：源码锁真的会咬人（故意把一处改回"没包"的样子 ⇒ 当场红）', () => {
     const web = stripComments(webSrc());
     const broken = web.replace(
-        "bus['extract-scales'] = longTask.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => {",
+        "bus['extract-scales'] = longTask.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async (task) => {",
         "bus['extract-scales'] = async () => {",
     );
     assert.notEqual(broken, web, '前置：那次替换必须真的改到东西（否则这条反向对照自己在空跑）');
-    const anchor = "bus['extract-scales'] = longTask.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async () => {";
+    const anchor = "bus['extract-scales'] = longTask.wrap('extract-scales', LONG_TASK_LABELS['extract-scales'], async (task) => {";
     assert.equal(broken.split(anchor).length - 1, 0, '★★故意改坏之后必须**找不到**那个锚点（第 ⑥ 条就是这么咬的）');
     // 另一半：名字表里少一个动作，接线层当场就取不到名字（`undefined` ⇒ 状态条会念出"undefined"）
     assert.equal(LONG_TASK_LABELS['extract-scales'], '只抽刻度', '★名字表里必须有这一个动作');

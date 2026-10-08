@@ -1733,7 +1733,15 @@ export function trimPack(pack, budgetTokens = EVOLUTION_BUDGET_TOKENS) {
     //   为什么必须在**这里**排（而不是在出包那一刻）：那一刻还不知道额度守卫最终会留几条，
     //   算出来的是**过期读数**——本文件已经为"拿过期读数做决定"栽过一次（见上面那段注释）。
     const relatedKept = Array.isArray(pack.相关往事) ? pack.相关往事 : [];
-    const briefAvail = relatedKept.length ? brief.filter((r) => !relatedKept.includes(r)) : brief;
+    // ★★★2026-10-08 体检修（原病：这一次去重**恒失效**）：原来按**对象身份**比
+    //   （`brief.filter((r) => !relatedKept.includes(r))`），上面那段注释还替它保证
+    //   "两栏返回的是**同一个** `briefLineText` 结果，所以身份比对是准的"——**那句不成立**：
+    //   `fetchChroniclePast` 每次都 `rows.push({tick, text, …})`（它那条注释还明令"必须新造对象"），
+    //   `fetchRelatedPast` 另建一批 ⇒ 两栏装的是**内容相同、引用不同**的对象 ⇒ `.includes` 永不相等。
+    //   ⇒ 改按**值键**比（轮次 ＋ 洗过的那句正文），与下面"按意思找回的旧事"那一处**同一把尺子**
+    //     （那把尺子早就写好了：`lineKeyOf`，见它的头注"跨栏去重只能按轮次＋正文比"）。
+    const relatedKeys = new Set(relatedKept.map((r) => lineKeyOf(r?.tick, r?.text)));
+    const briefAvail = relatedKeys.size ? brief.filter((r) => !relatedKeys.has(lineKeyOf(r?.tick, r?.text))) : brief;
     // ★★★leg133：**把往事按窗口切成两段**（`brief` 是按轮次升序的 ⇒ 切一刀就是两段）——
     //   · `briefWindow` = **窗口内**（`tick >= windowFromTick(...)`）⇒ **必须保住**，预算紧也不许把它挤空；
     //   · `briefOld`    = **窗口外**的更旧那一段 ⇒ 只在**还有余量**时从**最旧的一端**往里装。

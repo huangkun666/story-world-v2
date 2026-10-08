@@ -439,7 +439,7 @@ test('复查二轮⑥：大书分块里逐项出处仍按**本块作用域**核�
         });
     };
     const records = [];
-    const r = await extractWorldSetting({ sourceText: text, extract, allowedSources: blocks, onEvidence: (x) => records.push(x) });
+    const r = await extractWorldSetting({ sourceText: text, extract, chunkChars: Array.from((A_TEXT + B_TEXT).replaceAll('\n', '')).length - 50, allowedSources: blocks, onEvidence: (x) => records.push(x) });
     assert.equal(r.ok, true, (r.errors || []).join('；'));
     const canon = r.setting.frozen.canon;
     assert.equal(canon.society, A, `本块里真有出处的要收：${JSON.stringify(r.errors)}`);

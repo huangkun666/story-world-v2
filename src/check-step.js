@@ -389,8 +389,25 @@ export function checkWorldStep(step, ssot) {
                 } else if (u.field === 'status') {
                     if ((ent.status || 'active') !== 'dead') errors.push(`$.entityUpdates[${i}]: status 只用来"带因复活"（当前「${ent.name}」status=${ent.status || 'active'}，不是 dead）`);
                     if (u.value !== 'active') errors.push(`$.entityUpdates[${i}].value: 复活只能写成 "active"（当前 "${u.value}"）`);
-                    if (!(ev.eventProtocol === 4 ? (ev.actors || []).map(a => a.ref) : ev.ripples || []).includes(u.entity)) {
-                        errors.push(`$.entityUpdates[${i}].cause: 复活必须**挂在一件提到他的未了结事上**——「${ent.name}」不在事件「${ev.title}」的波及名单里（先让那件事点到他的名字）`);
+                    // ★★★2026-10-08 体检修（原病：`ev` 为 undefined 时直接取属性 ⇒ TypeError 抛穿校验）：
+                    //   上面判定层那一格带 `includeArchived: true` ⇒ 它**放行**"引用一条已归档事件"；
+                    //   可这里取事件只看**热账**（`ssot.events`），而归档会把 id 从热账里摘掉
+                    //   （`settle.js` 的 `world.events = world.events.filter(...)`）⇒ `ev` 可能是 undefined。
+                    //   抛出点没有 try/catch、且校验发生在克隆之前 ⇒ **整轮世界推进失败**；
+                    //   自愈那条路会拿同一条提议再校验一次 ⇒ 再抛一次 ⇒ 世界停摆。
+                    // ★★★2026-10-09 用户改口径（原先的收法是"如实拒"）：**已归档的事件可以当复活的因**。
+                    //   用户原话（他说清了自己要的是什么）：「我主要是想实现多年前的某一个事件到今日
+                    //   还有可能影响现今的事实，所以才让能引用已经归档的事件。」
+                    //   ★原来那条"如实拒"错在哪：归档**不等于没发生过**——它只是从热账搬进了大事纪
+                    //     （`settle.js` 的 `archiveClosedEvents`）。判定层（上面那一格）本来就放行，
+                    //     这一支再拒就是**同一件事两把尺子**（本仓最贵的那类病）。
+                    //   ★放开这一支**不拆任何闸**：复活真正的门在结算那一侧——
+                    //     「本 tick 必须被新落账的事点名」（`settle.js` 的 `thisTickNames`）。
+                    //     它是**独立**的一道，与"因是新是旧"无关 ⇒ 旧号只能当**理由**，
+                    //     不能单独把人拉回场上。
+                    //   ★热账那一支照旧核波及名单（那件事还在桌上、名单就在手边，核得了）。
+                    if (ev && !(ev.eventProtocol === 4 ? (ev.actors || []).map(a => a.ref) : ev.ripples || []).includes(u.entity)) {
+                        errors.push(`$.entityUpdates[${i}].cause: 复活必须**挂在一件提到他的事上**——「${ent.name}」不在事件「${ev.title}」的波及名单里（先让那件事点到他的名字）`);
                     }
                 }
             } else if (u.cause.type === 'agenda') {

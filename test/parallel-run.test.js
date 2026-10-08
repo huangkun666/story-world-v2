@@ -221,11 +221,12 @@ test('★★leg144·质量锁（起根）：**并发 1 与并发 3 起出来的�
 //     而 lane 不是同时起步的（A 取 0、B 取 1、C 取 2 是三个连续的微任务）⇒ **入口那一眼总有一个人看到 live==1**
 //     ⇒ 没装安全带也照样有块能成 ⇒ 判据全绿。**定稿：入口与出口各看一眼**（一个调用只要在**它的生命周期里**
 //     见过并发，就算挨了限流）。改完先证红：把 `degraded = true` 拿掉 ⇒ 当场红（成功 0 块）。
-test('★★★leg144·安全带（起根）：网关一限流（429）⇒ 剩下的退回串行，**后面的块还能成**', async () => {
+test('起根遇到请求429停止后续块，不把请求失败当内容级降级', async () => {
     const mkWorld = () => ({ meta: { tick: 0 }, entities: [{ id: 'e1', name: '青丘' }], events: [] });
     const chunks = Array.from({ length: 6 }, (_, i) => `【块${i + 1}】` + '甲'.repeat(40) + `第${i + 1}段的原话在这里`);
-    let live = 0;
+    let live = 0, calls = 0;
     const extract = async (prompt) => {
+        calls++;
         live += 1;
         const entered = live;        // ★入口那一眼
         await sleep(20);
@@ -235,14 +236,9 @@ test('★★★leg144·安全带（起根）：网关一限流（429）⇒ 剩�
         const n = /【块(\d+)】/.exec(prompt)?.[1] ?? '1';
         return { roots: [{ title: `第${n}件事`, parties: ['青丘'], quote: `第${n}段的原话在这里` }] };
     };
-    const r = await seedRootsChunked({
+    await assert.rejects(seedRootsChunked({
         ssot: mkWorld(), chunks, extract, fingerprint: 'fp429', at: 't', maxPerChunk: 4, concurrency: 3,
-    });
-    const okCount = r.chunks.filter((c) => c.ok).length;
-    const failCount = r.chunks.filter((c) => !c.ok).length;
-    assert.ok(failCount >= 1, `前置：第一波确实挨了 429（实际失败 ${failCount} 块）`);
-    assert.ok(okCount >= 1,
-        `★★★降级之后**后面的块真的跑成了**（成功 ${okCount} / 失败 ${failCount}）——`
-        + '没有那条安全带时这里会是 0（3 路一直并发 ⇒ 每一块"身边都有别人" ⇒ 全丢）');
-    assert.ok(r.seeded >= 1, '★落账的根数也 ≥1（不只"调用成了"，而是真的种进去了）');
+    }), error => error.sw2Stopped === true && /429/.test(error.message));
+    await sleep(30); // Already issued requests may settle; queued requests must stop.
+    assert.equal(calls, 3);
 });

@@ -303,6 +303,37 @@ test('W5e：活人不能走 status 通道（status 只用来"带因复活"）', 
     assert.ok(c.errors.some((e) => e.includes('不是 dead')), c.errors.join('; '));
 });
 
+test('W5f：★因引用「已归档事件」⇒ 可以引用（2026-10-09 用户改口径；原为 TypeError 抛穿 ＋ 如实拒）', () => {
+    // 病史（2026-10-08 体检实测复现）：`ref-rules.js` 的 `entityUpdates.cause` 那一格带
+    //   `includeArchived: true` ⇒ **判定层放行**"引用一条已归档事件"；
+    //   而这里取事件只看**热账**（`ssot.events`），归档会把 id 从热账里摘掉（`settle.js` 的
+    //   `world.events = world.events.filter(...)`）⇒ `ev` 是 undefined，
+    //   而下一行直接读 `ev.eventProtocol` ⇒ **TypeError**。
+    //   抛出点没有 try/catch，一路抛穿 `prepareSettle`（校验发生在克隆之前）⇒ 整轮世界推进失败；
+    //   自愈那条路会拿同一条提议再校验一次 ⇒ **再抛一次** ⇒ 世界停摆（不是"这一轮白跑"那么轻）。
+    // ★★2026-10-09 用户改口径：**已归档的事件可以当复活的因**。用户原话（他说清了要的是什么）：
+    //   「我主要是想实现多年前的某一个事件到今日还有可能影响现今的事实，所以才让能引用已经归档的事件。」
+    //   ⇒ 这一支不再拒。★放开的是"因可以是旧号"，**不是**复活那把钥匙：真复活仍要过结算那一道
+    //     「本 tick 必须被新落账的事点名」（`settle.js` 的 `thisTickNames`）——见下面第二段。
+    const milestones = [{ id: 'm_10', span: { from: 1, to: 10 }, ids: ['ev_old'], titles: ['旧事'], links: { up: [], down: [] } }];
+    const w = baseWorld({ milestones });
+    const step = revStep({ entityUpdates: [{ entity: 'e_dead', field: 'status', value: 'active', cause: { type: 'event', ref: 'ev_old' } }] });
+    let c;
+    assert.doesNotThrow(() => { c = checkWorldStep(step, w); }, '★不许抛错（原病：TypeError 抛穿校验）');
+    assert.equal(c.ok, true, `★归档事件可以当复活的因（改口径前这里被"如实拒"）：${c.errors.join('; ')}`);
+    // 第二段：**复活本身**仍归那把钥匙管——本轮没有新事点他名 ⇒ 照旧不复活（口径放开 ≠ 把闸拆了）
+    const r = settleTick({ ssot: baseWorld({ milestones }), step: step7({
+        entityUpdates: [{ entity: 'e_dead', field: 'status', value: 'active', cause: { type: 'event', ref: 'ev_old' } }],
+    }) });
+    assert.equal(r.ssot.entities.find((e) => e.id === 'e_dead').status, 'dead', '★没被本轮新事点名 ⇒ 照旧不复活');
+    assert.ok(r.stage.warnings.some((x) => x.includes('本 tick 没被新落账的事点名')), r.stage.warnings.join('; '));
+    // 反证：同一枚归档号作**别的字段**的因，照旧合法——判定层那条"归档事实仍可作因"不许被这一刀收窄
+    const other = checkWorldStep(step7({
+        entityUpdates: [{ entity: 'e_a', field: '实力', value: '金丹', cause: { type: 'event', ref: 'ev_old' } }],
+    }), w);
+    assert.equal(other.ok, true, `★归档事件仍可作别的字段的因：${other.errors.join('; ')}`);
+});
+
 // ============ W6 ★离场名册（复活通道的前提） ============
 
 test('W6：死者进"离场名册"——否则模型拿不到他的 id，复活在生产上是死代码（本棒实测踩到）', () => {

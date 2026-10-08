@@ -203,21 +203,30 @@ function logChannelOnce(usedXhr) {
     } catch (_) {}
 }
 
-export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = null, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens }) {
+export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = null, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens, extraction = false }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
     // ★发送器在**建传输那一刻**定下来（显式注入的优先，判据走这条；缺省 = pickSender）
     const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
     logChannelOnce(send === xhrSender);
-    return async (prompt) => {
+    return async (prompt, { signal = null } = {}) => {
         if (typeof send !== 'function') throw new Error('没有可用的发送通道（这个环境里 fetch 与 XMLHttpRequest 都没有）');
         const controller = new AbortController();
         const started = Date.now();
+        const cancel = () => controller.abort(Object.assign(new Error('用户已中止抽取'), { sw2Cancelled: true }));
+        if (signal?.aborted) cancel();
+        else signal?.addEventListener('abort', cancel, { once: true });
+        const guarded = work => new Promise((resolve, reject) => {
+            const abort = () => { controller.signal.removeEventListener('abort', abort); setTimeout(() => reject(controller.signal.reason), 0); };
+            if (controller.signal.aborted) return abort();
+            controller.signal.addEventListener('abort', abort, { once: true });
+            Promise.resolve().then(work).then(resolve, reject).finally(() => controller.signal.removeEventListener('abort', abort));
+        });
         // ★`abort(reason)` 里的 reason 在真浏览器里**到不了我们手上**（见上面 leg93d 那段），
         //   它留着只为两件事：① 本仓既有判据的假 fetch 会读它；② 调试时能在 devtools 里看见。
         //   **不要指望靠它给用户一句人话**——那句在下面的 catch 里显式组。
         const timer = setTimeout(() => controller.abort(new Error(`模型超时（${timeoutMs}ms）`)), timeoutMs);
         try {
-            const res = await send(endpoint, {
+            const res = await guarded(() => send(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -231,18 +240,35 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
                     ...(maxTokens ? { max_tokens: maxTokens } : {}),
                 }),
                 signal: controller.signal,
-            });
+            }));
             diagnostics.record('网络', res.ok ? 'info' : 'error', '模型请求', { model, status: res.status, ms: Date.now() - started });
             if (!res.ok) {
-                const snippet = (await res.text()).slice(0, 240);
+                const body = await guarded(() => res.text());
+                const snippet = body.slice(0, 240);
                 const err = new Error(`HTTP ${res.status}`);
                 err.status = res.status;
                 err.bodySnippet = snippet;
+                let refusal; try { refusal = JSON.parse(body)?.error; } catch {}
+                err.sw2ContextLength = ['context_length_exceeded', 'max_context_length_exceeded'].includes(refusal?.code);
+                err.sw2CallFailure = { type: 'http', status: res.status, bodySnippet: snippet, code: refusal?.code, refusal: refusal?.message };
                 throw err;
             }
-            const data = await res.json();
+            const data = await guarded(() => res.json());
             if (data?.usage) diagnostics.record('模型', 'info', '用量', { usageTokens: data.usage });
-            return data?.choices?.[0]?.message?.content ?? '';
+            const choice = data?.choices?.[0];
+            if (choice?.finish_reason) diagnostics.record('模型', choice.finish_reason === 'stop' ? 'info' : 'warn', '应答结束原因', { model, finishReason: choice.finish_reason, refusal: choice?.message?.refusal });
+            if (choice?.finish_reason === 'length') {
+                throw Object.assign(new Error('模型输出被截断，未能完整返回本次内容'), {
+                    name: 'Sw2TruncationError', sw2Truncated: true,
+                    sw2CallFailure: { type: 'truncation', finishReason: 'length' },
+                });
+            }
+            if (choice?.finish_reason === 'content_filter' || choice?.message?.refusal) {
+                const err = new Error('模型拒绝或过滤了本次请求');
+                err.sw2CallFailure = { type: 'filter', finishReason: choice?.finish_reason, refusal: choice?.message?.refusal };
+                throw err;
+            }
+            return choice?.message?.content ?? '';
         } catch (err) {
             // leg27：超时**如实标识**（判据 = 本控制器自己发出过中止 ⇒ fetch 因我们超时而拒）
             //   ⇒ 编排层据此把它与"网关偶发空回复"分开：**超时不重试、不拆半**（拆了也白拆，见文件头）。
@@ -258,18 +284,26 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
             //   ★修法：由**我们自己**记下的 `timeoutMs` 组一句人话（**超时是我们发的信号，我们知道是多少毫秒**），
             //     并把原异常挂在 `cause` 上（要复盘仍拿得到名与栈），同时保住 `sw2Timeout` 标志
             //     （`abstract.js` 靠它判"超时=止损，不重试、不拆半"）。
+            if (signal?.aborted) {
+                throw Object.assign(new Error('用户已中止抽取'), { name: 'AbortError', sw2Cancelled: true, sw2CallFailure: { type: 'cancelled' } });
+            }
             if (controller.signal.aborted) {
                 //   ★措辞纪律（本仓 A-3）：这句**会印到状态条上**（`async-tick.js:43` 的「⚠ 演算失败：…」），
                 //     所以**说人话、零引擎术语**——不写"主调用/传输/transport"这类内部词。
                 //     `ms` 留着：它是维护者与用户对齐"到底等了多久"的唯一实数。
-                const e = new Error(`模型超时（${timeoutMs}ms）——这一轮没等到模型回话，已中止；可在参数页把「单轮超时」调大`);
+                const advice = extraction
+                    ? '请核对模型服务状态或更换更快的模型，详情见调试台'
+                    : '可在参数页把「单轮超时」调大';
+                const e = new Error(`模型超时（${timeoutMs}ms）——这一轮没等到模型回话，已中止；${advice}`);
                 e.name = 'Sw2TimeoutError';
                 e.cause = err;
+                e.sw2CallFailure = { type: 'timeout', timeoutMs };
                 throw markTimeout(e);
             }
             throw err;
         } finally {
             clearTimeout(timer);
+            signal?.removeEventListener('abort', cancel);
         }
     };
 }

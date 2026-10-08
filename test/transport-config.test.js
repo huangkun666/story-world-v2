@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/transport-config.test.js
 // K30：设置→传输配置解析（浏览器适配套）。不联网：注入假 fetch。
 import { test } from 'node:test';
@@ -96,7 +97,7 @@ test('★leg27 + leg62：抽取档只改超时预算（**同一预算下**请求
 // 上面那条只能锁"档位存在"，锁不住"**接线真的用上了这个档**"——本仓血的教训（leg25 f：机制建好了、
 // 接线从没生效、测试全绿）。故这里直接读**生产接线点**（`web/index.js` 的 init-world）锁住它。
 test('★leg27：生产接线真的传了 extraction:true（防"档建好了、接线从没生效"）', () => {
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const web = readHostSource();
     const call = web.match(/resolveBrowserTransport\([^)]*\)/g) || [];
     const extractCall = call.find((c) => c.includes('EXTRACTION_MAX_TOKENS'));
     assert.ok(extractCall, 'init-world 必须调 resolveBrowserTransport（抽取接线在位）');

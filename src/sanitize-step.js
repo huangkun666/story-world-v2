@@ -31,7 +31,7 @@ import {
 //   ★**口径一个字不放宽**：本文件只用它的**判据**（合法/不合法 + 哪个 code），
 //     文案另走本文件自己的口（见下方 `SANITIZE_TEXT`）——净化器的理由是"丢掉理由"，
 //     与校验面（`$.foo[i].source: …` 整步拒）本来就不同形，两者都得是**逐字未变**（M4 判据锁着）。
-import { judgeRef, askRef, eventOrdinal } from './ref-rules.js';
+import { judgeRef, askRef, eventOrdinal, resolveRefTarget } from './ref-rules.js';
 import { checkEventContract, applyConditionUpdates } from './event-contract.js';
 import { isSettingRef } from './setting.js';
 import { RIPPLE_TARGET_CAP } from './weight.js';
@@ -293,7 +293,15 @@ export function dropInvalidProposals(step, ssot) {
     for (const family of ['newAgendas', 'newEntities']) {
         cur[family] = cur[family].flatMap((item, index) => {
             const ref = item.source?.type === 'event' ? item.source.ref : null;
-            if (!ref || findEvent(null, world, ref)) return [item];
+            // ★★★2026-10-09（与 `check-step` 的"归档可引用"同批）：**已归档的号不许被当成"本轮位次别名"**。
+            //   病（同一族"两把尺子"）：`findEvent` 只看**热账**（`includeArchived: false`），而判定层
+            //   （`ref-rules.js` 的 `newAgendas.source` / `newEntities.source`）**放行已归档的号**
+            //   ⇒ 一条"新谋划/新人的来路是多年前那件事"的**合法**提议，会掉进下面那条位次改写里，
+            //   被**悄悄改成本轮第 m 件新事**（号形如 `ev_<轮>_<位次>`，只要位次落在本轮提议件数内就撞上）
+            //   ⇒ 账上记的来路指错，而且**一声不响**（用户要的"旧事影响今天"就此丢在半路）。
+            //   ⇒ 这把尺子与判定层对齐：归档入纪的号也算"已经解析掉了"，照原样留着。
+            if (!ref || findEvent(null, world, ref)
+                || resolveRefTarget(world, ref, { includeArchived: true }).archived) return [item];
             const ordinal = eventOrdinal(ref);
             if (ordinal == null || ordinal < 1 || ordinal > originalEvents.length) return [item];
             const targetIndex = cur.newEvents.indexOf(originalEvents[ordinal - 1]);

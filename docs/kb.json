@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "27c07051-d7b6c977",
+  "fingerprint": "cb5d7209-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "27c07051",
+  "sourceFingerprint": "cb5d7209",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -159,11 +159,13 @@
     "docs/session-handoff-2026-10-07-leg203-event-scope.md",
     "docs/session-handoff-2026-10-07-leg204-event-prompt.md",
     "docs/session-handoff-2026-10-07-leg205-snapshot-debug.md",
+    "docs/session-handoff-2026-10-08-bug-health-check-pass1.md",
     "docs/session-handoff-2026-10-08-leg206-snapshot-scope.md",
     "docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md",
     "docs/session-handoff-2026-10-08-leg208-character-simulation-protection.md",
     "docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md",
     "docs/session-handoff-2026-10-08-leg209-publish-112.md",
+    "docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md",
     "docs/spec-abstract-passes.md",
     "docs/spec-abstraction-input-cleanup.md",
     "docs/spec-b2-chronicle-via-recall.md",
@@ -293,6 +295,9 @@
     "web/embed-runtime.js",
     "web/entity-window.js",
     "web/env-evidence.js",
+    "web/extraction-actions.js",
+    "web/extraction-progress.js",
+    "web/extraction-task.js",
     "web/geography-wiring.js",
     "web/hot-ledger.js",
     "web/idb-backend.js",
@@ -328,45 +333,45 @@
   ],
   "facts": {
     "what": "跑在 SillyTavern 里的\"活世界引擎\"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔",
-    "panelBuild": "leg209-character-protection-cleanup",
+    "panelBuild": "leg210-abstraction-reliability",
     "mainPromptV": "v2-agenda-t1-37",
     "cssVersion": "20261008-leg209-character-protection-cleanup",
     "version": "1.1.2",
     "srcModules": 72,
-    "webModules": 43,
-    "tests": 183,
+    "webModules": 46,
+    "tests": 188,
     "demos": 76,
-    "docs": 240,
-    "latestHandoff": "session-handoff-2026-10-08-leg209-publish-112.md",
+    "docs": 244,
+    "latestHandoff": "session-handoff-2026-10-08-leg210-abstraction-reliability.md",
     "lastCommits": [
-      "a40f7dd release: bump version to 1.1.2 and publish leg202-leg209 to the release repo",
-      "8530f84 feat: land leg204-leg209 work (snapshot, params, diagnostics, character protection)",
-      "a765292 docs: record event scope implementation and verified local installation",
-      "56b500b fix: preserve complete event scopes under budget and expose current conditions",
-      "2446dd3 fix: admit causal reactions to retained same-round events",
-      "04f48bb feat: carry event scopes and current conditions through inputs and readers",
-      "e76d46e fix: display condition lifecycle in plain Chinese",
-      "d88db14 fix: keep v4 obligations pending until explicit closure",
-      "b1bc6f8 feat: unify v4 event scopes and causal condition lifecycle",
-      "340ae6d fix: reject empty actors and conflicting condition annotations",
-      "00a9d58 feat: add v4 chat event scopes and persistent condition tags",
-      "84f8d90 docs: keep information discovery in event causality"
+      "12a7e05 Docs: record verified local extraction reliability preview",
+      "6f67e1a fix: give extraction timeout guidance without ineffective settings",
+      "3c64e1b Docs: correct extraction cancellation guidance and final validation scope",
+      "b9bc697 Docs: prepare extraction reliability preview and preserve concurrent records",
+      "888c449 Merge commit 'c0df71cb18555afb7f4b12c5292665d680b00081' into codex/abstraction-reliability-2026-10-08",
+      "f85fa0f fix: protect extraction commits from stale loads and book checks",
+      "966c7ce fix: inherit initialization locations before saving candidate",
+      "2c095e3 fix: guard abstraction task cancellation and chat loading",
+      "c0df71c fix: leg210b stale-scope 也给它一句人话（原先落到兜底那句「保存报错」，指错方向）",
+      "1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据",
+      "2ee1162 Fix settings guidance and model probe success text",
+      "6968fc4 Add extract chunk size setting and cancel action"
     ]
   },
   "counts": {
-    "cards": 384,
+    "cards": 390,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
       "待拍板": 4,
       "缺口": 19,
-      "交接": 158,
+      "交接": 160,
       "细案": 33,
       "索引": 2,
       "知识库": 11,
-      "当前值": 20,
+      "当前值": 21,
       "怎么跑": 2,
-      "代码地图": 116
+      "代码地图": 119
     }
   },
   "cards": [
@@ -471,7 +476,7 @@
       "title": "STATE.md · 2. 红线与规矩（逐字搬家，不许改写）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 78,
+      "line": 79,
       "where": "> **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。**",
       "keys": [
         "STATE",
@@ -503,7 +508,7 @@
       "title": "STATE.md · 3.  未决事项（唯一一份活儿清单）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 140,
+      "line": 141,
       "where": "> 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写\"已办结（哪棒）\"。",
       "keys": [
         "STATE",
@@ -535,8 +540,8 @@
       "title": "STATE.md · 4. 当前工作",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 180,
-      "where": "用户要求参数页运行与注入更清楚，并批准四块布局。已重排为自动运行、聊天如何影响世界、聊天模型能看到什么、往事怎么找；直接显示用途和调整后的影响，向量参数与正文黑白名单收进高级设置。保留参数原名、原值和全部接线。验证、独立审查及本地安装证据见",
+      "line": 181,
+      "where": "已按用户批准范围完成抽取可靠性与社区文档：块大小可设置，接口错误停止无效请求，调试台给出配置、真实调用数和具体失败，中止后及失败后均可重新运行；初始化/重抽保存候选副本，旧载入不能回写新聊天。保留日常项目并发完成的两处裸引用和 stale-",
       "keys": [
         "STATE",
         "入口",
@@ -566,7 +571,7 @@
       "title": "STATE.md · 5. 现场（本机）",
       "kind": "入口/规矩",
       "src": "STATE.md",
-      "line": 192,
+      "line": 197,
       "where": "- **项目**：`F:\\deepseek\\plugins\\story-world-v2`（**唯一实际项目根**；仓库根 `F:\\deepseek\\plugins`，",
       "keys": [
         "STATE",
@@ -598,7 +603,7 @@
       "kind": "活儿",
       "src": "docs/work-current.md",
       "line": 14,
-      "where": "",
+      "where": "**2026-10-09 继续收尾**：「继续」；「你能快点吗？不要做太多无效的验证」",
       "keys": [
         "现在做什么",
         "当前活儿",
@@ -618,7 +623,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 1429,
+      "line": 1440,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -6455,6 +6460,35 @@
       ]
     },
     {
+      "id": "handoff#session-handoff-2026-10-08-bug-health-check-pass1.md",
+      "title": "交接 leg（2026-10-08）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-08-bug-health-check-pass1.md",
+      "line": 1,
+      "where": "2. A 轨 · 核心引擎数据流 ／ 3. B 轨 · 抽象与抽取 ／ D-5 其余（本轮只登记未验，别当结论） ／ 6. E 轨 · 渲染 UI 层 ／ 7. F 轨 · web 接线层 ／ 8. 文档/口径层（本体检跑守门时顺带核过） ／ 10. 读数现场（本轮证据）",
+      "keys": [
+        "交接",
+        "leg",
+        "2026-10-08",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-08-bug-health-check-pass1.md",
+        "0. 一句话结论 + 逐条修复清单（按\"确证 + 危害\"重排）",
+        "1. 本轮\"摸过\"与\"没摸\"的模块（下一任的开工地图）",
+        "2. A 轨 · 核心引擎数据流",
+        "3. B 轨 · 抽象与抽取",
+        "4. C 轨 · 证据 / 召回 / 出包 / 检索",
+        "5. D 轨 · 参数 / 传输 / 实体 / 并发",
+        "D-5 其余（本轮只登记未验，别当结论）",
+        "6. E 轨 · 渲染 UI 层",
+        "7. F 轨 · web 接线层",
+        "8. 文档/口径层（本体检跑守门时顺带核过）",
+        "9. 建议下一任的接着修顺序（按\"确证 + 危害\"）",
+        "10. 读数现场（本轮证据）"
+      ]
+    },
+    {
       "id": "handoff#206",
       "title": "交接 leg206（2026-10-08）",
       "kind": "交接",
@@ -6557,6 +6591,37 @@
         "五、边界（如实登记，不掩盖）",
         "六、留给下一棒的现场知识（会再撞的两条）",
         "七、文档收尾"
+      ]
+    },
+    {
+      "id": "handoff#210",
+      "title": "交接 leg210（2026-10-08）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md",
+      "line": 1,
+      "where": "leg210 抽取可靠性与社区文档交接 ／ 用户要求与范围 ／ 行为与入口 ／ 验证与本地现场 ／ 缘起与边界 ／ 修了哪五条（每条都先写红判据、看着它红、再改码） ／ 复跑读数（本笔） ／ 本机安装现场",
+      "keys": [
+        "交接",
+        "leg210",
+        "2026-10-08",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-08-leg210-abstraction-reliability.md",
+        "leg210 抽取可靠性与社区文档交接",
+        "用户要求与范围",
+        "行为与入口",
+        "验证与本地现场",
+        "体检第一轮 · 代码层五条修复（2026-10-09 · 本机 dsh 实施）",
+        "缘起与边界",
+        "修了哪五条（每条都先写红判据、看着它红、再改码）",
+        "复跑读数（本笔）",
+        "本机安装现场",
+        "没做的（等用户拍板 / 不在本笔范围）",
+        "两条只有真机能定的（本笔只锁了接线形态）",
+        "本笔查到的两处文档错误（别再照着查）",
+        "另一个写手（重要）",
+        "2026-10-09 用户改口径：已归档的事件可以引用（当夜实施并上线）"
       ]
     },
     {
@@ -7714,7 +7779,7 @@
     },
     {
       "id": "dir#docs/superpowers/specs",
-      "title": "docs/superpowers/specs/（16 份旧档）",
+      "title": "docs/superpowers/specs/（17 份旧档）",
       "kind": "索引",
       "src": "docs/superpowers/specs",
       "line": 1,
@@ -7960,7 +8025,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 50,
-      "where": "**2236 / 2236 · fail 0 · skipped 0 · todo 0**；额外模型核验完全撤销，玩家、手动与临时保护有提案也只调用原主模型一次；程序权限、保存事务与开关交互保留。已删除撤销机制对应的旧测试。证据：`F:/d ｜ 复量：`node --test`（插件目录内）",
+      "where": "**2310 / 2310 · fail 0 · skipped 0 · todo 0**；覆盖可调块大小、请求止损、HTTP 事实诊断、中止/失败后重试、缓存提交、保存回滚与旧载入返回保护；★2026-10-09 新增**「已归档的事件可 ｜ 复量：`node --test`（插件目录内）",
       "keys": [
         "当前值",
         "读数",
@@ -7993,7 +8058,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 51,
-      "where": "**PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/smoke-final.log ｜ 复量：`node demo/smoke-demo.js`",
+      "where": "**PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-smoke.log` ｜ 复量：`node demo/smoke-demo.js`",
       "keys": [
         "当前值",
         "读数",
@@ -8027,7 +8092,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 52,
-      "where": "**`leg209-character-protection-cleanup`** ｜ 复量：`src/render-base.js`；角色资料行内紧凑开关，撤掉长说明与重复保护标签；玩家不能解除保护。",
+      "where": "**`leg210-abstraction-reliability`** ｜ 复量：`src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断；本地预览，公开发布点仍见下方。",
       "keys": [
         "当前值",
         "读数",
@@ -8226,12 +8291,46 @@
       ]
     },
     {
+      "id": "value#★抽取每块字符数",
+      "title": "当前值 · ★抽取每块字符数",
+      "kind": "当前值",
+      "src": "STATE.md",
+      "line": 58,
+      "where": "**缺省 30000**，设置页「抽取每块字符数」可填正安全整数；初始化和只重抽设定使用，按完整行分块，单行超限保留全文并报告；只抽刻度仍整源一次。 ｜ 复量：`src/abstract-limits.js` · `web/model-channel.js`",
+      "keys": [
+        "当前值",
+        "读数",
+        "判据",
+        "构建号",
+        "行数",
+        "★抽取每块字符数",
+        "STATE.md",
+        "STATE · story-world v2 现状（接手第一入口）",
+        "0. 三十秒版：这台东西是什么",
+        "0.5  活儿在哪（接手第一件事）",
+        "1.  当前权威读数（唯一出处）",
+        "2. 红线与规矩（逐字搬家，不许改写）",
+        "2.1 最高准则：没命令，不准动一个字节（用户 2026-09-11 立）",
+        "2.2 四条不可越的线",
+        "2.3 动手前的规矩（六条）",
+        "2.4 待办纪律（leg106 立，治\"任务堆积\"）",
+        "3.  未决事项（唯一一份活儿清单）",
+        "等你拍板的（2 条）",
+        "下一笔：待你点头（都是待选项、不是命令）",
+        "新立的活儿（2026-09-25 用户点头\"立项\"；都是量出来的）",
+        "新立的活儿（2026-09-30 用户点头「立项治」）",
+        "4. 当前工作",
+        "5. 现场（本机）",
+        "5.1 发布流程"
+      ]
+    },
+    {
       "id": "value#★抽取并发度",
       "title": "当前值 · ★抽取并发度",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 58,
-      "where": "**缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 1 路** ｜ 复量：`web/model-channel.js` · `src/parallel-run.js`",
+      "line": 59,
+      "where": "**缺省 2 路**，设置页「同时问几块」可填正安全整数；内容级失败退回 1 路，明确请求错误停止后续新请求；已发请求可能仍在服务端运行。 ｜ 复量：`web/model-channel.js` · `src/parallel-run.js`",
       "keys": [
         "当前值",
         "读数",
@@ -8264,7 +8363,7 @@
       "title": "当前值 · 包预算 出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 59,
+      "line": 60,
       "where": "**50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js`",
       "keys": [
         "当前值",
@@ -8298,7 +8397,7 @@
       "title": "当前值 · ★往回看轮数 出厂值",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 60,
+      "line": 61,
       "where": "**50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两件事** ｜ 复量：`src/limits.js`（★`PANEL_WINDOW_TURNS`）",
       "keys": [
         "当前值",
@@ -8332,7 +8431,7 @@
       "title": "当前值 · ★leg136–leg156 各笔",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 61,
+      "line": 62,
       "where": "⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/done-archive.md`",
       "keys": [
         "当前值",
@@ -8366,7 +8465,7 @@
       "title": "当前值 · CSS_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 62,
+      "line": 63,
       "where": "**`20261008-leg209-character-protection-cleanup`** ｜ 复量：`web/index.js`；角色保护开关状态、焦点与触屏点击区域；`test/render.test.js` 的 `CSS_PIN` 版本及指纹同步。",
       "keys": [
         "当前值",
@@ -8400,7 +8499,7 @@
       "title": "当前值 · MAIN_PROMPT_V",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 63,
+      "line": 64,
       "where": "**`v2-agenda-t1-37`** ｜ 复量：`src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。",
       "keys": [
         "当前值",
@@ -8434,8 +8533,8 @@
       "title": "当前值 · web/index.js 行数",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 64,
-      "where": "**3068 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。",
+      "line": 65,
+      "where": "**2766 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\\n').length`；抽取操作、进度和任务生命周期整族搬到独立 web 模块，载入返回检查聊天范围与版本；★2026-10-09 ",
       "keys": [
         "当前值",
         "读数",
@@ -8468,8 +8567,8 @@
       "title": "当前值 · CACHE_VERSION",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 65,
-      "where": "**`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-hash.js`",
+      "line": 66,
+      "where": "**`11`**；问法未变，不升。抽取缓存同时匹配来源、块大小和严格来源信息；整项任务成功保存才提交新缓存，中止/失败丢弃本项暂存，保留原有效缓存。 ｜ 复量：`src/fp-hash.js` · `src/abstract.js` · `web/extraction-task.js`",
       "keys": [
         "当前值",
         "读数",
@@ -8502,8 +8601,8 @@
       "title": "当前值 · 发布仓 main",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 66,
-      "where": "**`2a71ba5`** · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**； ｜ 复量：`node scripts/verify-release.mjs`",
+      "line": 67,
+      "where": "**`2a71ba5`**（代码发布点；远端含后续文档记账，2026-10-08 本轮只读复核实际 HEAD 为 `73f7f85`，证据 `F:/deepseek/tmp/abstraction-reliability-2026-10-0 ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",
@@ -8536,7 +8635,7 @@
       "title": "当前值 · release tag",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 67,
+      "line": 68,
       "where": "**`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发新 tag）⇒ ** ｜ 复量：`node scripts/verify-release.mjs`（会联网）",
       "keys": [
         "当前值",
@@ -8570,7 +8669,7 @@
       "title": "当前值 · 发布点读数的语义（leg124 立）",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 68,
+      "line": 69,
       "where": "**\"已发布到哪一版\"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8",
       "keys": [
         "当前值",
@@ -8604,7 +8703,7 @@
       "title": "当前值 · 版本号",
       "kind": "当前值",
       "src": "STATE.md",
-      "line": 69,
+      "line": 70,
       "where": "`manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 令「帮我推送并更新 ｜ 复量：`test/browser-compat.test.js`",
       "keys": [
         "当前值",
@@ -9930,6 +10029,51 @@
       ]
     },
     {
+      "id": "file#web/extraction-actions.js",
+      "title": "web/extraction-actions.js",
+      "kind": "代码地图",
+      "src": "web/extraction-actions.js",
+      "line": 1,
+      "where": "Extraction actions are one family: task lifetime, source, progress, commit.",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "extraction-actions",
+        "extraction-actions.js"
+      ]
+    },
+    {
+      "id": "file#web/extraction-progress.js",
+      "title": "web/extraction-progress.js",
+      "kind": "代码地图",
+      "src": "web/extraction-progress.js",
+      "line": 1,
+      "where": "",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "extraction-progress",
+        "extraction-progress.js"
+      ]
+    },
+    {
+      "id": "file#web/extraction-task.js",
+      "title": "web/extraction-task.js",
+      "kind": "代码地图",
+      "src": "web/extraction-task.js",
+      "line": 1,
+      "where": "One abstraction task owns cancellation, staged cache and terminal diagnostics.",
+      "keys": [
+        "文件",
+        "代码",
+        "web",
+        "extraction-task",
+        "extraction-task.js"
+      ]
+    },
+    {
       "id": "file#web/geography-wiring.js",
       "title": "web/geography-wiring.js",
       "kind": "代码地图",
@@ -10411,7 +10555,7 @@
     },
     {
       "id": "test#all",
-      "title": "判据在哪（test/ 共 183 个 *.test.js）",
+      "title": "判据在哪（test/ 共 188 个 *.test.js）",
       "kind": "代码地图",
       "src": "test",
       "line": 1,
@@ -10426,6 +10570,7 @@
         "abstract-fields",
         "abstract-input",
         "abstract-passes",
+        "abstract-reliability",
         "abstract-review-fixes",
         "abstract-review-fixes2",
         "abstract-selection-wiring",
@@ -10458,6 +10603,7 @@
         "context-chain",
         "deadlock-heal",
         "decay",
+        "diagnostic-transport",
         "diagnostics-console",
         "embed-channel",
         "embed-client",
@@ -10476,6 +10622,8 @@
         "event-contract",
         "event-scope-integration",
         "evidence-nodrop",
+        "extraction-host-reliability",
+        "extraction-task",
         "fingerprint",
         "full-roster-smoke",
         "gate",
@@ -10532,11 +10680,7 @@
         "prose-extract",
         "recall-query",
         "recent-window",
-        "ref-rules",
-        "rejected-round",
-        "related-recall",
-        "relations",
-        "render"
+        "ref-rules"
       ]
     }
   ]

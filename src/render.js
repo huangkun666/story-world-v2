@@ -19,6 +19,7 @@ import { renderAbstractSelection } from '../web/abstract-selection.js';
 // ★★★Task 3 复查（task-3-review.md ⑦）：实体搜索面要含**已确认别名** ⇒ 用共用的身份叫法（`entityKeysOf`）。
 import { entityKeysOf } from './entity-identity.js';
 import { isSimulationBlocked } from './simulation-protection.js';
+import { SETTING_CHUNK_CHAR } from './abstract-limits.js';
 // ★leg32：引擎尺度（盘算三道上限）的**唯一真源**。此前面板把分母写死成 `/15` `/5`
 //   ⇒ leg31b 把 `topLevel` 5 → 10 之后，世界真的变宽了而面板还写着 5，
 //   玩家无法从面板判断任何变宽实验是否奏效（用户实机「一点变化都没有」追出来的真缺陷）。
@@ -2320,7 +2321,7 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         + `<div class="sw2-field sw2-field-inline"><label>世界模型</label><div class="sw2-ctl-row">`
         + `<input class="sw2-input" id="sw2_model" value="${escapeHtml(cfg.model || '')}">`
         + `<button class="sw2-btn" data-action="list-models">获取模型列表</button>`
-        + `<button class="sw2-btn" data-action="probe-model">测试连通</button>`
+        + `<button class="sw2-btn" data-action="probe-model" title="连通成功只确认接口有响应；没有验证正式 JSON 参数">测试连通</button>`
         + `</div></div>`
         + `<div id="sw2_models">${renderModelListHtml(cfg)}</div>`
         + `<div id="sw2_probe">${renderModelProbeHtml(cfg)}</div>` 
@@ -2365,17 +2366,22 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         //     下限 1 写在 `min` 上，而**真正的拦截**在 `SETTINGS_NUM_RANGE`（唯一一处，见 `web/model-channel.js`）。
         + `<div class="sw2-field sw2-field-inline"><label>同时问几块</label>`
         + `<input class="sw2-input" id="sw2_extract_conc" data-settings="extractConcurrency" type="number" min="1" step="1" value="${escapeHtml(String(cfg.extractConcurrency ?? EXTRACT_CONCURRENCY))}" title="${attrText('开局读整本书时，同时发几个请求；你的网关一限流（报 429）就把它调小')}"></div>`
-        // ★★★leg169：同一个治法——结论（26 字）留在外面，原 218 字整段折进 `<details>`。
-        //   四条兜底事实一条不丢：三处共用这个数 · 429 会让整块书文抽不到 · 两处兜底 · 拿不准填 2。
-        + foldHint('<b>填大了网关会报 429</b>。',
-            '<b>开局读整本书</b>时同时发出去的请求数——每条网关能同时吃几个请求是不一样的'
-            + '（报 <b>429（请求太频繁）</b>时，那一块书文就<b>整块抽不到</b>，名号与设定都缺）；'
+        // ★★★leg169：同一个治法——结论留在外面，补充说明折进 `<details>`。
+        + foldHint('<b>并发数填大了网关会报 429</b>。',
+            '<b>开局读整本书</b>时同时发出去的请求数——每条网关能同时吃几个请求都不一样。'
+            + '遇到 <b>429（请求太频繁）</b>时，本次抽取会<b>停止并保留原世界</b>；把并发调小后再重试。'
+            + '内容错误等其他失败仍可能让余下请求退回一个一个来。'
             + '填 1 就是一块一块排队（最稳，但最慢）。'
-            + '<br>插件已经在两个地方替你兜底：① 只要有一块失败，<b>剩下的当场退回一个一个来</b>；'
-            + '② 一本书抽过一次之后，<b>再点「开始新世界」直接复用</b>、不再重抽。'
+            + '<br>一本书抽过一次之后，只有<b>分块字符数相同</b>才会复用结果；改了就会重新抽。'
             + '<br>拿不准就填 <b>2</b>；要是抽出来的名号与设定明显缺，就把它调小。'
             + '名册、设定、起根三处共用这一个数。',
-            { summary: '填错了会怎样' })
+            { summary: '并发设大了会怎样' })
+        + `<div class="sw2-field sw2-field-inline"><label for="sw2_extract_chunk_chars">抽取每块字符数</label>`
+        + `<input class="sw2-input" id="sw2_extract_chunk_chars" data-settings="extractChunkChars" type="number" min="1" max="${Number.MAX_SAFE_INTEGER}" step="1" value="${escapeHtml(String(cfg.extractChunkChars ?? SETTING_CHUNK_CHAR))}" title="${attrText('按字符分块，不是 token；完整行不会截断，超长行会单独成块并提示。更小的块不保证总耗时更短。只抽刻度不使用本项')}"></div>`
+        + foldHint('按<b>字符数</b>分块，不是 token。',
+            '每块最多按这个字符数切分；分块时保留完整原文行，超长行也不会截断，而会单独成块并提示。'
+            + '块设得更小不保证总耗时更短。只抽刻度时不使用本项。',
+            { summary: '这格控制什么' })
         // ★★★leg169：**「模型通道」那张卡到这里才关**（就是这一个 `</div>`）。
         //   原来它被下面那句长度上限的说明顺手关掉了（一处 `</div>` 用早了）⇒ 量出来的三处结构病：
         //   「记忆通道」卡被套进「模型通道」卡里、一句灰字漂在卡外、末尾「旧卷与存储」卡被挤出网格。
@@ -2595,9 +2601,15 @@ const cvDots = (p, m) => {
 };
 const cvChip = (x) => `<span class="sw2-cv-chip${x.visibility === 'concealed' ? ' dark' : ''}">${escapeHtml(x.goal)}${x.visibility === 'concealed' ? '（暗）' : ''} · ${x.closed ? '已了结' : '在办'} ${x.progress ?? 0}/${x.maxSteps ?? 0}</span>`;
 const cvSrcPhrase = (n) => {
+    // ★★★2026-10-08 体检修（原病：模型写的标题/盘算原样拼进 HTML ⇒ 破坏面板 DOM、甚至执行脚本）：
+    //   `n.title` / `n.goal` 是**模型自由文本**（`chain.js` 从账上原样搬过来），必须过 `escapeHtml`。
+    //   ★为什么转义写在**这里**、不写在调用点：本函数有两个消费点，靠"记得在每个调用点补"就是漏的成因——
+    //     同一层里 `escapeHtml(n.title)` 转了、紧挨着这一句没转，正是这么来的。
+    //   ★`cvSeedPhrase` 那边**不在这里转**：它的调用点已经 `escapeHtml(...)` 包了一层，
+    //     这里再转一次会把 `&lt;` 印成 `&amp;lt;`（双层转义，玩家读到的是乱码）——一处只许转一层。
     if (!n) return '由世界处境而生';
-    if (n.kind === 'event') return `沿「${n.title}」而来`;
-    if (n.kind === 'agenda') return `由盘算「${n.goal}」而生`;
+    if (n.kind === 'event') return `沿「${escapeHtml(n.title)}」而来`;
+    if (n.kind === 'agenda') return `由盘算「${escapeHtml(n.goal)}」而生`;
     if (n.kind === 'milestone') return '源头已入大事纪';
     if (n.kind === 'gap') return '沿「旧事」而来（已无从检索）';
     if (n.kind === 'terminal') return '纪之源头已不可查';

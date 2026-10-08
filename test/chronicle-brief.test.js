@@ -401,3 +401,43 @@ test('leg119·J12：★不递卷 / 递空数组 / 递坏卷 ⇒ 包**逐字节�
     assert.equal(JSON.stringify(buildEvolutionPack(w, null, { volumes: [null, {}, { rows: null }] }).pack), base,
         '★形状不对的卷要被跳过（不炸、不编、也不影响这一栏一个字）');
 });
+
+test('★★★2026-10-08 体检·B-3：「纪事」与「相关往事」不许同一件往事占两份额度', () => {
+    // 病（2026-10-08 体检实测复现）：`trimPack` 里那次去重按**对象身份**比
+    //   （`brief.filter((r) => !relatedKept.includes(r))`），而两栏的行是**各自新建的对象**：
+    //   `fetchChroniclePast` 每次 `rows.push({tick, text, …})`（它那条注释还明令"必须新造对象，不许把账上那一行原样塞进来"），
+    //   `fetchRelatedPast` 另建一批 ⇒ `.includes` 按引用判**永不相等** ⇒ 去重静默失效
+    //   （而那一处的注释承诺的正是"两栏返回同一个对象，所以身份比对是准的"——那句不成立）。
+    //   ★踩中它的形状（本判据的夹具）：**窗口内一行都没有** ⇒ 建包时 `纪事` 根本不挂键
+    //     ⇒ 末尾那道额度守卫从第一刻就跑，而它是从**全量**（含窗口外那些行）里装的
+    //     ⇒ 那些行同时也在 `相关往事` 里 ⇒ 同一件往事**占两份额度**，模型也会读到两遍。
+    //   ★对照（为什么既有判据没抓到它）：J16 那份夹具在窗口内**有** 50 行 ⇒ 那道守卫要么不跑、
+    //     要么 `keep < 窗口内条数` ⇒ 只回装"最新那一端" ⇒ 撞不上。
+    const chronicle = [];
+    for (let t = 1; t <= 70; t += 1) {
+        chronicle.push({
+            tick: t,
+            text: t % 3 === 0
+                ? `事件「白小娥第${t}件旧事」——沿「更早那件」而来，事发 中央，牵动 白小娥`
+                : `事件「杂事第${t}件」——由世界处境而生，事发 中央，牵动 无名氏`,
+        });
+    }
+    const w = {
+        entities: [{ id: 'e_a', kind: 'character', name: '白小娥', location: '中央' }],
+        agendas: [], events: [], weights: {}, chronicle,
+        context: { world: '测试界', positions: ['中央'] },
+        meta: { tick: 120 },        // 第 120 轮 · 往事窗口 50 ⇒ 账上这 70 行**全在窗口外**
+    };
+    const key = (r) => `${r?.tick}|${r?.text}`;
+    const pack = buildEvolutionPack(w, null, { picks: ['e_a'], lim: { 包预算: 2000 } }).pack;
+    const ji = (pack.纪事 || []).map(key);
+    const rel = (pack.相关往事 || []).map(key);
+    assert.ok(ji.length > 0 && rel.length > 0,
+        `前提：两栏都真的有东西（纪事 ${ji.length} · 相关往事 ${rel.length}）——否则这条判据是空绿`);
+    const both = ji.filter((k) => rel.includes(k));
+    assert.deepEqual(both, [],
+        `★同一件往事不许同时占两栏额度（实测重复 ${both.length} 件：${both.slice(0, 3).join(' / ')}）`);
+    // 反面自证：这一刀量的**不是空**——两栏各自都还得在（修完不许把「纪事」整栏删掉来糊弄它）
+    assert.ok(ji.length > 0, '★「纪事」不许被这一刀整栏删掉');
+    assert.ok(rel.length > 0, '★「相关往事」也不许被这一刀整栏删掉');
+});

@@ -300,3 +300,31 @@ test('★leg73 丙-web⑤：接线层**真的变薄**了（新模块存在、旧
         assert.match(storeCode, new RegExp(`^let\\s+${n}\\b`, 'm'), `★链状态 \`${n}\` 必须在新家（它是这一族的骨架）`);
     }
 });
+
+test('★★★2026-10-08 体检：切聊天必须复位快照链（否则拿上一本的号覆盖这一本的旧快照）', () => {
+    // 病（2026-10-08 体检复核）：快照那四个链状态是**模块级、与聊天无关**的全局，
+    //   而 IDB 键是 `${chatId}:${id}`（`snapshotStore` 每次现取**当前** chatId）。
+    //   切聊天那条路只做 `sw2TickQueue?.invalidate()` + `loadWorld()`，**没复位链**；
+    //   而"已对齐"那道门是**一次性**的（`ensureSnapshotChain` 里 `if (sw2SnapInited) return`）
+    //   ⇒ 切到另一本聊天**不重跑对齐** ⇒ 拿上一本的 `seq` 给这一本出号：
+    //     撞上这一本已占用的号就**直接覆盖**（静默丢历史），而 `anchorWorld/anchorId` 还停在上一本
+    //     ⇒ 这一本第一份快照的增量也对不上（回档可能拿到脏增量）。
+    //   ⇒ 这是 leg27 e 治过的那个病**跨聊天复发**（那一次注释写的就是"新快照把旧快照按 id 一份份覆盖"）。
+    const store = stripComments(read('web/snapshot-store.js'));
+    const index = stripComments(read('web/index.js'));
+    // ① 复位口必须住在快照那一族里（链状态只许有它家一个写手）
+    const fnAt = store.indexOf('export function resetChainState');
+    assert.ok(fnAt > 0, '★`resetChainState` 必须由 `web/snapshot-store.js` 导出（链状态住在它家）');
+    const fnEnd = store.indexOf('\nexport ', fnAt + 10);
+    const fn = store.slice(fnAt, fnEnd > 0 ? fnEnd : undefined);
+    assert.match(fn, /sw2SnapChain\s*=\s*\{/, '★复位要把链清回起点（seq/anchor 全归零）');
+    assert.match(fn, /sw2SnapInited\s*=\s*null/, '★必须把"已对齐"标记清掉——否则 `ensureSnapshotChain` 对新聊天不重跑');
+    assert.ok(!/sw2SnapLast\s*=/.test(fn), '★不许顺手清内容闸指纹（那是 `resetDedupState` 的活，两件事不绑一起）');
+    // ② 接线：切聊天那条路必须真的调它
+    const at = index.indexOf('et.CHAT_CHANGED');
+    assert.ok(at > 0, '前置：接线层必须有 CHAT_CHANGED 处理器');
+    const body = index.slice(at, at + 700);
+    assert.match(body, /resetChainState\(\)/, '★★切聊天那条路必须复位快照链（原病：只 invalidate() + loadWorld()）');
+    // ③ 反面：切聊天**不许**清空快照库（那是"重置快照"按钮的活——清了就是把这一本的历史真删了）
+    assert.ok(!/clearSnapshots\(/.test(body), '★切聊天不许调 `clearSnapshots`（它会真的清盘）');
+});

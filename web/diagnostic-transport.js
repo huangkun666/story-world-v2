@@ -4,19 +4,36 @@ let details = () => false;
 export function setDiagnosticDetails(fn) { details = typeof fn === 'function' ? fn : () => false; }
 /** 当前是否允许带明细（`debugDetails`）。抽依据记录用它决定带不带原话。 */
 export function diagnosticDetails() { return details() === true; }
-export function diagExtract(resolved) {
-    return async prompt => {
+export function diagExtract(resolved, options = null) {
+    let calls = 0, finished = false, active = 0, peakConcurrency = 0;
+    const configuration = { model: resolved.model, task: options?.task, sourceChars: options?.sourceChars, chunkChars: options?.chunkChars, concurrency: options?.concurrency };
+    if (options) diagnostics.record('抽取任务', 'info', '抽取开始', configuration);
+    const extract = async prompt => {
         const start = Date.now(), inputChars = String(prompt || '').length;
+        let entered = false;
         try {
-            const res = await resolved.transport(prompt);
+            if (options?.signal?.aborted) throw Object.assign(new Error('用户已中止抽取'), { sw2Cancelled: true });
+            calls++;
+            entered = true; active++; peakConcurrency = Math.max(peakConcurrency, active);
+            const res = await resolved.transport(prompt, { signal: options?.signal ?? null });
+            if (options?.signal?.aborted) throw Object.assign(new Error('用户已中止抽取'), { sw2Cancelled: true });
             const text = typeof res === 'string' ? res : typeof res?.text === 'string' ? res.text : '';
             diagnostics.record('模型', text.trim() ? 'info' : 'warn', text.trim() ? '调用完成' : '空响应', {
                 model: resolved.model, ms: Date.now() - start, inputChars, outputChars: text.length,
                 ...(details() ? { prompt, response: text } : {}),
             });
             return text;
-        } catch (err) { diagnostics.record('模型', 'error', String(err.message || err), { model: resolved.model, ms: Date.now() - start, inputChars }); throw err; }
+        } catch (err) { diagnostics.record('模型', 'error', String(err.message || err), { model: resolved.model, ms: Date.now() - start, inputChars, failure: err.sw2CallFailure, status: err.status, bodySnippet: err.bodySnippet, type: err.name, timeout: err.sw2Timeout, cancelled: err.sw2Cancelled }); throw err; }
+        finally { if (entered) active--; }
     };
+    extract.stats = () => ({ calls, peakConcurrency, activeConcurrency: active });
+    extract.finish = result => {
+        if (!options || finished) return result;
+        finished = true;
+        diagnostics.record('抽取任务', result?.ok ? 'info' : result?.cancelled ? 'warn' : 'error', result?.cancelled ? '抽取已中止' : result?.ok ? '抽取完成' : '抽取失败', { ...configuration, calls, timing: result?.timing, errors: result?.errors, warnings: result?.warnings, failure: result?.callFailure });
+        return result;
+    };
+    return extract;
 }
 /** HTTP 成功不等于演算成功：校验/结算拒因与部分降级也进入插件调试台。 */
 export function diagTickOutcome(result, previousTick) {

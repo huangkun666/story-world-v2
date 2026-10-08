@@ -145,3 +145,23 @@ test('message version changed during host save rejects consumption and compensat
     assert.deepEqual(persisted, before, 'the host must not keep a consumed candidate after rejecting its input version');
     assert.equal(snapshots, 0);
 });
+
+test('cancelled fresh-chat final save compensates persisted candidate to no world', async () => {
+    const ctx = makeCtx('fresh');
+    let release, aborted = false, persisted, calls = 0;
+    const pending = new Promise(resolve => { release = resolve; });
+    ctx.saveChat = async () => {
+        const captured = structuredClone(ctx.chatMetadata);
+        if (++calls === 1) await pending;
+        await new Promise(resolve => setTimeout(resolve, 15)); persisted = captured;
+    };
+    const hub = createHotLedgerHub({ freshCtx: () => ctx, hotMetaKey: 'hot', getSnapHub: () => ({ requestSnapshot() {} }) });
+    hub.resetHotLedgerState();
+    const guard = { assertCurrent() {}, checkScope() { if (aborted) throw new Error('cancelled'); } };
+    const save = hub.commitHotMeta({ savedAt: 'new', world: { meta: { tick: 0 } } }, { guard });
+    aborted = true; release();
+    await assert.rejects(save, /cancelled/);
+    assert.equal(ctx.chatMetadata.hot ?? null, null);
+    assert.equal(persisted.hot ?? null, null, 'host disk cannot retain the fresh candidate');
+    assert.equal(calls, 2);
+});

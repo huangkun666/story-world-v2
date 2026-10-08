@@ -36,7 +36,7 @@
 | **还剩哪些活儿** | 同一份的 §2 ⇒ 总表在 `docs/session-handoff-2026-09-22-leg109b-defects.md` **§3**（全文唯一一份；数 `⬜`／`△`）★**现读：没做 1 · 做了一半 0** |
 | **要查什么（全仓可搜）** | `docs/kb-index.md` · `docs/kb-search.html`（浏览器直接打开）· `docs/kb.json`（给 AI）★**生成物、别手改**：改了源就跑 `node scripts/build-kb.mjs`（守门 **R10** 咬指纹） |
 | **当前值／红线／现场** | **§1** · **§2** · **§5** |
-| **交接文档放哪** | `F:/deepseek/plugins/story-world-v2/docs/`；当前交接：`docs/session-handoff-2026-10-08-leg209-publish-112.md`（发布 1.1.2）。此前角色保护、参数界面、快照、诊断与聊天提示词交接作为历史保留。 |
+| **交接文档放哪** | `F:/deepseek/plugins/story-world-v2/docs/`；当前交接：`docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md`。此前发布、角色保护、参数界面、快照、诊断与聊天提示词交接作为历史保留。 |
 
 ---
 
@@ -47,23 +47,24 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **2236 / 2236 · fail 0 · skipped 0 · todo 0**；额外模型核验完全撤销，玩家、手动与临时保护有提案也只调用原主模型一次；程序权限、保存事务与开关交互保留。已删除撤销机制对应的旧测试。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/worktree-tests.log`、`source-doc-audit.log`、`installed-tests.log`；浏览器见 `browser-verification.json`。 | `node --test`（插件目录内） |
-| 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/smoke-final.log`、`installed-smoke.log` | `node demo/smoke-demo.js` |
-| `PANEL_BUILD` | **`leg209-character-protection-cleanup`** | `src/render-base.js`；角色资料行内紧凑开关，撤掉长说明与重复保护标签；玩家不能解除保护。 |
+| 判据 | **2310 / 2310 · fail 0 · skipped 0 · todo 0**；覆盖可调块大小、请求止损、HTTP 事实诊断、中止/失败后重试、缓存提交、保存回滚与旧载入返回保护；★2026-10-09 新增**「已归档的事件可以引用」**（带因复活不再拒归档号；净化器不再把归档号当"本轮位次别名"改写）；保留角色保护、保存事务与并发裸引用修复。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-doc-validation.json`、`final-receipt-audit.log`（守门内置无参全量）；此前整合验证见 `final-validation.json`；浏览器见 `after-browser-verification.json`；★本笔红/绿与上线读数见 `F:/deepseek/tmp/archive-ref-2026-10-09/verification.json`（改前同批判据 **fail 2**）。 | `node --test`（插件目录内） |
+| 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-smoke.log` | `node demo/smoke-demo.js` |
+| `PANEL_BUILD` | **`leg210-abstraction-reliability`** | `src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断；本地预览，公开发布点仍见下方。 |
 | ★出处核验（leg197 起） | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped` 在出处这条路上**恒为 0**（它只装"非出处原因"的丢弃）。★**没撤的**：形状（缺名/缺 title/缺当事人/自指/端点不在名册）· 冲突墓碑 · 枚举白名单（`PARAM_GEARS`）· 查书同名多值冲突 · 酒馆宏占位符不当名号 | `src/abstract-evidence.js`（口径全文写在文件头）· `test/evidence-nodrop.test.js` |
 | ★「往事注入多少字」出厂值 | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路合起来吃它）；★**装不下的往事整条不进、绝不截半条**（用户 2026-10-05：「字额度切忌把事件截掉」） | `src/limits.js` · `web/inject.js`（`liveRetrievalParams`） |
 | ★主调用输出上限（出厂值） | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** ⇒ 16,384 上第 11 轮起「返回空」/「非法 JSON」交替。★设置页那两个框**现读**、玩家可自己填 | `src/transport-http.js` |
 | ★模型容量怎么来的 | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** | `src/transport-http.js` · `web/model-channel.js` |
 | ★手机端 | 页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12px 小字**抬到 12px**。★**版面**走 `≤620px`、**手感**走 `(pointer:coarse)` | `web/style.css` 末尾两条 |
-| ★抽取并发度 | **缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 1 路** | `web/model-channel.js` · `src/parallel-run.js` |
+| ★抽取每块字符数 | **缺省 30000**，设置页「抽取每块字符数」可填正安全整数；初始化和只重抽设定使用，按完整行分块，单行超限保留全文并报告；只抽刻度仍整源一次。 | `src/abstract-limits.js` · `web/model-channel.js` |
+| ★抽取并发度 | **缺省 2 路**，设置页「同时问几块」可填正安全整数；内容级失败退回 1 路，明确请求错误停止后续新请求；已发请求可能仍在服务端运行。 | `web/model-channel.js` · `src/parallel-run.js` |
 | `包预算` 出厂值 | **50000**（leg135 抬的：用户令「我预算抬到50000token」） | `src/limits.js` |
 | ★`往回看轮数` 出厂值 | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两件事** | `src/limits.js`（★`PANEL_WINDOW_TURNS`） |
 | ★leg136–leg156 各笔 | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） | `docs/done-archive.md` |
 | `CSS_VERSION` | **`20261008-leg209-character-protection-cleanup`** | `web/index.js`；角色保护开关状态、焦点与触屏点击区域；`test/render.test.js` 的 `CSS_PIN` 版本及指纹同步。 |
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-37`** | `src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
-| `web/index.js` 行数 | **3068 / 3100**（硬锁 `<3100`） | Node `split('\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。 |
-| `CACHE_VERSION` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） | `src/fp-hash.js` |
-| 发布仓 main | **`2a71ba5`** · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg209 推的（用户 2026-10-08 令「**帮我推送并更新版本号**」；当次问定**只推 main ＋ 升号**）：**leg202–leg209 八棒一次上线**（上一发布点 `a075423` / leg201b），脚本自带核验 **8/8 ✔**、只读终检 **20/20 ✔**；本机酒馆安装位克隆已按 §10.0 收尾 `fetch` ＋ `reset --hard origin/main` 到这一笔 | `node scripts/verify-release.mjs` |
+| `web/index.js` 行数 | **2766 / 3100**（硬锁 `<3100`） | Node `split('\n').length`；抽取操作、进度和任务生命周期整族搬到独立 web 模块，载入返回检查聊天范围与版本；★2026-10-09 五条体检修复各加几行（链浮层收口 `closeChainPopup()`、切聊天复位快照链 `resetChainState()`）。 |
+| `CACHE_VERSION` | **`11`**；问法未变，不升。抽取缓存同时匹配来源、块大小和严格来源信息；整项任务成功保存才提交新缓存，中止/失败丢弃本项暂存，保留原有效缓存。 | `src/fp-hash.js` · `src/abstract.js` · `web/extraction-task.js` |
+| 发布仓 main | **`2a71ba5`**（代码发布点；远端含后续文档记账，2026-10-08 本轮只读复核实际 HEAD 为 `73f7f85`，证据 `F:/deepseek/tmp/abstraction-reliability-2026-10-08/public-refs-verification.txt`） · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg209 推的（用户 2026-10-08 令「**帮我推送并更新版本号**」；当次问定**只推 main ＋ 升号**）：**leg202–leg209 八棒一次上线**（上一发布点 `a075423` / leg201b），脚本自带核验 **8/8 ✔**、只读终检 **20/20 ✔**；本机酒馆安装位克隆已按 §10.0 收尾 `fetch` ＋ `reset --hard origin/main` 到这一笔 | `node scripts/verify-release.mjs` |
 | release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发新 tag）⇒ **点 release 下载的仍是那一棵** | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 令「帮我推送并更新版本号」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑）。★**tag/release 这一版没动**（用户当次只点了"推 main ＋ 升号"）⇒ 点 release 下载的仍是 `v1.1.0` 那棵 | `test/browser-compat.test.js` |
@@ -179,7 +180,11 @@
 
 ## 4. 当前工作
 
+已按用户批准范围完成抽取可靠性与社区文档：块大小可设置，接口错误停止无效请求，调试台给出配置、真实调用数和具体失败，中止后及失败后均可重新运行；初始化/重抽保存候选副本，旧载入不能回写新聊天。保留日常项目并发完成的两处裸引用和 stale-scope 提示修复。最终本地安装记录见 §5；授权原话见 `docs/work-current.md` §1，交接 `docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md`。未调用真实模型、修改真实聊天/世界书或公开发布。
+
 用户要求参数页运行与注入更清楚，并批准四块布局。已重排为自动运行、聊天如何影响世界、聊天模型能看到什么、往事怎么找；直接显示用途和调整后的影响，向量参数与正文黑白名单收进高级设置。保留参数原名、原值和全部接线。验证、独立审查及本地安装证据见 §1、§5；授权见 `docs/work-current.md` §1，交接 `docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md`。先前快照合并、诊断范围和聊天提示词改动保留。真实宿主和实体手机现场仍由用户刷新后试用。
+
+leg210／leg210b 已办结（2026-10-08，用户报障 ＋ 两道令「**修好即可**」「**把你说没治的也修了吧**」；★用户令「**只记录干了什么即可不用写交接**」⇒ 本笔无交接文档，记录只在本行与 §1）。**病灶：`web/index.js` 里两处"跨块裸引用"**（同一个形状，都是拆模块时漏的）：① 状态文本那句写的是**裸的** `SW2_FLUSH_TRIES`——leg78 把热账族搬去 `web/hot-ledger.js` 时它没进 import 名单 ⇒ 账本被别的副本覆盖（`replaced`）时**求值状态文本**当场 `ReferenceError`，被外层 `catch` 吃掉，状态条印的是「注意：初始化失败：SW2_FLUSH_TRIES is not defined」（TT/手机没有控制台 ⇒ 天书且无从自救）；★**代价比"文案不对"重**：异常抛在**求值实参**这一步 ⇒ 该行之后的一切都被跳过（`loadWorld` 的尾巴＝补参数镜像/刷面板/刷快照；初始化那笔的第二次显式落盘），而它报的偏偏是"存储没落盘"这种最需要后续动作的时刻。② `getWindowTurns` 那一行裸调 `resolveLimits(…)`，而本文件**从没 import 过它**，消费端 `web/settings-channels.js` 那格又是 `catch (_) { return undefined; }` ⇒ **症状是静默**：玩家设的「往事轮数」对向量召回窗口**从来没生效过**（一路回退出厂窗口）。**治法**：① 热账新开受控口 `flushTries()`（形状照 `flushTimeoutMs()`），那一句改走它；② 补 `import { resolveLimits } from '../src/limits.js'`（纯函数，本文件早有 `../src/*` 一批同类 import，不另造一层）；③ **leg210b**：`flushOutcomeText` 补 `stale-scope` 支（原先落到兜底那句「保存报错」＝把玩家往**错方向**指：它其实是"这笔保存中途聊天／角色换了、这一笔不再算数"）。**判据**：新增 `test/web-index-bare-refs.test.js` 4 条（兄弟模块导出名的**跨块裸引用通用扫描** ＋ 反向自证 ＋ 状态文本逐支真调 ＋ reason 契约；★扫描器的关键一格：**模板插值里的名字必须保住**——`${SW2_FLUSH_TRIES}` 就在插值里，把字符串内容整体丢掉的剥法看不见它，本棒第一版就写错成那样、判据当场假绿），`web-hot-ledger-layout` 的受控口契约表补 `hotHub.flushTries` ⇒ 全量 **2240 / 2240 · fail 0 · skipped 0 · todo 0**（原 2236；红证：拿修复前源码跑同一条判据 = 1 pass / 3 fail，指名 `SW2_FLUSH_TRIES@854` 与 `resolveLimits@2004`）。**号**：`PANEL_BUILD`／`CSS_VERSION`／`CACHE_VERSION`／`MAIN_PROMPT_V` **全不升**（没动样式、提示词、问法与玩家可见版面）；`web/index.js` **3068 → 3085 行**（余量 15，硬锁未破）。
 
 leg200 已办结（用户 2026-10-05 两道令 ＋ 两次当场追问，逐字：①「**不要搞这个校验了**」②「**把检索用的正文提取杀光html注释的设计改成我跟你说的白名单和黑名单的设计**」③「**提取tag的时候为什么要剥？难道正则提取不到tag？**」④「**落账时候是不是还有个值必须在正文找到？？读的还是被剥掉的正文？？**」）。**一条根**：**"剥"这一层原来管得太宽**，三处一起收。① **撤掉"值必须在正文里找得到"那道闸**（`src/settle.js`）：它是**恒真式**——值就是从标签行里切的（`tag-extract.js` 的 `cells.slice(2).join(…)`），而标签行就在被搜的那段文本里 ⇒ 那个 `includes` 必然为真、不可能失败；而唯一它会真咬的 `所在` 那一格恰恰是**误伤**（引擎自己过地名归一，归出来的名字可能不在正文里）⇒ 用户当场判"多余"，撤。② **提取那一趟不再剥**（`src/tick.js`）：`extractTags` 只扫 ` ```tags ` 围栏**里面的行**（`if (i < shell.start || i >= shell.end) continue`），围栏外面一个字都不读 ⇒ 剥没有用，只会把住在信封里的标签块一起剥掉（旧代码为此专门立过一条"保围栏"边界去救它，同批消失）。③ **"杀光 HTML 注释"改成玩家那两份名单**（`src/prose.js`）：**两个都空** ⇒ 成对块照剥、**注释不剥**（用户报的那个病：正文有时就包在注释里）；**黑名单填了** ⇒ 只剥点名的（成对块写标签名，注释写它**开头那几个字**）；**白名单填了** ⇒ 只留点名的、其余信封全剥（**信封外面的正文照留**）；两个都填 ⇒ **白名单优先**。★名单**由玩家填、插件一个内置词都没有**——红线 §4.8 禁的是"插件拿**内置**词表替玩家判语义"，这里是玩家点名、插件照办。**住哪**：参数页「正文怎么读」那一组两个多行框（新写通道 `data-settings-text`：**存原文**、读时拆条），剥只剩**一个**消费者——**检索查询串**（leg136 实测空手率 35.3% → 13.2% 的那一处）。**判据**：`test/prose-extract.test.js` 由 7 条重写成 **9 条**、`tag-granularity` 的 **G19 翻案**（闸撤了 ⇒ 值照收）⇒ 全量 **2052 / 2052 · fail 0 · skipped 0 · todo 0**。**号**：`PANEL_BUILD` → **`leg200-prose-lists`**；★`CSS_VERSION` **同批升**（`20261005-leg196-map-mobile` → **`20261005-leg200-prose-lists`**：真动了样式——名单那两个多行框要跨 `.sw2-field-head` 那个**两列栅格**，留在 96px 那一列里会被压成 96px，实测过）；`CACHE_VERSION`／`MAIN_PROMPT_V` **不升**；`web/index.js` **3099 / 3100（±0 行**——名单那一族按硬锁搬进 `web/model-channel.js`）；`src` 模块数 **68**（一个没增没减）。★**同日再一笔（leg200b）**：用户指认那枚「剥掉正文里的机器块」开关**是多余的**（原话「**不写就不剥得了，你还非搞个这个按钮干嘛**」「**有必要搞这种过度设计吗**」）⇒ **撤开关** ＋ **两个名单都空 ＝ 一个字都不剥**（`src/prose.js` 口径②改写、`proseStripLists` 去掉总闸、面板那一行删掉）⇒ `PANEL_BUILD` → **`leg200b-lists-only`**，判据 2052 → **2051**（`prose-extract` 9 → 8 条）。★**代价如实登记**：leg136 那条实测（查询串空手率 35.3% → 13.2%）**从此只在玩家自己填了黑名单之后**才拿得到——默认回到"不剥"，这是用户当次知情的取舍（他要的是"插件不替玩家决定"）。冒烟 **PASS · 终态 SSOT 8351 字节逐字节未变**（★如实登记：本笔动的是"检索查询串"与"落账那道闸"，合成冒烟那一族**不覆盖**它们）。
 
@@ -192,7 +197,7 @@ leg198 已办结（用户 2026-10-05 两道令，逐字：「**这个词表按�
 ## 5. 现场（本机）
 
 - **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`，
-  公共 Git 目录 `F:\deepseek\plugins\.git`；分支 **`codex/f-drive-home`**，当前 HEAD **`a765292`**，工作区包含聊天提示词、快照/诊断及配套文档调整）。
+  公共 Git 目录 `F:\deepseek\plugins\.git`；分支 **`codex/f-drive-home`**，当前源码与本地预览已对齐，提交及干净状态见 `F:/deepseek/tmp/abstraction-reliability-2026-10-08/install-verification.json`）。
   ★**2026-10-07 用户令「以后项目只在F盘的位置」**：C 盘那 16 棵工作树**整棵复制**到
   `F:/deepseek/worktrees/<原ID>/plugins`（逐字节核对、各保原 HEAD／分支／未提交状态），
   `git worktree list` **已不再登记任何 C 盘路径**；原 C 路径**实体项目文件已清空**，
@@ -213,6 +218,7 @@ leg198 已办结（用户 2026-10-05 两道令，逐字：「**这个词表按�
   `F:/deepseek/plugins/story-world-v2/docs/session-handoff-2026-10-07-f-drive-migration.md`。
 - **活跃部署位（都住 F 盘；`F:\jiuguanai\…` 这两处是宿主安装的发布位，搬家不动它们）**：
   ① **实际加载的那一份**＝`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\data\default-user\extensions\story-world-v2`
+  **本次安装现场（2026-10-09）**：已从 `73f7f85` 备份后增量安装到本地分支 `codex/leg210-abstraction-reliability-preview`，运行时预览提交 `a81cf04`；版本仍 1.1.2，内部构建见 §1。源码全量、50 轮合成冒烟、文档与知识索引守门通过；771 个源码跟踪文件逐字节一致，17 个变更运行时模块 HTTP 响应与安装文件相同。按用户要求，相同安装文件不重复整套验证。证据 `F:/deepseek/tmp/abstraction-reliability-2026-10-08/install-verification.json`、`final-doc-validation.json`、`final-smoke.log`；原安装 bundle/归档与日常原稿在同目录 `backup/`，初稿另保留 Git stash。最终文档记账提交由证据 JSON 记录，避免文档自引用提交号。Ctrl+Shift+R 后查看本地预览；未调用真实模型、修改真实聊天/世界书或推远端。下述 leg209 段为发布当时历史。
   ＝**发布仓的一个真实 git 克隆**（★leg156 起**不再是 junction**；2026-10-08 发布 1.1.2 之后现读：remote
   `https://github.com/huangkun666/story-world-v2.git`、**HEAD = `2a71ba5` = `origin/main`**、工作区干净、
   `manifest.json` 读 **1.1.2**——这是按 `docs/dev-process.md` §10.0 的收尾做的 `git fetch` ＋

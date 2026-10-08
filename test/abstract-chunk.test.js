@@ -9,6 +9,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractWorldSetting, CANON_SRC_CHAR, ROSTER_CHUNK_CHAR, SETTING_CHUNK_CHAR, ROSTER_CHUNK_DEPTH, chunkRows, buildAbstractPrompt, buildRosterPrompt, dedupeRoster, describeProgress } from '../src/abstract.js';
+import { createHttpTransport } from '../src/transport-http.js';
+import { createCache } from '../src/fp-hash.js';
+
+test('newline separators do not imply an overlong row; Unicode rows use code points and stay complete', async () => {
+    for (const [sourceText, overlong] of [['aaa\nbbb', false], ['😀😀😀\nbbb', false], ['😀'.repeat(7), true]]) {
+        const prompts = [];
+        const result = await extractWorldSetting({ sourceText, chunkChars: 6, skipRoster: true,
+            extract: async prompt => { prompts.push(prompt); return JSON.stringify({ society: 'city', bookEntities: [] }); } });
+        assert.equal(result.ok, true);
+        assert.equal(result.errors.some(error => error.includes('超长原文行')), overlong);
+        for (const row of sourceText.split('\n')) assert.ok(prompts.some(prompt => prompt.includes(row)));
+    }
+});
+
+test('truncated valid parent JSON is discarded while legal split children can recover and cache', async () => {
+    const cache = createCache(); let calls = 0;
+    const transport = createHttpTransport({ baseUrl: 'https://fake.invalid', apiKey: 'fake', model: 'fake',
+        fetchImpl: async (_url, options) => {
+            calls++;
+            const prompt = JSON.parse(options.body).messages[0].content;
+            const parent = prompt.includes('aaa\nbbb');
+            return { ok: true, json: async () => ({ choices: [{ finish_reason: parent ? 'length' : 'stop',
+                message: { content: JSON.stringify({ society: parent ? 'truncated-parent' : 'legal-child', bookEntities: [] }) } }] }) };
+        } });
+    const result = await extractWorldSetting({ sourceText: 'aaa\nbbb', chunkChars: 6, skipRoster: true, cache, extract: transport });
+    assert.equal(result.ok, true);
+    assert.equal(calls, 3, 'one rejected parent followed by two legal children');
+    assert.equal(result.timing.calls, calls);
+    assert.equal(result.setting.frozen.canon.society, 'legal-child');
+    assert.equal(cache.size(), 1);
+    assert.ok(!JSON.stringify(cache.get(result.fingerprint)).includes('truncated-parent'));
+});
 
 // 测试书：k0..k(n-1) 条目行（约 210 字符/条）；名号藏在条目深处（第 3 个词）
 function makeBook(n) {
@@ -403,7 +435,8 @@ test('★leg27：某块**超时** ⇒ 只调一次即止损跳过（不对半拆
         return JSON.stringify({ bookEntities: parseNames(part) });
     };
     const r = await extractWorldSetting({ sourceText: src, extract, cache: null });
-    assert.equal(r.ok, true, '一块超时不该拖垮全局（其余块照常）');
+    assert.equal(r.ok, false, '请求超时终止本次抽取，保留世界');
+    assert.equal(calls.length, 2, '超时后不再派发新请求');
     const fails = r.timing.steps.filter((e) => e.phase === 'finish' && e.ok === false);
     // ★"先证红"的判据：旧法（超时并进瞬时错）走对半拆 → 该块那一次超时会引发 2/4/8… 次后续失败
     assert.equal(fails.length, 1, `★恰好 1 次失败事件（对半拆会让它变成 2/4/8… 次，实际 ${fails.length}）`);
@@ -412,7 +445,7 @@ test('★leg27：某块**超时** ⇒ 只调一次即止损跳过（不对半拆
     const resent = calls.filter((p) => p === timedOutInput).length;
     assert.equal(resent, 1, `★超时那一刻的输入**只发出过 1 次**（旧法会拆半/重发 ⇒ >1，实际 ${resent}）`);
     assert.ok(fails[0].error.includes('超时'), `失败原因写明"超时"（实际：${fails[0].error}）`);
-    assert.ok(r.errors.some((e) => /第 \d+\/\d+ 块抽取失败/.test(e)), '★errors 必须写明**是哪一块**（旧法只说"块抽取失败"，丢了多少数据不说）');
+    assert.equal(r.callFailure.type, 'timeout', '终态保留失败类型，失败块可由进度记录定位');
 });
 
 test('★leg27 对照：瞬时错（空响应）**仍然**拆半自适应（v1 语义不许被超时分治误伤）', async () => {

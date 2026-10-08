@@ -33,6 +33,7 @@ export function resolveBrowserTransport(settings, { maxTokens, extraction = fals
             baseUrl: s.baseUrl,
             apiKey: s.apiKey,
             model: s.model,
+            extraction, // Diagnostic guidance follows the call context; request and budgets are unchanged.
             ...(maxTokensFinal ? { maxTokens: maxTokensFinal } : {}),
             ...(timeoutMsFinal ? { timeoutMs: timeoutMsFinal } : {}),
             ...(s.fetchImpl ? { fetchImpl: s.fetchImpl } : {}), // 测试注入通道

@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/scales-reextract.test.js
 // leg62c: locks for the "只重抽设定" (setting-only re-extraction) path.
 //
@@ -91,8 +92,8 @@ test('leg62c transport failure is NOT halved: splitting cannot fix a broken chan
     const calls = [];
     const failing = async (prompt) => { calls.push(prompt.length); throw new Error('Failed to fetch'); };
     const r = await extractWorldSetting({ sourceText: src, extract: failing, cache: null, force: true, skipRoster: true });
-    assert.equal(calls.length, chunks.length,
-        `at most 1 call per chunk (no recursion, no fallback retry): chunks ${chunks.length} => expect ${chunks.length}, got ${calls.length} (extra ones are the halving waterfall)`);
+    assert.equal(calls.length, 1, 'transport failure stops further chunks without recursion or fallback retry');
+    assert.equal(r.timing.calls, calls.length);
     // ★全块都失败 ⇒ 如实报失败（`ok=false`）——这正是要的：编排层据此**不动账本**。
     //   ★这一条本棒第一版写反了（断言成 ok=true），是判据自己把自己的语义给纠了。
     assert.equal(r.ok, false, 'all chunks failed => ok=false (world untouched, caller keeps the old setting)');
@@ -108,7 +109,7 @@ test('leg62c transport failure is NOT halved: splitting cannot fix a broken chan
 });
 
 test('leg62c wiring: reextract-setting passes skipRoster and preserves bookEntities', () => {
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const web = readHostSource();
     const start = web.indexOf("bus['reextract-setting']");
     const nextBus = web.indexOf('bus[', web.indexOf('};', start));
     const body = web.slice(start, nextBus > start ? nextBus : undefined);
@@ -127,24 +128,25 @@ test('leg62c wiring: reextract-setting passes skipRoster and preserves bookEntit
 //     · 「只重抽设定」**多传了** `cache` ⇒ 是**假接线**（`force: true` 本来就绕过它，传了只会让人以为它在起作用）；
 //     · 少了 `init-world` 的 `longTask.wrap` ⇒ 最慢的那一格仍然没有防连点闸（连点两下 = 两串调用一起跑）。
 test('★★★leg144 wiring: 并发度、书指纹缓存、防连点闸**四件都真的接上了**', () => {
-    const web = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const web = readHostSource();
+    assert.match(web, /const chunkChars = extractChunkCharsOf\(settings\), concurrency = extractConcurrency\(\)/);
     // ① 初始化那一段
     const initAt = web.indexOf("bus['init-world']");
     const initBody = web.slice(initAt, web.indexOf("bus['clear-evolution']", initAt));
     assert.ok(initBody.length > 800, '前置：切到了 init-world 的真函数体');
-    assert.match(initBody, /concurrency:\s*extractConcurrency\(\)/,
+    assert.match(initBody, /concurrency,\s*chunkChars/,
         '★初始化必须真把并发度传下去（不传 = 并发机制一行都不会被行使，默认值是 1）');
-    assert.match(initBody, /cache:\s*abstractCache/,
+    assert.match(initBody, /cache:\s*task\.cache/,
         '★初始化必须真把书指纹缓存传下去（不传 = 它又变回"从没接线"，同一本书再点一次又是完整一遍）');
-    assert.match(initBody, /seedRootsForWorld[\s\S]{0,400}?concurrency:\s*extractConcurrency\(\)/,
+    assert.match(initBody, /seedRootsForWorld[\s\S]{0,400}?concurrency,\s*chunkChars/,
         '★起根那一遍也要传并发度（同一把尺子：读同一本书、打同一条网关）');
     assert.match(web, /bus\['init-world'\]\s*=\s*longTask\.wrap\('init-world'/,
         '★★「初始化」必须被长活儿闸包住——它是面板上**最慢**的一格，此前偏偏是唯一没被护住的');
     // ② 「只重抽设定」那一段：要并发度，**不许**要缓存
     const reAt = web.indexOf("bus['reextract-setting']");
     const reBody = web.slice(reAt, web.indexOf('bus[', web.indexOf('};', reAt)));
-    assert.match(reBody, /concurrency:\s*extractConcurrency\(\)/, '★重抽也要并发度（它是最常被点的长活儿）');
-    assert.ok(!/cache:\s*abstractCache/.test(reBody),
+    assert.match(reBody, /concurrency,\s*chunkChars/, '★重抽也要并发度（它是最常被点的长活儿）');
+    assert.ok(!/cache:\s*task\.cache/.test(reBody),
         '★★重抽**不许**传缓存：它传的是 `force: true`（存在意义就是"书没变我也要重抽"）⇒ 传了是**假接线**');
     // ③ ★★★leg144 补（用户真机反馈「每个人使用的网关不同支持的并发度上限不同」）：并发度是**设置项**
     //    ★这一条咬的是"那个框真的能改到引擎"——四处缺一处，玩家填的数就是**死格**：

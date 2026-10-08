@@ -66,6 +66,7 @@ export function createWindowShell({ windowId, getViewState = null, setStatus = n
     <div class="sw2-actionbar" id="sw2_actionbar">
       <button class="sw2-btn sw2-primary" data-action="init-world">开始新世界</button>
       <button class="sw2-btn" data-action="advance-world">推进一轮</button>
+      <button class="sw2-btn" type="button" data-action="cancel-extraction" disabled aria-disabled="true">中止抽象</button>
       <span class="sw2-actionbar-state" id="sw2_advance_state"></span>
     </div>
     <div class="sw2-statusbar"><span class="sw2-dot"></span><span class="sw2-main" id="sw2_status_text">模板加载失败回退窗 · 完整面板需 settings.html</span></div>

@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**384 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `27c07051-d7b6c977`（源文件 27c07051 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**390 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `cb5d7209-d7b6c977`（源文件 cb5d7209 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,11 +11,11 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg209-character-protection-cleanup` |
+| 构建号 | `leg210-abstraction-reliability` |
 | 提示词号 | `v2-agenda-t1-37` |
 | 版本 | `1.1.2`（ST 扩展） |
-| 规模 | src **72** · web **43** · 判据 **183** · 探针 **76** · 文档 **240** |
-| 最新交接 | `session-handoff-2026-10-08-leg209-publish-112.md` |
+| 规模 | src **72** · web **46** · 判据 **188** · 探针 **76** · 文档 **244** |
+| 最新交接 | `session-handoff-2026-10-08-leg210-abstraction-reliability.md` |
 
 ## 卡片（按类分组）
 
@@ -26,17 +26,17 @@
 | STATE.md · 0. 三十秒版：这台东西是什么 | `STATE.md:15` | 一个跑在 SillyTavern 里的**活世界引擎**。你每推进一步 RP，世界演化一步：势力与角色按自己的盘算行动，事件从行动里长出来、带因果。 |
 | STATE.md · 0.5  活儿在哪（接手第一件事） | `STATE.md:31` | ／ 你要知道的 ／ 只看这一处 ／ |
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:43` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
-| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:78` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
-| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:140` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 当前工作 | `STATE.md:180` | 用户要求参数页运行与注入更清楚，并批准四块布局。已重排为自动运行、聊天如何影响世界、聊天模型能看到什么、往事怎么找；直接显示用途和调整后的影响，向量参数与正文黑白名单收进高级设置。保留参数原名、原值和全部接线。验证、独立 |
-| STATE.md · 5. 现场（本机） | `STATE.md:192` | - **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`， |
+| STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:79` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
+| STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:141` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
+| STATE.md · 4. 当前工作 | `STATE.md:181` | 已按用户批准范围完成抽取可靠性与社区文档：块大小可设置，接口错误停止无效请求，调试台给出配置、真实调用数和具体失败，中止后及失败后均可重新运行；初始化/重抽保存候选副本，旧载入不能回写新聊天。保留日常项目并发完成的两处裸 |
+| STATE.md · 5. 现场（本机） | `STATE.md:197` | - **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`， |
 
 ### 活儿（12）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1429` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` | **2026-10-09 继续收尾**：「继续」；「你能快点吗？不要做太多无效的验证」 |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1440` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -81,7 +81,7 @@
 | 缺口 E2 | `docs/session-handoff-2026-09-22-leg109b-defects.md:122` | 名册只列活人 ⇒ 账上死了的人从聊天模型视野里整个消失；而给世界模型的"离场名册"不报死没死（有意为之，防编事实） |
 | 缺口 E3 | `docs/session-handoff-2026-09-22-leg109b-defects.md:123` | 同一人的 实力 两边可以不同（账本可改、聊天模型看到的是书里原值） |
 
-### 交接（158）
+### 交接（160）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -238,11 +238,13 @@
 | 交接 leg203（2026-10-07） | `docs/session-handoff-2026-10-07-leg203-event-scope.md:1` | 事件范围与持续条件 · 本地试跑交接 ／ 人话版：这会怎么样 ／ 授权与范围 ／ 已实现 ／ 验收证据 ／ 本地安装 ／ 下一步 |
 | 交接 leg204（2026-10-07） | `docs/session-handoff-2026-10-07-leg204-event-prompt.md:1` | 聊天事件提示词 · 本地试跑交接 ／ 人话版：这会怎么样 ／ 用户授权与反馈 ／ 改动 ／ 验证与安装 ／ 下一步 |
 | 交接 leg205（2026-10-07） | `docs/session-handoff-2026-10-07-leg205-snapshot-debug.md:1` | leg205 · 快照选择与调试信息 ／ 本次原因与行为 ／ 实施与验证 ／ 用户复测 |
+| 交接 leg（2026-10-08） | `docs/session-handoff-2026-10-08-bug-health-check-pass1.md:1` | 2. A 轨 · 核心引擎数据流 ／ 3. B 轨 · 抽象与抽取 ／ D-5 其余（本轮只登记未验，别当结论） ／ 6. E 轨 · 渲染 UI 层 ／ 7. F 轨 · web 接线层 ／ 8. 文档/口径层（本体检 |
 | 交接 leg206（2026-10-08） | `docs/session-handoff-2026-10-08-leg206-snapshot-scope.md:1` | 快照重复项与诊断范围修正交接 ／ 用户问题与原因 ／ 最终行为 ／ 验证与审查 ／ 本地复测 |
 | 交接 leg207（2026-10-08） | `docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md:1` | 参数页运行与注入布局交接 ／ 最终行为 ／ 交互中发现并修正的保存问题 ／ 检索说明的核实 ／ 验证与集成 ／ 本地复测 |
 | 交接 leg208（2026-10-08） | `docs/session-handoff-2026-10-08-leg208-character-simulation-protection.md:1` | 玩家、禁止模拟角色与本轮行动事实保护 |
 | 交接 leg209（2026-10-08） | `docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md:1` | 撤销未经批准的额外调用，调整角色保护界面 |
 | 交接 leg209（2026-10-08） | `docs/session-handoff-2026-10-08-leg209-publish-112.md:1` | 一、接手位置与两个提交 ／ 四、验收和证据（全是亲手跑的） ／ 五、边界（如实登记，不掩盖） ／ 六、留给下一棒的现场知识（会再撞的两条） ／ 七、文档收尾 |
+| 交接 leg210（2026-10-08） | `docs/session-handoff-2026-10-08-leg210-abstraction-reliability.md:1` | leg210 抽取可靠性与社区文档交接 ／ 用户要求与范围 ／ 行为与入口 ／ 验证与本地现场 ／ 缘起与边界 ／ 修了哪五条（每条都先写红判据、看着它红、再改码） ／ 复跑读数（本笔） ／ 本机安装现场 |
 
 ### 细案（33）
 
@@ -286,7 +288,7 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| docs/superpowers/specs/（16 份旧档） | `docs/superpowers/specs:1` | 旧档目录（历史，不是现状）；逐份细节在那里，现状一律看 STATE.md §1 |
+| docs/superpowers/specs/（17 份旧档） | `docs/superpowers/specs:1` | 旧档目录（历史，不是现状）；逐份细节在那里，现状一律看 STATE.md §1 |
 | docs/handoffs/（34 份旧档） | `docs/handoffs:1` | 旧档目录（历史，不是现状）；逐份细节在那里，现状一律看 STATE.md §1 |
 
 ### 知识库（11）
@@ -305,30 +307,31 @@
 | 知识库 09-glossary · 术语表 | `kb/09-glossary.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
 | 知识库机器可读索引（kb-index.json） | `kb/kb-index.json:1` | 文件 / 符号 / 术语 / 决策 / 红线 / 流水线阶段（★快照，会过期） |
 
-### 当前值（20）
+### 当前值（21）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:50` | **2236 / 2236 · fail 0 · skipped 0 · todo 0**；额外模型核验完全撤销，玩家、手动与临时保护有提案也只调用原主模型一次；程序权限、保存事务与开关交互保留。已删除撤销机制对应的旧测 |
-| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/smoke |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg209-character-protection-cleanup`** ｜ 复量：`src/render-base.js`；角色资料行内紧凑开关，撤掉长说明与重复保护标签；玩家不能解除保护。 |
+| 当前值 · 判据 | `STATE.md:50` | **2310 / 2310 · fail 0 · skipped 0 · todo 0**；覆盖可调块大小、请求止损、HTTP 事实诊断、中止/失败后重试、缓存提交、保存回滚与旧载入返回保护；★2026-10-09 新增 |
+| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/abstraction-reliability-2026-10-08/final-smok |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg210-abstraction-reliability`** ｜ 复量：`src/render-base.js`；新增抽取块大小设置、中止抽象和具体任务诊断；本地预览，公开发布点仍见下方。 |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
 | 当前值 · ★模型容量怎么来的 | `STATE.md:56` | 取列表时**读网关自己报的** `max_output_tokens`/`context_window`，点某个模型即按它**自动填**上限；**没报 ⇒ 一个字都不写** ｜ 复量：`src/transport-htt |
 | 当前值 · ★手机端 | `STATE.md:57` | 页签**一行横滑**（44px）· 窄屏**单列** · 点击目标 **44/36/32px** · 输入类 **16px** · 遮罩留边 **6px** ＋ **`100dvh`** · 浮层**整屏** · <12 |
-| 当前值 · ★抽取并发度 | `STATE.md:58` | **缺省 2 路**，**是设置项**（设置页「模型通道」→「同时问几块」；用户 2026-09-27 裁「数自己填不设上限」）；`EXTRACT_CONCURRENCY` 只是**没填过的出厂值**；遇失败**当场退回 |
-| 当前值 · 包预算 出厂值 | `STATE.md:59` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
-| 当前值 · ★往回看轮数 出厂值 | `STATE.md:60` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
-| 当前值 · ★leg136–leg156 各笔 | `STATE.md:61` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
-| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261008-leg209-character-protection-cleanup`** ｜ 复量：`web/index.js`；角色保护开关状态、焦点与触屏点击区域；`test/render.test.js |
-| 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-37`** ｜ 复量：`src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
-| 当前值 · web/index.js 行数 | `STATE.md:64` | **3068 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。 |
-| 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
-| 当前值 · 发布仓 main | `STATE.md:66` | **`2a71ba5`** · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `m |
-| 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发 |
-| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
-| 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 |
+| 当前值 · ★抽取每块字符数 | `STATE.md:58` | **缺省 30000**，设置页「抽取每块字符数」可填正安全整数；初始化和只重抽设定使用，按完整行分块，单行超限保留全文并报告；只抽刻度仍整源一次。 ｜ 复量：`src/abstract-limits.js` · `we |
+| 当前值 · ★抽取并发度 | `STATE.md:59` | **缺省 2 路**，设置页「同时问几块」可填正安全整数；内容级失败退回 1 路，明确请求错误停止后续新请求；已发请求可能仍在服务端运行。 ｜ 复量：`web/model-channel.js` · `src/paral |
+| 当前值 · 包预算 出厂值 | `STATE.md:60` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
+| 当前值 · ★往回看轮数 出厂值 | `STATE.md:61` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
+| 当前值 · ★leg136–leg156 各笔 | `STATE.md:62` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
+| 当前值 · CSS_VERSION | `STATE.md:63` | **`20261008-leg209-character-protection-cleanup`** ｜ 复量：`web/index.js`；角色保护开关状态、焦点与触屏点击区域；`test/render.test.js |
+| 当前值 · MAIN_PROMPT_V | `STATE.md:64` | **`v2-agenda-t1-37`** ｜ 复量：`src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
+| 当前值 · web/index.js 行数 | `STATE.md:65` | **2766 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\n').length`；抽取操作、进度和任务生命周期整族搬到独立 web 模块，载入返回检查聊天范围与版本；★2026-10- |
+| 当前值 · CACHE_VERSION | `STATE.md:66` | **`11`**；问法未变，不升。抽取缓存同时匹配来源、块大小和严格来源信息；整项任务成功保存才提交新缓存，中止/失败丢弃本项暂存，保留原有效缓存。 ｜ 复量：`src/fp-hash.js` · `src/abstra |
+| 当前值 · 发布仓 main | `STATE.md:67` | **`2a71ba5`**（代码发布点；远端含后续文档记账，2026-10-08 本轮只读复核实际 HEAD 为 `73f7f85`，证据 `F:/deepseek/tmp/abstraction-reliability |
+| 当前值 · release tag | `STATE.md:68` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发 |
+| 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:69` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
+| 当前值 · 版本号 | `STATE.md:70` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 |
 
 ### 怎么跑（2）
 
@@ -337,7 +340,7 @@
 | 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:50` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
 | 怎么发布（导出独立根树 → 仓外跑判据冒烟 → 推 → 远端逐字节核） | `scripts/publish-release.mjs:1` | node scripts/publish-release.mjs（推）· node scripts/verify-release.mjs（远端只读终检） |
 
-### 代码地图（116）
+### 代码地图（119）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -424,6 +427,9 @@
 | web/embed-runtime.js | `web/embed-runtime.js:1` |  |
 | web/entity-window.js | `web/entity-window.js:1` | story-world-v2/web/entity-window.js |
 | web/env-evidence.js | `web/env-evidence.js:1` | story-world-v2/web/env-evidence.js |
+| web/extraction-actions.js | `web/extraction-actions.js:1` | Extraction actions are one family: task lifetime, source, progress, commit. |
+| web/extraction-progress.js | `web/extraction-progress.js:1` |  |
+| web/extraction-task.js | `web/extraction-task.js:1` | One abstraction task owns cancellation, staged cache and terminal diagnostics. |
 | web/geography-wiring.js | `web/geography-wiring.js:1` | 用户触发的地图补抽：仍是同一份世界、来源和进度才写回。 |
 | web/hot-ledger.js | `web/hot-ledger.js:1` | story-world-v2/web/hot-ledger.js |
 | web/idb-backend.js | `web/idb-backend.js:1` | story-world-v2/web/idb-backend.js |
@@ -456,20 +462,20 @@
 | web/world-entity-migration.js | `web/world-entity-migration.js:1` | story-world-v2/web/world-entity-migration.js |
 | web/world-replace.js | `web/world-replace.js:1` | story-world-v2/web/world-replace.js |
 | web/world-write-guard.js | `web/world-write-guard.js:1` | 异步查书等操作只可写回开始时的那份世界，不能覆盖期间保存的玩家设置。 |
-| 判据在哪（test/ 共 183 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
+| 判据在哪（test/ 共 188 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
-- `a40f7dd release: bump version to 1.1.2 and publish leg202-leg209 to the release repo`
-- `8530f84 feat: land leg204-leg209 work (snapshot, params, diagnostics, character protection)`
-- `a765292 docs: record event scope implementation and verified local installation`
-- `56b500b fix: preserve complete event scopes under budget and expose current conditions`
-- `2446dd3 fix: admit causal reactions to retained same-round events`
-- `04f48bb feat: carry event scopes and current conditions through inputs and readers`
-- `e76d46e fix: display condition lifecycle in plain Chinese`
-- `d88db14 fix: keep v4 obligations pending until explicit closure`
-- `b1bc6f8 feat: unify v4 event scopes and causal condition lifecycle`
-- `340ae6d fix: reject empty actors and conflicting condition annotations`
-- `00a9d58 feat: add v4 chat event scopes and persistent condition tags`
-- `84f8d90 docs: keep information discovery in event causality`
+- `12a7e05 Docs: record verified local extraction reliability preview`
+- `6f67e1a fix: give extraction timeout guidance without ineffective settings`
+- `3c64e1b Docs: correct extraction cancellation guidance and final validation scope`
+- `b9bc697 Docs: prepare extraction reliability preview and preserve concurrent records`
+- `888c449 Merge commit 'c0df71cb18555afb7f4b12c5292665d680b00081' into codex/abstraction-reliability-2026-10-08`
+- `f85fa0f fix: protect extraction commits from stale loads and book checks`
+- `966c7ce fix: inherit initialization locations before saving candidate`
+- `2c095e3 fix: guard abstraction task cancellation and chat loading`
+- `c0df71c fix: leg210b stale-scope 也给它一句人话（原先落到兜底那句「保存报错」，指错方向）`
+- `1eb9718 fix: leg210 接线层两处裸引用无出处（SW2_FLUSH_TRIES / resolveLimits）+ 通用判据`
+- `2ee1162 Fix settings guidance and model probe success text`
+- `6968fc4 Add extract chunk size setting and cancel action`
 

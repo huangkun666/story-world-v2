@@ -84,6 +84,10 @@ const FAMILY_STATE = [
 const HUB_DESTRUCTURED = ['readHotMeta', 'writeHotMeta', 'flushHotMeta'];
 const HUB_MEMBER_USE = [
     'hotHub.resetHotLedgerState', 'hotHub.sw2SetFlushTimeout', 'hotHub.flushTimeoutMs',
+    // ★★★leg210：**次数那一格也进受控口了**（本棒）。原来接线层的状态文本里写的是裸的 `SW2_FLUSH_TRIES`，
+    //   而它**不在 import 名单**里 ⇒ `replaced` 那一支一求值就 `ReferenceError`（详见本文件头 ② 那段的同款形状）。
+    //   ⇒ 定稿 `hotHub.flushTries()`，并**钉进这份契约**：这口不许变回裸引用，也不许"备着不用"。
+    'hotHub.flushTries',
 ];
 
 // ─────────────────── ① 搬家结果：符号只在**新家**定义，旧家不再定义 ───────────────────

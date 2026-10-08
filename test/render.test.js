@@ -39,6 +39,7 @@ import { ENGINE_DERIVED_ENV } from '../src/unrest.js';
 // ★leg55·二：「乱象」说明里的窗口数必须与**机制**同源（面板不许替机制承诺一个没写死的数）
 import { UNREST_WINDOW } from '../src/unrest.js';
 import { TENSION_WINDOW } from '../src/setting.js';
+import { SETTING_CHUNK_CHAR } from '../src/abstract-limits.js';
 // ★leg55：面板印的冷档阈值＝引擎轮转当缺省用的那份常量 ⇒ 判据从**真源**取，不抄字面量
 import { PROPOSED_LIMITS } from '../src/storage.js';
 import { expandChain } from '../src/chain.js';
@@ -1245,6 +1246,27 @@ test('★★★leg87：单轮超时/输出上限是**可填控件**（不是只�
     assert.match(dflt, new RegExp(`id="sw2_call_timeout"[^>]*value="${Math.round(PROPOSED_CALL_LIMITS.timeoutMs / 1000)}"`));
 });
 
+test('抽取每块字符数设置框使用真实设置键与共享默认值，并说明字符计数和超长行处理', () => {
+    const html = renderSettingsHtml(world(), { config: {} });
+    assert.equal(SETTING_CHUNK_CHAR, 30000, '★approved default remains 30000');
+    assert.match(html, new RegExp(`id="sw2_extract_chunk_chars"[^>]*data-settings="extractChunkChars"[^>]*value="${SETTING_CHUNK_CHAR}"`));
+    assert.match(html, /抽取每块字符数/);
+    const concurrencyInput = html.indexOf('data-settings="extractConcurrency"');
+    const concurrencyHint = html.indexOf('并发数填大了网关会报 429');
+    const chunkInput = html.indexOf('id="sw2_extract_chunk_chars"');
+    const chunkHint = html.indexOf('按<b>字符数</b>分块，不是 token。');
+    assert.ok(concurrencyInput < concurrencyHint && concurrencyHint < chunkInput && chunkInput < chunkHint,
+        '★并发说明紧跟并发框，随后才是块大小框及其说明');
+    assert.ok(html.slice(concurrencyHint, chunkInput).includes('并发数'), '★429 后果明确属于并发设置');
+    assert.match(html, /字符分块，不是 token/);
+    assert.match(html, /完整行.*超长行.*单独成块/);
+    assert.match(html, /更小不保证总耗时更短/);
+    assert.match(html, /只抽刻度.*不使用本项/);
+    assert.match(html, /没有验证正式 JSON 参数/);
+    const custom = renderSettingsHtml(world(), { config: { extractChunkChars: 12000 } });
+    assert.match(custom, /id="sw2_extract_chunk_chars"[^>]*value="12000"/);
+});
+
 test('K35/A-9 设置页：旧卷清单（卷号/信息/阅卷动作）入面；无卷时"尚未入卷"', () => {
     const html = renderSettingsHtml(world(), { config: CONFIG, oldVolumes: VOLUMES });
     assert.match(html, /入卷清单/);
@@ -1662,6 +1684,43 @@ test('★★★leg93c：事件链**不再插进编年页**——改走浮层（�
     //    不拦的话按一次 ESC 会**把面板一起关掉**（用户要的是关这个小窗）
     assert.ok(/addEventListener\('keydown', onEsc, true\)/.test(src),
         '★ESC 必须在捕获阶段挂（且 `stopPropagation`）——不许连面板一起关');
+});
+
+test('★★★2026-10-08 体检：链视图不许把模型写的标题/盘算原样拼进 HTML（XSS）', () => {
+    // 病（2026-10-08 体检复核）：`cvSrcPhrase` 把 `n.title` / `n.goal` **原样**拼进 HTML——
+    //   `沿「${n.title}」而来` / `由盘算「${n.goal}」而生`（`src/render.js` 那一处）。
+    //   而 `n.title` / `n.goal` 是**模型自由文本**（`chain.js` 从账上原样搬）。
+    //   ★坐实"这是漏、不是设计"的三条对照（都在同一层）：
+    //     ① 同一行里紧挨着的 `escapeHtml(root.position)` 转了；
+    //     ② 同一层对**同一个** `n.title`/`n.goal` 另有单转的印法（`escapeHtml(n.title)`）；
+    //     ③ `cvSeedPhrase` 也内嵌未转义值，可它**调用处补了** `escapeHtml(...)`，而本处调用处没补。
+    //   ⇒ 危害：模型文本里的 `<` / `"` 会破坏面板 DOM，甚至执行脚本（玩家可见面 ＋ 注入面）。
+    const w = chainWorld();
+    w.events.find((e) => e.id === 'ev_1_1').title = '<img src=x onerror="boom()">';
+    w.agendas.find((a) => a.id === 'a_2').goal = '<script>bad()</script>';
+    const html = renderChainViewHtml(expandChain(w, 'ev_2_1'), { world: w });
+    assert.ok(!html.includes('<img'), '★不许把模型写的标题原样拼进 HTML（裸 `<img` 出现在产物里）');
+    assert.ok(!html.includes('<script>bad'), '★不许把模型写的盘算原样拼进 HTML（裸 `<script>` 出现在产物里）');
+    assert.ok(html.includes('&lt;img'), '★要的是转义后的形态（那句话还在，只是被转义了）');
+    assert.ok(html.includes('&lt;script&gt;bad'), '★同上：盘算那一句也走转义');
+});
+
+test('★★★2026-10-08 体检：链里点链不许漏摘 ESC 监听（原为只 remove() 旧浮层）', () => {
+    // 病（2026-10-08 体检复核）：`bus['open-chain']` 进来第一件事只把旧 mask 从 DOM 摘掉
+    //   （`document.getElementById(CHAIN_MASK_ID)?.remove()`），**没跑收口** `closeChainPopup()`。
+    //   而 ESC 那条监听挂在 **`document`** 上（捕获阶段），`removeEventListener` 只写在收口里
+    //   ⇒ 每"从一条链里点开另一条链"就多一个**永不回收**的孤儿监听（闭包还牵着已摘掉的浮层）。
+    //   ★比"内存泄漏"更重的一层：孤儿监听每次 ESC 都 `stopPropagation()`，
+    //     而它在 `document` 的捕获阶段 ⇒ **拦住了事件继续下沉**，于是之后打开的、把 ESC 挂在
+    //     更深节点上的浮层（阅卷浮层 / 实体窗）收不到键——要刷新页面才恢复。
+    const src = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
+    const at = src.indexOf("bus['open-chain']");
+    assert.ok(at > 0, '前置：动作总线里必须有 open-chain');
+    const body = src.slice(at, at + 4200);
+    assert.ok(body.includes('closeChainPopup();'),
+        '★换链必须先走收口（只有它会摘掉挂在 document 上的 ESC 监听）');
+    assert.ok(!/getElementById\(CHAIN_MASK_ID\)\?\.remove\(\)/.test(body),
+        '★不许再只 `remove()` 旧浮层——那条路不摘 document 上的 keydown（监听器泄漏的正是它）');
 });
 
 test('K41/A-15 里程碑穿透渲染：纪珠 + 聚合 parents + 卷区间装配阅卷 + 下沿余尾', () => {
@@ -2607,7 +2666,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //     ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动，下面 `CSS_PIN` 同时咬两头）。
     //   ★★★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那十三格
     //     **只进报告、不上屏** ⇒ 调试页摘要回到原来的大小（玩家可见面又变了一次）⇒ 再升一格。
-    assert.equal(PANEL_BUILD, 'leg209-character-protection-cleanup');
+    assert.equal(PANEL_BUILD, 'leg210-abstraction-reliability');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2672,7 +2731,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '209', '前置：角色保护改为资料行内开关，继续核对构建号与样式号。');
+    assert.equal(buildLeg, '210', '前置：抽取任务恢复与载入保护，继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);

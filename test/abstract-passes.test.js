@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/abstract-passes.test.js
 // ★★★leg150（用户令「甲案＋丙案，开工吧」· 2026-09-29）：**抽象的「三遍」收成「两遍」**。
 //
@@ -287,7 +288,7 @@ test('★leg150 指纹：串形与老口径**逐字相同**（两条路的幂等
 // ⑤ 接线层：按"并进来了没有"分叉（并进来了就直接落账，不再发第三遍调用）
 // ══════════════════════════════════════════════════════════════════════════════
 test('★leg150 接线：初始化把并进来的根直接落账，并进来的那一次**不再发第三遍调用**', () => {
-    const web = read('../web/index.js');
+    const web = readHostSource();
     assert.match(web, /seedRootsFromPass\(seed,/, '★有个"收下并进来的根"的入口（住 src/seed-roots.js）');
     assert.match(web, /Array\.isArray\(r\.rawRoots\)/, '★按"并进来了没有"分叉：并进来了直接落账；没并进来（小书/命中缓存）才走老的分块起根');
     assert.match(web, /seedRoots:\s*\{\s*playerName/, '★把人设名递进抽取（玩家自己不许进候选池）');
@@ -313,7 +314,7 @@ test('★leg150 文案：实施清单仍印块号（leg149 那条棘轮不许回
     assert.ok(line.includes('第 3/14 块'), `★块号照旧要印（leg149 的棘轮：实际「${line}」）`);
     assert.ok(line.includes('属性'), '★第二遍只问属性');
     assert.ok(!line.includes('属性与设定'), '★丙案之后"与设定"是假话，四处文案都不许再印');
-    const web = read('../web/index.js');
+    const web = readHostSource();
     for (const bad of ["'属性与设定'", '属性与设定第']) {
         assert.ok(!web.includes(bad), `★状态栏/心跳/事件日志三处也不许再印「${bad}」`);
     }

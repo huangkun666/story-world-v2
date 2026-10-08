@@ -1,3 +1,4 @@
+import { readHostSource } from './host-wiring-source.js';
 // story-world-v2/test/world-replace-layout.test.js
 // ★★★leg103（A3）：**「覆盖现存世界」这一族的判据**（用户令"我捋一遍"捋出来的两条真缺陷）。
 //
@@ -47,7 +48,7 @@ function bodyOfIn(src, sig, stops = ['\nexport function ', '\nexport async funct
     return src.slice(at, end);
 }
 
-const INDEX = read('web/index.js');
+const INDEX = readHostSource();
 const INDEX_CODE = stripComments(INDEX);
 
 // ---------- ① 新家在盘上，且真的装着那一族 ----------
@@ -105,13 +106,13 @@ test('★★★leg103·WR③：初始化那句"先拍一份快照"的承诺，**
     // ① 文案这一侧：承诺必须在（它是玩家读到的"退路说明"）
     assert.match(wrCode, /换掉前自保/, '★初始化那份文案必须写明"会先拍一份（换掉前自保）"——玩家据此知道退路在哪');
     // ② 行为这一侧：接线层必须**真拍**，而且拍在**确认之后、writeHotMeta 之前**
-    const body = bodyOfIn(indexCode, "bus['init-world'] = longTask.wrap('init-world', LONG_TASK_LABELS['init-world'], async () => {", ["\n    bus['", '\n    // ----------']);
+    const body = bodyOfIn(indexCode, "bus['init-world'] = longTask.wrap('init-world', LONG_TASK_LABELS['init-world'], async (task) => {", ["\n    bus['", '\n    // ----------']);
     assert.ok(body.length > 800, '前置：切到了 init-world 的真函数体');
     assert.match(body, /(?:^|[^\w$.])snapHub\.requestSnapshot\s*\(/, '★★★必须**真的调** `snapHub.requestSnapshot(`——否则那句承诺就是空的');
     assert.match(body, /'换掉前自保'/, "★理由串必须是「换掉前自保」（快照页上玩家认得出它是哪一份）");
     const confirmAt = body.indexOf('window.confirm(initWorldOverwriteNotice(');
     const snapAt = body.indexOf('snapHub.requestSnapshot(');
-    const writeAt = body.indexOf('writeHotMeta(');
+    const writeAt = body.indexOf('task.commit(');
     assert.ok(confirmAt > 0 && snapAt > confirmAt, '★★自保快照必须在**玩家点了确定之后**才拍（不能替他拍一堆没用的）');
     assert.ok(writeAt > snapAt, '★★自保快照必须在 `writeHotMeta` **之前**——在它之后拍到的是**新世界**（这正是原来的病）');
     // ③ 零阻塞：拍快照失败绝不许挡住初始化

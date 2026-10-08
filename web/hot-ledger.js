@@ -391,10 +391,18 @@ export async function commitHotMeta(meta, { guard = null, saveMessages = false }
                 [sw2HotMetaLastWriteAt, sw2HotMetaPendingWriteAt, sw2HotMetaWrittenMeta, sw2HotMetaWrittenFp, sw2HotMetaLastFlushOkAt, sw2HotMetaWrittenScope] = bookkeeping;
                 // The host already acknowledged the candidate. Restore its persisted
                 // metadata too when an input changed while that save was pending.
-                if (hostSaved && before) {
-                    writeHotMeta(before, { transactional: true });
-                    const restored = await flushHotMeta({ strict: true, saveMessages: true });
-                    if (!restored.ok || restored.queued) throw new Error(`${err?.message || err}；原账回存未确认：${restored.detail || restored.reason || '未确认'}`);
+                if (hostSaved) {
+                    if (before) {
+                        writeHotMeta(before, { transactional: true });
+                        const restored = await flushHotMeta({ strict: true, saveMessages: true });
+                        if (!restored.ok || restored.queued) throw new Error(`${err?.message || err}；原账回存未确认：${restored.detail || restored.reason || '未确认'}`);
+                    } else {
+                        const restored = await sw2CallSaveChat(ctx, { saveMessages: true });
+                        if (restored.fast || hotLedgerScope(freshCtx()) !== scope || readHotMeta() != null) {
+                            throw new Error(`${err?.message || err}；空账回存未确认`);
+                        }
+                    }
+                    [sw2HotMetaLastWriteAt, sw2HotMetaPendingWriteAt, sw2HotMetaWrittenMeta, sw2HotMetaWrittenFp, sw2HotMetaLastFlushOkAt, sw2HotMetaWrittenScope] = bookkeeping;
                 }
             }
         }
@@ -428,6 +436,17 @@ export function flushTimeoutMs() {
     return sw2FlushTimeoutMs;
 }
 
+/** ★★★leg210：把**当前生效的重试次数**如实报出去（`flushOutcomeText` 那句"试了 N 次没抢回来"要用它）。
+ *  ★为什么必须有这个口（**这口是踩出来的，不是想出来的**）：接线层那一句原先写的是裸的
+ *    `SW2_FLUSH_TRIES`，而 leg78 搬家时它**没进 import 名单** —— 正是上面 `flushTimeoutMs()` 那条注释
+ *    预告过的同款形状（跨块够到族里的一个名字）⇒ 搬完就变成**裸引用**，`replaced` 那一支一求值
+ *    当场 `ReferenceError: SW2_FLUSH_TRIES is not defined`（实机症状见 `web/index.js` 那一句的注释）。
+ *  ★判据为什么以前没咬住：leg78 的 ③ 只钉了超时档那一格（`hotHub.flushTimeoutMs()`），次数这一格漏钉。
+ *  ⇒ 口径与超时档**完全一致**：族里的数与名只住本文件，外面要读就走受控口（`hotHub.flushTries()`）。 */
+export function flushTries() {
+    return SW2_FLUSH_TRIES;
+}
+
 /**
  * 依赖注入工厂（照 `createSnapshotHub` / `createParamHub` 先例）。
  *   `deps` 三样：`freshCtx`（取 ST 上下文）· `hotMetaKey`（热账住哪一格）· `getSnapHub`（★迟到取快照 hub）。
@@ -444,6 +463,6 @@ export function createHotLedgerHub(deps) {
         readHotMeta, writeHotMeta, flushHotMeta, commitHotMeta,
         hotMetaUnflushed, hotMetaFingerprint, hotMetaSignatureOf,
         sw2ExplicitChatName, sw2SetFlushTimeout, resetHotLedgerState,
-        flushTimeoutMs,
+        flushTimeoutMs, flushTries,
     };
 }

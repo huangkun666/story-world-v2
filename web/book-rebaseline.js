@@ -26,7 +26,7 @@ export { REBASELINE_ACTION };   // ★转出去：接线层因此**少一条 imp
  *   · `hot`                          热账那一族：`{ readHotMeta, loadHotAccount, writeHotMeta, hotAccountShape, flushHotMeta }`
  *   · `ui`                           面板与状态条：`{ refreshWorld, refreshSections, setStatus }`
  *   · `longTask` / `LONG_TASK_LABELS` / `action`（`web/long-task.js` 的闸与名字表）
- * @returns {{runLoadCheck: Function, handler: Function, result: Function}}
+ * @returns {{readCheck: Function, publishCheck: Function, runLoadCheck: Function, handler: Function, result: Function}}
  *   `result()` 交回**最近一次**载入期的读数（`null` = 无从判断）——面板据此决定要不要出那一行与那颗按钮。
  */
 export function createBookRebaselineHub({
@@ -45,18 +45,34 @@ export function createBookRebaselineHub({
      * 载入期那一问：账上那份设定，是从现在这本书抽的吗？
      * ★失败一律降级成 `null`（`checkCurrentBook` 自己吞异常）⇒ **绝不阻塞载入**、绝不改账。
      */
-    async function runLoadCheck(world) {
+    async function readCheck(world, transaction = null, options = {}) {
+        transaction?.assertCurrent();
         try {
-            last = await checkCurrentBook(world);
-            if (last?.changed) {
-                console.warn('[story-world-v2] 换书检测：账本按旧书建、现在挂的是另一本', last);
-                say(bookChangedStatus(last));   // ★这一句由本族自己说（接线层少一处分支，见文件头"行数锁"）
-            }
+            const checked = await checkCurrentBook(world, options);
+            transaction?.assertCurrent();
+            return checked;
         } catch (err) {
+            if (err?.sw2Cancelled) throw err;
+            transaction?.assertCurrent();
             console.warn('[story-world-v2] 换书检测失败（这次不判断，世界照常载入）', String(err?.message || err));
-            last = null;
+            return null;
+        }
+    }
+
+    // Candidate reads are private until the owning world save has succeeded.
+    // Publishing is synchronous, so no cancellable source wait follows commit.
+    function publishCheck(checked, transaction = null) {
+        transaction?.assertCurrent();
+        last = checked;
+        if (last?.changed) {
+            console.warn('[story-world-v2] 换书检测：账本按旧书建、现在挂的是另一本', last);
+            say(bookChangedStatus(last));
         }
         return last;
+    }
+
+    async function runLoadCheck(world, transaction = null) {
+        return publishCheck(await readCheck(world, transaction), transaction);
     }
 
     /**
@@ -100,7 +116,7 @@ export function createBookRebaselineHub({
     // ★闸与"看得见"复用 `web/long-task.js`（与那三个长动作同一把尺）：它**不是**长活儿，
     //   但连点两下同样不该发两遍（第二遍会再取一次书）——顺带白拿"按钮灰掉 + 状态条出声"。
     const wrapped = longTask?.wrap ? longTask.wrap(action, LONG_TASK_LABELS?.[action], handler) : handler;
-    return { runLoadCheck, handler: wrapped, result: () => last };
+    return { readCheck, publishCheck, runLoadCheck, handler: wrapped, result: () => last };
 }
 
 // ＝＝ ★★★leg112：**本族的单例 + 迟到注入**（接线层为它花掉的每一行都要在 3100 那把锁里排队）＝＝
@@ -115,5 +131,7 @@ export function injectBookRebaseline(d) { deps = d || null; return hub(); }
 function hub() { if (!singleton && deps) singleton = createBookRebaselineHub(deps); return singleton; }
 /** 载入期那一问 / 玩家按「就按现在这本算」那一条 / 面板渲染读的读数（未注入 ⇒ null，绝不抛）。 */
 export const runLoadCheck = (...a) => { const h = hub(); return h ? h.runLoadCheck(...a) : null; };
+export const readLoadCheck = (...a) => { const h = hub(); return h ? h.readCheck(...a) : null; };
+export const publishLoadCheck = (...a) => { const h = hub(); return h ? h.publishCheck(...a) : null; };
 export const rebaselineHandler = (...a) => { const h = hub(); return h ? h.handler(...a) : undefined; };
 export const bookCheckResult = () => { const h = hub(); return h ? h.result() : null; };

@@ -116,3 +116,22 @@ test('归档结果仍可引出世界涟漪；同轮位次别名不能冒充已�
     assert.equal(hit.archived, true);
     assert.equal(hit.viaSameRound, false);
 });
+
+test('★2026-10-09：净化器不许把「已归档的号」当成"本轮位次别名"改写（两把尺子对齐）', () => {
+    // 病（同一族"两把尺子"）：净化器查"这个号在账上有没有"用的是 `findEvent`（**只看热账**），
+    //   而判定层（`ref-rules.js` 的 `newAgendas.source` / `newEntities.source`）**放行已归档的号**。
+    //   ⇒ 一条"新谋划/新人的来路是多年前那件事"的**合法**提议，会掉进下面那条"按本轮位次改写"的路：
+    //     `ev_1_1` 的位次是 1，只要本轮提了 ≥1 件新事就撞上 ⇒ 被**悄悄改成本轮第 1 件新事**，
+    //     账上记的来路指错，而且一声不响（用户要的"旧事影响今天"就此丢在半路）。
+    const w = world();
+    w.milestones.push({ ids: ['ev_1_1'], rows: [{ id: 'ev_1_1', title: '多年前那件事' }] });
+    const step = emptyStep({
+        newEvents: [{ title: '今天的新事', source: { type: 'state' }, position: '城中', ripples: ['e_a'] }],
+        newAgendas: [{ entity: 'e_a', goal: '接着旧事起一条线', visibility: 'known', source: { type: 'event', ref: 'ev_1_1' } }],
+        newEntities: [{ name: '闻讯而来的人', entity: 'e_a', location: '城中', source: { type: 'event', ref: 'ev_1_1' } }],
+    });
+    const { step: kept, dropped } = dropInvalidProposals(step, w);
+    assert.deepEqual(dropped, [], `★这两条都合法、一条都不许丢：${JSON.stringify(dropped)}`);
+    assert.equal(kept.newAgendas[0]?.source?.ref, 'ev_1_1', '★盘算的来路仍指那件已归档的旧事（不许被改成本轮新事）');
+    assert.equal(kept.newEntities[0]?.source?.ref, 'ev_1_1', '★新人入局的来路同上');
+});

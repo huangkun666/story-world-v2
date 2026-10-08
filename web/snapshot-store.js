@@ -377,6 +377,27 @@ export function readSnapshotCache() { return sw2SnapshotCache; }
 /// 清：接线层"落盘簿记复位"要顺带清的两个闸（内容闸指纹 + 参数闸基准）。
 export function resetDedupState() { sw2SnapLast = []; sw2SnapLastWorldFp = null; }
 
+/**
+ * ★★★2026-10-08 体检修：**切聊天时复位快照链**（只清内存里的链与"已对齐"标记，**一个字节不碰盘**）。
+ *   病（原样）：链状态是**模块级、与聊天无关**的全局，而快照库的键是 `${chatId}:${id}`
+ *   （`snapshotStore` 每次现取**当前** chatId）。切聊天那条路只 `invalidate()` + `loadWorld()`，
+ *   **没复位链**；而"已对齐"那道门是**一次性**的（`ensureSnapshotChain` 里 `if (sw2SnapInited) return`）
+ *   ⇒ 切到另一本聊天**不重跑对齐** ⇒ 拿上一本的 `seq` 给这一本出号：
+ *     撞上这一本已占用的号就**直接覆盖**（静默丢历史），而 `anchorWorld/anchorId` 还停在上一本
+ *     ⇒ 这一本第一份快照的增量也对不上（回档可能拿到脏增量）。
+ *   ⇒ 这是 leg27 e 治过的那个病（"新快照把旧快照按 id 一份份覆盖"）**跨聊天复发**。
+ *   ★与另外两条口的分工（三件事**不绑一起**，各治各的）：
+ *     · 本函数：只复位**链**（切聊天用）；
+ *     · `resetDedupState`：只清内容闸指纹与参数闸基准（判据开局用）；
+ *     · `clearSnapshots`：**真清盘**（"重置快照"按钮用——切聊天绝不许走它）。
+ *   ★未收的一格（如实登记，别当已修）：`sw2SnapQueue` 里可能还排着**上一本**未落完的写——
+ *     本函数**不撤队列**。真机若见到"切完聊天第一份快照的增量对不上"，先查这一处。
+ */
+export function resetChainState() {
+    sw2SnapChain = { seq: 0, anchorId: null, anchorSeq: null, anchorWorld: null };
+    sw2SnapInited = null;
+}
+
 // ★★接线层的**唯一入口**（依赖注入工厂）。
 //   `deps` 十一样：8 个接线层函数 + 3 个取数口。
 //   ★`freshCtx` 也走 deps（`snapshotStore` 每次现取 chatId ⇒ 换聊天自动换键空间，这是 leg27 e 的前提）。
@@ -412,6 +433,6 @@ export function createSnapshotHub(deps) {
     return {
         snapshotList, restoreSnapshot, clearSnapshots, resetSnapshots,
         requestSnapshot, refreshSnapshots, snapshotStore,
-        readSnapshotCache, resetDedupState,
+        readSnapshotCache, resetDedupState, resetChainState,
     };
 }

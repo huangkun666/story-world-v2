@@ -18,6 +18,7 @@
 
 import { listModels, probeModel } from '../src/transport-http.js';
 import { renderModelListHtml, renderModelProbeHtml } from '../src/render.js';
+import { normalizeExtractChunkChars, SETTING_CHUNK_CHAR } from '../src/abstract-limits.js';
 
 /** 按 id 找键的那三个框（地址/密钥/模型）。★数字键**不在这张表里**（它们走 `data-settings`，见下）。 */
 export const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model' };
@@ -50,6 +51,11 @@ export function proseStripLists({ settings = null } = {}) {
     return { black: settings?.proseBlackList ?? '', white: settings?.proseWhiteList ?? '' };
 }
 
+/** 从设置读取有效抽取块大小；非法或未填写时沿用抽取端的共享默认值。 */
+export function extractChunkCharsOf(settings = {}) {
+    return normalizeExtractChunkChars(settings?.extractChunkChars ?? SETTING_CHUNK_CHAR);
+}
+
 // 数字型设置键的范围（唯一真源：reading 端——渲染层只画 min/max 提示，**拦截在这里**）。
 //   ★为什么拦：这两个数直接进引擎（`resolveBrowserTransport` → `createHttpTransport` 的
 //     `timeoutMs`/`maxTokens`）⇒ 落一个 NaN 或负数进去 = 每轮调用当场失败，而玩家只会看到"演算失败"。
@@ -63,6 +69,7 @@ export function proseStripLists({ settings = null } = {}) {
 export const SETTINGS_NUM_RANGE = {
     callTimeoutSec: [5, 600], callMaxTokens: [1024, 131072], tagMaxActions: [1, 200],
     extractConcurrency: [1, Number.POSITIVE_INFINITY],
+    extractChunkChars: [1, Number.MAX_SAFE_INTEGER],
     // ★★★leg161（用户令「**这是记忆插件的向量模型参数配置，就这几个**」）：**检索参数那三格**。
     //   ★它们住**参数页**的注入卡（与"插件动不动你的对话"同一处）——因为那一段就是它们管的东西。
     //   ★★`retrievalTop` / `retrievalDepth` 是**整数**（条数）；`retrievalMinScore` 是**小数**
@@ -93,6 +100,7 @@ export const SETTINGS_NUM_LABEL = {
     callMaxTokens: '单轮输出上限（token）',
     tagMaxActions: '单轮注入行动条数上限',
     extractConcurrency: '同时问几块',
+    extractChunkChars: '抽取每块字符数',
     // ★leg161：检索参数那三格（名字照玩家看得懂的话说，零引擎术语）。
     //   ★2026-10-05：**名字保持原样**——玩家已经认得它们；"这一格作用在哪、管什么"
     //     改由参数页那四格各挂的一枚小问号说清（见 `src/render.js` 的 `paramHint`）。
@@ -205,7 +213,7 @@ export function createModelChannelHub(deps = {}) {
         const r = await probeModel({ baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model, fetchImpl });
         // ★用户 2026-09-27 当场裁的：**不写"模型回了几个字"**（那是内部噪声，玩家要的是通没通）。
         state.probe = r.ok
-            ? { ok: true, line: `通 · ${String(s.model || '')} · ${secs(r.ms)}` }
+            ? { ok: true, line: `通 · ${String(s.model || '')} · ${secs(r.ms)}（最小请求成功；正式抽取 JSON 参数未验证）` }
             : { ok: false, line: `注意：${r.error}` };
         status(r.ok ? `连通 · ${String(s.model || '')} · ${secs(r.ms)}` : `注意：连不通：${r.error}`);
         paint();
