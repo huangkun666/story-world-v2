@@ -199,6 +199,7 @@ export function makeVectorRecall({ getCtx, getWorld, getRuntime, getVolumes, que
             floor: Math.max(0, Number(world?.meta?.tick) || 0) + 1, // ★覆盖当前全账，不套近期窗口
             volumes: (() => { try { return getVolumes?.() ?? null; } catch (_) { return null; } })(),
             queryText: text,
+            audience: 'chat',
             top: p.top,
             minScore: p.minScore,
         });

@@ -28,6 +28,8 @@
 //   为什么取数放在这里而不是编排层：`apply()` 是**唯一**同时拿得到 `getCtx()`（上一轮正文＋这一轮输入）
 //   与 `getWorld()`（账）的地方；而 `web/index.js` 只剩 **1 行**余量（硬锁 `<3100`）⇒ **不许再往那里加**。
 import { recallLedger, RECALL_MODES, formatRecalled, timeMarkAt, rankKeywordMatches, recalledLineText } from '../src/ledger-recall.js';
+import { filterChatRecords } from '../src/event-provenance.js';
+import { currentScopeIds } from '../src/event-contract.js';
 // ★★★leg198：**「正文」那一层搬进 `src/prose.js`**——提取那一趟（`src/tick.js`）也要用它，
 //   而 `src/` **不许** import `web/`（单向边）⇒ 一处定义只能住在引擎那一侧。
 import { proseOnly } from '../src/prose.js';
@@ -252,20 +254,52 @@ export function tagSpecText() {
     const roleFields = CHANGE_FIELDS.filter((f) => CHANGE_FIELD_KIND[f] === 'character').join('／');
     const factionFields = CHANGE_FIELDS.filter((f) => CHANGE_FIELD_KIND[f] === 'faction').join('／');
     return [
-        '【本回合必须用标签标出"已经发生的事"】',
-        '★这是本回合的**硬要求**，不是风格建议：正文照常写，但**真动了手的人、真被改动的格、真许下的事**都要在末尾那个块里各写一行。',
-        '漏了标签，插件这一轮就收不到（这一轮白跑）——所以**先保证标签，再谈文风**。',
+        '【本回合必须用标签标出实际行动与重要结果】',
+        '★正文照常写；末尾标签记录会改变后续局面的事实结果、当前状态变化与仍需兑现的承诺。普通行动只用于当轮已行动者保护。',
+        '标签块必须有，但【事件】可以一条也没有。没有标签块，插件收不到本轮标记；只有日常活动时保留实际行动，不为凑事件数量编结果。',
         '',
         `★★把所有标签**集中放在正文最末尾的一个 ${FENCE}tags 块里**（前后各一行 ${FENCE} 围栏，照下面那样写）。`,
         '**只有这个块里面的标签插件才看**；块外面写了也不作数（所以正文里怎么引用、怎么打比方都不会被误读）。',
         '',
+        '先选事件，再写编号：',
+        '· 每件事件都要能指出正文已经确立的具体变化：新增了什么事实、改变了谁的处境或行动条件、确立了什么义务。只说“某人做完了某个动作”不够；没有这样的变化，就只写行动。不要为了满足这个要求给正文添加后果。',
+        '· 查看公开资料、问候、走动、清点人数、进入会场、列队集合等，若没有独立新结果，只写【行动】。把它们改称“完成查阅”“完成问候”“完成集结”“确认到场”，仍然不成为事件。',
+        '· 对照：查看公开规则不是发布新规则；普通问候不是确立新关系；按安排集合不是获得新资格。若正文确实写出新规则发布、双方约定交换证据、某人参赛资格被取消，才记录那个具体结果。例子不是要求本轮必须发生这些事。',
+        '· 认知变化要写出足以改变判断或行动条件的关键新事实，例如发现背叛的证据；仅仅看过资料、听完介绍、熟悉流程不单独登记。已有公开事实不因每个人读了一遍就各建一件事件。',
+        '· 事件不按规模大小判断，一句有效约定也可登记；同一结果的查看、交谈、办理过程不拆成多个事件。“已完成”只表示事件完成，不表示一个普通动作因此值得入账。',
+        '',
+        '例一：只有日常活动，没有事件。学生甲查看公开资料，与同学乙互致问候后进场列队，班长清点人数；没有新规则、约定或其他独立结果，标签这样写：',
         `${FENCE}tags`,
+        '【协议】4',
+        '【时长】半小时',
+        '【场景：校园】',
+        '【行动】学生甲｜查看公开资料并与同学乙互致问候｜同学乙',
+        '【行动】同学乙｜向学生甲问候｜学生甲',
+        '【场景：体育馆】',
+        '【行动】学生甲｜进场列队',
+        '【行动】班长｜清点人数',
+        FENCE,
+        '',
+        '例二：正文确实发生突破、护送约定或新规则发布时，分别登记相应结果；只抄实际发生的项：',
+        `${FENCE}tags`,
+        '【协议】4',
         '【此刻】复苏历三年 三月初七 卯时',
         '【时长】半柱香',
         '【场景：忘川渡口】',
         '【行动】薛铁衣｜迎战｜黄坤',
-        '【变化】黄坤｜实力｜元婴期',
-        '【承诺】黄坤｜护送白小娥回江州｜白小娥',
+        '【事件】E1｜黄坤突破至元婴期｜已完成',
+        '【当事人】E1｜黄坤',
+        '【变化】黄坤｜实力｜元婴期｜E1',
+        '【事件】E2｜黄坤答应护送白小娥回江州｜未决',
+        '【当事人】E2｜黄坤、白小娥',
+        '【承诺】黄坤｜护送白小娥回江州｜白小娥｜E2',
+        '【事件】E3｜学校向全体学生公开新规则｜已完成',
+        '【类别】E3｜公示',
+        '【影响范围】E3｜原文｜全体学生',
+        '【公开范围】E3｜原文｜全体学生',
+        '【持续条件】C1｜E3｜下周起禁止携带手机入课堂｜尚未生效',
+        '【条件范围】C1｜原文｜全体学生',
+        '【条件时间】C1｜下周｜',
         FENCE,
         '',
         '规则：',
@@ -274,15 +308,24 @@ export function tagSpecText() {
         '3. 【此刻】＝**现在是什么时候**——一个**时间点**（如「复苏历三年 三月初七 卯时」）。★**不用算、不用跟上一轮对账**；写不出时间点就**别写这一行**（空着就是空着）。',
         '4. 【时长】＝**从这里起又过了多久**（三日后／当夜／一炷香／半晌）。★它与【此刻】**是两回事**：只会说相对时间时，**只写【时长】、【此刻】留空**。',
         '5. 【场景：X】＝**这一场戏在哪儿**（X 用下面【本世界的名号】里列出的**地名**）。换了地方就再写一条。',
-        '6. 【行动】一行一条，中间用**全角竖线｜**分开，依次是：**谁做的｜做了什么｜针对谁**。只写**真的动了手**的人；第一格必须有，后两格知道就写、不知道就不写——**不要为了凑格式编一个名字**。',
+        '6. 【行动】谁｜做了什么｜针对谁，中间用全角竖线｜分开。行动只标当轮已行动者，保护其实际落子；普通问候、移动、发资料若无新影响，不单独登记事件。后两格知道就写、不知道就不写——不要为了凑格式编一个名字。',
+        '   【事件】本消息编号｜结果摘要｜已完成或未决。编号如 E1、E2，只在本消息内使用；每件事件继承其前面最近的【场景】与【此刻】，后面的时间不回填。可选第四格为账上既有因果事件 ID（顿号分隔），有可靠 ID 才填，不编 ID。',
+        '   【类别】事件编号｜类别原话；【当事人】事件编号｜对象名（顿号分隔）；缺少当事人可省略，不为格式编发布人。',
+        '   【影响范围】事件编号｜对象/成员/地点/原文｜范围内容；【公开范围】同样三格。影响是制度或事实适用于谁，公开是向谁公布，两者分开；公开不能当成所有人已经知情或行动。多项范围重复写关联行，前后顺序均可。成员只能引用已有组织或分支，不能猜成员；未知对象、例外与交集保留完整原文。',
+        '   一件事件是一项已发生、改变后续局面的事实结果，或确立尚需兑现的承诺。结果摘要写具体新事实或义务，不能只给动作加“完成”；同一结果及其多格变化关联同一编号。已完成结果即使还会产生后果，也写已完成；明确未履行义务才写未决。',
         `7. 【变化】谁｜哪一格｜**变成了什么**。★第二格**只能用这几个名**：**角色**＝${roleFields}；**势力**＝${factionFields}。`,
         '   ★★第三格填的是**变完之后那一格的值**——一个**新状态**（对：「元婴期」「重伤」「边关防务总管」「剑术通神」），不是一个**过程**（错：「获取了资源」「大幅提升」——那是**怎么变的**，填进去这一格从此是句空话）。戏里怎么称呼就怎么照抄，**不要**换算成数字或等级分。',
         '   ★★★**角色变强/突破时，第三格要写书里那套档位的名字**（境界/等级/品阶/军阶…本书怎么分就怎么写）：书里分筑基／金丹／元婴，就从筑基写**金丹**；**不许**写成「实力大增」「功力大涨」「大幅提升」这类**抽象的变强总结**——那种话填进去，这一格就再也说不出他到底什么水平了。',
         '   ★**戏里没点出那个新档位就别写这一行**（只写"得了一枚丹药、功力大涨"而没说是哪个境界 ⇒ **留空**，不许拿过程或总结去凑）。',
-        '8. 【承诺】谁｜许了什么｜对谁——答应的事、欠下的债、结下的交情或仇（**不是动手，但确实发生了**）；对象不知道就不写第三格。',
+        '8. 【承诺】谁｜许了什么｜对谁。变化与承诺都可在现有三格后加第四格本消息事件编号，关联同一结果；对象未知但需填第四格时保留空第三格。没有关联事件则省略第四格。',
+        '   【持续条件】本消息条件编号｜原因事件编号｜条件正文｜尚未生效/有效/已结束；只在正文明确确立条件时写。公告已完成与制度仍有效分开，不把制度记成永久未决义务。',
+        '   【条件范围】条件编号｜对象/成员/地点/原文｜范围内容；【条件时间】条件编号｜开始时间原话｜结束时间原话，未知保留空格，可整行省略，不推算日历。',
+        '   【条件变更】已有条件ID｜有效/已结束｜原因事件编号；例如【条件变更】cond_1_1｜已结束｜E4。修改正文或范围时新建条件，并写【替代条件】本消息条件编号｜已有条件ID；旧条文不覆写，已结束条件不能重新激活。',
+        '   重提或普通转发用【引用】已有事件ID，例如【引用】ev_1_1，不重新登记原公告。日常获知可写在行动缘由，不建独立知情或传播标签，也不要求先有知情记录。',
+        '   人物获知后行动应有合理因果和途径；私密事实不能因为模型看见就让外人知道。密信截获、泄密等改变局面的重要传播写普通新事件，第四格指向原原因。错误公告只记某方发布了某说法，不把其中的灾害、死亡或胜负当成客观事实。',
         '9. 只标**真的发生了**的：只是在场、只是被提到、只是说话，都不算；★**比喻和夸张不算**（"打得天崩地裂"不是变化）。',
         '10. **主角（你正在扮演的那位玩家）的行动照样标**——插件只是记下来，**不会替他做决定**。',
-        '11. ★**写完之后自己数一遍**：这一轮有几个人真的动了手？谁的哪一格被改成了什么？谁许下了什么？**漏一条就等于这一轮少记一件事。**',
+        '11. 写完之后自己数一遍重要结果：逐件检查是否有具体新事实或义务，把只有过程、问候、普通查阅、移动或集结的项从【事件】中删掉，保留实际【行动】。块首有【协议】4；结果、当事人、范围及关联编号与正文一致。没有重要结果时不编事件，不补“无事件”占位标签；事件为零也合格。',
         '',
         '★**自检（照这个查）**：正文末尾应当有**这一个块**，像上面那个例子一样。**没有这个块 = 这一轮没达标。**',
         '',
@@ -570,9 +613,23 @@ export function ledgerDivergenceText(ssot, { maxChars = DIVERGENCE_DEFAULT.maxCh
  *     `ledger` 是"以前发生过什么、为什么收场"（深、跨多轮）——★两段不是一件事，别合并。
  */
 export function buildInjections(world, { roster = true, spec = true, worldTide = false, ledger = '' } = {}) {
+    const seenConditions = new Set();
+    const currentConditions = (world?.conditions || []).filter(c => {
+        if (!c?.id || !['planned','active'].includes(c.state) || seenConditions.has(c.id)) return false;
+        seenConditions.add(c.id); return true;
+    }).map(c => {
+        const scopes = (c.scope || []).map(s => s.text).filter(Boolean).join('；');
+        const confirmed = currentScopeIds(c.scope, world).map(id => (world?.entities || []).find(e => e.id === id)?.name || id);
+        return `${c.id}｜${c.state === 'active' ? '有效' : '尚未生效'}｜${c.statement}`
+            + (scopes ? `｜适用范围：${scopes}` : '')
+            + (confirmed.length ? `｜当前已确认部分：${confirmed.join('、')}` : '')
+            + (c.effectiveFrom ? `｜开始：${c.effectiveFrom}` : '')
+            + (c.effectiveUntil ? `｜结束：${c.effectiveUntil}` : '');
+    });
     const tags = [
         spec ? tagSpecText() : '',
         roster ? rosterText(world) : '',
+        currentConditions.length ? `【当前持续条件 · 按ID引用】\n${currentConditions.join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
     // ③ **世界动向 = 这一轮世界发生了什么**（`runTick` 结算后写进 `meta.lastInjection` 的编年条目）。
     //   ★★★leg89 补（用户：「**把这一轮世界发生了什么注入上下文啊**」）：这一格**原来是空的**——
@@ -616,7 +673,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     //   缺省（没接线／判据里的纯注入器）⇒ 每格都回 `RETRIEVAL_PARAMS` 的出厂值 = 本笔之前的行为。
     //   ★**每次用时现取**，不在装配时抓死——抓死就是这一笔要治的那个病。
     const paramsNow = () => (typeof retrievalParams === 'function' ? liveRetrievalParams(retrievalParams()) : RETRIEVAL_PARAMS);
-    let vecRows = [], vectorEpoch = 0, vectorScope = null, vectorJob = null;
+    let vecRows = [], vecProvenance = null, vectorEpoch = 0, vectorScope = null, vectorJob = null;
     let vecNote = vecDeps ? '还没备' : '没接向量路';
     // 结果属于一次完整查询；同一个世界对象也可能换话题、切聊天或回档。
     // ★★（2026-10-05）**取数那几格（问多长／取几条／多像才算像）也算这份结果的一部分**——
@@ -663,6 +720,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
                     if (!current()) { if (epoch === vectorEpoch) clearVectors(); return; }
                     if (rows == null) { clearVectors(); reapply(); return; }
                     vecRows = Array.isArray(rows) ? rows : Array.isArray(rows?.items) ? rows.items : [];
+                    vecProvenance = rows?.report?.provenance || null;
                     vecNote = vecRows.length ? `${vecRows.length} 条` : '空手';
                     reapply();
                 }).catch((err) => {
@@ -680,7 +738,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     }
     // ★★★leg119：卷缓存也要知道"现在是哪个聊天"——复用同一个 `getCtx`（**不新增依赖形参**，
     //   见本模块上面那一族注释：`web/index.js` 只剩 1 行余量，加不了新接线）。
-    function clearVectors() { vectorEpoch++; vecRows = []; vectorScope = null; vectorJob = null; vecNote = '关键词'; }
+    function clearVectors() { vectorEpoch++; vecRows = []; vecProvenance = null; vectorScope = null; vectorJob = null; vecNote = '关键词'; }
     bindVolumeSource(getCtx, getWorld);
     let warned = false;
     let lastLine = null;
@@ -819,10 +877,12 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
                 //   ★**去重按行身份**（轮次 ＋ 洗过的那句正文）：一个事实只许出现一次
                 //     （口径与 `pack.js` 的 `lineKeyOf` 同源）。
                 // 先合并完整候选，再按命中数选择预算；预先截断会丢掉匹配更多词的旧行。
-                const got = recallLedger(world, { modes: [RECALL_MODES.BY_NAMES, RECALL_MODES.BY_KEYWORD], text: q, maxChars: null, volumes: vols });
+                const got = recallLedger(world, { audience: 'chat', modes: [RECALL_MODES.BY_NAMES, RECALL_MODES.BY_KEYWORD], text: q, maxChars: null, volumes: vols });
                 const lit = got.ok ? rankKeywordMatches(got.items || [], q) : [];
                 const lineKey = (row) => `${Number(row?.tick)}|${proseOnly(String(row?.text ?? '')).trim()}`;
-                const extra = vecRows.filter((r) => Number(r?.tick) <= Number(world.meta?.tick));
+                const vectorFiltered = filterChatRecords(world, vecRows.filter((r) => Number(r?.tick) <= Number(world.meta?.tick)), { volumes: vols });
+                const extra = vectorFiltered.items;
+                const provenance = filterChatRecords(world, [...(got.provenance?.records || []), ...(vecProvenance?.records || []), ...vectorFiltered.report.records], { volumes: vols }).report;
                 // ★★★leg161（**实测逼出来的**）：**两路必须各有一份额度，不能合成一个池子。**
                 //   病（400 轮长账上量的）：字面路取回 **641 行**、而 1600 字只装得下 **24 行**
                 //   ⇒ 合成一个池子按"轮次新的在前"装 ⇒ 装的全是最新的那 24 行，
@@ -916,7 +976,11 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
                         recalledText = formatRecalled(world, keptOut, { volumes: vols });
                     }
                 }
+                // Verify again at the final formatting boundary, including cached vector data.
+                keptOut = filterChatRecords(world, keptOut, { volumes: vols }).items;
+                recalledText = keptOut.length ? formatRecalled(world, keptOut, { volumes: vols }) : '';
                 for (const it of keptOut) kept.push(it);
+                provenance.selectedIds = kept.map(it => String(it?.id ?? ''));
                 recalled = recalledText;
                 recallNote = kept.length
                     ? `${recalled.length} 字（字面 ${litCount} ＋ 向量 ${vectorCount}`
@@ -932,6 +996,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
                     keptLiteral: litCount, keptVector: vectorCount,
                     overflow, cap,
                     vectorNote: vecNote,
+                    provenance,
                 };
             }
             // ★**没分歧、也没取到往事 ⇒ 空串**：与接线之前**逐字节相同**（零扰动，判据 D1 锁着）。

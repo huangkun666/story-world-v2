@@ -36,7 +36,7 @@
 | **还剩哪些活儿** | 同一份的 §2 ⇒ 总表在 `docs/session-handoff-2026-09-22-leg109b-defects.md` **§3**（全文唯一一份；数 `⬜`／`△`）★**现读：没做 1 · 做了一半 0** |
 | **要查什么（全仓可搜）** | `docs/kb-index.md` · `docs/kb-search.html`（浏览器直接打开）· `docs/kb.json`（给 AI）★**生成物、别手改**：改了源就跑 `node scripts/build-kb.mjs`（守门 **R10** 咬指纹） |
 | **当前值／红线／现场** | **§1** · **§2** · **§5** |
-| **交接文档放哪** | `F:/deepseek/plugins/story-world-v2/docs/`（用户 2026-10-02 指定；新交接不放 C 盘；规则见 `AGENTS.md`） |
+| **交接文档放哪** | `F:/deepseek/plugins/story-world-v2/docs/`；当前交接：`docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md`。此前角色保护、参数界面、快照、诊断与聊天提示词交接作为历史保留。 |
 
 ---
 
@@ -47,9 +47,9 @@
 
 | 读数 | 当前值 | 怎么复量 |
 |---|---|---|
-| 判据 | **2051 / 2051 · fail 0 · skipped 0 · todo 0**（★leg200b **净 −1**：用户指认"那枚总闸开关是多余的"（「**不写就不剥得了，你还非搞个这个按钮干嘛**」）⇒ **开关撤掉、两个名单都空＝一个字都不剥**，`prose-extract` 由 9 条并成 **8 条**。★leg200 **净 +2**：**正文剥块改成玩家那两份名单**（白/黑名单）＋ **提取那一趟不再剥** ＋ **撤掉"值必须在正文里找得到"那道闸**——`test/prose-extract.test.js` 由 7 条重写成 **9 条**（注释默认不剥 · 黑名单 · 白名单 · 白名单优先 · 名单解析 · 提取不再剥那两档 · 接线锁），`test/tag-granularity.test.js` 的 **G19 翻案**（那道闸撤了 ⇒ 值照收），`test/render.test.js`／`test/retrieval-params-live.test.js` 跟着翻案。★leg199 **净 +5**：新增 5 条 —— `test/no-guess.test.js` **leg199①②③**（**块外的标签一个都不许认**：正文引用一行 `【行动】` ⇒ 一件不记 ＋ **引用点到玩家名 ⇒ 玩家没有落子**（那条最狠的档）＋ 包块对照组）· `test/tag-granularity.test.js` **G18b**（「实力」那一格要落**新状态**、写成**过程**就是空话）＋ **G18c**（★**有境界的书：突破要落书里那一档的名字**（筑基 → 金丹），并如实锁住"抽象总结照旧落格"这个代价）；同批**翻案 7 个文件**：`tag-extract.test.js`（16 条：夹具全部包块 ＋ ㉔b 按新口径重写为 leg199① ＋ 新增规范第 7 条那两组断言）· `prose-extract.test.js`（⑩ 那条原对照"两头都是 0"⇒ 拆成"保围栏兜底 ＋ 信封里的字真被剥掉"两面）· `abstract-review-fixes.test.js` / `abstract-review-fixes2.test.js` / `integration-boundary-aliases.test.js` / `rejected-round.test.js`（夹具包块）· `render.test.js`（构建号 ＋ 前置 leg 号）。★leg198 那一笔：**2045 / 2045**（净 −3：新增 19 条、删 `test/extract.test.js` 20 条、翻案 4 个文件 −2） | `node --test`（无参，在插件目录内） |
-| 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动"正文里认不认标签"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每一轮 `dialogue` 为空）⇒ 这条读数是"引擎可见面零漂移"的硬读数，**不覆盖**新口径在真账上的后果） | `node demo/smoke-demo.js` |
-| `PANEL_BUILD` | **`leg201b-report-only-selfcheck`** | `src/render-base.js`；★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那十三格**只进报告、不上屏**（`debug-console.js` 的 `REPORT_ONLY_KEYS`）⇒ 调试页摘要回到原来的大小。★leg201 那一笔（宿主保存层 ＋ 卡形状读法 ＋ 环境自检本身）见 §4。★`CSS_VERSION` **不升**（`web/style.css` 零改动，`CSS_PIN` 同时咬两头）。 |
+| 判据 | **2236 / 2236 · fail 0 · skipped 0 · todo 0**；额外模型核验完全撤销，玩家、手动与临时保护有提案也只调用原主模型一次；程序权限、保存事务与开关交互保留。已删除撤销机制对应的旧测试。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/worktree-tests.log`、`source-doc-audit.log`、`installed-tests.log`；浏览器见 `browser-verification.json`。 | `node --test`（插件目录内） |
+| 冒烟 | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/smoke-final.log`、`installed-smoke.log` | `node demo/smoke-demo.js` |
+| `PANEL_BUILD` | **`leg209-character-protection-cleanup`** | `src/render-base.js`；角色资料行内紧凑开关，撤掉长说明与重复保护标签；玩家不能解除保护。 |
 | ★出处核验（leg197 起） | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped` 在出处这条路上**恒为 0**（它只装"非出处原因"的丢弃）。★**没撤的**：形状（缺名/缺 title/缺当事人/自指/端点不在名册）· 冲突墓碑 · 枚举白名单（`PARAM_GEARS`）· 查书同名多值冲突 · 酒馆宏占位符不当名号 | `src/abstract-evidence.js`（口径全文写在文件头）· `test/evidence-nodrop.test.js` |
 | ★「往事注入多少字」出厂值 | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路合起来吃它）；★**装不下的往事整条不进、绝不截半条**（用户 2026-10-05：「字额度切忌把事件截掉」） | `src/limits.js` · `web/inject.js`（`liveRetrievalParams`） |
 | ★主调用输出上限（出厂值） | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** ⇒ 16,384 上第 11 轮起「返回空」/「非法 JSON」交替。★设置页那两个框**现读**、玩家可自己填 | `src/transport-http.js` |
@@ -59,14 +59,14 @@
 | `包预算` 出厂值 | **50000**（leg135 抬的：用户令「我预算抬到50000token」） | `src/limits.js` |
 | ★`往回看轮数` 出厂值 | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两件事** | `src/limits.js`（★`PANEL_WINDOW_TURNS`） |
 | ★leg136–leg156 各笔 | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） | `docs/done-archive.md` |
-| `CSS_VERSION` | **`20261005-leg200-prose-lists`** | `web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg200 升了**（`web/style.css` 真动了：名单那两个多行框要跨 `.sw2-field-head` 那个两列栅格——留在 96px 那一列里会被压成 96px，实测过）；leg197／leg198／leg199 **均未升**（`web/style.css` 一个字节没动）；leg196 改的是地图那张整屏遮罩。 |
-| `MAIN_PROMPT_V` | **`v2-agenda-t1-34`** | `src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`newEvents[].position` 仍可省、仍不猜地点。★**leg197／leg198／leg199 均未升**（`src/prompts.js` 一行未碰——leg199 改的是**聊天模型那一侧**的标签规范，它住在 `web/inject.js` 的 `tagSpecText()`，不在这个文件里）。 |
-| `web/index.js` 行数 | **3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 **1 行**，下一笔要往接线层加东西**先搬一族出去**） | `split('\n').length`（★**别用 PowerShell 数**——实测它在这个文件上会少报一千行） |
+| `CSS_VERSION` | **`20261008-leg209-character-protection-cleanup`** | `web/index.js`；角色保护开关状态、焦点与触屏点击区域；`test/render.test.js` 的 `CSS_PIN` 版本及指纹同步。 |
+| `MAIN_PROMPT_V` | **`v2-agenda-t1-37`** | `src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
+| `web/index.js` 行数 | **3068 / 3100**（硬锁 `<3100`） | Node `split('\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。 |
 | `CACHE_VERSION` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） | `src/fp-hash.js` |
-| 发布仓 main | **`05811c7`** · 构建号 **`leg201-host-save-and-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg201 推的（用户令「**推送吧**」——版本号仍停在 1.1.1，未打 tag） | `node scripts/verify-release.mjs` |
+| 发布仓 main | **`a075423`** · 构建号 **`leg201b-report-only-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg201b 推的（用户令「**推送吧**」；同日 leg201 → leg201b 两笔，版本号仍停在 1.1.1，未打 tag） | `node scripts/verify-release.mjs` |
 | release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发新 tag）⇒ **点 release 下载的仍是那一棵** | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
-| 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.1`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.0 → 1.1.1；用户 2026-10-05 令「帮我推送更新吧，版本号变成1.1.1」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑）。★**tag/release 这一版没动**（用户当次只点了"推 main ＋ 升号"）⇒ 点 release 下载的仍是 `v1.1.0` 那棵 | `test/browser-compat.test.js` |
+| 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 令「帮我推送并更新版本号」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑）。★**tag/release 这一版没动**（用户当次只点了"推 main ＋ 升号"）⇒ 点 release 下载的仍是 `v1.1.0` 那棵 | `test/browser-compat.test.js` |
 
 **三个"真的变了才升"的号（判据锁着）**：
 - 动了 `web/style.css` ⇒ **必须同批升 `CSS_VERSION`**；没动样式 ⇒ **不升**（判据只看"动没动样式"）。
@@ -179,6 +179,8 @@
 
 ## 4. 当前工作
 
+用户要求参数页运行与注入更清楚，并批准四块布局。已重排为自动运行、聊天如何影响世界、聊天模型能看到什么、往事怎么找；直接显示用途和调整后的影响，向量参数与正文黑白名单收进高级设置。保留参数原名、原值和全部接线。验证、独立审查及本地安装证据见 §1、§5；授权见 `docs/work-current.md` §1，交接 `docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md`。先前快照合并、诊断范围和聊天提示词改动保留。真实宿主和实体手机现场仍由用户刷新后试用。
+
 leg200 已办结（用户 2026-10-05 两道令 ＋ 两次当场追问，逐字：①「**不要搞这个校验了**」②「**把检索用的正文提取杀光html注释的设计改成我跟你说的白名单和黑名单的设计**」③「**提取tag的时候为什么要剥？难道正则提取不到tag？**」④「**落账时候是不是还有个值必须在正文找到？？读的还是被剥掉的正文？？**」）。**一条根**：**"剥"这一层原来管得太宽**，三处一起收。① **撤掉"值必须在正文里找得到"那道闸**（`src/settle.js`）：它是**恒真式**——值就是从标签行里切的（`tag-extract.js` 的 `cells.slice(2).join(…)`），而标签行就在被搜的那段文本里 ⇒ 那个 `includes` 必然为真、不可能失败；而唯一它会真咬的 `所在` 那一格恰恰是**误伤**（引擎自己过地名归一，归出来的名字可能不在正文里）⇒ 用户当场判"多余"，撤。② **提取那一趟不再剥**（`src/tick.js`）：`extractTags` 只扫 ` ```tags ` 围栏**里面的行**（`if (i < shell.start || i >= shell.end) continue`），围栏外面一个字都不读 ⇒ 剥没有用，只会把住在信封里的标签块一起剥掉（旧代码为此专门立过一条"保围栏"边界去救它，同批消失）。③ **"杀光 HTML 注释"改成玩家那两份名单**（`src/prose.js`）：**两个都空** ⇒ 成对块照剥、**注释不剥**（用户报的那个病：正文有时就包在注释里）；**黑名单填了** ⇒ 只剥点名的（成对块写标签名，注释写它**开头那几个字**）；**白名单填了** ⇒ 只留点名的、其余信封全剥（**信封外面的正文照留**）；两个都填 ⇒ **白名单优先**。★名单**由玩家填、插件一个内置词都没有**——红线 §4.8 禁的是"插件拿**内置**词表替玩家判语义"，这里是玩家点名、插件照办。**住哪**：参数页「正文怎么读」那一组两个多行框（新写通道 `data-settings-text`：**存原文**、读时拆条），剥只剩**一个**消费者——**检索查询串**（leg136 实测空手率 35.3% → 13.2% 的那一处）。**判据**：`test/prose-extract.test.js` 由 7 条重写成 **9 条**、`tag-granularity` 的 **G19 翻案**（闸撤了 ⇒ 值照收）⇒ 全量 **2052 / 2052 · fail 0 · skipped 0 · todo 0**。**号**：`PANEL_BUILD` → **`leg200-prose-lists`**；★`CSS_VERSION` **同批升**（`20261005-leg196-map-mobile` → **`20261005-leg200-prose-lists`**：真动了样式——名单那两个多行框要跨 `.sw2-field-head` 那个**两列栅格**，留在 96px 那一列里会被压成 96px，实测过）；`CACHE_VERSION`／`MAIN_PROMPT_V` **不升**；`web/index.js` **3099 / 3100（±0 行**——名单那一族按硬锁搬进 `web/model-channel.js`）；`src` 模块数 **68**（一个没增没减）。★**同日再一笔（leg200b）**：用户指认那枚「剥掉正文里的机器块」开关**是多余的**（原话「**不写就不剥得了，你还非搞个这个按钮干嘛**」「**有必要搞这种过度设计吗**」）⇒ **撤开关** ＋ **两个名单都空 ＝ 一个字都不剥**（`src/prose.js` 口径②改写、`proseStripLists` 去掉总闸、面板那一行删掉）⇒ `PANEL_BUILD` → **`leg200b-lists-only`**，判据 2052 → **2051**（`prose-extract` 9 → 8 条）。★**代价如实登记**：leg136 那条实测（查询串空手率 35.3% → 13.2%）**从此只在玩家自己填了黑名单之后**才拿得到——默认回到"不剥"，这是用户当次知情的取舍（他要的是"插件不替玩家决定"）。冒烟 **PASS · 终态 SSOT 8351 字节逐字节未变**（★如实登记：本笔动的是"检索查询串"与"落账那道闸"，合成冒烟那一族**不覆盖**它们）。
 
 leg199 已办结（用户 2026-10-05 两道令 ＋ 一次更正，逐字：①「**不用管默认值的问题，删掉降级吧**」②「**提示词1300多字，我认为可能需要优化一下，之前我发现一个问题，就是正文标签里给一个角色修改实力字段，但是不是写从筑基到金丹这样修改，而是写获取了资源然后大幅提升了当前实力**」③**更正**：「**我说的不是这个意思，我说的是实力按道理来说如果有境界那么应该是境界的变化，而不是一句抽象的实力大增**」）。**这一笔治的是什么**：leg198 拆掉了"没标签就拿词表猜"那一族，但**还留着第二条猜的路**——`src/tag-extract.js` 的"**块不在 ⇒ 退回逐行扫全篇**"（leg93 立的降级）。体检实跑（装置 `F:/deepseek/tmp/leg198-audit/probe.mjs`）证明它**比词表更狠**：正文里只要有一行以 `【行动】` 开头（引用字条/告示/解说格式）就成真行动；**写到玩家名上时变成玩家这一轮的落子**递给世界模型（改前读数 `move.verb='刺杀'`、`pack.playerMove` 有值）——那正是 leg198 声称已治好的病换了个入口。**治法**：① **整支撤掉那条降级**（没有 ` ```tags ` 块 ⇒ **零收获**），与注入规范那句"块外写了也不作数"从此一致；★补一档：JSON 转义那种写法（围栏前挂着 `{"tags":"`）原来靠降级兜，现在给"还原过字面 `\n`"那一档**单独放宽围栏识别**（`RE_FENCE_OPEN_LOOSE`，只对已确认 JSON 转义的文本开门）⇒ leg137 那条静默失效不许复发。② **标签规范第 7 条改值口径（按用户更正改了两层）**：第三格＝**变完之后那一格的值**（新状态），不是**过程**；★★**变强/突破时要写书里那套档位的名字**（境界/等级/品阶/军阶——书里分筑基/金丹/元婴就写**金丹**），**不许**写「实力大增」这类**抽象的变强总结**；戏里没点出新档位就**留空**。★**示例由过程式的「踏入元婴」改成状态式的「元婴期」**（旧示例自己就在教模型写错）。**判据**：新增 5 条（`no-guess` leg199①②③ · `tag-granularity` G18b ＋ G18c），翻案 7 个文件 ⇒ 全量 **2050 / 2050 · fail 0 · skipped 0 · todo 0**。**四个号**：`PANEL_BUILD` → **`leg199-blockonly`**；`CACHE_VERSION` **不升**（仍 11）· `CSS_VERSION`／`MAIN_PROMPT_V` **不升**（`web/style.css` 与 `src/prompts.js` 一个字节没动）；`web/index.js` **3099 / 3100（±0 行）**。冒烟 **PASS · 终态 SSOT 8351 字节逐字节未变**（★如实登记：合成冒烟那一族**没有正文**⇒ 这条读数**不覆盖**本笔在真账上的后果）。★★**同批体检发现一个更大的病（未治，等用户拍）**：`CHANGE_FIELDS` 那张七名白名单（`所属/身份/定位/实力/性质/倾向/规模`）把**书自己起名的格**挡在门外——而 `sanitizeBookFields` 对**键开放**（`BOOK_FIELD_KEYS` 只是排序用的"常用键"，另见 `abstract.js:414` 明写"键你可以按本书自己的写法起名，如…境界/体质/兵力…"）⇒ 真账上实体就带着 `军威/声望/伤势` 这类书自己的格。实跑：`【变化】黄坤｜境界｜金丹期` ⇒ `changesBad: [{why:'field'}]`、**落格 0**；改用 `实力` 才落得上（装置 `F:/deepseek/tmp/leg198-audit/probe-field.mjs`）。⇒ 书里那把尺叫「境界」时，标签写不对格名就**静默丢掉**。★**同批发布**（用户 2026-10-05 令「**帮我推送更新吧，版本号变成1.1.1**」）：版本号 **1.1.0 → 1.1.1**（`manifest.json` ＋ `web/index.js` 两处 ＋ 判据锁 ＋ README ＋ 本文件 §1）；发布仓 main `d5d70e2`（leg197）→ **`79a91ce`**（**leg198 ＋ leg199 两笔一次上线**；脚本核验 **8/8 ✔** · 只读终检 **20/20 ✔**）；★**tag/release 未动**（当次问定：只推 main ＋ 升号）⇒ 点 release 下载的仍是 `v1.1.0` 那棵。★路上撞到并修掉**发布脚本自己的一处真 bug**：`~/.git-credentials` 是**多主机共用**的、而当天 gitee 那行排到了第一行 ⇒ 原写法取到 11 位 gitee 密钥 ⇒ 三个 API 全 `401`，报错却说"网络？token？"（已改成**按主机挑行**，两个脚本同批）。交接见 F 盘 `session-handoff-2026-10-05-leg199-blockonly.md`。
@@ -189,21 +191,35 @@ leg198 已办结（用户 2026-10-05 两道令，逐字：「**这个词表按�
 
 ## 5. 现场（本机）
 
-- **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**；
-  HEAD **`59d5535`**；本次仅向 docs 归档文档，原开发分支保留）。当前实现位于
-  `C:/Users/30319/.codex/worktrees/332e/plugins/story-world-v2`，分支 **`codex/entities-refresh`**；1e1b 召回实现、fb99 故事详情实现、d050 记忆与调试实现及此前阅读改版工作树保留。
-- ★★**文档住哪（leg197 起）**：用户令「**把文档移植到F盘的那个位置**」⇒
-  **F 盘那份 `F:/deepseek/plugins/story-world-v2/docs/` 现在是文档的家**：leg197 已把 C 盘工作树那份 docs
-  **整棵合并进去**（272 个文件逐字节核对通过 ＋ F 盘原有的 27 份独有文件保留 ⇒ 共 **299 份**），
-  备份在 `F:/deepseek/tmp/leg197-docs-migration/`（`C-docs-before` / `F-docs-before`）。
-  ★**还差最后一步（没做成，如实登记）**：把 C 盘那个 `docs` 目录**换成指向 F 盘的目录联接**——
-  实测 `Rename-Item docs` 与"腾空后删目录"**都被 Windows 拒绝（EPERM）**，而同级的 `demo`/`scripts`
-  改名正常 ⇒ 是**某个长驻进程占着 `docs` 这个目录本身**（多半是本会话的文件观察层），
-  **本会话内解不开**。⇒ 收尾脚本已写好：`node F:/deepseek/tmp/leg197-docs-migration/finish-junction.mjs`
-  （幂等、带回滚；**重启 DSH 会话后再跑一次**即可收口）。在那之前：**新交接一律写 F 盘那份**（这条本来就是这个仓的规矩）。
-- **部署位**：`…\SillyTavern\data\default-user\extensions\story-world-v2`＝**发布仓的一个 git 克隆**（★leg156 起
-  **不再是 junction**）⇒ ★**开发目录改的东西不会自己进酒馆**：走"提交 → 推发布仓（或**装本地预览**，
-   当前工作树装置 `F:/deepseek/tmp/leg190-optional-event-position/install-local-preview.mjs`）→ `git pull` → **Ctrl+Shift+R**”。
+- **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`，
+  公共 Git 目录 `F:\deepseek\plugins\.git`；分支 **`codex/f-drive-home`**，当前 HEAD **`a765292`**，工作区包含聊天提示词、快照/诊断及配套文档调整）。
+  ★**2026-10-07 用户令「以后项目只在F盘的位置」**：C 盘那 16 棵工作树**整棵复制**到
+  `F:/deepseek/worktrees/<原ID>/plugins`（逐字节核对、各保原 HEAD／分支／未提交状态），
+  `git worktree list` **已不再登记任何 C 盘路径**；原 C 路径**实体项目文件已清空**，
+  旧项目路径均转向当前 F 项目；其中 4 个被占用的父目录只含联接。规则见 `AGENTS.md`
+  与工作树父目录 `F:/deepseek/worktrees/AGENTS.md`。独立核验：`independent-verification.json`。
+  ★**历史工作树**（保留原分支与未提交内容，**不是开发入口**）：`F:/deepseek/worktrees/`
+  （`134f` 11698b8 ／ `14fd` codex/panorama-reader ／ `1e1b` codex/recall-query-refresh ／ `30d4` 11698b8 ／
+  `332e` codex/entities-refresh **8bc13a2** ／ `4545` codex/memory-model-list ／ `5c3e` 11698b8 ／
+  `92b2` 11698b8 ／ `c2c6` 11698b8 ／ `cf18` codex/abstraction-input-cleanup ／
+  `d050` codex/mobile-memory-console ／ `d4d7` codex/ui-subtabs-controls ／ `d630` codex/story-reader-density ／
+  `e37e` codex/panorama-story-reader ／ `fa61` 11698b8 ／ `fb99` codex/panel-status-cleanup）。
+  ★**搬家证据**：`F:/deepseek/tmp/f-drive-migration-2026-10-07/`（`copies-ready.json` · `inventory/migrate-<ID>.json` ·
+  `inventory/worktree-list-after.txt` · `logs/` · `backup/`）。
+- **文档唯一入口**：`F:/deepseek/plugins/story-world-v2/docs/`，与当前源码同一棵树。
+  原 C 项目文件已迁完，不再需要运行旧文档迁移脚本；历史目录的 docs 保留迁移前版本。
+  F 盘独有文档已保留，版本冲突和原未提交修改的原件在
+  `F:/deepseek/tmp/f-drive-migration-2026-10-07/backup/`。迁移交接：
+  `F:/deepseek/plugins/story-world-v2/docs/session-handoff-2026-10-07-f-drive-migration.md`。
+- **活跃部署位（都住 F 盘；`F:\jiuguanai\…` 这两处是宿主安装的发布位，搬家不动它们）**：
+  ① **实际加载的那一份**＝`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\data\default-user\extensions\story-world-v2`
+  ＝**发布仓的一个真实 git 克隆**（★leg156 起**不再是 junction**；2026-10-08 现读：remote
+  `https://github.com/huangkun666/story-world-v2.git`、当前本地预览由安装前基线 **`05ea0ea`** 增量撤销额外调用并调整角色保护开关；最终安装提交与运行文件核验见本次 `install-verification.json`，**不是联接**、**与 C 盘无关**）
+  ⇒ ★**开发目录改的东西不会自己进酒馆**：本次已通过
+    `F:/deepseek/tmp/character-protection-cleanup-2026-10-08/integrate-install.mjs` 备份后增量安装；用户在酒馆 **Ctrl+Shift+R** 后即可测试。
+    安装前 Git bundle 与原树归档在同目录 `backup/`，现场核验见 `install-verification.json`；安装目录验证日志为 `installed-tests.log`、`installed-smoke.log`、`installed-doc-audit.log`，HTTP 核验见 `http-verification.json`。本次仅本地预览，未推送远端；本次证据目录为 `F:/deepseek/tmp/character-protection-cleanup-2026-10-08/`。额外模型核验已完全撤销；自由文本事实保护沿用原生成提示词，不宣称程序能硬判所有叙述。此前各次安装证据保留。
+  ② `…\SillyTavern\public\scripts\extensions\third-party\story-world-v2`（`docs/dev-process.md` §4 记的那个旧 junction 位）
+  ——**2026-10-07 现读：这一格已不存在**；真实入口就是 ①。
 - **面板构建号在哪看**：★**不在「设置」页**。真在两处：① **「参数」页最上面那行**（`src/render.js:784`）；
   ② **「角色与势力」页表头那行小字**（`src/render.js:1922`）。★leg74/leg106–112 那几份交接与 `kb/08` 写的
   "设置页"是**过时口径**（2026-09-30 现读源码勘正）。

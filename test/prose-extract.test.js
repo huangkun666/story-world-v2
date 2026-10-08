@@ -114,7 +114,8 @@ test('leg200⑥b：正文包在注释里、标签块在外面 ⇒ 照旧读得�
     const dialogue = ['<!--黄坤走进渡口，甲在那里等他。-->', fenced('【行动】甲｜偷袭')].join('\n');
     const r = await run(dialogue);
     assert.equal(r.ok, true, r.error);
-    assert.equal(r.dialogueStats.events, 1, '★正文里那个真块照旧记下一件事');
+    assert.equal(r.dialogueStats.events, 0, '普通动作不自动成为事件');
+    assert.deepEqual(r.dialogueStats.actedIds, ['e_a'], '真块内的行动仍解析为本轮保护');
 });
 
 // ── ⑦ 接线与面板：源码锁（名单必须真接在线上；总闸开关必须真的没了）───────────────────

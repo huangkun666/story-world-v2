@@ -125,6 +125,9 @@
   会连带跑到 `backups/`、`harness/`、旧项目 `story-world` 的测试（实测 **7367 条、8 条红**，全与本项目无关）。
   ⇒ **只在这个目录内跑**（那时是 1096 条全绿）。
 - **ST 插件形态**（K30 起）：`manifest.json`（id=story_world_v2）+ `settings.html`（六页签面板壳模板）+ `web/index.js` / `web/style.css`（sw2_ 命名空间，与 v1 sd_ 全隔离）——**部署位**：`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\public\scripts\extensions\third-party\story-world-v2` = **junction → 项目根**（第十三棒落位，台账 L96；v1 同层同法先例；web/ 改动免重复拷贝，ST 页面刷新即载）；重启 ST 后经扩展菜单「观棋窗口」打开；**浏览器侧传输配置走设置页**（K30 `transport-config.js` 链），Node 侧 env/预设链不变（两链互不干扰）。
+  ★**2026-10-07 现读更正（上面这一格是历史沿革，别照它去找目录）**：`public\scripts\…` 这个旧 junction 位**现在不存在**；
+  真实加载的那一份是 `F:\jiuguanai\SillyTavern-Launcher\SillyTavern\data\default-user\extensions\story-world-v2`
+  ＝**发布仓的一个真实 git 克隆**（★leg156 起**不再是 junction**，见 §10）。当前值以 `STATE.md` §5「活跃部署位」为准。
 - **演示**（`node demo/<名称>.js`，在项目根目录运行）：
   | 脚本 | 用途 |
   |---|---|

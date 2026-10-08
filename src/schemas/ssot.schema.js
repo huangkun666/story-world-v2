@@ -4,6 +4,7 @@
 
 import {geographySchema} from './geography.schema.js';
 
+import { actorSchema, scopeSchema, storedScopeSchema } from '../event-contract.js';
 export const ssotSchema = {
     kind: 'object',
     additional: false,
@@ -397,6 +398,7 @@ export const ssotSchema = {
                     kind: { kind: 'string', enum: ['faction', 'character'] },
                     name: { kind: 'string', minLength: 1 },
                     location: { kind: 'string', minLength: 1 },   // 驻点必须 ∈ context.positions（引擎校验 §3.2）
+                    simulationBlocked: { kind: 'boolean' },   // 仅用户可写；玩家自动受保护，不要求旧账补键。
                     // leg25 c（用户令「删」）：实体 `attrs`（四维浮点：兵力/权位/人脉/耳目）**整条删除**。
                     //   为什么：这几个概念**没法精确表示**（书里没刻度、现实里也没有），压成 0–1 是拿精确外壳
                     //   装模糊内容；且手拍值让"编的"看起来像"算的"（design-core-leg23 §4 第 1 条）。
@@ -511,18 +513,23 @@ export const ssotSchema = {
                 // 不知道发生在哪里就省略，不补玩家驻地或「未明」；写了仍须为非空文本。
                 // 回归见 test/schema.test.js 与 test/optional-event-position.test.js。
                 props: {
+                    eventProtocol: { kind: 'number', enum: [4] },
+                    participantMode: { kind: 'string', enum: ['legacy'] },
+                    category: { kind: 'string', minLength: 1 },
+                    reportedContent: { kind: 'string', minLength: 1 },
+                    actors: { kind: 'array', items: actorSchema },
+                    affected: { kind: 'array', items: storedScopeSchema },
+                    audience: { kind: 'array', items: storedScopeSchema },
                     id: { kind: 'string', minLength: 1 },
                     title: { kind: 'string', minLength: 1 },
-                    // ★★★leg123：**正文里那句原话**（`dialogue` 型事件专用；引擎从标签行**逐字**抄进来）。
-                    //   ★它是"**值必须在正文里找得到**"这条闸的凭据：一个值要是连正文里都找不到，
-                    //     那它就是模型换算/编出来的 ⇒ 不收（细案 §2.7 第 ③ 条；★词表判语义是红线禁的，
-                    //     所以"照抄"只能靠这条**机械**的核对来做）。
-                    //   ★老事件没有这一格 ⇒ 空着（零迁移）。★归档副本只拷五格 ⇒ 它不入档（已知边界，见编年行那处注）。
+                    // 旧协议变化/承诺可留标签原话；原文匹配拒收已撤。旧事件无此格仍合法。
                     proseQuote: { kind: 'string', minLength: 1 },
                     // ★★★leg123：`dialogue` 型事件的**族**（引擎从标签那一族写上，模型写不出——它不在 world-step 契约里）。
-                    //   用处：① 门控"谁被正文点到"用 `ripples`；② 净化器"谁本轮已经出过手"只看 `action`/`promise`
-                    //   （**改过格的人不算出过手**——他可能只是被写了一句"他受伤了"）；③ "已改定的格"靠 `meta` 留痕。
-                    dialogueKind: { kind: 'string', enum: ['action', 'change', 'promise'] },
+                    //   旧族保留兼容；v3 用 result，行动与字段保护由 meta.turnProtection 单独保存。
+                    dialogueKind: { kind: 'string', enum: ['action', 'change', 'promise', 'result'] },
+                    producer: { kind: 'string', enum: ['chat', 'world', 'setting', 'unknown'] },
+                    recordType: { kind: 'string', enum: ['result', 'state', 'maintenance'] },
+                    participantNames: { kind: 'array', items: { kind: 'string', minLength: 1 } },
                     source: {                                                      // 无源事件引擎拒绝（§4.2）
                         kind: 'object',
                         additional: false,
@@ -644,6 +651,15 @@ export const ssotSchema = {
                 },
             },
         },
+        conditions: { kind: 'array', items: { kind: 'object', additional: false, required: ['id','eventRef','statement','state'], props: {
+            id: { kind: 'string', minLength: 1 }, eventRef: { kind: 'string', minLength: 1 }, statement: { kind: 'string', minLength: 1 },
+            state: { kind: 'string', enum: ['planned','active','ended'] }, scope: { kind: 'array', items: scopeSchema },
+            effectiveFrom: { kind: 'string', minLength: 1 }, effectiveUntil: { kind: 'string', minLength: 1 },
+            supersedes: { kind: 'string', minLength: 1 }, endCause: { kind: 'string', minLength: 1 },
+            changes: { kind: 'array', items: { kind: 'object', additional: false, required: ['state','eventRef','tick'], props: {
+                state: { kind: 'string', enum: ['planned','active','ended'] }, eventRef: { kind: 'string', minLength: 1 }, tick: { kind: 'number', int: true, min: 0 }
+            } } }
+        } } },
         milestones: {   // K18/因果链 T3：温层里程碑（可选——缺省=旧世界合法形态；引擎结构摘要，链上节点，ids 保回溯）
             kind: 'array',
             items: {
@@ -687,16 +703,25 @@ export const ssotSchema = {
                             props: {
                                 id: { kind: 'string', minLength: 1 },
                                 title: { kind: 'string' },
+                                eventProtocol: { kind: 'number', enum: [4] },
+                                participantMode: { kind: 'string', enum: ['legacy'] },
+                                category: { kind: 'string', minLength: 1 },
+                                reportedContent: { kind: 'string', minLength: 1 },
+                                actors: { kind: 'array', items: actorSchema },
+                                affected: { kind: 'array', items: storedScopeSchema },
+                                audience: { kind: 'array', items: storedScopeSchema },
+                                dialogueKind: { kind: 'string', enum: ['action', 'change', 'promise', 'result'] },
+                                producer: { kind: 'string', enum: ['chat', 'world', 'setting', 'unknown'] },
+                                recordType: { kind: 'string', enum: ['result', 'state', 'maintenance'] },
+                                participantNames: { kind: 'array', items: { kind: 'string', minLength: 1 } },
+                                timeMark: { kind: 'string', minLength: 1 },
                                 source: {
                                     kind: 'object',
                                     additional: false,
                                     required: ['type'],
                                     props: {
                                         // ★★★leg123：归档副本的源枚举同样要收 `dialogue`（否则一条 dialogue 事件
-                                        //   一入档就违约）。★如实登记一处**已知边界**：归档副本只拷**事件那五格**
-                                        //   （id/title/source/position/ripples，见 `settle.js` 归档口径），
-                                        //   故 `timeMark` **不入档**——时间点仍在那条事件对应的**编年行**上（行入卷时整行带走）。
-                                        //   要把 `timeMark` 也带进档 = 动归档口径与它那条判据，属另一笔。
+                                        //   一入档就违约）。来源、记录类别、未知参与者名称与已有时间点也随事件保留。
                                         type: { kind: 'string', enum: ['plot', 'state', 'ripple', 'seed', 'dialogue'] },
                                         ref: { kind: 'string' },
                                     },
@@ -737,6 +762,8 @@ export const ssotSchema = {
                     kind: { kind: 'string', enum: ['scheme', 'major', 'ripple', 'shade', 'state'] },   // K39/链视图细案 §3.1：编年行类型章（五筛用；可选=旧行零扰动）
                     eventRef: { kind: 'string' },
                     chainRef: { kind: 'string' },   // 第十五棒补（K39 修正后拍板）：闭环/涟漪平息行的链目标事件 id——纯链入口数据，注入面（streams 只读 eventRef）语义分离；可选=旧行零扰动
+                    producer: { kind: 'string', enum: ['chat', 'world', 'setting', 'unknown'] },
+                    recordType: { kind: 'string', enum: ['result', 'state', 'maintenance'] },
                     // ★★★leg115：**这一轮的"此后又过了多久"**——正文里【时长】写的原话（「三天」「一炷香」），
                     //   逐字照抄、**不做任何累加换算**（红线：不许把词换算成数）。
                     //   为什么非记不可（用户原话：「**聊天llm是不知道什么时候世界发生了什么事懂吗？**」）：
@@ -760,6 +787,23 @@ export const ssotSchema = {
             required: ['tick'],
             props: {
                 tick: { kind: 'number', int: true, min: 0 },
+                chatConsumption: { kind: 'array', items: {
+                    kind: 'object', additional: false,
+                    required: ['chatId', 'messageId', 'version', 'fingerprint', 'tick', 'eventIds', 'changedFields'],
+                    props: {
+                        chatId: { kind: 'string', minLength: 1 }, messageId: { kind: 'string', minLength: 1 },
+                        version: { kind: 'string', minLength: 1 }, fingerprint: { kind: 'string', minLength: 1 },
+                        tick: { kind: 'number', int: true, min: 0 }, eventIds: { kind: 'array', items: { kind: 'string' } },
+                        changedFields: { kind: 'array', items: { kind: 'object', additional: false, required: ['entityId', 'field'],
+                            props: { entityId: { kind: 'string', minLength: 1 }, field: { kind: 'string', minLength: 1 } } } },
+                    },
+                } },
+                turnProtection: { kind: 'object', additional: false, required: ['tick', 'actedIds', 'changedFields'], props: {
+                    tick: { kind: 'number', int: true, min: 0 }, actedIds: { kind: 'array', items: { kind: 'string' } },
+                    participantIds: { kind: 'array', items: { kind: 'string' } },
+                    changedFields: { kind: 'array', items: { kind: 'object', additional: false, required: ['entityId', 'field'],
+                        props: { entityId: { kind: 'string', minLength: 1 }, field: { kind: 'string', minLength: 1 } } } },
+                } },
                 // ★★leg60（用户真账实测抓出）：**起根的指纹记录**——`seedRoots.js` 从 leg40 起一直在写它
                 //   （幂等闸 + 逐块读数），而契约层漏登记 ⇒ 只要种过根，整份文档就违纪。
                 //   为什么以前没显形：三国旧账只种出 1 条根（本棒 7 条）。四栏全可选（旧账零扰动）。

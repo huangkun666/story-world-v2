@@ -2,11 +2,13 @@
 // 世界步语义校验（S4）：真 schema 强制（形状）+ 身份/因果/位置/波及（语义）。
 // 事件源三类与无源拒绝（§4.2）、事件位置合法性切片版（§3.2）在此落实。
 import { validate } from './schema.js';
+import { checkEventContract, applyConditionUpdates } from './event-contract.js';
 import { worldStepSchema } from './schemas/world-step.schema.js';
 import { isSettingRef } from './setting.js';   // K25：设定池保留键空间判词
 import { RIPPLE_TARGET_CAP } from './weight.js';   // leg25：波及上限唯一真源（此前该上限生产 0 强制点=纸面机制）
 import { checkAgendaInvolvement } from './entity-lookup.js';   // 细案 §6 R2：单盘算一轮涉及实体 ≤15（唯一真源）
 import { normalizePosition } from './position.js';   // leg33：剥掉引擎自己打在 location 列上的「（推）」注解（叶子模块，无环）
+import { isProtectedForStep, currentTurnProtection } from './simulation-protection.js';
 // ★★★leg163：这里原先 import 了 `pack.js` 的 `buildScaleTableIndex`/`sanitizeScaleRequests`/
 //   `SCALE_ONDEMAND_TOP`（leg64 那条"按需查表"要拿它们核表名）。那一族已随「全塞」整族撤走
 //   ⇒ 本文件**不再 import `pack.js`**（撤走前那段注释担心的"无环"从此更不成问题）。
@@ -59,7 +61,7 @@ const verdictOf = (point, source, ctx) => {
 //     `parent`（改换门庭／叛投／被吞并）· `branches` · `organs` · `status`（仅带因复活）· **+ 任何新栏**。
 //     `location` 为什么也放：位置线冻结的是"**位置集当闸**"与集合本身，而 `entities[].location` 是**自由文本、
 //       零机制消费者**（不筛选、不约束交互）⇒ 改它**没有任何机制后果**，也没有专用通道可撞。
-export const ENTITY_IMMUTABLE_FIELDS = ['id', 'kind', 'name', 'lastActiveTick', 'fieldSource', 'parentSource', 'parentSourceFrom'];
+export const ENTITY_IMMUTABLE_FIELDS = ['id', 'kind', 'name', 'lastActiveTick', 'fieldSource', 'parentSource', 'parentSourceFrom', 'simulationBlocked'];
 // ★leg34 撤回留档（**别再往回做**）：本棒曾实现 `fieldQueries` = "模型在世界步里点名要查哪个字段，引擎下一轮回灌"。
 //   用户 2026-09-13 追问「为什么聊天 llm 能够直接获取想要的世界书内容呢还能通过向量化搜索直接在插件里搜到呢
 //   都是一轮解决的啊，也没有产生额外的文件」⇒ **那套是错的方向**：
@@ -164,6 +166,18 @@ export function checkWorldStep(step, ssot) {
     // ① 形状：真 schema 强制
     const r = validate(step, worldStepSchema);
     if (!r.ok) return { ok: false, errors: r.errors, warnings: [] };
+    for (const [i, ev] of step.newEvents.entries()) errors.push(...checkEventContract(ev, step.eventProtocol, ssot).map(e => `$.newEvents[${i}]: ${e}`));
+    if (step.conditionUpdates !== undefined) {
+        if (step.eventProtocol !== 4) errors.push('$.conditionUpdates: 必须声明 eventProtocol:4');
+        else {
+            const temp = JSON.parse(JSON.stringify(ssot));
+            const ids = newEventIdsOf(step, (ssot.meta?.tick ?? 0) + 1);
+            temp.events.push(...step.newEvents.map((ev,i) => ({...ev,id:ids[i]})));
+            const resolveEventRef = ref => (ssot.events || []).some(e => e.id === ref) || (ssot.milestones || []).some(m => (m.ids || []).includes(ref)) ? ref : ids[(eventOrdinal(ref) || 0)-1] || ref;
+            const checked = applyConditionUpdates(temp, step.conditionUpdates, { resolveEventRef });
+            for (const bad of checked.rejected) errors.push(...bad.errors.map(e => `$.conditionUpdates[${bad.index}]: ${e}`));
+        }
+    }
 
     // 位置可省；填写了就要在归一后仍有地点，不能先放行空格再把它变成非法空串。
     for (const [i, ev] of step.newEvents.entries()) {
@@ -175,11 +189,13 @@ export function checkWorldStep(step, ssot) {
 
     const { entityIds, agendaIds, eventIds, positions } = indexIds(ssot);
     const playerId = ssot.context?.playerId;   // K8：玩家棋子标注（红线 1 代码化）
+    const protectedRole = id => isProtectedForStep(ssot, id);
+    const protectionText = id => id === playerId ? '模型禁写玩家（红线 1；玩家不可改、玩家不可灭）' : '模型禁写受保护角色（禁止模拟或本轮已经行动）';
 
     // ② 身份：动作/状态变更挂存在的实体；盘算推进挂存在的盘算
     //    K8 禁写规则（优先于未知实体检查）：模型禁写玩家——actions 涉 playerId 一律拒绝，世界如实不动
     for (const [i, a] of step.actions.entries()) {
-        if (playerId && a.entity === playerId) errors.push(`$.actions[${i}].entity: 模型禁写玩家 "${playerId}"（红线 1 代码化）`);
+        if (protectedRole(a.entity)) errors.push(`$.actions[${i}].entity: ${protectionText(a.entity)} "${a.entity}"`);
         // ★★★leg67 甲-余：行动方存在性收进判据表（`'actions.entity'`）——原先与净化器各写一份。
         //   ⚠紧邻上面那条**不是**同一件事（那条是红线 1 的"禁写玩家"，读 `context.playerId`）。
         {
@@ -196,7 +212,7 @@ export function checkWorldStep(step, ssot) {
     // （环检测在出生落账时由引擎做——K14；此处只校验引用合法，无源之物不存在）
     for (const [i, na] of (step.newAgendas || []).entries()) {
         // K14（K13 施工补差）：模型禁写玩家三通道完整——行动/状态变更（K8）+ 新盘算提议（玩家是棋子不是模拟主体，盘算树细案 §2）
-        if (playerId && na.entity === playerId) errors.push(`$.newAgendas[${i}].entity: 模型禁写玩家 "${playerId}"（红线 1 代码化）`);
+        if (protectedRole(na.entity)) errors.push(`$.newAgendas[${i}].entity: ${protectionText(na.entity)} "${na.entity}"`);
         // ★★★leg67 甲-余：属主存在性也收进判据表（`'newAgendas.entity'`）——它原先与净化器各写一份。
         {
             const v = verdictOf('newAgendas.entity', { type: 'id', ref: na.entity }, { world: ssot, step });
@@ -210,6 +226,11 @@ export function checkWorldStep(step, ssot) {
         //   ★`if (stype === ...)` 那圈分派也一并删了：分派住进表里（源型 ⇒ 那一格），本文件不挑源型。
         const v = verdictOf('newAgendas.source', na.source, { world: ssot, step });
         if (v) errors.push(`$.newAgendas[${i}].source: ${v}`);
+        // 子盘算会写父盘算的承诺并记为父属主委派；不能借普通 NPC 替受保护角色作决定。
+        if (na.source?.type === 'parent') {
+            const owner = (ssot.agendas || []).find(a => a.id === na.source.ref)?.owner;
+            if (protectedRole(owner)) errors.push(`$.newAgendas[${i}].source: ${protectionText(owner)}；不可通过子盘算替其委派或承诺`);
+        }
     }
     for (const [i, ad] of step.agendaAdvances.entries()) {
         // ★leg67（甲案）：判据搬进 `src/ref-rules.js` 的 `'agendaAdvances.agendaId'` 表。
@@ -225,17 +246,19 @@ export function checkWorldStep(step, ssot) {
         //   **没拦"推进"** ⇒ 账上只要已有属于玩家的盘算（旧账/合并前遗留），模型就能一直替玩家演下去。
         //   本条堵上：**玩家的盘算不由模型推进**——玩家那一步只由玩家自己的落子进入世界。
         const owner = (ssot.agendas.find((a) => a.id === ad.agendaId) || {}).owner;
-        if (playerId && owner === playerId) {
-            errors.push(`$.agendaAdvances[${i}].agendaId: 模型禁写玩家（红线 1 代码化；不许推进玩家的盘算 "${ad.agendaId}"）`);
+        if (protectedRole(owner)) {
+            errors.push(`$.agendaAdvances[${i}].agendaId: ${protectionText(owner)}；不许推进其盘算 "${ad.agendaId}"`);
         }
     }
     // ②c 取消通道（K18/因果链 T5）：提议放弃——agendaId 必须存在且未结算（"已结算盘算不可取消"）；
-    // 模型只有提议权，裁决归引擎；玩家不是模拟主体（agendaCancels 无 entity 通道，形状天然无玩家面）
+    // 模型只有提议权，裁决归引擎；按盘算属主检查保护，不能借取消通道替角色决定。
     for (const [i, ac] of (step.agendaCancels || []).entries()) {
         // ★leg67（甲案）：判据搬进 `src/ref-rules.js` 的 `'agendaCancels.agendaId'` 表
         //   （"未知盘算" / "已结算盘算不可取消"两句原先手写在本文件里——它就是"同一个号能不能这么用"）。
         const v = verdictOf('agendaCancels.agendaId', { type: 'id', ref: ac.agendaId }, { world: ssot, step });
         if (v) errors.push(`$.agendaCancels[${i}].agendaId: ${v}`);
+        const owner = (ssot.agendas.find(a => a.id === ac.agendaId) || {}).owner;
+        if (protectedRole(owner)) errors.push(`$.agendaCancels[${i}].agendaId: ${protectionText(owner)}；不许取消其盘算`);
     }
 
     // ②d 实体治理（K37/细案 §3.7 → A-10/A-11）：入局提议（newEntities）与覆灭提议（entityFates）语义校验
@@ -243,7 +266,7 @@ export function checkWorldStep(step, ssot) {
     const bookNames = new Set((ssot.context?.setting?.frozen?.canon?.bookEntities || []).map((b) => String(b?.name || '')));
     const booked = new Set(Object.keys(ssot.meta?.dialogueBook || {}));
     for (const [i, ne] of (step.newEntities || []).entries()) {
-        if (playerId && ne.entity === playerId) errors.push(`$.newEntities[${i}].entity: 模型禁写玩家（红线 1 代码化；玩家不是入局提议者）`);
+        if (protectedRole(ne.entity)) errors.push(`$.newEntities[${i}].entity: ${protectionText(ne.entity)}；不可作为入局提议者`);
         // ★★★leg67 甲-余：提议者存在性收进判据表（`'newEntities.entity'`）。
         //   ★`ne.entity &&` 这个**前置守卫不能省**（本棒实测栽过一次）：提议者**可省**
         //     （`world-step.schema.js` 里 `entity` 不在 required 里，dialogueFact 源可省略）
@@ -280,7 +303,7 @@ export function checkWorldStep(step, ssot) {
             errors.push(`$.entityFates[${i}].entity: 未知实体 "${f.entity || ''}"`);
             continue;
         }
-        if (playerId && f.entity === playerId) errors.push(`$.entityFates[${i}].entity: 玩家不可灭（玩家是棋子，覆灭归世界）`);
+        if (protectedRole(f.entity)) errors.push(`$.entityFates[${i}].entity: ${protectionText(f.entity)}；不可覆灭`);
         if ((ent.status || 'active') === 'dead') errors.push(`$.entityFates[${i}].entity: 已覆灭实体不重复覆灭（dead=终局）`);
         if (!f.source?.ref) {
             errors.push(`$.entityFates[${i}].source: 覆灭提议必须带源引用（真实落账复核归引擎）`);
@@ -326,8 +349,11 @@ export function checkWorldStep(step, ssot) {
                 errors.push(`$.entityUpdates[${i}].entity: 未知实体 "${u.entity || ''}"`);
                 continue;
             }
-            if (playerId && u.entity === playerId) {
-                errors.push(`$.entityUpdates[${i}].entity: 玩家不可改（红线 1；玩家的行为与承诺是唯一真相源）`);
+            if (protectedRole(u.entity)) {
+                errors.push(`$.entityUpdates[${i}].entity: ${protectionText(u.entity)}；不可改写字段`);
+            }
+            if ((currentTurnProtection(ssot)?.changedFields || []).some(r => r.entityId === u.entity && r.field === u.field)) {
+                errors.push(`$.entityUpdates[${i}].field: 这一格本轮已由正文落定，同一轮同一格只写一次`);
             }
             if (ENTITY_IMMUTABLE_FIELDS.includes(u.field)) {
                 errors.push(`$.entityUpdates[${i}].field: "${u.field}" 不可改（主键/实体类型/身份锚——改它会静默破坏名册对齐与重名守卫）`);
@@ -363,7 +389,7 @@ export function checkWorldStep(step, ssot) {
                 } else if (u.field === 'status') {
                     if ((ent.status || 'active') !== 'dead') errors.push(`$.entityUpdates[${i}]: status 只用来"带因复活"（当前「${ent.name}」status=${ent.status || 'active'}，不是 dead）`);
                     if (u.value !== 'active') errors.push(`$.entityUpdates[${i}].value: 复活只能写成 "active"（当前 "${u.value}"）`);
-                    if (!(ev.ripples || []).includes(u.entity)) {
+                    if (!(ev.eventProtocol === 4 ? (ev.actors || []).map(a => a.ref) : ev.ripples || []).includes(u.entity)) {
                         errors.push(`$.entityUpdates[${i}].cause: 复活必须**挂在一件提到他的未了结事上**——「${ent.name}」不在事件「${ev.title}」的波及名单里（先让那件事点到他的名字）`);
                     }
                 }
@@ -446,9 +472,8 @@ export function checkWorldStep(step, ssot) {
                 //   ——"黄坤欠了谁一条命"是**玩家的承诺**，只有玩家能立，模型不许替他立。
                 //   ★**反方向是允许的**：别人**对玩家**的态度（"薛铁衣恨黄坤"）是**世界**的事，
                 //     那正是这世界活起来的样子 ⇒ **只拦 `from`，不拦 `to`**。
-                if (playerId && fromId === playerId) {
-                    errors.push(`$.relationUpdates[${i}].from: 玩家不可作"持有关系"的那一方（红线 1；玩家的行为与承诺是唯一真相源）——`
-                        + '要写就写**别人对玩家**的关系（把玩家放进 to），那才是世界的盘算');
+                if (protectedRole(fromId)) {
+                    errors.push(`$.relationUpdates[${i}].from: ${fromId === playerId ? '玩家不可作（红线 1）' : '受保护角色不可作'}"持有关系"的那一方；可以写别人对其的关系（放进 to）`);
                     continue;
                 }
                 // ★同批不重复：同一条边（谁→对谁→什么关系）一轮内只提一次（照 `entityUpdates` 的 seenPairs 口径：
@@ -494,6 +519,8 @@ export function checkWorldStep(step, ssot) {
                 // ★判据在 `'relationClosures.id'` 表：号在册 ∧ 还没了结 ∧ **只认已落账的边**。
                 const v = verdictOf('relationClosures.id', { type: 'id', ref: relId }, { world: ssot, step });
                 if (v) errors.push(`$.relationClosures[${i}].id: ${v}`);
+                const edge = (ssot.relations || []).find(r => r.id === relId);
+                if (protectedRole(edge?.from)) errors.push(`$.relationClosures[${i}].id: ${protectionText(edge.from)}；不可解除其主动持有的关系`);
             }
         }
     }
@@ -553,6 +580,10 @@ export function checkWorldStep(step, ssot) {
     for (const [i, ev] of step.newEvents.entries()) {
         const v = verdictOf('newEvents.source', ev.source, { world: ssot, step });
         if (v) errors.push(`$.newEvents[${i}].source: ${v}`);
+        if (ev.source?.type === 'plot') {
+            const owner = (ssot.agendas || []).find(a => a.id === ev.source.ref)?.owner;
+            if (protectedRole(owner)) errors.push(`$.newEvents[${i}].source: ${protectionText(owner)}；不可通过事件推进其盘算`);
+        }
     }
 
     // ④ 位置：**自由文本**（★leg33c 用户拍板「要么就直接将位置变成自由文本就好了，位置集干脆删了」）

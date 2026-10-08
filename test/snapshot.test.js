@@ -544,7 +544,7 @@ test('★leg27 后：生产接线——快照钩子真的挂在唯一落账收�
         return src.slice(a, b > 0 ? b : undefined);
     };
     // ★leg78：`writeHotMeta` 现在**不带 `function` 前缀**（它是 `export function`）
-    const fn = bodyOfIn(hotMod, 'export function writeHotMeta(meta)', ['\nexport function ', '\nfunction ', '\nconst ', '\nlet ']);
+    const fn = bodyOfIn(hotMod, 'export function writeHotMeta(meta,', ['\nexport function ', '\nfunction ', '\nconst ', '\nlet ']);
     assert.ok(fn.length > 100, '前置：在热账新家找得到 writeHotMeta 函数体');
     // ★leg73：调用点改成走 hub（`snapHub.requestSnapshot(…)`）——判据锚**"这一处必须真的调它"**，
     //   所以形态都接受：裸名（旧）· `snapHub.` 成员（leg73）· `getSnapHub().` 取值函数（★leg78：
@@ -563,7 +563,7 @@ test('★leg27 后：生产接线——快照钩子真的挂在唯一落账收�
     assert.match(req, /if \(sw2SnapLast\.includes\(fp\)\) return;/, '★逐字节相同 ⇒ 直接不拍');
     const restore = bodyOfIn(snapMod, 'export async function restoreSnapshot(', ['\nexport async function ', '\nfunction ']);
     assert.match(restore, /requestSnapshot\(current/, '★恢复前必须先给当前状态拍一份');
-    assert.match(restore, /if \(!r\.ok\) return \{ ok: false/, '★链不可恢复时明确拒绝（不许"大概恢复"）');
+    assert.match(restore, /if \(!r\.ok\)\s*\{[\s\S]*?return \{ ok: false, error: r\.error \};\s*\}/, '★链不可恢复时记录错误并明确拒绝（不许"大概恢复"）');
     // ★leg78：`SECTIONS`（八个页签）是**接线层**的东西，与热账族无关 ⇒ 这里按名字取接线层源码
     assert.match(SRC_OF_FILE['web/index.js'](), /'snapshots'/, 'SECTIONS 必须含 snapshots');
     const tpl = readFileSync(new URL('../settings.html', import.meta.url), 'utf8');

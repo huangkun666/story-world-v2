@@ -5,9 +5,9 @@
 //   来历、变过的格、**他做的**、**涉及到他的**、在办的谋划、关系，一次看全。
 //
 // ★★本模块的边界（守死）：**取数 ＋ 拼 HTML ＋ 开关窗口**，三件而已。
-//   · **零新写通道**：下面每一格都是**现推**（从 `world` 这个对象上现算），
+//   · 资料格都是**现推**（从 `world` 这个对象上现算），
 //     没有一格是新加的账、没有一处迁移、契约层一个字节没动。
-//   · **不碰引擎**：本模块零 `src/` 依赖（只借一个 `escapeHtml`），不认识引擎、不认识视图态。
+//   · 用户授权的禁止模拟开关仅调用注入的保存口，不在窗口内改账；保护判定借核心共用函数。
 //   · **不认识面板**：窗口开在哪、谁点开的，全靠注入进来的 `getWorld`。
 //   ⇒ 模块顶层**零 DOM** ⇒ Node 里可直接 import，纯函数那几口能真跑判据
 //     （与 `web/action-router.js` / `web/view-state.js` 同一把尺）。
@@ -35,6 +35,7 @@ import { escapeHtml } from '../src/render-base.js';
 //   的 `memberEntitiesOf`（面板「麾下：」那一行也用它）——本模块只借**取数**那一半，
 //   **呈现**自己来（窗口要全量、带 id、可点；面板那一行是截到 8 个的名号串）。
 import { memberEntitiesOf } from '../src/pack.js';
+import { isSimulationBlocked } from '../src/simulation-protection.js';
 
 /** 浮层的 id（一处定义、多处引用——照 `CHAIN_MASK_ID` 的先例）。 */
 export const ENTITY_WINDOW_MASK_ID = 'sw2_entity_window';
@@ -52,7 +53,7 @@ export const ENTITY_WINDOW_ACTION = 'ent-open';
 //     · `branches` / `organs` —— 归属那一格的从属名单（分支/机构）。
 const STRUCT_KEYS = new Set([
     'id', 'kind', 'name', 'location', 'lastActiveTick', 'status',
-    'fieldSource', 'parent', 'parentSource', 'parentSourceFrom', 'branches', 'organs',
+    'fieldSource', 'parent', 'parentSource', 'parentSourceFrom', 'branches', 'organs', 'simulationBlocked',
 ]);
 
 // ── ② 常用键的**显示序**：照 `src/tag-extract.js` 的 `CHANGE_FIELDS` ──────────
@@ -266,6 +267,11 @@ export function renderEntityWindowHtml(world, id) {
     const kindCn = KIND_CN[e.kind] || e.kind || '';
     const status = STATUS_CN[e.status] || null;
     const isPlayer = world?.context?.playerId === e.id;
+    const blocked = e.kind === 'character' && isSimulationBlocked(world, e.id);
+    const protection = e.kind === 'character'
+        ? (isPlayer ? `<span class="sw2-simulation-fixed" title="玩家角色始终受保护，不能允许模拟">禁止模拟</span>`
+            : `<button type="button" class="sw2-simulation-toggle" role="switch" aria-checked="${blocked}" data-simulation-toggle="${escapeHtml(String(e.id))}" data-simulation-blocked="${!blocked}" title="禁止世界模型代写此角色；再次点击恢复模拟">禁止模拟<span class="sw2-simulation-track" aria-hidden="true"></span></button>`)
+        : '';
 
     // ── 头 ──
     const head = `<header class="sw2-header sw2-ew-head">`
@@ -279,7 +285,9 @@ export function renderEntityWindowHtml(world, id) {
         + (Number.isFinite(e.lastActiveTick) ? `<span>最近动过 <b>第 ${e.lastActiveTick} 轮</b></span>` : '')
         + (status ? `<span>状态 <b>${escapeHtml(status)}</b></span>` : '')
         + `<span>账上 id <b>${escapeHtml(String(e.id))}</b></span>`
-        + `</div></div>`
+        + protection + `</div>`
+        + (e.kind === 'character' ? `<div class="sw2-simulation-status" data-simulation-status role="status" aria-live="polite"></div>` : '')
+        + `</div>`
         + `<div class="sw2-close sw2-ew-close" title="关闭（Esc）">✕</div></header>`;
 
     const body = [];
@@ -417,10 +425,10 @@ export function renderEntityWindowHtml(world, id) {
 
 /**
  * 依赖注入工厂（照 `createSnapshotHub` / `createHotLedgerHub` / `createActionRouter` 先例）。
- * @param {{getWorld: () => object|null, setStatus?: (s: string) => void, doc?: object|null}} deps
+ * @param {{getWorld: () => object|null, getScope?: () => any, setStatus?: (s: string) => void, setSimulationBlocked?: (id: string, blocked: boolean, expected: object) => Promise, doc?: object|null}} deps
  *   ★`getWorld` 必须是**函数**（世界对象会被反复重新赋值——传成值就是"第二份真相"）。
  */
-export function createEntityWindowHub({ getWorld, setStatus = null, doc = null } = {}) {
+export function createEntityWindowHub({ getWorld, getScope = () => '', setStatus = null, setSimulationBlocked = null, doc = null } = {}) {
     if (typeof getWorld !== 'function') throw new TypeError('createEntityWindowHub：`getWorld` 必须是函数');
     const D = () => doc || (typeof document !== 'undefined' ? document : null);
     let escHandler = null;
@@ -447,6 +455,7 @@ export function createEntityWindowHub({ getWorld, setStatus = null, doc = null }
         }
         const world = getWorld();
         if (!world) { if (setStatus) setStatus('注意：还没有世界可看'); return false; }
+        const expected = { scopeKey: JSON.stringify(getScope()), worldVersion: JSON.stringify(world) };
         close();                                   // 先撤上一层（连点两个实体 ⇒ 换内容，不留两份）
         const mask = d.createElement('div');
         // ★★★`sw2-open` 这一个类**绝不能少**（leg140 真机上就是栽在它上面）：
@@ -472,10 +481,39 @@ export function createEntityWindowHub({ getWorld, setStatus = null, doc = null }
         //   ★只认 `[data-who]`（账上认得到实体的那些行）；认不到的行**没有**这个属性 ⇒ 天然不可点。
         //   ★`closest?.` 用可选调用：判据那份**假 DOM** 没有 `closest`（它只 stub 了本模块用到的那几口），
         //     真浏览器里一定有。★别把这一句改成"假设一定有 `closest`"——那会让假 DOM 判据当场红在错的地方。
-        box.addEventListener('click', (ev) => {
+        box.addEventListener('click', async (ev) => {
+            const toggle = ev.target?.closest?.('[data-simulation-toggle]');
+            if (toggle) {
+                ev.preventDefault?.();
+                if (toggle.disabled) return;
+                const focused = d.activeElement === toggle;
+                toggle.disabled = true;
+                const status = box.querySelector?.('[data-simulation-status]');
+                if (status) status.textContent = '正在保存…';
+                try {
+                    if (typeof setSimulationBlocked !== 'function') throw new Error('禁止模拟设置未接上保存入口');
+                    await setSimulationBlocked(toggle.getAttribute('data-simulation-toggle'), toggle.getAttribute('data-simulation-blocked') === 'true', expected);
+                    if (d.getElementById?.(ENTITY_WINDOW_MASK_ID) === mask) {
+                        const restoreFocus = focused && (d.activeElement === toggle || d.activeElement === d.body);
+                        open(id);
+                        if (restoreFocus) d.getElementById?.(ENTITY_WINDOW_MASK_ID)?.querySelector?.('[data-simulation-toggle]')?.focus?.();
+                    }
+                } catch (err) {
+                    if (d.getElementById?.(ENTITY_WINDOW_MASK_ID) === mask) {
+                        const message = `注意：禁止模拟设置失败：${err?.message || err}`;
+                        if (status) status.textContent = message;
+                        setStatus?.(message);
+                    }
+                } finally {
+                    toggle.disabled = false;
+                    if (focused && d.getElementById?.(ENTITY_WINDOW_MASK_ID) === mask
+                        && (d.activeElement === toggle || d.activeElement === d.body)) toggle.focus?.();
+                }
+                return;
+            }
             const hit = ev.target?.closest?.('[data-who]');
-            const id = hit?.getAttribute?.('data-who');
-            if (id) open(id);
+            const who = hit?.getAttribute?.('data-who');
+            if (who) open(who);
         });
         // ⓷ Esc：**捕获阶段 + stopPropagation** ⇒ 面板那条"Esc 关整个窗口"不会跟着一起触发
         //   （与链浮层 `web/index.js` 的 `onEsc` 逐字同款；本监听只在窗口存在期间挂着，随它一起摘掉）

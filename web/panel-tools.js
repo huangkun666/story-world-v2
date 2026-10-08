@@ -13,7 +13,7 @@ export function abstractSelectionFor(ctx) {
     return normalizeAbstractSelection(ctx?.extensionSettings?.story_world_v2?.abstractSelections?.[String(ctx?.chatId || 'default')]);
 }
 
-export function createPanelTools({ getCtx, getWorld, getSettings, writeSetting, getRuntime, getInjector, onVectorChange, build } = {}) {
+export function createPanelTools({ getCtx, getWorld, getSettings, writeSetting, getRuntime, getInjector, getConsumptionReadout, onVectorChange, build } = {}) {
     /** 每个窗口一份的**来源所有者**（与取书缓存同一把尺）：重绑与写回都按它判"还是不是这一份"。 */
     const sourceOwners = new WeakMap();
     /** 每个窗口一份的读取世代：晚到的旧读取不许把旧来源/旧迁移写到新聊天上。 */
@@ -27,6 +27,7 @@ export function createPanelTools({ getCtx, getWorld, getSettings, writeSetting, 
     //     **只进报告、不上屏**——用户 2026-10-05 当场裁「**太多了，就放在复制报告里就行了，别展示出来**」
     //     （十三格环境事实会把摘要撑成一面读数墙，真正该扫一眼的那几个数反而被淹掉）。
     const summary = () => ({ 环境自检: gatherEnvFacts({ ctx: getCtx(), character: pickCharacter(getCtx()), world: getWorld() }),
+        消息消费: getConsumptionReadout?.() || null, 事件来源: getInjector?.()?._facts?.()?.recall?.provenance || null,
         build, tick: getWorld()?.meta?.tick ?? '未加载', vectorEnabled: getSettings()?.embedEnabled === true,
         ...(getRuntime()?.lastStats?.() || {}), recentFrom: Math.max(0, Number(getWorld()?.meta?.tick || 0) - Number(getWorld()?.context?.setting?.dynamic?.env?.往事轮数 || 50) + 1),
         modules: ['模型', '网络', '注入', '记忆', '状态', '存储', '快照', '抽象来源'], injection: getInjector?.()?._last?.() || '尚未注入' });

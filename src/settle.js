@@ -2,6 +2,7 @@
 // 结算管线（S5）：按序 校验 → 薄裁定 → 因果挂链 → 一致性检查 → 分量重算（常量占位）→ 落账 → 编年 → GC/度量。
 // 纯函数：输入 SSOT 不被修改，返回新世界。硬规则出处：ANCHOR §3②/§4.2/§4.4/§4.5、切片细案 S5、长跑防线细案 §2.5。
 import { checkWorldStep, newEventIdsOf, normalizeSameStepEventRefs } from './check-step.js';
+import { eventDetails, eventEntityIds, eventDetailText, resolveScopes, checkEventContract, applyConditionUpdates, remapConditionEventRefs } from './event-contract.js';
 // ★★★leg67（甲案）：**引用完整性收成单一主人**——"因必须未闭环"这条判据（含 leg66 的"判定时点 = 进入批次那一刻"）
 //   整段搬进 `src/ref-rules.js` 的 `'entityUpdates.cause'` 表；本文件只传 `entry` 快照并渲染裁定文案。
 //   ★为什么必须收口：这条判据原先在**三处**各写一份（校验期 `check-step`、净化期 `sanitize-step`、
@@ -267,9 +268,11 @@ function hangEvents(world, step, tick) {
             title: ev.title,
             source: { ...ev.source },
             ...(ev.position ? { position: ev.position } : {}),
-            ripples: [...(ev.ripples || [])],
+            ...(step.eventProtocol === 4 ? { ...eventDetails(ev), eventProtocol: 4,
+                ...(ev.affected !== undefined ? {affected:resolveScopes(ev.affected,world,tick)} : {}),
+                ...(ev.audience !== undefined ? {audience:resolveScopes(ev.audience,world,tick)} : {}) } : { ripples: [...(ev.ripples || [])] }),
             links: { up: ups, down: [] },
-            closed: false,
+            closed: step.eventProtocol === 4 ? !ev.pending : false,
         };
         // ★★★leg137：世界侧事件的时间——**由模型自己写**（`newEvents[].at`，逐字照抄）。
         //   ★用户令：「**只要告诉时间流逝的长度和起始，事件的时间字段就由 llm 自己写**，
@@ -277,6 +280,7 @@ function hangEvents(world, step, tick) {
         //   ★⚠**这里不许"顺延"**（本笔第一版就是那么写的，被用户当场打回）：一轮能起十几件事，
         //     拿一个时刻盖满全场就是把时间抹平。模型没写 ⇒ **这一件事就是没有时间**（红线 2）。
         const at = String(ev?.at ?? '').trim();
+        if (node.closed) node.closedAt = tick;
         if (at) node.timeMark = at;
         world.events.push(node);
         added.push(node);
@@ -376,6 +380,8 @@ function closeEvents(world, closedIds, tick, chronicle) {
     if (closedIds.size) {
         for (const ev of world.events) {
             if (ev.closed || ev.source?.type !== 'plot') continue;
+            // v4 未决表示明确尚未履行；源盘算结清不能替它判定履行。
+            if (ev.eventProtocol === 4) continue;
             if (!closedIds.has(ev.source.ref)) continue;
             ev.closed = true;
             ev.closedAt = tick;
@@ -384,6 +390,8 @@ function closeEvents(world, closedIds, tick, chronicle) {
     }
     for (const ev of world.events) {
         if (ev.closed || ev.source?.type !== 'ripple') continue;
+        // 没有后续接线不等于义务完成；v4 由明确 eventClosures 收场。
+        if (ev.eventProtocol === 4) continue;
         if (!chainSettled(world, ev)) continue;
         if (tick - bornTickOf(ev) < CHAIN_SETTLE) continue;
         if (hasPendingDownstream(world, ev)) continue;
@@ -754,7 +762,13 @@ function archiveClosedEvents(world, tick) {
                 const extra = ups.filter((u) => u !== ev.source?.ref);
                 m.rows.push({
                     id: ev.id,
+                    ...eventDetails(ev),
                     title: ev.title,
+                    ...(ev.producer ? { producer: ev.producer } : {}),
+                    ...(ev.recordType ? { recordType: ev.recordType } : {}),
+                    ...(ev.dialogueKind ? { dialogueKind: ev.dialogueKind } : {}),
+                    ...(ev.participantNames?.length ? { participantNames: [...ev.participantNames] } : {}),
+                    ...(ev.timeMark ? { timeMark: ev.timeMark } : {}),
                     ...(ev.source ? { source: { type: ev.source.type, ...(ev.source.ref ? { ref: ev.source.ref } : {}) } } : {}),
                     ...(ev.position ? { position: ev.position } : {}),
                     ...(Array.isArray(ev.ripples) && ev.ripples.length ? { ripples: [...ev.ripples] } : {}),
@@ -830,7 +844,7 @@ function chronicleEvents(world, step, tick, chronicle) {
         const row = {
             id: `ch_${tick}_ev_${i + 1}`,
             tick,
-            text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}${where}${ripples}`,
+            text: `事件「${ev.title}」——${eventSourcePhrase(world, ev)}${where}${ripples}${eventDetailText(ev) ? `；${eventDetailText(ev)}` : ''}`,
             kind: ev.source.type === 'plot' ? 'major' : ev.source.type === 'ripple' ? 'ripple' : 'state',
             eventRef: `ev_${tick}_${i + 1}`,
         };
@@ -1044,7 +1058,7 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
             //     为什么：check 只核"ripples 里有他"，而 ripples 是**模型自己写的**；若那件因是**前几轮**的旧事件，
             //     模型可以把一个死人的 id 补进旧事件的波及名单……但旧事件本 tick 没上桌 ⇒ 这里直接拦住。
             //     口径：**复活和被点名必须发生在同一轮**（dead → 被一件"正在发生的事"重新拉回场上）。
-            const thisTickNames = (gstep.newEvents || []).some((e) => (e.ripples || []).includes(ent.id));
+            const thisTickNames = (gstep.newEvents || []).some((e) => gstep.eventProtocol === 4 ? (e.actors || []).some(a => a.ref === ent.id) : (e.ripples || []).includes(ent.id));
             if (!thisTickNames) {
                 warnings.push(`裁定: 复活复核拒绝——「${ent.name}」本 tick 没被新落账的事点名（复活必须与"被重新点名"同轮发生）`);
                 continue;
@@ -1092,7 +1106,8 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
 }
 
 // ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.3 / §2.7）：**聊天侧那一侧的落账**。
-//   把标签里的【行动】/【变化】/【承诺】注册成 **`dialogue` 型事件**（一条事实一条），并把【变化】的值**落到实体格上**。
+//   v3 明确【事件】结果统一落账，关联变化/承诺共用该事件；普通行动只提供当轮保护。
+//   旧协议变化建已完成结果、承诺建未决结果；不迁移已有事件。
 //
 //   ★它在 `runTick` 里的位置是**提取之后、出包之前**（`src/tick.js`）——两个理由：
 //     ① 世界模型这一轮要**看得见**这些既成事实（它们进的是**账**，而包读账）；
@@ -1143,115 +1158,153 @@ export const DIALOGUE_EVENT_CAP = Infinity;    // 已作废（原 60）：一轮
 export const DIALOGUE_UPDATE_CAP = Infinity;   // 已作废（原 6）：一轮有几个格变了就落几个格
 
 export function registerDialogueFacts(world, { facts = null, dialogue = '', tick = null } = {}) {
-    const stats = { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0 };
+    // dialogue remains a compatibility argument; original quote matching is not a validation rule.
+    const stats = { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0,
+        resultEvents: [], actedIds: [], changedFields: [], rejected: [] };
     if (!world || !facts) return stats;
     const t = Number.isFinite(tick) ? tick : (world.meta?.tick ?? 0);
-    // ★★★leg200：`dialogue` 这一格**已无读者**（原来只有下面那道"值必须在正文里找得到"读它）——
-    //   照 `recall`/`recallStore` 那条先例**留着但留档**：撤形参会动调用面（`src/tick.js` 与判据都在传），
-    //   要撤得单独一笔。★调用方仍可以照旧传，只是不再有任何效果。
-    const ents = world.entities || [];
-    const byId = new Map(ents.filter((e) => e?.id).map((e) => [e.id, e]));
-    const nameOf = (id) => byId.get(id)?.name || id;
-    const fallbackPos = world.context?.positions?.[0] || '未明';
-    world.events = world.events || [];
-    world.chronicle = world.chronicle || [];
-    const timeMark = facts.at || null;          // ★不带源、不推算：逐字照抄（用户 2026-09-24 裁定）
+    const byId = new Map((world.entities || []).filter(e => e?.id).map(e => [e.id, e]));
+    const nameOf = id => byId.get(id)?.name || id;
+    const timeMark = facts.at || null;
     let nextId = Math.max(DIALOGUE_EVENT_BASE, maxEventOrdinal(world, t) + 1);
     let seq = 0;
-    const wrote = new Set();                    // `实体|格` —— 同轮同格只落一次
-
-    const addFact = (title, rippleIds, quote, kind, position, family = 'action') => {
-        if (stats.events >= DIALOGUE_EVENT_CAP) { stats.capped += 1; return null; }
-        const id = `ev_${t}_${nextId}`;
-        nextId += 1;
-        seq += 1;
+    const wrote = new Set();
+    const localEvents = new Map();
+    const knownCauses = new Set((world.events || []).map(e => e.id));
+    for (const m of world.milestones || []) for (const id of m.ids || []) knownCauses.add(id);
+    const reject = (why, detail = {}) => { stats.dropped += 1; stats.rejected.push({ why, ...detail }); };
+    for (const [family, rejected] of [['result', facts.eventsBad], ['change', facts.changesBad], ['promise', facts.promisesBad]]) {
+        for (const row of rejected || []) reject(row.why, { family, raw: row.raw });
+    }
+    const acted = id => { if (byId.has(id) && !stats.actedIds.includes(id)) stats.actedIds.push(id); };
+    for (const id of facts.actedIds || []) acted(id);
+    // Ordinary actions provide protection only, including the player's actual move.
+    for (const a of [...(facts.actions || []), ...(facts.player ? [facts.player] : [])]) {
+        if (byId.has(a.actorId)) acted(a.actorId);
+        else reject('actor', { entityId: a.actorId });
+    }
+    const addResult = ({ title, participantIds = [], participantNames = [], position, pending = false, details = null, at = timeMark,
+        causeIds = [], quote = null, family = 'result' }) => {
+        const causes = [];
+        for (const ref of causeIds) {
+            if (knownCauses.has(ref)) { if (!causes.includes(ref)) causes.push(ref); }
+            else reject('cause', { ref });
+        }
         const node = {
-            id,
-            title,
-            source: { type: 'dialogue' },        // ★"无源事件引擎拒绝"：这一型的源就是**正文本身**
-            dialogueKind: family,                // ★'action' / 'change' / 'promise'（细案 §2.6：门控与净化要按它分）
-            position: position || fallbackPos,
-            ripples: [...new Set((rippleIds || []).filter(Boolean))],   // ★约定位：`ripples[0]` 恒是这件事的**主语**
-            links: { up: [], down: [] },
-            closed: false,                       // ★开着：世界模型下一轮能看见它、能拿它当因
+            id: `ev_${t}_${nextId++}`, title, source: { type: 'dialogue' },
+            dialogueKind: family, producer: 'chat', recordType: 'result',
+            ...(details ? { ...eventDetails(details), eventProtocol:4,
+                ...(details.affected !== undefined ? {affected:resolveScopes(details.affected,world,t)} : {}),
+                ...(details.audience !== undefined ? {audience:resolveScopes(details.audience,world,t)} : {}) } : {ripples: [...new Set(participantIds.filter(id => byId.has(id)))]}),
+            links: { up: causes, down: [] }, closed: !pending,
         };
+        if (!pending) node.closedAt = t;
+        if (position) node.position = position;
+        if (participantNames.length) node.participantNames = [...new Set(participantNames)];
         if (quote) node.proseQuote = quote;
-        if (timeMark) node.timeMark = timeMark;
-        world.events.push(node);
-        const row = { id: `ch_${t}_dlg_${seq}`, tick: t, text: title, kind, eventRef: id };
-        if (timeMark) row.timeMark = timeMark;
-        world.chronicle.push(row);
+        if (at) node.timeMark = at;
+        (world.events ||= []).push(node);
+        for (const ref of causes) {
+            const parent = world.events.find(e => e.id === ref)
+                || (world.milestones || []).find(m => (m.ids || []).includes(ref));
+            if (parent) {
+                parent.links ||= { up: [], down: [] };
+                parent.links.down ||= [];
+                if (!parent.links.down.includes(node.id)) parent.links.down.push(node.id);
+            }
+        }
+        const detailText = eventDetailText(node);
+        const row = { id: `ch_${t}_dlg_${++seq}`, tick: t, text: title + (detailText ? `；${detailText}` : ''), kind: 'major',
+            eventRef: node.id, producer: 'chat', recordType: 'result' };
+        if (at) row.timeMark = at;
+        (world.chronicle ||= []).push(row);
         stats.events += 1;
+        stats.resultEvents.push(node);
         return node;
     };
-
-    // ── 【行动】→ 事件（含主角那一条：他做了什么同样是既成事实）───────────────────
-    const acts = [...(facts.actions || [])];
-    if (facts.player) acts.push(facts.player);
-    for (const a of acts) {
-        if (!byId.has(a.actorId)) { stats.dropped += 1; continue; }        // ① 在册
-        const obj = a.targetId ? nameOf(a.targetId) : (a.targetText || '');
-        const who = nameOf(a.actorId);
-        const what = String(a.verb || '').trim();
-        const title = `${who}${what}${obj ? `（对${obj}）` : ''}`;
-        addFact(title, [a.actorId, a.targetId], null, 'state', a.location);
+    for (const e of facts.events || []) {
+        const { pending: legacyPending, ...legacyFields } = e || {};
+        const contractErrors = checkEventContract(facts.protocol === 4 ? e : legacyFields, facts.protocol === 4 ? 4 : undefined, world);
+        if (contractErrors.length) { reject('protocol', { localId:e?.localId, errors:contractErrors }); continue; }
+        if (!e?.localId || !String(e.title || '').trim() || typeof e.pending !== 'boolean' || localEvents.has(e.localId)) {
+            reject('result', { localId: e?.localId }); continue;
+        }
+        const participantIds = [];
+        for (const id of e.participantIds || []) {
+            if (byId.has(id)) participantIds.push(id);
+            else reject('participant', { entityId: id, localId: e.localId });
+        }
+        const participantNames = (e.participantNames || []).filter(n => typeof n === 'string' && n.trim());
+        if (facts.protocol !== 4 && !participantIds.length && !participantNames.length) { reject('participants', { localId: e.localId }); continue; }
+        localEvents.set(e.localId, addResult({ title: e.title, participantIds, participantNames,
+            position: e.location, pending: e.pending, causeIds: e.causeIds || [], at:facts.protocol === 4 ? e.at || null : timeMark, details:facts.protocol === 4 ? e : null }));
     }
-    // ── 【变化】→ 事件 ＋ **落格** ────────────────────────────────────────────────
+    const association = row => {
+        if (!row.eventLocalId) return null;
+        const node = localEvents.get(row.eventLocalId);
+        if (!node) reject('eventLocalId', { eventLocalId: row.eventLocalId });
+        return node || false;
+    };
+    const attach = (node, ids, names = []) => {
+        if (node.eventProtocol === 4) {
+            node.actors ||= [];
+            for (const id of ids.filter(id => byId.has(id))) if (!node.actors.some(a => a.ref === id)) node.actors.push({name:nameOf(id),ref:id});
+            for (const name of names.filter(Boolean)) if (!node.actors.some(a => a.name === name)) node.actors.push({name});
+            return;
+        }
+        for (const id of ids.filter(id => byId.has(id))) if (!node.ripples.includes(id)) node.ripples.push(id);
+        for (const name of names.filter(Boolean)) {
+            node.participantNames ||= [];
+            if (!node.participantNames.includes(name)) node.participantNames.push(name);
+        }
+    };
     for (const c of facts.changes || []) {
         const ent = byId.get(c.entityId);
-        if (!ent) { stats.dropped += 1; continue; }                        // ① 在册
         const isPlace = c.field === CHANGE_PLACE_FIELD;
-        if (!isPlace && !CHANGE_FIELDS.includes(c.field)) { stats.dropped += 1; continue; }   // ② 格在册
+        if (!ent || (!isPlace && !CHANGE_FIELDS.includes(c.field))) { reject('change', { entityId: c.entityId, field: c.field }); continue; }
         const val = String(c.value ?? '').trim();
-        if (!val) { stats.dropped += 1; continue; }
-        // ★★★leg159（用户令「立项治：值没变就不落账」）：**跨轮空转不许再落一件"没发生的事"**。
-        //   病（leg158 在用户那份真账上量到的，见交接 §3.1①）：正文里同一句
-        //     `【变化】黄坤｜身份｜确立江州实际掌控者地位` 在第 1/2/3 轮各出现一次 ⇒ 落成**三件同名事件**，
-        //     而账上那格**从第 1 轮起就已经是它**。★代价不止"多两行"：「万子明」入局正是因它而生的，
-        //     而 `ch_3_ev_9` 是**沿着这条空转事件**长出来的（编年行 = 世界往下长的入口）。
-        //   根因：本函数原来**只在同一轮内**去重（下面那张 `wrote` 表，键＝`实体|格`）——跨轮一道都没有。
-        //   口径（逐字照用户那句）：**该实体该格的值已经等于新值 ⇒ 不落事件、不写编年、不进 `wrote`**，
-        //     只在 `stats` 里记一格 `noop`（读数行据此告诉玩家"模型把同一句话又说了几遍"）。
-        //   ★比法是**逐字**比（两侧都先 `trim`）——本仓不把词换算成数、也不替账判"意思一样"
-        //     （词表判语义是红线明禁的，ANCHOR §4.8）。★leg200 起不再引"值必须在正文里找得到"
-        //     那条（它已撤），比法本身一个字没变。
-        //   ★`ent[c.field]` 是**账上此刻的值**：世界步那条路（`applyEntityUpdates`）写的就是它 ⇒ 两处同一格。
-        //   ★**没值**（undefined）≠ 空串：那是"这一格还没有过值"（红线 2 明写"空着就是空着"），
-        //     拿空串去顶它会把"第一次"判成"没变" ⇒ 只许"原来真有值、且与新值逐字相同"才算空转。
-        //   ★与红线 2 不冲突：这一条**不改任何值**，只是不落一件没发生的事（账记的是"发生了什么"，
-        //     不是"模型又说了一遍"）。★★不许把这个判断挪到渲染层去：那会让"账上是三条、面板上两条"，
-        //     正是本仓最忌的"两个真相"（交接 §4.1 明写）。
-        const cur = ent[c.field];
-        if (typeof cur === 'string' && cur.trim() === val) { stats.noop += 1; continue; }
-        // ★★★leg200：原第③道"值必须在正文里找得到"**已按用户令撤掉**（恒真式，见函数头留档）。
+        if (!val) { reject('value', { entityId: c.entityId, field: c.field }); continue; }
+        const linked = association(c);
+        if (linked === false) continue;
+        if (typeof ent[c.field] === 'string' && ent[c.field].trim() === val) { stats.noop += 1; continue; }
         const pair = `${c.entityId}|${c.field}`;
-        if (wrote.has(pair)) { stats.dropped += 1; continue; }             // ③ 同轮同格只一次
-        if (stats.updates >= DIALOGUE_UPDATE_CAP) { stats.capped += 1; continue; }   // 配额（★整条不进：不许"记了事实却没落格"）
-        const title = `${ent.name}的${c.field === CHANGE_PLACE_FIELD ? '所在' : c.field}变成了「${val}」`;
-        const node = addFact(title, [c.entityId], c.raw || null, 'major', c.location, 'change');
-        if (!node) continue;
-        // ── 落格（照 `applyEntityUpdates` 的**同一形状**留痕：原值与现值同时在场、能追到账）──
+        if (wrote.has(pair)) { reject('duplicateField', { entityId: c.entityId, field: c.field }); continue; }
+        const node = linked || addResult({ title: `${ent.name}的${isPlace ? '所在' : c.field}变成了「${val}」`,
+            participantIds: [c.entityId], quote: c.raw || null, position: c.location, family: 'change' });
+        attach(node, [c.entityId]);
         const prev = ent[c.field];
         ent[c.field] = val;
-        world.meta.entityFields = world.meta.entityFields || {};
-        const rec = world.meta.entityFields[ent.id] ? { ...world.meta.entityFields[ent.id] } : {};
+        world.meta ||= {};
+        world.meta.entityFields ||= {};
+        const rec = { ...(world.meta.entityFields[ent.id] || {}) };
         const fieldsRec = { ...(rec.fields || {}) };
-        fieldsRec[c.field] = {
-            value: val, prev, cause: node.id, causeType: 'event', tick: t, source: '变更',
-            prior: fieldsRec[c.field] || null,
-        };
+        fieldsRec[c.field] = { value: val, prev, cause: node.id, causeType: 'event', tick: t, source: '变更', prior: fieldsRec[c.field] || null };
         rec.fields = fieldsRec;
         world.meta.entityFields[ent.id] = rec;
         wrote.add(pair);
         stats.updates += 1;
+        stats.changedFields.push({ entityId: c.entityId, field: c.field });
     }
-    // ── 【承诺】→ 事件（不是动手，但确实发生了；关系边仍由世界步带因提议）──────────
     for (const p of facts.promises || []) {
-        if (!byId.has(p.entityId)) { stats.dropped += 1; continue; }       // ① 在册
+        if (!byId.has(p.entityId) || !String(p.what || '').trim()) { reject('promise', { entityId: p.entityId }); continue; }
+        const linked = association(p);
+        if (linked === false) continue;
         const to = p.toId ? nameOf(p.toId) : (p.toText || '');
-        const title = `${nameOf(p.entityId)}许下「${p.what}」${to ? `（对${to}）` : ''}`;
-        addFact(title, [p.entityId, p.toId], p.raw || null, 'major', p.location, 'promise');
+        const node = linked || addResult({ title: `${nameOf(p.entityId)}许下「${p.what}」${to ? `（对${to}）` : ''}`,
+            participantIds: [p.entityId, p.toId], quote: p.raw || null, position: p.location, pending: true, family: 'promise' });
+        attach(node, [p.entityId, p.toId], !p.toId && p.toText ? [p.toText] : []);
+        acted(p.entityId);
     }
+    if (facts.conditionUpdates?.length) {
+        if (facts.protocol !== 4) reject('protocol', {family:'condition'});
+        else {
+            const conditions = applyConditionUpdates(world, facts.conditionUpdates, {tick:t,producer:'chat',resolveEventRef:ref => localEvents.get(ref)?.id || ref});
+            stats.conditions = conditions.applied.length;
+            stats.conditionUpdates = conditions.applied.map(c => ({id:c.id,state:c.state,eventRef:c.eventRef}));
+            for (const bad of conditions.rejected) reject('condition', {index:bad.index,errors:bad.errors});
+        }
+    }
+    for (const bad of facts.conditionsBad || []) reject(bad.why || 'condition', {family:'condition',raw:bad.raw});
     return stats;
 }
 // ★★★leg120（A3 关系网，细案 `docs/spec-relationship-network.md`）：**关系变更的落账通道**。
@@ -1327,13 +1380,13 @@ function applyRelationChanges(world, gstep, tick, warnings, chronicle, openCause
 // 一条确定性规则不发明状态机；dead 终局不复归；编年「复归」一笔（kind ripple——被波及点名而起的反应）
 function reactivateNamed(world, events, tick, chronicle) {
     const named = new Set();
-    for (const ev of events || []) for (const r of ev.ripples || []) named.add(r);
+    for (const ev of events || []) for (const r of ev.eventProtocol === 4 ? (ev.actors || []).map(a => a.ref).filter(Boolean) : ev.ripples || []) named.add(r);
     if (!named.size) return;
     for (const e of world.entities) {
         if (e.status !== 'retired' || !named.has(e.id)) continue;
         e.status = 'active';
         e.lastActiveTick = tick;
-        const ev = (events || []).find((x) => (x.ripples || []).includes(e.id));
+        const ev = (events || []).find((x) => x.eventProtocol === 4 ? (x.actors || []).some(a => a.ref === e.id) : (x.ripples || []).includes(e.id));
         chronicle.push({
             id: `ch_${tick}_rev_${e.id}`,
             tick,
@@ -1356,7 +1409,7 @@ function reactivateNamed(world, events, tick, chronicle) {
 //   是**错的判断**，被 K47 与重量冒烟两处读数当场证伪。
 function retireInactive(world, tick, warnings, chronicle) {
     const canRetire = (e) => !(world.agendas || []).some((a) => a.owner === e.id && !a.closed)
-        && !(world.events || []).some((ev) => !ev.closed && (ev.ripples || []).includes(e.id));
+        && !(world.events || []).some((ev) => !ev.closed && eventEntityIds(ev,world).includes(e.id));
     if (tick % ENTITY_GC_SCAN_TICKS !== 0) return;
     for (const e of world.entities) {
         if (e.status && e.status !== 'active') continue;
@@ -1511,6 +1564,11 @@ export function gateAndSnapshot(world, ctx) {
     //   ⇒ 名单上多出来的人"照名单开了线也会被门控丢掉"（那份名单就成了空转）。
     const spotlight = new Set(computeIdleFaces(ssot, resolveLimits(world).待启用名单).map((f) => f.id));
     const gate = gateWorldStep(stepN, ssot, moveFact, spotlightSet);
+    if (gate.step.conditionUpdates !== undefined) {
+        const remapped = remapConditionEventRefs(gate.step.conditionUpdates,stepN.newEvents,gate.step.newEvents,world,tick);
+        gate.step.conditionUpdates = remapped.updates;
+        for (const bad of remapped.rejected) ctx.warnings.push(`条件丢弃[${bad.index}]: ${bad.errors.join('；')}`);
+    }
     ctx.gate = gate;
     // ★leg40b 续（死锁修复·收尾一格）：**把"按位次认下来的同轮引用"改成引擎真发的号**。
     //   位置必须在**门控之后**：`gate.js:87-93` 会丢掉"静默方属主的 plot 事件"⇒ 数组位次会变，
@@ -1573,12 +1631,22 @@ export function adjudicateAndPopulate(world, ctx) {
     // ★leg40b 续：这个上限现在**可调**（`每轮事件`：6/9/12 ⇒ `lim.每轮事件`），账上没设档位时 = 出厂 6（逐字不变）。
     if (gstep.newEvents.length > lim.每轮事件) {
         const kept = gstep.newEvents.slice(0, lim.每轮事件);
+        if (gstep.conditionUpdates !== undefined) {
+            const remapped = remapConditionEventRefs(gstep.conditionUpdates,gstep.newEvents,kept,world,tick);
+            gstep.conditionUpdates = remapped.updates;
+            for (const bad of remapped.rejected) warnings.push(`条件丢弃[${bad.index}]: ${bad.errors.join('；')}`);
+        }
         for (const ev of gstep.newEvents.slice(lim.每轮事件)) {
             warnings.push(`裁定: 事件洪峰（每 tick ≤${lim.每轮事件}）：「${ev.title}」被拒`);
         }
         gstep.newEvents = kept;
     }
     const events = hangEvents(world, gstep, tick);
+    if (gstep.conditionUpdates?.length) {
+        const resolveEventRef = ref => (world.events || []).some(e => e.id === ref) || (world.milestones || []).some(m => (m.ids || []).includes(ref)) ? ref : events[(eventOrdinal(ref) || 0)-1]?.id || ref;
+        const conditions = applyConditionUpdates(world,gstep.conditionUpdates,{tick,resolveEventRef});
+        for (const bad of conditions.rejected) warnings.push(`条件丢弃[${bad.index}]: ${bad.errors.join('；')}`);
+    }
     ctx.events = events;
     return world;
 }

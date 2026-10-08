@@ -2607,7 +2607,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //     ★`CSS_VERSION` **不升**（`web/style.css` 一个字节没动，下面 `CSS_PIN` 同时咬两头）。
     //   ★★★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那十三格
     //     **只进报告、不上屏** ⇒ 调试页摘要回到原来的大小（玩家可见面又变了一次）⇒ 再升一格。
-    assert.equal(PANEL_BUILD, 'leg201b-report-only-selfcheck');
+    assert.equal(PANEL_BUILD, 'leg209-character-protection-cleanup');
     for (const bad of ['agenda', 'tick', 'ssot', 'schema', 'chronicle', 'entity', 'kind']) {
         assert.ok(!PANEL_BUILD.includes(bad), `构建号不得含「${bad}」`);
     }
@@ -2648,7 +2648,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     //   **自己声明 `width:100%;height:100%`** ＋ `box-sizing:border-box`，手机档补 `height:100dvh`）。
     //   病与全量读数见 `web/style.css` 那一处 leg196 注释（手机端真机报的"地图只在最顶上露一小块框"）。
     //   ★指纹在**全部改动落地之后**现算再填（它是"浏览器吃没吃到旧样式表"的唯一机械闸）。
-    const CSS_PIN = { ver: '20261005-leg200-prose-lists', sha: '6724b14fb30946463d4fcb1664d9d9a832c041338531d9fe5cf19ec1eacd8bc2' };
+    const CSS_PIN = { ver: '20261008-leg209-character-protection-cleanup', sha: 'f9719cc02371c66c738f1b54638125cb88346cab9b9c7577294bc3434bba226c' };
     const styleSha = createHash('sha256')
         .update(readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     assert.equal(cssVer, CSS_PIN.ver,
@@ -2672,7 +2672,7 @@ test('★细案编年页（leg50）：版位升位且不含引擎术语（构建
     assert.equal(styleSha, CSS_PIN.sha,
         `★样式表内容指纹对不上 ⇒ 要么你**真动了** \`web/style.css\`（那就同批升 \`CSS_VERSION\`，`
         + `并把上面 \`CSS_PIN\` 的号与指纹一起换掉）、要么是**无意的改动**（请还原）。实测指纹 ${styleSha}`);
-    assert.equal(buildLeg, '201b', '前置：本笔构建号为 leg201b（环境自检只进报告、不上屏），继续核对构建号与样式号。');
+    assert.equal(buildLeg, '209', '前置：角色保护改为资料行内开关，继续核对构建号与样式号。');
     // ★口径：构建号**不许落后于** CSS 号（旧口径还要求"挨得近"，已按用户拍板撤掉——见上）。
     const cssNum = Number((/^(\d+)/.exec(cssLeg) || [])[1]);
     const buildNum = Number((/^(\d+)/.exec(buildLeg) || [])[1]);
@@ -3005,21 +3005,18 @@ test('★★leg52·B：**参数页撤「推进」卡 ≠ 删处理器**（接线
     assert.match(web, /sw2AdvanceOnce\(\)/, '★特判必须真的调推进入口（不只是判了个名字）');
     const onceAt = web.indexOf('export function sw2AdvanceOnce');
     assert.ok(onceAt > 0, '★`sw2AdvanceOnce` 必须存在（自动路与手动路共用它）');
-    const onceBody = web.slice(onceAt, onceAt + 1800);
-    assert.match(onceBody, /sw2TickQueue\.advance\(mes\)/, '★它必须**带着正文**调 tick 队列（否则标签永远提不到）');
-    assert.match(onceBody, /sw2LatestMessageText\(freshCtx\(\)\)/, '★正文必须**现取**（抓死会读到上一个聊天的最后一条）');
-    assert.match(onceBody, /skipped: 'same-message'/, '★必须有"同一段正文只推一次"的守卫（重复提取是本笔带出来的新风险）');
+    const onceBody = web.slice(onceAt, onceAt + 180);
+    assert.match(onceBody, /consumptionHub\.advance\(options\)/, '两个入口使用持久化消息身份；行为回归见 message-consumption.test.js');
+    assert.match(web, /createMessageConsumptionHub\(\{ getCtx: freshCtx/, '正文与聊天作用域必须现取');
+    assert.match(web, /beforeCommit: recordConsumption/, '消费记录必须随世界同笔保存');
     assert.match(web, /advance: \(\) => sw2AdvanceOnce\(\)/, '★自动路也必须走同一个入口（两把尺子 = 迟早分叉）');
     // ★★★leg156（用户实机报「推完了还显示这条、我想再推就显示这个」）——两条新锁：
     //   ① **手动那颗按钮不受这条闸管**（闸管的是"正文要不要再提一遍"，按钮管的是"世界走不走"；
     //      挡它的后果是按钮变哑：最后一条正文没换人就永远推不动）；
     //   ② **只有真推成功才记账**（原先把 `sw2LastAdvancedMes` 写在推进之前 ⇒ 那一轮没成功也记成
     //      "推过了"、从此重推不了，与 `src/async-tick.js` 自己的"失败…可立即重试"当场矛盾）。
-    assert.match(onceBody, /const verdict = manual \? \{ go: true \} : messageVerdict;/, '★手动路必须豁免这条闸（否则按钮变哑）');
-    assert.ok(/\.then\(\(res\) => \{ if \(res\?\.ok && mes\) sw2LastAdvancedMes = mes; return res; \}\)/.test(onceBody),
-        '★"推过了"这只记在**成功之后**（失败必须可立即重推）');
-    // ★反证的反证：自动路那条闸**不许**被顺手撤掉（它是本职：一轮回复只提一次标签）
-    assert.ok(!/manual \? \{ go: true \} : \{ go: true \}/.test(onceBody), '★自动路照旧挡（不许把闸整条拆了）');
+    assert.match(web, /hotHub\.commitHotMeta\(hotAccountShape\(rot.hot\)/, '成功须等待宿主保存；失败恢复内存热账');
+    assert.ok(!web.includes('let sw2LastAdvancedMes'), '正文相同不能作为消息身份；不同消息的同文结果分别消费');
 });
 
 test('★★leg52·C：几格合并成一栏 —— **能力零损失**（天时/时局照旧能设、乱象照旧只读）', () => {
@@ -3071,7 +3068,7 @@ test('★★leg52·D：长说明折叠 —— **首句留在外面**、**后果�
     const outsideFolds = html.replace(/<details class="sw2-fold">[\s\S]*?<\/details>/g, '');
     assert.ok(outsideFolds.includes('这一栏是<b>世界的样子</b>，不是世界的开关。'),
         '★首句（结论）必须留在折叠外面');
-    assert.ok(outsideFolds.includes('插件静默'), '★★后果句（关掉总闸会怎样）绝不许折进去');
+    assert.ok(outsideFolds.includes('自动推进已关闭'), '关闭后的后果句绝不许折进去');
     assert.ok(outsideFolds.includes('构建 <b>'), '★构建号不折（折起来＝排障时等于没有）');
     // ④ 折进去的确实是"长说明"，不是把该留的也折了
     assert.ok(!outsideFolds.includes('这四格分别是什么'), '折叠的招牌自己不该出现在外面');
@@ -3575,7 +3572,7 @@ test('★★★leg143·A：「插件对你的对话做了什么」那一卡**搬
     const params = renderParamsHtml(world(), { config: CONFIG });
     const settings = renderSettingsHtml(world(), { config: CONFIG });
     // ① **新家必须真有**：那一卡 ＋ 四枚开关 ＋ 那个条数框
-    assert.match(params, /<h4>插件对你的对话做了什么<\/h4>/, '★那一卡必须画在参数页上（用户令：设置里那些闸归到参数页）');
+    assert.ok(params.includes('id="sw2_subtab_params_runtime_panel"'), '运行与注入必须画在参数页的运行子页上');
     for (const key of ['injectTagSpec', 'injectRoster', 'injectWorldTide', 'injectLedgerRecall']) {
         assert.ok(params.includes(`data-inject-switch="${key}"`), `★开关「${key}」必须跟着搬（四枚一个都不许丢）`);
     }

@@ -82,13 +82,10 @@ test('A-10 生·无源拒：source 缺 ref → 校验拒绝，世界如实不动
     assert.ok(r2.stage.warnings.some((x) => x.includes('无源不入局')));
 });
 
-test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；玩家拒；未知提议者拒', () => {
+test('A-10 生·event 源须存在，完成事实仍可作因；玩家拒；未知提议者拒', () => {
     const w = baseWorld({ context: { world: '临渊城', tension: 0.5, positions: ['临渊城', '大营'], playerId: 'e_player' }, entities: [...baseWorld().entities, { id: 'e_player', kind: 'character', name: '黄坤', location: '临渊城' }] });
     w.events.push({ id: 'ev_closed', title: '旧事', source: { type: 'state' }, position: '临渊城', ripples: [], closed: true });
     const cases = [
-        // ★leg64 第五轮：`ev_closed` **在账上**（只是已了结）⇒ 报的必须是"已经了结"，不是"必须引已存在未决事件"
-        //   （旧文案让用户/模型都以为"抄错号了"，实测现场：大荒 `ev_5_1 [已了结]` 被当成"不存在"）。
-        [{ name: 'A', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_closed' } }, '已经了结'],
         // ★leg32f：原来这里还有一条「重名 ⇒ 拒」。**已按用户实机反馈撤掉**——重名是"丢掉那条提议"
         //   （账上已有的那个人正在册），不是"世界步不合法"；旧法会让整轮陪葬（连同玩家这一轮的行动）。
         //   新的judgment在下面 leg32f 那两条用例里（含"同一步里别的事照常落账"）。
@@ -99,28 +96,16 @@ test('A-10 生·event 源必须未决；重名拒；位置必须在位置集；�
         const r = checkWorldStep(step({ newEntities: [ne] }), w);
         assert.ok(!r.ok && r.errors.some((e) => e.includes(frag)), `${frag}: ${r.errors.join('; ')}`);
     }
-    // ★leg64 第五轮：**"不存在"与"存在但已了结"必须报成两句不同的话**（本仓"错误信息不许说假话"那条纪律）
+    // 完成状态不取消因果资格；缺失引用仍须明确拒绝。
     const gone = checkWorldStep(step({ newEntities: [{ name: 'B', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_nope' } }] }), w);
-    assert.ok(gone.errors.some((e) => e.includes('必须引已存在未决事件')), '压根不存在的号 ⇒ 报"必须引已存在未决事件"');
+    assert.ok(!gone.ok && gone.errors.some((e) => e.includes('必须引已存在事件')), '不存在的号仍须拒绝');
     assert.ok(!gone.errors.some((e) => e.includes('已经了结')), '★不存在的号**不许**被说成"已经了结"（两句不许混用）');
     const closed = checkWorldStep(step({ newEntities: [{ name: 'B', location: '大营', entity: 'e_merchant', source: { type: 'event', ref: 'ev_closed' } }] }), w);
-    assert.ok(closed.errors.some((e) => e.includes('已经了结')), '账上真有的已了结事件 ⇒ 报"已经了结"');
-    assert.ok(closed.errors.every((e) => !e.includes('必须引已存在未决事件')), '★已了结的**不许**被说成"不存在"');
+    assert.equal(closed.ok, true, closed.errors.join('; '));
 });
 
-// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝════
-// ★★★leg66（用户实机第二条裁定）：`newAgendas[].source` 引了**已了结**的事件时，报错**必须给出路**。
-//   现场（真账 tick 8 · 大荒z1）：模型给「苏千欢」起新盘算、源写 `{type:'event', ref:'ev_7_1'}`
-//   （「苏千欢携龙气破开废墟遁走」）——而 `ev_7_1` **已经了结**（`closedAt=7`，被它自己那条盘算满步结算联闭）。
-//   ★**引擎判得对**：`newAgendas` 的源型只有 event/parent/state（`world-step.schema.js:40` 锁着），
-//     `ripple` 不是它的合法源型。但模型**是照输入在写**——`ev_7_1` 就在包里的 `closedRoots`（拾遗）那一栏，
-//     而提示词第 14 条明写"**旧事也能接**，用 source.type='ripple' + ref= 它的 id"⇒
-//     **模型的意图（那件事的余波长出新线）完全合法，只是落错了格子**。
-//   旧文案只说"引一件未决事件，或把源改成 state"——两条都把模型的心愿说成不可能 ⇒ 它会反复换号重试
-//   （leg64 那条"报错把人领错方向"的同一种病）。
-//   ⇒ 本用例锁三件：①仍指名到事、仍说"已经了结"；②给出**拾遗→ripple**那条出路（照着读就能改对）；
-//     ③**不许**把已了结说成"不存在"（与上面 leg64 那条同一纪律）。
-test('★leg66：newAgendas 引已了结事件 ⇒ 报错要指名到事、说"已经了结"，并给出「拾遗→ripple」那条出路', () => {
+// 旧事实的后果可以直接起新线，无须为通过引用检查先造一条中间事件。
+test('newAgendas 引已了结事件：保留原始原因，直接起新线', () => {
     const w = baseWorld();
     w.agendas = w.agendas || [];
     w.events = w.events || [];
@@ -131,13 +116,7 @@ test('★leg66：newAgendas 引已了结事件 ⇒ 报错要指名到事、说"�
             source: { type: 'event', ref: 'ev_gone' }, maxSteps: 4,
         }],
     }), w);
-    assert.equal(r.ok, false, '已了结的事不能当新线的源（语义闸不许放宽）');
-    const msg = r.errors.find((e) => e.includes('已经了结')) || '';
-    assert.ok(msg.includes('ev_gone'), `要指名到号：${msg}`);
-    assert.ok(msg.includes('苏千欢携龙气破开废墟遁走'), `★要指名到**事**（读者才知道是哪件）：${msg}`);
-    assert.ok(msg.includes('ripple'), `★★必须给出「先接旧事（newEvents + ripple）」那条出路：${msg}`);
-    assert.ok(msg.includes('拾遗') || msg.includes('closedRoots'), `★并指出它在输入的哪一栏：${msg}`);
-    assert.ok(!msg.includes('必须引已存在未决事件'), `★已了结的**不许**被说成"不存在"（与 leg64 同一纪律）：${msg}`);
+    assert.equal(r.ok, true, r.errors.join('; '));
 });
 
 

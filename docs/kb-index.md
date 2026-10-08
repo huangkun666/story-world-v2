@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**329 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `352157d9-d7b6c977`（源文件 352157d9 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**383 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `6c3b3fb0-d7b6c977`（源文件 6c3b3fb0 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -11,11 +11,11 @@
 | 事实 | 值 |
 |---|---|
 | 它是什么 | 跑在 SillyTavern 里的"活世界引擎"：世界书只读 · 引擎记账（账房＋史官） · LLM 只提议与执笔 |
-| 构建号 | `leg201b-report-only-selfcheck` |
-| 提示词号 | `v2-agenda-t1-34` |
-| 版本 | `1.1.1`（ST 扩展） |
-| 规模 | src **68** · web **39** · 判据 **170** · 探针 **76** · 文档 **201** |
-| 最新交接 | `session-handoff-2026-10-02-leg173-panorama-reader.md` |
+| 构建号 | `leg209-character-protection-cleanup` |
+| 提示词号 | `v2-agenda-t1-37` |
+| 版本 | `1.1.2`（ST 扩展） |
+| 规模 | src **72** · web **43** · 判据 **183** · 探针 **76** · 文档 **239** |
+| 最新交接 | `session-handoff-2026-10-08-leg209-character-protection-cleanup.md` |
 
 ## 卡片（按类分组）
 
@@ -28,15 +28,15 @@
 | STATE.md · 1.  当前权威读数（唯一出处） | `STATE.md:43` | > 这一节是**全仓唯一的当前值出处**。别处引用一律写"见 `STATE.md` §1"。 |
 | STATE.md · 2. 红线与规矩（逐字搬家，不许改写） | `STATE.md:78` | > **用户原话：「不要动代码，把不要动代码写进最高准则，没有我的命令不准动一个字节」。** |
 | STATE.md · 3.  未决事项（唯一一份活儿清单） | `STATE.md:140` | > 每条带：**出处** · **触发条件** · **拍板人**。做完就地划掉并写"已办结（哪棒）"。 |
-| STATE.md · 4. 当前工作 | `STATE.md:180` | leg200 已办结（用户 2026-10-05 两道令 ＋ 两次当场追问，逐字：①「**不要搞这个校验了**」②「**把检索用的正文提取杀光html注释的设计改成我跟你说的白名单和黑名单的设计**」③「**提取tag的 |
-| STATE.md · 5. 现场（本机） | `STATE.md:190` | - **项目**：`F:\deepseek\plugins\story-world-v2`（仓库根是 `F:\deepseek\plugins`；分支 **`leg151-prefetch`**； |
+| STATE.md · 4. 当前工作 | `STATE.md:180` | 用户要求参数页运行与注入更清楚，并批准四块布局。已重排为自动运行、聊天如何影响世界、聊天模型能看到什么、往事怎么找；直接显示用途和调整后的影响，向量参数与正文黑白名单收进高级设置。保留参数原名、原值和全部接线。验证、独立 |
+| STATE.md · 5. 现场（本机） | `STATE.md:192` | - **项目**：`F:\deepseek\plugins\story-world-v2`（**唯一实际项目根**；仓库根 `F:\deepseek\plugins`， |
 
 ### 活儿（12）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
 | 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1282` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1415` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -81,7 +81,7 @@
 | 缺口 E2 | `docs/session-handoff-2026-09-22-leg109b-defects.md:122` | 名册只列活人 ⇒ 账上死了的人从聊天模型视野里整个消失；而给世界模型的"离场名册"不报死没死（有意为之，防编事实） |
 | 缺口 E3 | `docs/session-handoff-2026-09-22-leg109b-defects.md:123` | 同一人的 实力 两边可以不同（账本可改、聊天模型看到的是书里原值） |
 
-### 交接（122）
+### 交接（157）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -207,6 +207,41 @@
 | 交接 leg171（2026-10-02） | `docs/session-handoff-2026-10-02-leg171-setting-reader.md:1` | UI 预览后的细化交接 ／ 用户授权 ／ 实现 ／ 验证 ／ 本机预览 |
 | 交接 leg172（2026-10-02） | `docs/session-handoff-2026-10-02-leg172-memory-models.md:1` | 记忆模型列表与窗口修复交接 ／ 交付行为 ／ 验证与代理分工 ／ 真跑尚未验收 ／ 本机 agent 调度配置 |
 | 交接 leg173（2026-10-02） | `docs/session-handoff-2026-10-02-leg173-panorama-reader.md:1` | 观棋阅读布局交接 ／ 页面行为 ／ 验证与复现 ／ 文档归档与本机预览 |
+| 交接 leg174（2026-10-02） | `docs/session-handoff-2026-10-02-leg174-story-reader.md:1` | 世界近况与独立故事阅读交接 ／ 页面行为 ／ 验证与本机 agent ／ 本机预览与接手位置 |
+| 交接 leg175（2026-10-02） | `docs/session-handoff-2026-10-02-leg175-reader-density.md:1` | 观棋留白、信息密度与名称下划线交接 ／ 文件与规则 ／ 实现与验证 ／ 本机预览 |
+| 交接 leg175（2026-10-03） | `docs/session-handoff-2026-10-03-leg175b-name-highlight.md:1` | 观棋名称只保留高亮 |
+| 交接 leg176（2026-10-03） | `docs/session-handoff-2026-10-03-leg176-abstraction-input.md:1` | 用户授权与现场 ／ 已解决的入口问题 ／ 验收证据 ／ 本地 dsh 与独立审查 ／ 用户验证入口与限制 |
+| 交接 leg177（2026-10-03） | `docs/session-handoff-2026-10-03-leg177-panel-controls.md:1` | 本次用户要求与最终澄清 ／ 源码与安装现场 ／ 最终界面与行为 ／ 验收证据 ／ 用户查看与范围限制 |
+| 交接 leg178（2026-10-03） | `docs/session-handoff-2026-10-03-leg178-mobile-memory-console.md:1` | 手机操作、可选向量、自选抽象来源与调试台交接 ／ 位置与提交 ／ 已实现 ／ 验证证据 ／ 本机 dsh 使用与复核 ／ 实际边界 |
+| 交接 leg179（2026-10-03） | `docs/session-handoff-2026-10-03-leg179-quiet-status.md:1` | 顶部调试信息收起与项目改进建议 ／ 实现 ／ 验证 ／ 建议范围 |
+| 交接 leg181（2026-10-03） | `docs/session-handoff-2026-10-03-leg181-story-detail-polish.md:1` | 故事详情整理、左侧轮次与已有时间展示 ／ 1. 接手先读与真实源码位置 ／ 2. 用户授权范围与最终行为 ／ 时间从哪里取 ／ 3. 改动文件与 dsh 使用 ／ 4. 验证与安装证据 ／ 5. 已发现但尚未实施的已有功 |
+| 交接 leg182（2026-10-03） | `docs/session-handoff-2026-10-03-leg182-recall-query-refresh.md:1` | 当前问题的向量召回与关键词预算排序 ／ 1. 接手先读与源码位置 ／ 2. 最终行为 ／ 新问题的向量 ／ 关键词选择 ／ 3. 改动范围 ／ 4. 验证证据 ／ 5. 使用与限制 |
+| 交接 leg183（2026-10-03） | `docs/session-handoff-2026-10-03-leg183-roster-cleanup.md:1` | 观棋显示轮数与角色势力名册整理 ／ 1. 接手入口与位置 ／ 2. 旋钮的实际用途 ／ 3. 名册界面 ／ 4. 验证与交付 ／ 5. 使用 |
+| 交接 leg184（2026-10-03） | `docs/session-handoff-2026-10-03-leg184-roster-column-label.md:1` | 角色与势力列标题改为「属性」· 交接 ／ 1. 接手入口与位置 ／ 2. 完成的修改 ／ 3. 验证与安装证据 ／ 4. 前面用户反馈的状态（尚未修复） |
+| 交接 leg185（2026-10-04） | `docs/session-handoff-2026-10-04-leg185-abstraction-sources.md:1` | 抽象来源、自由取料与有据入账交接 ／ 已完成的行为 ／ 现场与提交 ／ 验收与证据 ／ 后续边界 |
+| 交接 leg186（2026-10-04） | `docs/session-handoff-2026-10-04-leg186-source-picker-fixes.md:1` | 来源页关闭正文、搜索与批量结果修复交接 ／ 修复行为与原因 ／ 源码与本机安装 ／ 验收证据 |
+| 交接 leg189（2026-10-04） | `docs/session-handoff-2026-10-04-leg189-retained-attributes.md:1` | 来源修复、首轮拒绝保护与属性保留交接 ／ 接手位置 ／ 已完成 ／ 来源页（leg186） ／ 首轮无有效输出仍加轮数（leg187） ／ 设定页空白与警告（leg188） ／ 描述属性完整保留（leg189，最新用户规 |
+| 交接 leg192（2026-10-04） | `docs/session-handoff-2026-10-04-leg192-geography-map.md:1` | 接手位置 ／ 做了什么 ／ 地点关系（契约与查询） ／ 抽取与补抽 ／ 当轮演化输入 ／ 地图改成弹窗 ／ 验收和证据 ／ 后续边界（如实登记） |
+| 交接 leg192（2026-10-05） | `docs/session-handoff-2026-10-05-leg192-retrieval-live.md:1` | 「往事怎么找」三格真正生效 ＋ 四格挂上小问号 ／ 接手位置 ／ 治的是什么病 ／ 改了什么 ／ 一、参数改成现读（填了就生效） ／ 二、参数一改，旧的召回结果当场作废重取 ／ 三、名字保持原样 ＋ 各挂一枚小问号 ／  |
+| 交接 leg193（2026-10-05） | `docs/session-handoff-2026-10-05-leg193-inject-readout.md:1` | 接手位置 ／ 五句令各治的是什么 ／ 改了什么（逐处） ／ 一、参数页那一卡（src/render.js） ／ 四、接线与样式 ／ 验收和证据 ／ 后续边界（如实登记） ／ 文档收尾 |
+| 交接 leg194（2026-10-05） | `docs/session-handoff-2026-10-05-leg194-original-line-gone.md:1` | 接手位置 ／ 2. 改了什么 ／ 四、升位 ／ 3. 验收和证据 ／ 4. 后续边界（如实登记） ／ 文档收尾 |
+| 交接 leg195（2026-10-05） | `docs/session-handoff-2026-10-05-leg195-publish-v110.md:1` | 接手位置 ／ 那句话说清了什么（用户拍板四件） ／ 改了什么（逐处） ／ 二、发布点记账（读数只许有一个家） ／ 四、为什么推了两次（这是本仓的记账法，不是失误） ／ 验收和证据 ／ 路上确认与踩到的（留给下一棒） ／  |
+| 交接 leg196（2026-10-05） | `docs/session-handoff-2026-10-05-leg196-map-mobile.md:1` | 接手位置 ／ 一、病根（在真宿主页面上复现出来的，不是猜的） ／ 二、治法（照另外两张遮罩抄） ／ 三、我踩的三个坑（如实登记，留给下一棒省时间） ／ 四、判据（先证红再改，不是"改完补一条绿的"） ／ 六、验收和证据  |
+| 交接 leg197（2026-10-05） | `docs/session-handoff-2026-10-05-leg197-evidence-nodrop.md:1` | 接手位置 ／ 一、病（用户那句话在代码里的落点） ／ 二、治法（一句话：出处只记账、不拦人） ／ 三、四个号 ／ 四、判据（先证红再改，不是"改完补一条绿的"） ／ 七、后续边界（如实登记） ／ 八、文档收尾 |
+| 交接 leg198（2026-10-05） | `docs/session-handoff-2026-10-05-leg198-noguess.md:1` | 接手位置 ／ 一、病（社区反馈四条  源码落点） ／ 二、治法（逐处） ／ 一、拆掉"词表猜"整族（用户拍板的那一刀） ／ 二、零标签不再静默 ／ 三、实体页空文案改实话 ／ 三、判据（先证红，不是"改完补一条绿的"）  |
+| 交接 leg199（2026-10-05） | `docs/session-handoff-2026-10-05-leg199-blockonly.md:1` | 一、令①：删掉的是哪条降级、为什么非删不可 ／ 二、令①的配套：JSON 转义那一档必须单独救 ／ 三、令②③：第 7 条改值口径（"实力"那一格） ／ 四、判据（新增 5 条 ＋ 翻案 7 个文件） ／ 五、四个号 ／ |
+| 交接 leg199（2026-10-05） | `docs/session-handoff-2026-10-05-leg199-publish-111.md:1` | 一、接手位置与四个提交 ／ 二、版本号升在哪（五处 ＋ 生成物） ／ 三、路上撞到的那个真 bug（本笔最值钱的一条） ／ 四、验收和证据（全是亲手跑的） ／ 五、边界（如实登记，不掩盖） ／ 七、文档收尾 |
+| 交接 leg200（2026-10-05） | `docs/session-handoff-2026-10-05-leg200-prose-lists.md:1` | 二、A：那道校验为什么该撤（用户④问出来的） ／ 四、B2：白/黑名单（用户②的裁法，逐字落地） ／ 六、判据 ／ 七、四个号 ／ 八、四个提交与两次推送 ／ 九、边界（如实登记，不掩盖） ／ 十、文档收尾 |
+| 交接 leg201（2026-10-05） | `docs/session-handoff-2026-10-05-leg201-host-save-and-card-shape.md:1` | 宿主保存层、卡形状读法与"环境自检"交接 ／ 一、宿主保存层（TauriTavern） ／ 二、卡形状读法（「角色卡四件套全空」） ／ 三、环境自检（取证通道） ／ 硬读数 ／ 遗留 ／ 别重走（本棒踩过的坑，逐条留档） |
+| 交接 leg（2026-10-07） | `docs/session-handoff-2026-10-07-f-drive-migration.md:1` | 项目已迁到 F 盘；事件打磨设计交接 ／ 项目的家 ／ C 盘旧路径 ／ 备份与核验 ／ 后续模型规则 ／ 当前新任务 |
+| 交接 leg202（2026-10-07） | `docs/session-handoff-2026-10-07-leg202-event-polish.md:1` | 交付位置与状态 ／ 最终行为 ／ 标签协议 ／ 验证证据与具体结果 ／ 审查收口 ／ 剩余现场边界 ／ 本地预览安装与试用 |
+| 交接 leg203（2026-10-07） | `docs/session-handoff-2026-10-07-leg203-event-scope.md:1` | 事件范围与持续条件 · 本地试跑交接 ／ 人话版：这会怎么样 ／ 授权与范围 ／ 已实现 ／ 验收证据 ／ 本地安装 ／ 下一步 |
+| 交接 leg204（2026-10-07） | `docs/session-handoff-2026-10-07-leg204-event-prompt.md:1` | 聊天事件提示词 · 本地试跑交接 ／ 人话版：这会怎么样 ／ 用户授权与反馈 ／ 改动 ／ 验证与安装 ／ 下一步 |
+| 交接 leg205（2026-10-07） | `docs/session-handoff-2026-10-07-leg205-snapshot-debug.md:1` | leg205 · 快照选择与调试信息 ／ 本次原因与行为 ／ 实施与验证 ／ 用户复测 |
+| 交接 leg206（2026-10-08） | `docs/session-handoff-2026-10-08-leg206-snapshot-scope.md:1` | 快照重复项与诊断范围修正交接 ／ 用户问题与原因 ／ 最终行为 ／ 验证与审查 ／ 本地复测 |
+| 交接 leg207（2026-10-08） | `docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md:1` | 参数页运行与注入布局交接 ／ 最终行为 ／ 交互中发现并修正的保存问题 ／ 检索说明的核实 ／ 验证与集成 ／ 本地复测 |
+| 交接 leg208（2026-10-08） | `docs/session-handoff-2026-10-08-leg208-character-simulation-protection.md:1` | 玩家、禁止模拟角色与本轮行动事实保护 |
+| 交接 leg209（2026-10-08） | `docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md:1` | 撤销未经批准的额外调用，调整角色保护界面 |
 
 ### 细案（33）
 
@@ -250,16 +285,32 @@
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| docs/superpowers/specs/（10 份旧档） | `docs/superpowers/specs:1` | 旧档目录（历史，不是现状）；逐份细节在那里，现状一律看 STATE.md §1 |
+| docs/superpowers/specs/（16 份旧档） | `docs/superpowers/specs:1` | 旧档目录（历史，不是现状）；逐份细节在那里，现状一律看 STATE.md §1 |
 | docs/handoffs/（34 份旧档） | `docs/handoffs:1` | 旧档目录（历史，不是现状）；逐份细节在那里，现状一律看 STATE.md §1 |
+
+### 知识库（11）
+
+| 卡片 | 在哪 | 是什么 |
+|---|---|---|
+| 知识库 00-index · 总目录与问题路由 | `kb/00-index.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 01-overview · 概览与理念 | `kb/01-overview.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 02-architecture · 架构与数据流 | `kb/02-architecture.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 03-ledger-ssot · 世界账（SSOT）模型 | `kb/03-ledger-ssot.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 04-source-map · 源码地图（src/） | `kb/04-source-map.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 05-web-panel · 面板与注入（web/） | `kb/05-web-panel.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 06-parameters · 世界参数与旋钮 | `kb/06-parameters.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 07-decisions · 决策与红线 | `kb/07-decisions.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 08-testing-tooling · 测试与工具链 | `kb/08-testing-tooling.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库 09-glossary · 术语表 | `kb/09-glossary.md:1` | （★快照：冲突时以代码为准；当前值只看 STATE.md §1） |
+| 知识库机器可读索引（kb-index.json） | `kb/kb-index.json:1` | 文件 / 符号 / 术语 / 决策 / 红线 / 流水线阶段（★快照，会过期） |
 
 ### 当前值（20）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
-| 当前值 · 判据 | `STATE.md:50` | **2051 / 2051 · fail 0 · skipped 0 · todo 0**（★leg200b **净 −1**：用户指认"那枚总闸开关是多余的"（「**不写就不剥得了，你还非搞个这个按钮干嘛**」）⇒ * |
-| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**（★leg199 **逐字节未变**——本笔只动"正文里认不认标签"这一层，而合成冒烟那一族**压根没有正文**（`dialogueGen` 不传 ⇒ 每 |
-| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg201b-report-only-selfcheck`** ｜ 复量：`src/render-base.js`；★leg201b（用户当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：环境自检那 |
+| 当前值 · 判据 | `STATE.md:50` | **2236 / 2236 · fail 0 · skipped 0 · todo 0**；额外模型核验完全撤销，玩家、手动与临时保护有提案也只调用原主模型一次；程序权限、保存事务与开关交互保留。已删除撤销机制对应的旧测 |
+| 当前值 · 冒烟 | `STATE.md:51` | **PASS · 终态 SSOT 8351 字节 · 警告 0**；合成演算终态保持一致。证据：`F:/deepseek/tmp/character-protection-cleanup-2026-10-08/smoke |
+| 当前值 · PANEL_BUILD | `STATE.md:52` | **`leg209-character-protection-cleanup`** ｜ 复量：`src/render-base.js`；角色资料行内紧凑开关，撤掉长说明与重复保护标签；玩家不能解除保护。 |
 | 当前值 · ★出处核验（leg197 起） | `STATE.md:53` | **只记账、不拦人**：`verifyQuote` 照跑，结果进抽取诊断（`keep` 核过 / `pending` 没给 / **`unverified` 给了但对不上 ⇒ 照收**）；`summary.dropped |
 | 当前值 · ★「往事注入多少字」出厂值 | `STATE.md:54` | **1600**（`src/limits.js` 的 `LEDGER_CHARS_DEFAULT` ＝ **唯一真源**；参数页那格**现读设置**，填了就生效）。★它是**整段**的字数上限（按名字找 ＋ 按意思找两路 |
 | 当前值 · ★主调用输出上限（出厂值） | `STATE.md:55` | **`32768`**（leg157 **16,384 → 32,768**）：`max_tokens` 是**生成总量**、`reasoning_tokens` 算在里面，而 DeepSeek **思考模式默认开着** |
@@ -269,14 +320,14 @@
 | 当前值 · 包预算 出厂值 | `STATE.md:59` | **50000**（leg135 抬的：用户令「我预算抬到50000token」） ｜ 复量：`src/limits.js` |
 | 当前值 · ★往回看轮数 出厂值 | `STATE.md:60` | **50**（第十格：**观棋页往回看多少轮**；用户令「**一个管给模型看的，一个管画给用户看的**」）。最近这些轮里有进展的故事显示完整经过，可能包含更早的起因。与 `往事轮数`（给模型看的那个窗口）是**两个旋钮两 |
 | 当前值 · ★leg136–leg156 各笔 | `STATE.md:61` | ⇒ **已搬进 `docs/done-archive.md`**（出包期只剩整包预算一条尺 · 召回进包 · 契约键登记 · 稳定版记忆层整族撤走；★`DB_VERSION` **留 3**） ｜ 复量：`docs/do |
-| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261005-leg200-prose-lists`** ｜ 复量：`web/index.js`；`CSS_PIN` 的版本与内容指纹同步。★**leg200 升了**（`web/style.css` 真动了： |
-| 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-34`** ｜ 复量：`src/prompts.js`；新增地理事实一条：地点关系（包含／相邻／通道）与来源未载的区别照用，不许把推定驻地当现场、不许把关系线换算成路程或方向。`ne |
-| 当前值 · web/index.js 行数 | `STATE.md:64` | **3099 / 3100**（硬锁 `<3100`；★leg199 **±0 行**——这一笔一行都没往接线层加（改的全在 `src/tag-extract.js` 与 `web/inject.js`）⇒ 余量仍是 * |
+| 当前值 · CSS_VERSION | `STATE.md:62` | **`20261008-leg209-character-protection-cleanup`** ｜ 复量：`web/index.js`；角色保护开关状态、焦点与触屏点击区域；`test/render.test.js |
+| 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-37`** ｜ 复量：`src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
+| 当前值 · web/index.js 行数 | `STATE.md:64` | **3068 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。 |
 | 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
-| 当前值 · 发布仓 main | `STATE.md:66` | **`05811c7`** · 构建号 **`leg201-host-save-and-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main`  |
+| 当前值 · 发布仓 main | `STATE.md:66` | **`a075423`** · 构建号 **`leg201b-report-only-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一 |
 | 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发 |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
-| 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.1`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.0 → 1.1.1；用户 2026-10-05 |
+| 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 |
 
 ### 怎么跑（2）
 
@@ -285,7 +336,7 @@
 | 怎么验证（三条命令，都在插件目录内跑） | `STATE.md:50` | node --test（全量判据，无参）· node demo/smoke-demo.js（50 轮冒烟）· node scripts/audit-docs.mjs（文档守门） |
 | 怎么发布（导出独立根树 → 仓外跑判据冒烟 → 推 → 远端逐字节核） | `scripts/publish-release.mjs:1` | node scripts/publish-release.mjs（推）· node scripts/verify-release.mjs（远端只读终检） |
 
-### 代码地图（108）
+### 代码地图（116）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -310,6 +361,8 @@
 | src/entity-identity.js | `src/entity-identity.js:1` | story-world-v2/src/entity-identity.js |
 | src/entity-lookup.js | `src/entity-lookup.js:1` | story-world-v2/src/entity-lookup.js |
 | src/entropy.js | `src/entropy.js:1` | story-world-v2/src/entropy.js |
+| src/event-contract.js | `src/event-contract.js:1` | 事件原话、历史范围和持续条件的共同入口。零依赖，不判断故事语义。 |
+| src/event-provenance.js | `src/event-provenance.js:1` | Production provenance is independent from causal provenance. Never follow source.ref. |
 | src/fp-hash.js | `src/fp-hash.js:1` | story-world-v2/src/fp-hash.js |
 | src/gate.js | `src/gate.js:1` | story-world-v2/src/gate.js |
 | src/geography-extract.js | `src/geography-extract.js:1` |  |
@@ -341,6 +394,7 @@
 | src/seed-roots.js | `src/seed-roots.js:1` | story-world-v2/src/seed-roots.js |
 | src/setting.js | `src/setting.js:1` | story-world-v2/src/setting.js |
 | src/settle.js | `src/settle.js:1` | story-world-v2/src/settle.js |
+| src/simulation-protection.js | `src/simulation-protection.js:1` | 玩家、用户禁止模拟的角色和本轮已行动角色共用这份权限判定。 |
 | src/smoke.js | `src/smoke.js:1` | story-world-v2/src/smoke.js |
 | src/snapshot.js | `src/snapshot.js:1` | story-world-v2/src/snapshot.js |
 | src/st-preset.js | `src/st-preset.js:1` | story-world-v2/src/st-preset.js |
@@ -356,6 +410,7 @@
 | src/vector-history.js | `src/vector-history.js:1` | 向量只是当前历史的索引；来源变化后不得复用旧向量。 |
 | src/vector-store.js | `src/vector-store.js:1` | story-world-v2/src/vector-store.js |
 | src/weight.js | `src/weight.js:1` | story-world-v2/src/weight.js |
+| src/world-input.js | `src/world-input.js:1` | 世界输入只保存一份本轮事件正文；其他栏目按事件身份引用，不修改世界账。 |
 | src/worldstep.js | `src/worldstep.js:1` | story-world-v2/src/worldstep.js |
 | web/abstract-selection.js | `web/abstract-selection.js:1` | story-world-v2/web/abstract-selection.js |
 | web/abstract-source-editor.js | `web/abstract-source-editor.js:1` | story-world-v2/web/abstract-source-editor.js |
@@ -376,17 +431,20 @@
 | web/inject.js | `web/inject.js:1` | story-world-v2/web/inject.js |
 | web/long-task.js | `web/long-task.js:1` | story-world-v2/web/long-task.js |
 | web/map-reader.js | `web/map-reader.js:1` |  |
+| web/message-consumption.js | `web/message-consumption.js:1` | Message identity and history guards live here; no body-based deduplication. |
 | web/model-channel.js | `web/model-channel.js:1` | story-world-v2/web/model-channel.js |
 | web/page-compose.js | `web/page-compose.js:1` | story-world-v2/web/page-compose.js |
 | web/page-subtabs.js | `web/page-subtabs.js:1` | Page navigation only: never writes settings or replaces controls. |
 | web/panel-tools.js | `web/panel-tools.js:1` |  |
 | web/panorama-reader.js | `web/panorama-reader.js:1` | Temporary reading state only. No world, configuration, or model writes. |
 | web/param-panel.js | `web/param-panel.js:1` | story-world-v2/web/param-panel.js |
+| web/runtime-diagnostics.js | `web/runtime-diagnostics.js:1` | 本插件诊断适配层：保留控制台原行为，仅采集有明确本插件来源的记录。 |
 | web/scroll-keep.js | `web/scroll-keep.js:1` | story-world-v2/web/scroll-keep.js |
 | web/seed-diagnostics.js | `web/seed-diagnostics.js:1` | story-world-v2/web/seed-diagnostics.js |
 | web/seed-roots-wiring.js | `web/seed-roots-wiring.js:1` | story-world-v2/web/seed-roots-wiring.js |
 | web/setting-reader.js | `web/setting-reader.js:1` | View-only directory search. No ledger, config, model, or HTML writes. |
 | web/settings-channels.js | `web/settings-channels.js:1` | story-world-v2/web/settings-channels.js |
+| web/simulation-protection.js | `web/simulation-protection.js:1` | 用户的禁止模拟开关：候选账与当前账分开，保存确认后才刷新界面。 |
 | web/snapshot-store.js | `web/snapshot-store.js:1` | story-world-v2/web/snapshot-store.js |
 | web/status-bar.js | `web/status-bar.js:1` | story-world-v2/web/status-bar.js |
 | web/story-reader.js | `web/story-reader.js:1` | Ephemeral reading state. Navigation never changes the world ledger or settings. |
@@ -396,20 +454,21 @@
 | web/window-shell.js | `web/window-shell.js:1` | story-world-v2/web/window-shell.js |
 | web/world-entity-migration.js | `web/world-entity-migration.js:1` | story-world-v2/web/world-entity-migration.js |
 | web/world-replace.js | `web/world-replace.js:1` | story-world-v2/web/world-replace.js |
-| 判据在哪（test/ 共 170 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
+| web/world-write-guard.js | `web/world-write-guard.js:1` | 异步查书等操作只可写回开始时的那份世界，不能覆盖期间保存的玩家设置。 |
+| 判据在哪（test/ 共 183 个 *.test.js） | `test:1` | 全量跑 node --test（无参，必须在插件目录内）；按子系统分组见 kb/08-testing-tooling.md |
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
-- `0b3100b story-world-v2 leg201 发布记账：发布点跟到 05811c7 / leg201-host-save-and-selfcheck（★纯记账笔，产品行为零变化）`
-- `abe6a67 story-world-v2 leg201：宿主保存层 ＋ 卡形状读法 ＋ 环境自检（社区三次报同一条之后）`
-- `adaa692 story-world-v2 leg200b 发布记账：发布点跟到 3fac63c / leg200b-lists-only（★纯记账笔，产品行为零变化）`
-- `fadf96d story-world-v2 leg200b：撤掉"剥掉正文里的机器块"那枚多余的开关（不写就不剥）`
-- `c3727dc story-world-v2 leg200 发布记账：发布点跟到 bc1e98c / leg200-prose-lists（★纯记账笔，产品行为零变化）`
-- `ef9ac88 story-world-v2 leg200：正文剥块改成玩家那两份名单 ＋ 撤掉"值必须在正文里找得到"那道闸`
-- `7b60983 story-world-v2 leg199 发布记账：发布点跟到 79a91ce / leg199-blockonly / 1.1.1（★纯记账笔，产品行为零变化）`
-- `772aea5 story-world-v2 修发布脚本两处：凭据按主机挑行（★别取第一行）`
-- `4fd37b7 story-world-v2 发布 1.1.1：把 leg198 ＋ leg199 两笔推上发布仓 main（★不打 tag、不发 release）`
-- `a0b1ad2 story-world-v2 leg199：删掉"块外裸标签"那条降级 ＋ 标签规范第 7 条改值口径`
-- `08d955f ﻿story-world-v2 leg198：拆掉"没标签就拿词表猜"那一族 ＋ 社区反馈四条`
-- `e3b1a38 story-world-v2 leg197 发布记账：发布点跟到 03e641b / leg197-evidence-nodrop（★纯记账笔，产品行为零变化）`
+- `179b69f release: bump version to 1.1.2 and publish leg202-leg209 to the release repo`
+- `8530f84 feat: land leg204-leg209 work (snapshot, params, diagnostics, character protection)`
+- `a765292 docs: record event scope implementation and verified local installation`
+- `56b500b fix: preserve complete event scopes under budget and expose current conditions`
+- `2446dd3 fix: admit causal reactions to retained same-round events`
+- `04f48bb feat: carry event scopes and current conditions through inputs and readers`
+- `e76d46e fix: display condition lifecycle in plain Chinese`
+- `d88db14 fix: keep v4 obligations pending until explicit closure`
+- `b1bc6f8 feat: unify v4 event scopes and causal condition lifecycle`
+- `340ae6d fix: reject empty actors and conflicting condition annotations`
+- `00a9d58 feat: add v4 chat event scopes and persistent condition tags`
+- `84f8d90 docs: keep information discovery in event causality`
 

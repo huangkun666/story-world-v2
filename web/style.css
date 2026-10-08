@@ -1206,19 +1206,17 @@
 .sw2-cold-mgmt em{font-style:normal;font-size:var(--sw2-fs-label);color:var(--sw2-text-faint);}
 .sw2-cold-mgmt .sw2-thr{color:var(--sw2-amber);}
 
-/* ★★★leg166：快照页那四格**此前一条规则都没有**（全仓零声明，实测只落在 `.sw2-row` 的默认样式上）
-   ⇒ 四样东西（编号 / 触发词·轮次 / 种类·体积 / 时刻）连成一段灰字，而末尾那枚「回到此步」按钮
-   与它们同基线挤在一起——"每一步都能退回去"这一页最该一眼看清的正是**哪一步是哪一步**。
-   本笔补上这一族（照演示的列表行语言：定宽格 ＋ 等宽只给**编号**，其余走正文色分层）：
-     · 编号 `s12` 是 id ⇒ **等宽**、定宽 44px、正文色（它是这一行的"名字"）；
-     · 触发词·轮次吃余宽（长句截断，别把按钮顶走）；
-     · 种类·体积 与 时刻 定宽靠右、`tabular-nums`（数字对齐才读得快）；
-     · 按钮 `margin-left:auto` ⇒ 永远钉在行尾（同 `.sw2-pan-badge` / `.sw2-pan-brg` 那条口径）。 */
-.sw2-snap-id{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);color:var(--sw2-text);flex:none;width:44px;}
-.sw2-snap-tick{font-size:var(--sw2-fs-md);color:var(--sw2-text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.sw2-snap-kind{font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:none;font-variant-numeric:tabular-nums;}
+/* 快照只画轮次/保存顺序、差异数量、本地时刻和回档按钮；手机按两行排。 */
+.sw2-snap-tick{font-size:var(--sw2-fs-md);color:var(--sw2-text);flex:1;min-width:0;overflow-wrap:anywhere;}
+.sw2-snap-summary{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);flex:none;white-space:nowrap;}
 .sw2-snap-at{font-family:"Cascadia Mono",Consolas,monospace;font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);flex:none;font-variant-numeric:tabular-nums;}
 .sw2-row[data-snap] .sw2-btn{margin-left:auto;flex:none;}
+.sw2-row[data-snap]{align-items:center;}
+@media(max-width:620px){
+  .sw2-row[data-snap]{flex-wrap:wrap;}
+  .sw2-row[data-snap] .sw2-snap-tick{flex-basis:calc(100% - 100px);}
+  .sw2-row[data-snap] .sw2-snap-at{flex:1;}
+}
 
 /* ---------- 页脚 ---------- */
 .sw2-footer{padding:var(--sw2-sp-2) var(--sw2-sp-4);border-top:1px solid var(--sw2-line);font-size:var(--sw2-fs-sm);color:var(--sw2-text-faint);}
@@ -1362,8 +1360,20 @@
 .sw2-ew-name{display:flex;align-items:baseline;gap:var(--sw2-sp-2);flex-wrap:wrap;font-size:var(--sw2-fs-lg);font-weight:600;letter-spacing:-.01em;}
 .sw2-ew-you{color:var(--sw2-amber);border-color:var(--sw2-amber-dim);font-size:11px;letter-spacing:0;}
 .sw2-ew-kind{font-size:10.5px;color:var(--sw2-text-faint);letter-spacing:0;font-weight:400;}
-.sw2-ew-sub{display:flex;gap:var(--sw2-sp-3);flex-wrap:wrap;margin-top:3px;}
+.sw2-ew-sub{display:flex;align-items:center;gap:var(--sw2-sp-3);flex-wrap:wrap;margin-top:3px;}
 .sw2-ew-sub b{color:var(--sw2-text-dim);font-weight:400;}
+.sw2-simulation-toggle{display:inline-flex;align-items:center;gap:var(--sw2-sp-2);min-height:32px;padding:0;border:0;background:transparent;color:var(--sw2-text-faint);font:inherit;white-space:nowrap;cursor:pointer;}
+.sw2-simulation-track{display:inline-flex;align-items:center;flex:none;width:28px;height:16px;padding:2px;box-sizing:border-box;border:1px solid var(--sw2-line);border-radius:999px;background:var(--sw2-card-2);}
+.sw2-simulation-track::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--sw2-text-faint);}
+.sw2-simulation-toggle[aria-checked="true"]{color:var(--sw2-text-dim);}
+.sw2-simulation-toggle[aria-checked="true"] .sw2-simulation-track{justify-content:flex-end;background:var(--sw2-blue-soft);border-color:var(--sw2-blue-line);}
+.sw2-simulation-toggle[aria-checked="true"] .sw2-simulation-track::after{background:var(--sw2-blue);}
+.sw2-simulation-toggle:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:3px;border-radius:var(--sw2-r-sm);}
+.sw2-simulation-toggle:disabled{opacity:.5;cursor:wait;}
+.sw2-simulation-fixed{color:var(--sw2-text-faint);}
+.sw2-simulation-status{font-size:var(--sw2-fs-sm);color:var(--sw2-text-dim);margin-top:var(--sw2-sp-1);overflow-wrap:anywhere;}
+.sw2-simulation-status:empty{display:none;}
+@media(pointer:coarse){.sw2-simulation-toggle{min-height:44px;}}
 /* 每一格的标题：复用 `.sw2-list-head`（它自带那条横线），只补那一格的计数。
    ★★leg141：`.sw2-ew-hint`（标题后那半句括号说明）**整条删掉** —— 用户令
    「**把（账上「涟漪」头一个是他；正文给的也在这一格里）这种文字给删了**」。
@@ -1722,6 +1732,19 @@
 .sw2-params-grid .sw2-tgl .sw2-actions .sw2-btn{border:0;border-radius:0;min-width:38px;padding:5px 10px;}
 .sw2-params-grid .sw2-tgl .sw2-param-val{display:none;}
 .sw2-params-grid .sw2-inject-box{gap:0;}
+/* leg207：运行与注入四组共用宽度，控件的用途紧跟在下一行。 */
+#sw2_subtab_params_runtime_panel .sw2-params-grid,.sw2-runtime-stack{display:flex;flex-direction:column;gap:20px;min-width:0;width:100%;}
+.sw2-runtime-group{box-sizing:border-box;min-width:0;width:100%;padding:20px 22px;border:1px solid var(--sw2-line);border-radius:var(--sw2-r-md);background:var(--sw2-card);}
+.sw2-runtime-group > h4{font-size:16px;font-weight:600;line-height:1.5;color:var(--sw2-text);margin:0 0 12px;}
+.sw2-runtime-group .sw2-master-switch{border:0;background:none;padding:0;}
+.sw2-runtime-group .sw2-tgl > h4{flex:1 1 240px;min-width:0;}
+.sw2-runtime-group .sw2-tgl .sw2-actions{flex:none;}
+.sw2-runtime-group .sw2-runtime-help{flex:1 1 100%;margin-top:4px;overflow-wrap:anywhere;}
+.sw2-runtime-group .sw2-inject-facts{border-top:1px solid var(--sw2-line-soft);padding-top:12px;overflow-wrap:anywhere;}
+.sw2-runtime-facts-title{font-size:12px;font-weight:500;color:var(--sw2-text-body);margin-bottom:4px;}
+.sw2-runtime-advanced{margin-top:18px;border-top:1px solid var(--sw2-line);padding-top:12px;min-width:0;}
+.sw2-runtime-advanced > summary{font-size:13px;line-height:1.8;color:var(--sw2-text-body);cursor:pointer;}
+.sw2-runtime-advanced > summary:focus-visible{outline:2px solid var(--sw2-blue);outline-offset:3px;}
 /* ★★★（2026-10-05）表格行那一份：**框宽 96px**（照 leg169 的读数），而"说明"仍由上面那条基本规则
    落在 `.sw2-field-head` 的下一行。★grid 那两列只作用于 `.sw2-field-head`（旧写法直接写在
    `.sw2-field` 上 ⇒ 说明成了"第三行"，那正是用户截图里那一百多像素空档）。 */
@@ -2012,6 +2035,9 @@
   .sw2-view .sw2-set-card > h4{font-size:16px;}
   .sw2-settings,.sw2-params-grid{gap:16px;}
   .sw2-settings-column,.sw2-params-column{gap:16px;}
+  .sw2-runtime-group{padding:18px 16px;}
+  #sw2_subtab_params_runtime_panel .sw2-params-grid,.sw2-runtime-stack{gap:16px;}
+  .sw2-runtime-group .sw2-tgl > h4{flex-basis:100%;}
   .sw2-params-grid .sw2-master-switch > h4{flex:1 1 100%;}
   .sw2-params-grid .sw2-master-switch > .sw2-param-val{margin-left:auto;}
   .sw2-settings .sw2-field.sw2-field-inline{grid-template-columns:minmax(0,1fr);gap:6px;}
@@ -2049,6 +2075,7 @@
   .sw2-chip,.sw2-fchip,.sw2-model{display:inline-flex;align-items:center;min-height:36px;}
   .sw2-chainbtn{min-height:32px;padding:0 10px;}
   .sw2-fold > summary{min-height:32px;}
+  .sw2-runtime-advanced > summary{min-height:36px;}
   .sw2-param-select,.sw2-param-input{min-height:36px;}
   /* ★输入类一律 16px：iOS 上碰一个 <16px 的输入框会**整页放大**，而且放大之后回不去。
      改前实测：`.sw2-input` 与两个搜索框都是 **13px**。 */

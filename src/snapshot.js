@@ -399,6 +399,51 @@ export function planRetention({ snapshots, retain = RETAIN_STEPS, keepId = null 
     };
 }
 
+/** 同一恢复结果只列一次；存储类型不构成回档选项，不改写底层快照。 */
+export function previewSnapshots(snapshots) {
+    const rows = sortBySeq((Array.isArray(snapshots) ? snapshots : []).filter(s => isObj(s) && s.id));
+    const groups = new Map(), unreadable = [];
+    const ordered = value => Array.isArray(value) ? value.map(ordered)
+        : isObj(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value;
+    for (const row of rows) {
+        try {
+            const restored = restoreFrom({ snapshots: rows, targetId: row.id });
+            if (!restored.ok || !isObj(restored.world) || Array.isArray(restored.world)) throw new Error(restored.error || '快照未包含有效世界内容。');
+            // known 决定恢复后的旧卷可用范围，也属于恢复结果；不按类型或保存时间判同一状态。
+            const state = JSON.parse(JSON.stringify({ world: restored.world, known: row.memoryHistory?.known || {} }));
+            const key = JSON.stringify(ordered(state)), group = groups.get(key);
+            if (!group) groups.set(key, { row, state });
+            else if (row.current || !group.row.current) group.row = row; // 优先保留真实当前目标，否则取较新记录。
+        } catch (err) {
+            unreadable.push({ row, preview: { readable: false, diffCount: null, headline: '无法读取', error: String(err?.message || err) } });
+        }
+    }
+    const selected = [...groups.values(), ...unreadable].sort((a, b) => seqOfSnapshot(a.row) - seqOfSnapshot(b.row));
+    const totals = new Map(), seen = new Map();
+    for (const { row, state } of selected) if (state && Number.isFinite(row.tick)) totals.set(row.tick, (totals.get(row.tick) || 0) + 1);
+    let previous = null;
+    return selected.map(({ row, state, preview: failed }) => {
+        if (failed) return { ...row, preview: failed };
+        const diffCount = previous ? snapshotDifferenceCount(previous.state, state) : null;
+        const saveIndex = (seen.get(row.tick) || 0) + 1;
+        seen.set(row.tick, saveIndex);
+        const preview = { readable: true, diffCount, headline: diffCount === null ? '差异 —' : `差异 ${diffCount} 处`,
+            comparedTo: previous?.id || null, saveIndex, saveCount: totals.get(row.tick) || 1 };
+        previous = { state, id: row.id };
+        return { ...row, preview };
+    });
+}
+
+function snapshotDifferenceCount(before, after) {
+    if (Object.is(before, after)) return 0;
+    if (!isObj(before) || !isObj(after) || Array.isArray(before) !== Array.isArray(after)) return 1;
+    let count = 0;
+    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        count += !Object.hasOwn(before, key) || !Object.hasOwn(after, key) ? 1 : snapshotDifferenceCount(before[key], after[key]);
+    }
+    return count;
+}
+
 /** 状态栏/面板用的一行事实摘要（纯函数） */
 export function describeSnapshots(snapshots) {
     const list = (Array.isArray(snapshots) ? snapshots : []).filter((s) => isObj(s) && s.id);

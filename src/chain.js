@@ -1,20 +1,20 @@
 // story-world-v2/src/chain.js
 // K40 因果链展开器（链视图细案 §3.2 → A-15）：引擎层纯函数——只读 world 数据面，
 // 把"一件事的来去"展开成确定性节点链：
-//   上承（up）：root 沿 source.ref 逐级上溯——ripple 逐跳（事件节点）/ plot 遇盘算弧线卡
+//   上承（up）：root 沿因果 source.ref / links.up 上溯——ripple 逐跳 / plot 遇盘算弧线卡
 //     （agenda 节点：委派链 parents + 产果 fruits + 子盘算 children）/ state 到「由世界处境而生」
 //     （state-root）/ ref 落空 → gap（悬空）；**里程碑聚合穿透**：上溯未命中热 events →
 //     ★leg111：先查 `milestone.rows`（纪内逐事件的来路）——**归档事件与热池事件走同一条路**；
 //     再退回纪节点（span/counts/titles/ids/entries），纪的 parents 沿 m.links.up 聚合
 //     继续（links.up 空 → terminal「纪之源头已不可查」）；
-//   下沿（down）：root 的 ripple 引用方（source.type==='ripple' && source.ref===id）全分支递归
+//   下沿（down）：root 的因果引用方（ripple source.ref 或显式 links.up）全分支递归
 //     （按出生轮序）——★leg111：**归档的引用方也进下沿**；已归档引用方（m.links.down 点名）→ leaf-note 余尾收敛珠；
 // 防御：未知 id/空世界 → {ok:false}；环防 seen（上溯/下沿/委派链各自有界）→ gap(ring)；
 //   ★leg110 修：环防的 `seen` **分两条路径各自为界**——事件链一条、纪递归一条（纪不继承事件链的 seen），
 //     否则"纪引用到一个链上走过的事件"会被误判成成环（真账 19% 的节点撞这条误报，见 `milestoneNode` 头注）。
 // 纪律：输入不可变、输出可序列化、逐字节确定；本模块零创作（不生成任何玩家词面），
 // 渲染层（renderChainViewHtml）负责 id → 玩家名与措辞。
-// 数据面真语义（台账 L107 实读记录）：事件 down 边不维护——下游靠扫 source.ref 引用方；
+// 旧事件 down 边可能未维护；下游扫描 source.ref 与 links.up 因果引用方。
 //   ★leg111 起归档事件**保留来路**（`milestone.rows` 存事件契约那五格）⇒ 纪内逐事件的上承/下沿都可枚举；
 //   旧账（本笔之前归档的）没有 `rows` ⇒ 如实退回"纪节点 + 余尾"（不编来路）。
 //   归档产果仍只列热池（agenda 产果那一栏未跟改）。
@@ -153,40 +153,50 @@ function milestoneNode(evs, ms, m, seen, arch = new Map()) {
     return node;
 }
 
-// 上承路径（root 之上，最远在前；事件段为单一路径，纪/弧线自带分支面）
+// Production source and causal links are independent: dialogue retains its source,
+// while links.up carries existing event causes (including completed/archived causes).
+function eventCauseRefs(ev) {
+    const primary = ev.source?.type === 'ripple' ? ev.source.ref : null;
+    return [...new Set([primary, ...(Array.isArray(ev.links?.up) ? ev.links.up : [])]
+        .filter(ref => typeof ref === 'string' && ref))];
+}
+
+// 上承路径（root 之上，最远在前）。多因展开所有已知来路；同祖去重，环防仅限当前路径。
 function sourceUp(world, evs, ags, ms, srcEv, seen, arch = new Map()) {
     const out = [];
-    const walk = (ev) => {
+    const visited = new Set();
+    const walk = (ev, path) => {
         const t = ev.source?.type;
-        if (t === 'state') { out.push({ kind: 'state-root' }); return; }
-        // ★leg40：**世界源起的根**（`seed-roots.js` 落账的第四型源）——它不是"局势自己拱出来的处境"，
-        //   是**书里写着的事**（`seedFrom.quote` 就是那句话）⇒ 单独成一个终节点，面板上必须分开说。
-        if (t === 'seed') { out.push({ kind: 'seed-root', seedFrom: ev.seedFrom || null }); return; }
-        if (t === 'plot') { out.push(agendaNode(world, ags, ags.get(ev.source?.ref))); return; }
-        const ref = ev.source?.ref;
-        if (!ref) { out.push({ kind: 'gap', reason: 'missing' }); return; }
-        if (seen.has(ref)) { out.push({ kind: 'gap', reason: 'ring' }); return; }
-        seen.add(ref);
-        const hot = evs.get(ref);
-        if (hot) { out.push(evNode(hot)); walk(hot); return; }
-        // ★★★leg111：上游那件事**已归档** ⇒ 用 `rows` 保住的来路继续往上走（改前这里落到"悬空"、链就此断）。
-        //   这就是用户要的"和其他没进的事件一样"：归档与否，链视图的走法完全一致。
-        const arc = arch.get(ref);
-        if (arc) { const n = { ...arc, archived: true }; out.push(evNode(n)); walk(n); return; }
-        const m = msOf(ms, ref);
-        if (m) { out.push(milestoneNode(evs, ms, m, new Set(), arch)); return; }   // ★leg110：纪递归**从空集起步**（不继承事件链的 seen）——见 milestoneNode 头注
-        out.push({ kind: 'gap', reason: 'missing' });
+        const refs = eventCauseRefs(ev);
+        if (t === 'plot') out.push(agendaNode(world, ags, ags.get(ev.source?.ref)));
+        if (!refs.length) {
+            if (t === 'state') out.push({ kind: 'state-root' });
+            else if (t === 'seed') out.push({ kind: 'seed-root', seedFrom: ev.seedFrom || null });
+            else if (t !== 'plot' && t !== 'dialogue') out.push({ kind: 'gap', reason: 'missing' });
+            return;
+        }
+        for (const ref of refs) {
+            if (path.has(ref)) { out.push({ kind: 'gap', reason: 'ring' }); continue; }
+            if (visited.has(ref)) continue;
+            visited.add(ref);
+            const nextPath = new Set(path);
+            nextPath.add(ref);
+            const parent = evs.get(ref) || (arch.has(ref) ? { ...arch.get(ref), archived: true } : null);
+            if (parent) { walk(parent, nextPath); out.push(evNode(parent)); continue; }
+            const m = msOf(ms, ref);
+            if (m) { out.push(milestoneNode(evs, ms, m, new Set(), arch)); continue; }
+            out.push({ kind: 'gap', reason: 'missing' });
+        }
     };
-    walk(srcEv);
-    out.reverse();
+    walk(srcEv, new Set(seen));
     return out;
 }
 
-// 下沿全分支：直接 ripple 引用方递归 + 归档余尾收敛珠（m.links.down 点名）
+// 下沿全分支：显式因果引用方递归 + 归档余尾收敛珠（m.links.down 点名）
 // ★★★leg111：**归档的引用方也进下沿**（改前只扫热池 `world.events` ⇒ 一条事归档后，它的下游就看不见了）。
 function downTree(world, evs, ms, srcEv, seen, arch = new Map()) {
     const kids = [...(world.events || []), ...[...arch.values()].map((r) => ({ ...r, archived: true }))]
-        .filter((e) => e.source?.type === 'ripple' && e.source.ref === srcEv.id)
+        .filter((e) => eventCauseRefs(e).includes(srcEv.id))
         .sort((a, b) => eventBornTick(a.id) - eventBornTick(b.id) || idCmp(a.id, b.id));
     const children = [];
     const childSeen = new Set(seen);
@@ -196,8 +206,9 @@ function downTree(world, evs, ms, srcEv, seen, arch = new Map()) {
             children.push({ ...evNode(k), ring: true });   // 环防（人工构造互指才可达，防御不删）
             continue;
         }
-        childSeen.add(k.id);
-        children.push(evNode(k, downTree(world, evs, ms, k, childSeen, arch)));
+        const branchSeen = new Set(childSeen);
+        branchSeen.add(k.id);
+        children.push(evNode(k, downTree(world, evs, ms, k, branchSeen, arch)));
     }
     for (const m of world.milestones || []) {
         if ((m.links?.down || []).includes(srcEv.id)) {

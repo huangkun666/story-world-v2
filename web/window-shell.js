@@ -24,7 +24,7 @@
  */
 export function createWindowShell({ windowId, getViewState = null, setStatus = null } = {}) {
     const WINDOW_ID = String(windowId || '');
-    const say = (m) => { try { setStatus?.(m); } catch (_) { /* 状态条不许影响收起 */ } };
+    const say = (m, options) => { try { setStatus?.(m, options); } catch (_) { /* 状态条不许影响收起 */ } };
 
     /** 弹窗压顶内联规则（v1 同款：id 特异性保证任何加载顺序下固定位、压过 ST 自身弹层） */
     function modalBoost() {
@@ -104,7 +104,7 @@ export function createWindowShell({ windowId, getViewState = null, setStatus = n
 
     function closeWindow() {
         document.getElementById(WINDOW_ID)?.classList.remove('sw2-open');
-        say('观棋窗口已收起');   // ★leg108（B9）：收起时收回中性——`openWindow` 只显示、**不重画状态条**（旧话会原样留到下次打开）
+        say('观棋窗口已收起', { diagnostic: false }); // 收回中性状态，调试记录不收集窗口动作。
         // ★细案实体页：视图态随关面板重置（照编年页"纯视图态、关面板重置"的口径）
         try {
             const vs = getViewState?.();

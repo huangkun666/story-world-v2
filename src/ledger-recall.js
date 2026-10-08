@@ -60,6 +60,8 @@ import { chronicleBriefKind, CHRONICLE_BRIEF_KINDS } from './chronicle-brief.js'
 //     本仓为"同一个判断两处各写一份"付过账（leg117 那张表分叉），这里不重蹈。
 import { recallForPack } from './embed-orchestration.js';
 import { RECALL_TOP_DEFAULT } from './ledger-vector.js';
+import { filterChatRecords } from './event-provenance.js';
+import { eventDetailText } from './event-contract.js';
 // ★本笔（死码清理）：原来这里还有第二条 import——`setting.js` 的 `eventBornTick`（leg118 借来的
 //   "一件事件出生在第几轮"那把尺）。它只服务 `withRound`，而 `withRound` 只服务那四种被删的取法
 //   ⇒ 一起删了。★本模块回到**一条 import**（仍是真叶子：不取世界、不碰 DOM、不碰存储）。
@@ -161,7 +163,20 @@ const DEFAULTS = Object.freeze({
 export function chronicleOf(ssot, volumes) {
     const hot = Array.isArray(ssot?.chronicle) ? ssot.chronicle : [];
     const list = Array.isArray(volumes) ? volumes : [];
-    if (!list.length) return hot;
+    const details = new Map();
+    for (const m of ssot?.milestones || []) for (const e of m.rows || []) details.set(e.id, e);
+    for (const e of ssot?.events || []) details.set(e.id, e);
+    const enrich = rows => {
+        const mapped = rows.map(r => {
+        const e = details.get(r?.eventRef);
+        const detail = eventDetailText(e);
+        if (!detail || String(r.text || '').includes(detail) ||
+            !(r.text === e.title || String(r.text || '').startsWith(`事件「${e.title}」`))) return r;
+        return { ...r, text: `${r.text}；${detail}` };
+        });
+        return mapped.some((r, i) => r !== rows[i]) ? mapped : rows;
+    };
+    if (!list.length) return enrich(hot);
     const ordered = list.slice().sort((a, b) => volumeStartTick(a) - volumeStartTick(b));
     const cold = [];
     for (const v of ordered) {
@@ -169,7 +184,7 @@ export function chronicleOf(ssot, volumes) {
         if (!rows) continue;
         for (const r of rows) if (r) cold.push(r);
     }
-    return cold.length ? [...cold, ...hot] : hot;
+    return enrich(cold.length ? [...cold, ...hot] : hot);
 }
 
 /** 一卷从第几轮开始——**只用来排序**；读不出 ⇒ 排到最后。★绝不填 `0` 冒充轮次（红线 §2.2 第 2 条）。 */
@@ -433,8 +448,11 @@ function modeByVector(ssot, q) {
         excludeIds: Array.isArray(q?.excludeIds) ? q.excludeIds : [],
         rippleIds: Array.isArray(q?.rippleIds) ? q.rippleIds : [],
         tickNow: q?.currentTick ?? null,
-        rows: Array.isArray(q?.rows) ? q.rows : null,
+        rows: Array.isArray(q?.rows) ? q.rows : chronicleOf(ssot, q.volumes),
+        audience: q.audience,
+        volumes: q.volumes,
     });
+    if (got?.report?.provenance && Array.isArray(q.provenanceReports)) q.provenanceReports.push(got.report.provenance);
     // ★交出去的**必须是编年行那个形状**（`{id,tick,text,…}`）——本层其余取法都是这个形状，
     //   消费者（`formatRecalled` / 包那一栏）按同一个形状读。`line` 是排好版的那一句，也一起带上。
     return (got?.items || []).map((it) => ({ id: it.id, tick: it.tick, text: it.text, ...(it.timeMark ? { timeMark: it.timeMark } : {}), line: it.line, score: it.score }));
@@ -527,6 +545,7 @@ export function matchedKeysOf(ssot, text) {
  */
 export function recallLedger(ssot, query = {}) {
     const q = { ...DEFAULTS, ...query };
+    q.provenanceReports = [];
     const modes = (Array.isArray(q.modes) ? q.modes : [q.modes]).filter(Boolean);
     const out = { ok: false, items: [], reason: '', mode: modes, queryChars: 0, total: 0 };
     try {
@@ -562,8 +581,11 @@ export function recallLedger(ssot, query = {}) {
             for (const b of bucket) items.push(b.it);
         }
         // 条数闸默认不限；按各模式的选择顺序截取，关键词匹配不会再被新旧覆盖。
+        const filtered = q.audience === 'chat' ? filterChatRecords(ssot, items, { volumes: q.volumes, rows: q.rows }) : null;
+        if (filtered) out.provenance = filterChatRecords(ssot, [...filtered.report.records, ...q.provenanceReports.flatMap(report => report.records || [])], { volumes: q.volumes, rows: q.rows }).report;
+        const eligible = filtered ? filtered.items : items;
         const maxItems = Number.isFinite(q.limit) && q.limit >= 0 ? q.limit : Infinity;
-        const capped = maxItems < items.length ? items.slice(0, maxItems) : items;
+        const capped = maxItems < eligible.length ? eligible.slice(0, maxItems) : eligible;
         out.total = capped.length;
 
         // 字符预算：★只按预算切，不设条数上限（本仓血证：`entityUpdates ≤3` 那个静默闸）
@@ -585,6 +607,7 @@ export function recallLedger(ssot, query = {}) {
             kept.push(it); chars += len;
         }
         out.items = kept;
+        if (filtered) out.provenance.selectedIds = kept.map(it => String(it?.id ?? ''));
         out.queryChars = chars;
         if (!kept.length) {
             out.reason = items.length

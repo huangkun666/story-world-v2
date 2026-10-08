@@ -21,8 +21,7 @@
 //
 // ＝＝ 治法（口径写在 `web/status-bar.js` 的 `isOwnError` / `reportWinError` 上）＝＝
 //   · **自己的错**（出处落在本插件目录里）⇒ 照旧进状态条 ＋ 控制台。
-//   · **别人的错** ⇒ **不进状态条**，但**必须进控制台**（不许悄悄吞——"看不到"比"看错"更坏）。
-//   · **拿不到出处**（无 `filename`、无 stack）⇒ **当自己的**：宁可多报一句，也不许把自己的错吞掉。
+//   · leg206 用户收口：宿主/其他扩展及未知来源不进插件状态条、记录或重复转发。
 //
 // ＝＝ 为什么这些判据长这样 ＝＝
 //   ★第 1 条是**前置自证**：没有它，"别人的错不写状态条"这条**一个什么都不写的实现也能过**
@@ -81,14 +80,13 @@ test('★★leg145b ①（★前置自证）：**自己的错**必须真进状�
     });
 });
 
-test('★★leg145b ②：**别人抛的错不进状态条**，但必须进控制台（不许悄悄吞）', () => {
+test('leg206：别人抛的错不进插件状态条，也不由插件重复转发', () => {
     const e = { message: 'SpeechSynthesisUtterance is not defined', filename: ST_TTS_URL, error: new ReferenceError('SpeechSynthesisUtterance is not defined') };
     withStatusBox((box) => {
         const warned = captureWarn(() => reportWinError(e));
         assert.equal(box.textContent, '',
             '★ST 的 TTS 扩展抛的错不许再印在本插件状态条上（这就是用户实机看到的那一条）');
-        assert.equal(warned.length, 1, '★但必须留一条控制台记录——"看不到"比"看错"更坏');
-        assert.ok(warned[0].includes('SpeechSynthesisUtterance'), `★留痕里要带上原文，实测：${warned[0]}`);
+        assert.equal(warned.length, 0, '插件不替宿主再次输出；未阻止浏览器原生处理');
     });
 });
 
@@ -102,12 +100,12 @@ test('★★leg145b ③：**同协议、同前缀、只差一个目录名**的�
     });
 });
 
-test('★leg145b ④：**拿不到出处**（无 filename、无 stack）⇒ 当自己的（宁可多报，也不许吞掉自家的错）', () => {
-    assert.equal(isOwnError({}), true, '★两头都拿不到出处 ⇒ 当自己的');
-    assert.equal(isOwnError({ filename: '' }), true, '★空 filename 等于没出处 ⇒ 当自己的');
+test('leg206：拿不到出处时不自动归为插件', () => {
+    assert.equal(isOwnError({}), false);
+    assert.equal(isOwnError({ filename: '' }), false);
     withStatusBox((box) => {
         captureWarn(() => reportWinError({ message: '匿名异常' }));
-        assert.equal(box.textContent, '注意：未捕获异常：匿名异常', '★没出处的那种照旧要写（保守优先）');
+        assert.equal(box.textContent, '', '未知来源不写本插件状态条');
     });
 });
 
@@ -126,13 +124,14 @@ test('★leg145b ⑤：`unhandledrejection` 没有 `filename`，改看 `reason.s
         box.textContent = '';
         const warned = captureWarn(() => reportWinError({ reason: theirs }));
         assert.equal(box.textContent, '', '★别人的 rejection 不许进状态条');
-        assert.equal(warned.length, 1, '★但别人的 rejection 也要留痕');
+        assert.equal(warned.length, 0, '其他来源不由插件重复输出');
     });
 });
 
 test('★★leg145b ⑥（接线锁）：分流真挂在两个事件上 ＋ 插件目录**现算**（不许写死目录名）', () => {
     const index = readFileSync(new URL('../web/index.js', import.meta.url), 'utf8');
     const bar = readFileSync(new URL('../web/status-bar.js', import.meta.url), 'utf8');
+    const scope = readFileSync(new URL('../web/runtime-diagnostics.js', import.meta.url), 'utf8');
 
     assert.match(index, /addEventListener\('error',\s*reportWinError\)/,
         '★`error` 事件必须挂到分流的那个口上（挂回旧写法 = 病回来）');
@@ -143,6 +142,7 @@ test('★★leg145b ⑥（接线锁）：分流真挂在两个事件上 ＋ 插�
 
     assert.match(bar, /export\s+function\s+reportWinError\b/, '★分流口必须在 `web/status-bar.js` 里（状态条那行字只有一处写手）');
     assert.match(bar, /export\s+function\s+isOwnError\b/, '★判别口要能被判据直接调（否则第 ③④⑤ 条只能靠集成测试碰运气）');
-    assert.match(bar, /new URL\('\.\.\/',\s*import\.meta\.url\)/,
+    assert.match(scope, /new URL\('\.\.\/',\s*import\.meta\.url\)/,
         '★插件根目录必须**从 `import.meta.url` 现算**——写死 `story-world-v2` 就是第二份"安装契约"真相');
+    assert.match(bar, /return isPluginError\(e\)/, '异常与控制台共用同一归属判据');
 });

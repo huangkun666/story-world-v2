@@ -100,11 +100,11 @@ test('★R1 必带因：因指不到账上真物 ⇒ 不落账，且如实说出
     assert.equal(noCause.ok, false, '★没有因 ⇒ 拒（"无因之变＝随口编的关系"）');
 });
 
-test('★R2 不许抄书：因必须挂在**还没了结**的事上 ⇒ 书里的静态关系结构上写不进来', () => {
+test('事件打磨：已完成事实可引起新关系，编造的事件原因仍拒收', () => {
     const w = W();
     // 拿一件**早就了结**的事当因 ⇒ 拒（"不许拿旧事解释今天的变化"——与字段写回同一条口径）
     const stale = checkWorldStep(step({ relationUpdates: [ru({ cause: { type: 'event', ref: 'ev_c' } })] }), w);
-    assert.equal(stale.ok, false, '★拿已了结的旧事当因 ⇒ 拒');
+    assert.equal(stale.ok, true, '已发生事实可作新关系的因');
     // ★这就是"抄书进不来"的机制：书里写着的师父/血亲关系**指不出账上的任何一件事**
     //   ⇒ 模型想把它抄进这张表时，**没有任何一个合法的 ref 可填**（填了就必然被判"未知/已了结"）。
     const fabricated = checkWorldStep(step({ relationUpdates: [ru({ cause: { type: 'event', ref: 'ev_书里写的师父关系' } })] }), w);
@@ -202,7 +202,7 @@ test('★两个消费口同一把尺：校验面拒的，净化面也丢（不�
     const cases = [
         ['两端不在册', ru({ to: 'e_nobody' })],
         ['因不在账', ru({ cause: { type: 'event', ref: 'ev_不存在' } })],
-        ['因已了结', ru({ cause: { type: 'event', ref: 'ev_c' } })],
+        ['因盘算不存在', ru({ cause: { type: 'agenda', ref: 'ag_missing' } })],
         ['玩家当持有方', ru({ from: 'e_me' })],
     ];
     for (const [name, bad] of cases) {

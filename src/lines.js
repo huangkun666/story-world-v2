@@ -71,13 +71,14 @@ export const LINE_DETAIL_KEEP = 20;
 // ── 来路（照量测脚本 `parentOfEvent` / `parentOfAgenda` 逐字同规）──────────────
 /**
  * 一件事件的来路（父 id；null = 根）。
- * `ripple` 指向另一件事 · `plot` 指向一条盘算 · `state`/`seed`/`dialogue` ⇒ 根（处境/书里/正文起头）。
+ * ripple/plot 的 source.ref 保留主因；其余显式 links.up 第一项为树的父。
+ * 没有显式因的 state/seed/dialogue 才是根；其余多因仍单独计数，树保持单亲。
  */
 export function parentOfEvent(e) {
     const st = e?.source?.type, ref = e?.source?.ref;
     if (st === 'ripple' && ref) return ref;
     if (st === 'plot' && ref) return ref;
-    return null;
+    return (Array.isArray(e?.links?.up) ? e.links.up : []).find(id => typeof id === 'string' && id) || null;
 }
 
 /**

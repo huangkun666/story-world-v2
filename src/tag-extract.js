@@ -206,6 +206,7 @@ const RE_ESCAPED_FENCE_CLOSE = /\\n[ \t]*(?:```|~~~)/;
  */
 function emptyResult() {
     return {
+        protocol: null, events: [], eventsBad: [], actedIds: [],
         actions: [], elapsed: '', elapsedParts: [], at: null,
         changes: [], changesBad: [], promises: [], promisesBad: [],
         count: 0, parsed: 0, unresolved: [], notNoted: [],
@@ -259,6 +260,11 @@ export function extractTags(text, ctx = {}) {
     const changesBad = [];                 // 【变化】**丢掉**的行 + 为什么丢（丢了什么必须能被看见）
     const promises = [];                   // 【承诺】谁｜许了什么｜对谁
     const promisesBad = [];                // 【承诺】**丢掉**的行 + 为什么丢
+    const events = [];
+    const eventsBad = [];
+    const references = [], conditionUpdates = [], conditionsBad = [], associations = [];
+    let recentAt = null;
+    let protocol = null;
     const entById = new Map((entities || []).filter((e) => e?.id).map((e) => [e.id, e]));   // 类别校验用（角色的格 ≠ 势力的格）
     let at = null;                         // 【此刻】的时间点原文（★**先到先得**：点不是一个可以累加的量）
 
@@ -283,10 +289,28 @@ export function extractTags(text, ctx = {}) {
     const shell = shellRange(text0, { loose });
     if (!shell) return emptyResult();
     const lines = text0.split(/\r?\n/);
+    // Protocol is a block-level declaration. Invalid/missing v3 declarations must
+    // never reinterpret an association cell as part of a legacy field value.
+    const blockLines = lines.slice(shell.start, shell.end).map(line => line.trim());
+    const declarations = blockLines.filter(line => /^【协议】/.test(line));
+    const newTag = /^【(类别|当事人|影响范围|公开范围|引用|持续条件|条件范围|条件时间|条件变更|替代条件)】/;
+    const newIntent = blockLines.some(line => newTag.test(line));
+    const intent = declarations.length > 0 || newIntent || blockLines.some(line => /^【事件】/.test(line));
+    for (const v of [3, 4]) if (declarations.length && declarations.every(line => line.slice('【协议】'.length).trim() === String(v))) protocol = v;
+    const invalidProtocol = intent && (!protocol || (newIntent && protocol !== 4));
     for (let i = 0; i < lines.length; i += 1) {
         if (i < shell.start || i >= shell.end) continue;
         const raw = lines[i].trim();
         if (!raw) continue;
+        const linked = raw.match(/^【(类别|当事人|影响范围|公开范围|引用|持续条件|条件范围|条件时间|条件变更|替代条件)】(.*)$/);
+        if (linked) {
+            const [, tag, body] = linked;
+            const cells = body.trim().split(TAG_FIELD_SEP).map(s => s.trim());
+            const bad = tag.includes('条件') ? conditionsBad : eventsBad;
+            if (invalidProtocol || protocol !== 4) bad.push({raw, why:'protocol'});
+            else associations.push({tag, cells, raw});
+            continue;
+        }
 
         // ① 时长（可多条 ⇒ 按出现序收集，★累加且**不做算术**）
         if (/^【时长】/.test(raw)) {
@@ -366,6 +390,42 @@ export function extractTags(text, ctx = {}) {
             else actions.push(row);
             continue;
         }
+        if (/^【协议】/.test(raw)) {
+            const version = raw.slice('【协议】'.length).trim();
+            if (!['3','4'].includes(version) || invalidProtocol) malformed.push(raw.slice(0, 40));
+            continue;
+        }
+        if (/^【事件】/.test(raw)) {
+            const cells = raw.slice('【事件】'.length).trim().split(TAG_FIELD_SEP).map(s => s.trim());
+            const [localId, title, participants, status, causes] = cells;
+            const reject = (why) => eventsBad.push({ raw: raw.slice(0, 80), why });
+            if (invalidProtocol || !protocol) { reject('protocol'); continue; }
+            if (protocol === 4) {
+                const [localId, title, status, causes] = cells;
+                if (cells.length < 3 || cells.length > 4 || !localId || !title || !['已完成','未决'].includes(status)) { reject('shape'); continue; }
+                if (events.some(e => e.localId === localId)) { reject('localId'); continue; }
+                events.push({localId,title,pending:status === '未决', ...(recentAt ? {at:recentAt}:{}), ...(sceneId ?? sceneText ? {location:sceneId ?? sceneText}:{}), ...(causes ? {causeIds:[...new Set(causes.split('、').map(s=>s.trim()).filter(Boolean))]}:{})});
+                continue;
+            }
+            if (cells.length < 4 || cells.length > 5 || !localId || !title || !participants || !['已完成', '未决'].includes(status)) { reject('shape'); continue; }
+            if (events.some(e => e.localId === localId)) { reject('localId'); continue; }
+            const participantIds = [], participantNames = [];
+            for (const name of [...new Set(participants.split('、').map(s => s.trim()).filter(Boolean))]) {
+                const id = resolveEntity(name);
+                if (id) { if (!participantIds.includes(id)) participantIds.push(id); }
+                else {
+                    participantNames.push(name);
+                    unresolved.set(name, (unresolved.get(name) || 0) + 1);
+                }
+            }
+            if (!participantIds.length && !participantNames.length) { reject('participants'); continue; }
+            const row = { localId, title, participantIds, pending: status === '未决' };
+            if (participantNames.length) row.participantNames = participantNames;
+            if (sceneId ?? sceneText) row.location = sceneId ?? sceneText;
+            if (causes) row.causeIds = [...new Set(causes.split('、').map(s => s.trim()).filter(Boolean))];
+            events.push(row);
+            continue;
+        }
         // ④ 【此刻】——**现在是什么时候**（时间点；逐字照抄，不做算术、不带源）
         if (/^【此刻】/.test(raw)) {
             const m = RE_AT.exec(raw);
@@ -373,10 +433,12 @@ export function extractTags(text, ctx = {}) {
             const v = normPlace(m?.[1]);
             if (!v) { malformed.push(raw.slice(0, 40)); continue; }
             if (at === null) at = v;           // ★先到先得（不取最后、不拼接：点不是一个可累加的量）
+            recentAt = v;
             continue;
         }
         // ⑤ 【变化】——谁｜哪一格｜变成什么（格名对齐实体账；值**照抄不换算**）
         if (/^【变化】/.test(raw)) {
+            if (invalidProtocol) { changesBad.push({ raw: raw.slice(0, 80), why: 'protocol' }); continue; }
             const m = RE_CHANGE.exec(raw);
             RE_CHANGE.lastIndex = 0;
             const body = normPlace(m?.[1]);
@@ -384,7 +446,8 @@ export function extractTags(text, ctx = {}) {
             const cells = body.split(TAG_FIELD_SEP).map((s) => s.trim());
             const who = cells[0] || '';
             const field = cells[1] || '';
-            const value = cells.slice(2).join(TAG_FIELD_SEP).trim();   // ★值里若含「｜」，整段照收（不切碎）
+            if (protocol && (cells.length < 3 || cells.length > 4)) { changesBad.push({ raw: raw.slice(0, 40), why: 'shape' }); continue; }
+            const value = (protocol ? cells[2] : cells.slice(2).join(TAG_FIELD_SEP)).trim();
             if (!who || !field || !value) { malformed.push(raw.slice(0, 40)); continue; }
             const id = resolveEntity(who);
             if (!id) {
@@ -413,16 +476,19 @@ export function extractTags(text, ctx = {}) {
                 raw: raw.trim(),                            // ★原话（落账时当 `proseQuote` 用：逐字回执）
                 location: sceneId ?? sceneText ?? null,     // 地点继承最近场景（与行动同一条）
                 source: 'tag',
+                ...(protocol && cells[3] ? { eventLocalId: cells[3] } : {}),
             });
             continue;
         }
         // ⑥ 【承诺】——谁｜许了什么｜对谁（不是动手，但确实发生了；"让世界记住我的事"那一格）
         if (/^【承诺】/.test(raw)) {
+            if (invalidProtocol) { promisesBad.push({ raw: raw.slice(0, 80), why: 'protocol' }); continue; }
             const m = RE_PROMISE.exec(raw);
             RE_PROMISE.lastIndex = 0;
             const body = normPlace(m?.[1]);
             if (!body) { malformed.push(raw.slice(0, 40)); continue; }
             const cells = body.split(TAG_FIELD_SEP).map((s) => s.trim());
+            if (protocol && (cells.length < 3 || cells.length > 4)) { promisesBad.push({ raw: raw.slice(0, 40), why: 'shape' }); continue; }
             const who = cells[0] || '';
             const what = cells[1] || '';
             const toText = cells[2] || '';
@@ -445,11 +511,79 @@ export function extractTags(text, ctx = {}) {
                 raw: raw.trim(),                            // ★原话（落账时当 `proseQuote` 用：逐字回执）
                 location: sceneId ?? sceneText ?? null,
                 source: 'tag',
+                ...(protocol && cells[3] ? { eventLocalId: cells[3] } : {}),
             });
             continue;
         }
         // ⑦ 其它一律不看（正文归模型自由写；只有 `【…` 开头却不像上面各族的行才当"形状不合"留痕）
-        if (/^【(时长|场景|行动|此刻|变化|承诺)/.test(raw)) malformed.push(raw.slice(0, 40));
+        if (/^【(时长|场景|行动|此刻|变化|承诺|协议|事件)/.test(raw)) malformed.push(raw.slice(0, 40));
+    }
+
+    // 先登记声明，再合并关联；关联的前后顺序不影响结果。
+    const states = {'尚未生效':'planned','有效':'active','已结束':'ended'};
+    for (const a of associations.filter(a => ['持续条件','条件变更','引用'].includes(a.tag))) {
+        const [id, eventRef, statement, state] = a.cells;
+        const reject = why => (a.tag === '引用' ? eventsBad : conditionsBad).push({raw:a.raw,why});
+        if (a.tag === '引用') {
+            if (a.cells.length !== 1 || !id) reject('shape');
+            else if (!references.includes(id)) references.push(id);
+        } else if (a.tag === '持续条件') {
+            if (a.cells.length !== 4 || !id || !eventRef || !statement || !states[state]) reject('shape');
+            else if (conditionUpdates.some(c=>c.localId===id)) reject('localId');
+            else if (!events.some(e=>e.localId===eventRef)) reject('eventRef');
+            else conditionUpdates.push({op:'create',localId:id,eventRef,statement,state:states[state]});
+        } else {
+            if (a.cells.length !== 3 || !id || !['有效','已结束'].includes(eventRef) || !statement) reject('shape');
+            else conditionUpdates.push({op:'state',conditionRef:id,state:states[eventRef],eventRef:statement});
+        }
+    }
+    const scopeItem = cells => {
+        const kinds = {'对象':'entity','成员':'members','地点':'place','原文':'text'};
+        const kind = kinds[cells[1]], text = cells[2];
+        if (cells.length !== 3 || !kind || !text) return null;
+        const ref = ['entity','members'].includes(kind) ? resolveEntity(text) : null;
+        const eligible = ref && (kind !== 'members' || entById.get(ref)?.kind === 'faction');
+        return {kind:kind === 'members' && !eligible ? 'text' : kind,text,...(eligible ? {ref}:{})};
+    };
+    const conditionTimes = new Map();
+    for (const a of associations.filter(a => !['持续条件','条件变更','引用'].includes(a.tag))) {
+        const condition = a.tag.includes('条件');
+        const bad = condition ? conditionsBad : eventsBad;
+        const row = condition ? conditionUpdates.find(c=>c.op==='create' && c.localId===a.cells[0]) : events.find(e=>e.localId===a.cells[0]);
+        const reject = why => bad.push({raw:a.raw,why});
+        if (!row) { reject(condition ? 'conditionRef':'eventRef'); continue; }
+        if (a.tag === '类别') {
+            if (a.cells.length !== 2 || !a.cells[1] || row.category) reject('shape'); else row.category=a.cells[1];
+        } else if (a.tag === '当事人') {
+            const names = (a.cells[1] || '').split('、').map(s=>s.trim()).filter(Boolean);
+            if (a.cells.length !== 2 || !names.length) {reject('shape');continue;}
+            row.actors ||= [];
+            for (const name of names) if (!row.actors.some(x=>x.name===name)) {
+                const ref=resolveEntity(name);row.actors.push({name,...(ref?{ref}:{})});
+            }
+        } else if (['影响范围','公开范围','条件范围'].includes(a.tag)) {
+            const scope=scopeItem(a.cells);if (!scope) {reject('shape');continue;}
+            const field = a.tag==='影响范围' ? 'affected' : a.tag==='公开范围' ? 'audience':'scope';
+            (row[field] ||= []).push(scope);
+        } else if (a.tag==='条件时间') {
+            if (a.cells.length!==3) {reject('shape');continue;}
+            const first = conditionTimes.get(row);
+            if (first) {
+                if (first[0] !== a.cells[1] || first[1] !== a.cells[2]) reject('conflict');
+                continue;
+            }
+            conditionTimes.set(row, a.cells.slice(1));
+            if(a.cells[1])row.effectiveFrom=a.cells[1];if(a.cells[2])row.effectiveUntil=a.cells[2];
+        } else if (a.tag==='替代条件') {
+            if(a.cells.length!==2 || !a.cells[1])reject('shape');
+            else if (row.supersedes && row.supersedes !== a.cells[1]) reject('conflict');
+            else row.supersedes=a.cells[1];
+        }
+    }
+    if (protocol === 4) for (const [rows,bad] of [[changes,changesBad],[promises,promisesBad]]) {
+        for (let i=rows.length-1;i>=0;i--) if(rows[i].eventLocalId && !events.some(e=>e.localId===rows[i].eventLocalId)) {
+            bad.push({raw:rows[i].raw,why:'eventRef'});rows.splice(i,1);
+        }
     }
 
     // ★`parsed` 的语义（leg89 实测校正，写死防将来改歪）：**正文里解析出的行动条数**
@@ -461,6 +595,9 @@ export function extractTags(text, ctx = {}) {
     const kept = actions.slice(0, cap);
 
     return {
+        protocol, events, eventsBad,
+        ...(protocol === 4 || conditionsBad.length ? {references,conditionUpdates,conditionsBad}:{}),
+        actedIds: [...new Set([...actions, ...playerSeen].map(a => a.actorId))],
         actions: kept,
         // ★散文并列，不是时长合计（合计就要做算术 = 编数）
         elapsed: elapsedParts.join('；'),
@@ -520,7 +657,7 @@ export function hasTagFacts(f) {
         || f.malformed?.length || f.playerDropped
         // ★★★leg123：三族新料也算"有料"——只有【此刻】/【变化】/【承诺】时也要进包、要出声
         //   （★`*Bad` 也算：丢了什么**必须能被看见**，这正是"不许静默"那条口径的落点）。
-        || f.at || f.changes?.length || f.promises?.length || f.changesBad?.length || f.promisesBad?.length,
+        || f.at || f.events?.length || f.eventsBad?.length || f.references?.length || f.conditionUpdates?.length || f.conditionsBad?.length || f.changes?.length || f.promises?.length || f.changesBad?.length || f.promisesBad?.length,
     );
 }
 
@@ -537,16 +674,20 @@ export function tagReadoutLine(f) {
     const nonPlayer = Math.max(0, (f.parsed || 0) - unresolvedN - (f.player ? 1 + (f.playerDropped || 0) : 0));
     const truncated = nonPlayer > (f.count || 0);
     bits.push(`${f.parsed || 0} 条${truncated ? `（入包 ${f.count}）` : ''}`);
-    if (f.player) bits.push(`主角 ${1 + (f.playerDropped || 0)} 条（入账 1）`);
+    if (f.player) bits.push(`主角 ${1 + (f.playerDropped || 0)} 条（落子 1）`);
     if (f.unresolved?.length) {
         const who = f.unresolved.slice(0, 3).map((u) => (u.n > 1 ? `${u.name}×${u.n}` : u.name)).join('、');
-        // ★措辞如实（leg89 更正）：这些人的行动**不在账上**，但**已经递给世界模型看过**——
-        //   不许写成"丢了"（那会让玩家以为东西没了），也不许写成"入账了"（那是假话）。
-        bits.push(`不在名册 ${f.unresolved.length} 个名字（${who}）——他们这轮的事没入账，但已递给世界模型`);
+        // 名称解析诊断不承诺动作正文入包；重要未知参与者随明确结果保留名字。
+        bits.push(`不在名册 ${f.unresolved.length} 个名字（${who}）——未建立实体，结果中的名字保留`);
     }
     if (f.elapsed) bits.push(`时长 ${f.elapsed}`);
     // ★★★leg123：三族新料如实报——**含"丢掉的"**（丢了什么必须能被看见，这条与既有 `形状不合` 同一口径）。
     if (f.at) bits.push(`此刻 ${f.at}`);
+    if (f.events?.length) bits.push(`结果 ${f.events.length}`);
+    if (f.eventsBad?.length) bits.push(`结果丢掉 ${f.eventsBad.length} 行`);
+    if (f.references?.length) bits.push(`引用 ${f.references.length}`);
+    if (f.conditionUpdates?.length) bits.push(`持续条件 ${f.conditionUpdates.length}`);
+    if (f.conditionsBad?.length) bits.push(`条件丢掉 ${f.conditionsBad.length} 行`);
     if (f.changes?.length) bits.push(`变化 ${f.changes.length}`);
     if (f.promises?.length) bits.push(`承诺 ${f.promises.length}`);
     if (f.changesBad?.length) bits.push(`变化丢掉 ${f.changesBad.length} 行`);

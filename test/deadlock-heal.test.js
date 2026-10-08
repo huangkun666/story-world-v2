@@ -88,11 +88,11 @@ test('死锁甲：★净化路径即使模型**没写事件 id**，同轮引用�
     assert.equal(checkWorldStep(clean.step, w).ok, true, '净化后必须过校验');
 });
 
-test('死锁甲：同轮事件**恒为未决态**（已闭环判据仍有效）——世界账里那件已闭环的旧事件照样拒', () => {
+test('事件打磨：闭合事实仍可产生新盘算，不需要先重开旧事', () => {
     const w = world({ tick: 3 });
     w.events = [{ id: 'ev_done', title: '旧事', source: { type: 'state' }, position: '大营', ripples: [], links: { up: [], down: [] }, closed: true }];
     const r = checkWorldStep(stepWith({ newAgendas: [newAgenda({ source: { type: 'event', ref: 'ev_done' } })] }), w);
-    assert.equal(r.ok, false, '已闭环事件不可作盘算之源（闸仍在）');
+    assert.equal(r.ok, true, '已闭合的是过去的事项，新的后果可以引用该事实');
 });
 
 test('死锁甲：★entityFates **刻意不享用**同轮事件（覆灭要尘埃落定，只认已落账的事）', () => {
@@ -286,7 +286,7 @@ test('★本次修：校验被拒不再整轮丢——自愈接管，好提议�
     w.events = [{ id: 'ev_done', title: '旧事', source: { type: 'state' }, position: '大营', ripples: [], links: { up: [], down: [] }, closed: true }];
     const step = stepWith({
         newEvents: [newEvent({ title: '这条写得好，该留下' })],                        // 合法
-        newAgendas: [newAgenda({ source: { type: 'event', ref: 'ev_done' } })],      // ★挂在已了结的事上 ⇒ 校验必拒
+        newAgendas: [newAgenda({ source: { type: 'event', ref: 'ev_missing' } })],   // 不存在的因仍须拒绝
     });
     // ★自证前提：这条闸**必须还在**（拿副本跑，别污染待用的那份账）
     assert.equal(checkWorldStep(step, structuredClone(w)).ok, false, '闸必须还在（否则本用例什么都没测到）');

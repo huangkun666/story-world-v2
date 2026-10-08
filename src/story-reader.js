@@ -1,6 +1,7 @@
 // Reading projections only: grouping and viewing windows remain in panorama.js.
 import { buildPanorama, archivedEventsOf, bornTick, stripEngine, resolveIds } from './panorama.js';
 import { escapeHtml as esc } from './render-base.js';
+import { eventDetails, eventDetailText } from './event-contract.js';
 
 const tickValue = value => value == null || value === '' || typeof value === 'boolean' ? null
     : Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
@@ -59,7 +60,7 @@ export function buildStoryReader(world, opts = {}) {
             // panorama's legacy tick fallback is 0; absent source dates stay absent here.
             const why = clean(event.why);
             add('event', bornTick(event.id) ?? tickValue(raw?.tick), event.title, event.why,
-                { position: event.position || '', people: event.ripples, eventId: String(event.id), causeMissing: !why || why === MISSING_CAUSE, timeMark: eventTimes.get(String(event.id)) || timeOf(birth) });
+                { position: event.position || '', people: event.ripples, ...eventDetails(raw), eventId: String(event.id), causeMissing: !why || why === MISSING_CAUSE, timeMark: eventTimes.get(String(event.id)) || timeOf(birth) });
             const explicit = (world?.chronicle || []).filter(row => row.eventRef === event.id && !/^事件「/.test(String(row.text)));
             const traces = [...event.traces, ...explicit];
             for (const trace of traces) if (clean(trace.text) !== clean(event.title)) add('trace', trace.tick, '', trace.text, { eventId: String(event.id), link: linkSummary(trace.text), timeMark: timeOf(trace) || traceTimes.get(traceKey(event.id, trace.tick, trace.text)) || traceTimes.get(traceKey('', trace.tick, trace.text)) || '' });
@@ -84,7 +85,7 @@ export function buildStoryReader(world, opts = {}) {
         const dated = candidates.filter(chapter => chapter.tick != null).sort((a, b) => b.tick - a.tick || priority[b.kind] - priority[a.kind]);
         const change = dated[0] || candidates.at(-1) || { text: '', title: '', tick: null };
         const name = clean(thread.kicker?.goal) || clean(thread.name);
-        const search = [name, thread.actor, ...thread.actors, ...thread.places, ...unique.flatMap(chapter => [chapter.title, chapter.text, chapter.actor, chapter.position, chapter.timeMark])].filter(Boolean).join(' ');
+        const search = [name, thread.actor, ...thread.actors, ...thread.places, ...unique.flatMap(chapter => [chapter.title, chapter.text, chapter.actor, chapter.position, chapter.timeMark, eventDetailText(chapter)])].filter(Boolean).join(' ');
         return { ...thread, name, chapters: ordered, progressTick: change.tick, change: { ...change, text: change.kind === 'event' ? change.title : change.text || change.title }, search };
     }).sort((a, b) => (b.progressTick ?? -Infinity) - (a.progressTick ?? -Infinity) || String(a.id).localeCompare(String(b.id)));
     const contexts = [];
@@ -133,6 +134,8 @@ function chapterSection(chapter, chapterIndex, prefix, storyKey, mention, previo
         if (chapter.title) parts.push(`<h2>${mention(chapter.title, true)}</h2>`);
         if (chapter.timeMark) parts.push(`<p class="sw2-story-chapter-time" data-story-time>时间：${esc(chapter.timeMark)}</p>`);
         if (chapter.kind === 'event') {
+            const detail = eventDetailText(chapter);
+            if (detail) parts.push(`<p class="sw2-story-chapter-where" data-event-scope>${mention(detail, true)}</p>`);
             if (chapter.text && !chapter.causeMissing) parts.push(traceDetails(`${recordKey}-origin`, '来路', chapter.text, mention));
             else parts.push(`<p class="sw2-story-chapter-note">${esc(MISSING_CAUSE)}</p>`);
         } else if (chapter.text && chapter.link) parts.push(traceDetails(`${recordKey}-link`, chapter.link, chapter.text, mention));

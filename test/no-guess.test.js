@@ -108,8 +108,9 @@ test('leg198④：只有别人的标签 ⇒ 玩家的落子仍是空（★不许
     assert.equal(r.move, null, '★玩家没出手 ⇒ 落子为空');
     assert.equal(r.pack.pack.playerMove, null,
         '★递出去的那一格必须是空：拿"甲沉吟"冒充"玩家沉吟"，世界模型会照着演');
-    // 对照组：甲那条行动**照旧入账**（拆的是回退，不是标签提取）
-    assert.ok(r.dialogueStats.events >= 1, '★别人的行动照旧要记下来（只是不许记到玩家头上）');
+    // 对照组：甲的行动仍被解析并保护，普通动作不再自动建事件。
+    assert.deepEqual(r.dialogueStats.actedIds, ['e_a']);
+    assert.equal(r.dialogueStats.events, 0);
 });
 
 // ── ③ 对照组：玩家自己的标签照旧成立 ──────────────────────────────────────────
@@ -161,5 +162,6 @@ test('leg199③（对照组）：同一行**包进块里** ⇒ 照旧是一条�
     const r = await run(fenced('【行动】黄坤｜刺杀｜甲'));
     assert.equal(r.ok, true, r.error);
     assert.equal(r.move?.verb, '刺杀', '★块里那一条照常成立（证明上面那两个 0 是边界判出来的，不是夹具坏了）');
-    assert.equal(r.dialogueStats.events, 1);
+    assert.equal(r.dialogueStats.events, 0, '普通行动只提供保护，不自动成为结果事件');
+    assert.deepEqual(r.dialogueStats.actedIds, [r.ssot.context.playerId]);
 });

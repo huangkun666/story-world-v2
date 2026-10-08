@@ -152,7 +152,7 @@ test('P7：★召回发生在"聊天侧这一轮的事落账之后、出包之�
     const w = mkWorld();
     let seen = null;
     let prompt = '';
-    const dialogue = F(['【行动】薛铁衣｜迎战｜天门']);
+    const dialogue = F(['【协议】3', '【行动】薛铁衣｜迎战｜天门', '【事件】E1｜渡口防线确立｜薛铁衣、天门｜已完成']);
     const r = await runTick({
         transport: async (p) => { prompt = String(p); return { text: JSON.stringify(EMPTY_STEP) }; },
         ssot: w, dialogue, extractCtx: {}, recall: false,

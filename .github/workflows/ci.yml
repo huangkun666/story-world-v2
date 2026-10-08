@@ -1,0 +1,42 @@
+# story-world-v2 · CI
+#
+# 本仓**零外部依赖、无构建步骤**（没有 package.json、没有 node_modules）⇒ 这里**没有 npm install 这一步**。
+# 两条命令就是 README「运行测试与自检」里那两条，跑在插件目录 = 仓库根上（公开仓就是这个子树的导出件）。
+#
+# ★为什么只有这两条（不是漏了，是想过）：
+#   `node scripts/audit-docs.mjs --check` 要核 `docs/index.json` 有没有过期，而那份生成物是在
+#   **完整开发工作区**里生成的；公开仓的树里少了未入库的开发档案 ⇒ 在干净检出上它必然报红。
+#   它是**开发机的守门**（咬 STATE.md / README / 知识索引的一致性），不是 CI 的判据
+#   ——留档见该脚本顶部 §⑤/§⑥ 与 R3。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 判据 + 冒烟（Node ${{ matrix.node }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # ★零依赖：没有 package.json，也没有 npm install 这一步
+      - name: 全量判据（node --test）
+        run: node --test
+
+      - name: 端到端冒烟（50 tick 合成世界 · 零 token · 不打模型）
+        run: node demo/smoke-demo.js

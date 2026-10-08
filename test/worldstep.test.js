@@ -297,14 +297,14 @@ test('K13：无源 newAgendas 拒绝（无源之物不存在）', () => {
     assert.ok(r.errors.some((e) => e.includes('newAgendas[0].source')));
 });
 
-test('K13：event 源必须引已存在未决事件（不存在 / 已闭环均拒）', () => {
+test('K13：event 源必须存在，已完成事实可引起新的盘算', () => {
     const s1 = agendaStep({ source: { type: 'event', ref: 'ev_nope' } });
     assert.equal(checkWorldStep(s1, GOLDEN).ok, false, 'ref 不存在');
 
     const w = structuredClone(GOLDEN);
     w.events = [{ id: 'ev_done', title: '旧事', source: { type: 'state' }, position: '边关', ripples: [], links: {}, closed: true }];
     const s2 = agendaStep({ source: { type: 'event', ref: 'ev_done' } });
-    assert.equal(checkWorldStep(s2, w).ok, false, '已闭环事件不可作源');
+    assert.equal(checkWorldStep(s2, w).ok, true, '闭合事实仍可作新后果的来源');
 });
 
 test('K13：parent 源必须引未结算（在飞）盘算', () => {

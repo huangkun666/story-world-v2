@@ -233,6 +233,14 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
     const wanted = Math.floor(Number(limit));
     const LIMIT = Number.isFinite(wanted) && wanted > 0 ? Math.min(wanted, MAX_LIMIT) : DEFAULT_LIMIT;
     const list = [];
+    const listeners = new Set();
+    let notifying = false;
+    function notify() {
+        if (notifying) return;
+        notifying = true;
+        try { for (const fn of [...listeners]) { try { fn(); } catch (_) {} } }
+        finally { notifying = false; }
+    }
 
     /**
      * 记一条。★**绝不抛**：值再怪也接得住，真出了没料到的事返回 null。
@@ -253,6 +261,7 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
             };
             list.push(rec);
             if (list.length > LIMIT) list.splice(0, list.length - LIMIT);   // 只留最近 LIMIT 条
+            notify();
             return cloneRecord(rec);
         } catch (_) {
             return null;
@@ -280,6 +289,7 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
     function clear() {
         const removed = list.length;
         list.length = 0;
+        notify();
         return removed;
     }
 
@@ -313,7 +323,12 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
         }
     }
 
-    return { record, snapshot, clear, report, limit: LIMIT, size: () => list.length };
+    function subscribe(fn) {
+        if (typeof fn !== 'function') return () => {};
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+    }
+    return { record, snapshot, clear, report, subscribe, limit: LIMIT, size: () => list.length };
 }
 
 /** 插件共用的那一只（设置面板、网络与存储那几处都记到它上面）。 */

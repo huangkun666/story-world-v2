@@ -47,9 +47,9 @@ function txDone(db, store, mode, fn) {
         const tx = db.transaction(store, mode);
         const s = tx.objectStore(store);
         const req = fn(s);
-        tx.oncomplete = () => { if (mode === 'readwrite') diagnostics.record('存储', 'info', '本地写入完成', { store }); db.close(); resolve(req?.result); };
+        tx.oncomplete = () => { db.close(); resolve(req?.result); };
         tx.onerror = () => { diagnostics.record('存储', 'error', '本地事务失败', { store, error: tx.error }); db.close(); reject(tx.error); };
-        tx.onabort = () => { db.close(); reject(tx.error); };
+        tx.onabort = () => { diagnostics.record('存储', 'error', '本地事务中止', { store, error: tx.error }); db.close(); reject(tx.error); };
     });
 }
 

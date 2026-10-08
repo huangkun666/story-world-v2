@@ -263,3 +263,68 @@ test('★`bindSettingsForm` 幂等：挂两次只挂一次（`dataset` 那道闩
     assert.ok(after1 >= 3, `★第一次要真的挂上（input/change/wheel 三条，实测 ${after1}）`);
     assert.equal(binds, after1, '★第二次必须早退（否则同一个窗口上会叠两份委托）');
 });
+
+// 真实表单委托配合可控的窗口和设置；只派发 input/change，不直接调用归一函数。
+function settingsForm(key, initial) {
+    const handlers = new Map();
+    const settings = { [key]: initial };
+    const writes = [];
+    const statuses = [];
+    const win = { dataset: {}, addEventListener: (type, fn) => handlers.set(type, fn) };
+    const hub = createModelChannelHub({
+        getWin: () => win, getSettings: () => settings,
+        writeSetting: (k, value) => { writes.push([k, value]); settings[k] = value; },
+        setStatus: line => statuses.push(line),
+    });
+    hub.bindSettingsForm();
+    const submit = (type, value) => {
+        assert.equal(typeof handlers.get(type), 'function', `真实 ${type} 委托必须已注册`);
+        handlers.get(type)({ target: { value, getAttribute: name => name === 'data-settings' ? key : null } });
+    };
+    return { settings, writes, statuses, submit };
+}
+
+test('往事注入多少字通过真实表单委托保存现值，拒绝非法值且保留原值', () => {
+    const key = 'retrievalMaxChars';
+    const form = settingsForm(key, 1600);
+    for (const type of ['input', 'change']) {
+        for (const raw of ['1', '2700', '20000']) {
+            const before = form.writes.length;
+            form.submit(type, raw);
+            assert.deepEqual(form.writes.at(-1), [key, Number(raw)], `${type} 应保存 ${raw}`);
+            assert.equal(form.writes.length, before + 1);
+            assert.equal(form.settings[key], Number(raw));
+        }
+        const kept = form.settings[key];
+        const count = form.writes.length;
+        for (const raw of ['', '0', '-1', '20001', '1.5', 'NaN']) {
+            form.submit(type, raw);
+            assert.equal(form.writes.length, count, `${type} 不应保存 ${raw}`);
+            assert.equal(form.settings[key], kept);
+            assert.match(form.statuses.at(-1), /往事注入多少字.*1–20000.*整数.*没有写入/);
+        }
+    }
+});
+
+test('相似度阈值通过真实表单委托保存小数，非法值提示小数范围且保留原值', () => {
+    const key = 'retrievalMinScore';
+    const form = settingsForm(key, 0.1);
+    for (const type of ['input', 'change']) {
+        for (const [raw, expected] of [['0', 0], ['0.31', 0.31], ['1', 1], ['0.314', 0.31]]) {
+            const before = form.writes.length;
+            form.submit(type, raw);
+            assert.deepEqual(form.writes.at(-1), [key, expected], `${type} 应保存 ${raw}`);
+            assert.equal(form.writes.length, before + 1);
+            assert.equal(form.settings[key], expected);
+        }
+        const kept = form.settings[key];
+        const count = form.writes.length;
+        for (const raw of ['', '-0.01', '1.01', 'NaN']) {
+            form.submit(type, raw);
+            assert.equal(form.writes.length, count, `${type} 不应保存 ${raw}`);
+            assert.equal(form.settings[key], kept);
+            assert.match(form.statuses.at(-1), /相似度阈值.*0–1.*小数.*没有写入/);
+            assert.ok(!form.statuses.at(-1).includes('整数'));
+        }
+    }
+});

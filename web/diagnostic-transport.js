@@ -20,6 +20,12 @@ export function diagExtract(resolved) {
 }
 /** HTTP 成功不等于演算成功：校验/结算拒因与部分降级也进入插件调试台。 */
 export function diagTickOutcome(result, previousTick) {
+    if (result?.pack?.inputStats) {
+        diagnostics.record('世界输入', 'info', '本轮世界输入组成', {
+            tick: result.ssot?.meta?.tick ?? previousTick,
+            ...result.pack.inputStats,
+        });
+    }
     if (!result || (result.ok && !result.healed?.used)) return;
     diagnostics.record('演算', result.ok ? 'warn' : 'error',
         result.ok ? '部分提议未落账，合法提议已结算' : '演算失败，轮数未推进', {

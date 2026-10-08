@@ -341,6 +341,26 @@ function fakeWin({ module = '', level = '', details = false, clipboard = undefin
     return { win, root, moduleSel, levelSel, detailsBox, recordsBox, summaryBox, result, handlers, added, emit };
 }
 
+test('调试台实时显示新增错误，保留筛选与详情，解绑后停止刷新', async () => {
+    diagnostics.clear();
+    const f = fakeWin({ level: 'error', details: true });
+    const api = bindDebugConsole(f.win, { getSnapshot: filters => diagnostics.snapshot(filters), getSummary: () => ({}) });
+    diagnostics.record('页面异常', 'error', '实时错误', { line: 42 });
+    diagnostics.record('状态', 'info', '有用操作');
+    await Promise.resolve();
+    assert.match(f.recordsBox.innerHTML, /实时错误/);
+    assert.doesNotMatch(f.recordsBox.innerHTML, /有用操作/);
+    assert.equal(f.levelSel.value, 'error');
+    assert.equal(f.detailsBox.checked, true);
+    assert.equal(f.levelSel.focused, 0);
+    api.dispose();
+    const previous = f.recordsBox.innerHTML;
+    diagnostics.record('页面异常', 'error', '已解绑');
+    await Promise.resolve();
+    assert.equal(f.recordsBox.innerHTML, previous);
+    diagnostics.clear();
+});
+
 test('调试台①：渲染片段——摘要事实、模块/级别下拉、详情勾选框、四枚按钮（固定 id + 中文标签）', () => {
     const html = renderDebugConsole({
         summary: { build: 'leg177', tick: 12, vectorEnabled: false },

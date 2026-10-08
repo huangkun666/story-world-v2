@@ -1,7 +1,9 @@
 // story-world-v2/src/tick.js
 // 完整 tick 编排（S6）：对话 → 落子提取 → 演化上下文 → 主调用（真 schema）→ 结算 → 双流。
 // 这就是"最小活棋盘跑通一次完整 tick"的入口。
-import { extractTags, hasTagFacts, tagReadoutLine } from './tag-extract.js';
+import { extractTags, tagReadoutLine } from './tag-extract.js';
+import { eventDetails, eventEntityIds } from './event-contract.js';
+import { referencedEventsOf } from './world-input.js';
 import { buildEvolutionPack, lineRootsOfPack, recordShownLines, windowFromTick, RECENT_WINDOW_TURNS } from './pack.js';
 import { runMainCall } from './worldstep.js';
 import { settleTick, registerDialogueFacts } from './settle.js';
@@ -239,40 +241,18 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     //   `tagFacts.actions` 按 `src/tag-extract.js` 的口径**只装非主角的行**（`:319-320`），
     //   所以"玩家没有标签时拿末条顶上" = **把别人的行动当成玩家的落子**递给世界模型（`pack.playerMove`）。
     //   口径：**有动词才算落子**；没有 ⇒ 空着（红线 2：空着就是空着）。
-    //   ★空动词那条主角事实并没有丢：它照旧经 `move` 进 settle/streams，并经 `turnFacts.player` 进包
-    //     （见下面那一族），所以世界模型照样看得见"他被标签点到、只是没写做了什么"。
+    //   空动词的主角标签仍保留解析诊断和 actedIds 保护，不制造动作全文或结果事件。
     const moveFact = move?.verb ? move : null;
     // ★注入包只带"有料的那部分"（照 `recalled` 口径）：没抽到东西 ⇒ 键不出现。
     //   ★写法纪律：**不用"条件展开"那种简写**（`{...cond ? {a} : {}}` 不是合法 JS——
     //     leg89 当场被解析器咬住："Unexpected identifier"）。这里显式建对象、逐键按条件 add。
     let turnFacts = null;
-    if (hasTagFacts(tagFacts)) {
-        turnFacts = {
-            actions: tagFacts.actions,
-            count: tagFacts.count,
-            parsed: tagFacts.parsed,
-        };
-        if (tagFacts.elapsed) turnFacts.elapsed = tagFacts.elapsed;
-        if (tagFacts.unresolved.length) turnFacts.unresolved = tagFacts.unresolved;
-        // ★★★leg89 更正（用户：「就算不在名册上也给插件模型看到啊？？为啥要丢掉呢」）：
-        //   不在名册上的人**这一轮做过的事**也要进包——不进账，但必须让世界模型看见
-        //   （否则"这个人该不该入局"永远没证据：旧做法把这些行动整个丢掉）。
-        if (tagFacts.notNoted.length) turnFacts.notNoted = tagFacts.notNoted;
-        if (tagFacts.player) {
-            turnFacts.player = {
-                verb: tagFacts.player.verb,
-                object: tagFacts.player.targetText,
-                location: tagFacts.player.location,
-            };
-        }        if (tagFacts.playerDropped) turnFacts.playerDropped = tagFacts.playerDropped;
-        if (tagFacts.malformed.length) turnFacts.malformed = tagFacts.malformed;
-    }
     // ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.3/§2.6）：**聊天侧那一侧的落账**——
-    //   把三族标签注册成 `dialogue` 型事件、并把【变化】的格落下。
+    //   明确结果落为 dialogue 事件，关联变化落格；行动只给紧凑保护集合。
     //   ★**必须在出包之前**，两个理由：① 世界模型这一轮要看得见这些既成事实（包读的是**账**）；
     //     ② 它该看到**新状态**（否则照旧样子演）。
     //   ★★同时这是"谁先谁后"那条顺序的**落点**（用户 2026-09-24：「先聊天模型给出谁行动了谁被修改了，
-    //     然后世界模型就不用再模拟这些行动过的角色了」）：行动过的人与已改定的格从此都在账上，
+    //     然后世界模型就不用再模拟这些行动过的角色了」）：本轮保护独立于事件正文，
     //     世界步那三条结构（`gate.js`/`sanitize-step.js`）就按它判。
     //   ★零扰动：三族都没料（老聊天 / 开关关着）⇒ **一个字节都不碰账**。
     const chronicleLenBefore = (world?.chronicle || []).length;   // ★leg115 的时间印记靠它认出"本轮新落的行" ⇒ **必须先于注册取**
@@ -286,6 +266,25 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     //     落账那条'值必须在正文里找得到'的校验（`settle.js`）也读它"——而**那条校验已按用户令撤掉**
     //     （它是恒真式：值就是从这段文本里切出来的，见 `src/settle.js` 的留档）⇒ 这一格现在只剩一个读者。
     const dialogueStats = registerDialogueFacts(world, { facts: tagFacts, dialogue: prose, tick: dialogueTick });
+    const participantIds = [...new Set(dialogueStats.resultEvents.flatMap(e => eventEntityIds(e, world)))];
+    const references = referencedEventsOf(world, tagFacts.references, dialogueStats.rejected);
+    if (dialogueStats.resultEvents.length || dialogueStats.actedIds.length || dialogueStats.changedFields.length || references.length || tagFacts.conditionUpdates?.length || tagFacts.elapsed || tagFacts.at) {
+        turnFacts = {
+            events: dialogueStats.resultEvents.map(e => ({ id: e.id, title: e.title,
+                ...(e.eventProtocol === 4 ? eventDetails(e) : { participantIds: e.ripples }),
+                pending: !e.closed, source: e.source, dialogueKind: e.dialogueKind, producer: e.producer, recordType: e.recordType,
+                ...(e.position ? { position: e.position } : {}), ...(e.timeMark ? { timeMark: e.timeMark } : {}),
+                ...(e.participantNames?.length ? { participantNames: e.participantNames } : {}),
+                ...(e.links.up.length ? { causeIds: e.links.up } : {}) })),
+            actedIds: dialogueStats.actedIds, changedFields: dialogueStats.changedFields,
+        };
+        if (references.length) turnFacts.references = references;
+        if (tagFacts.elapsed) turnFacts.elapsed = tagFacts.elapsed;
+        if (tagFacts.at) turnFacts.at = tagFacts.at;
+        world.meta.turnProtection = { tick: dialogueTick, actedIds: dialogueStats.actedIds,
+            changedFields: dialogueStats.changedFields, participantIds };
+    }
+
     // ★★★leg119：`ledgerVolumes` = **编年进了冷档的那些段（卷）**，由编排层取好递进来
     //   （与 `recallStore` 同一条路：引擎不碰存储，浏览器侧的东西一律从选项进来）。
     //   ★不传 ⇒ `null` ⇒ 与接线之前**逐字节相同**（旧调用方零扰动）。★leg153 起它多一个消费者：

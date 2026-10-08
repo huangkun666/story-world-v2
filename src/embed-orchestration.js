@@ -24,6 +24,7 @@ import { embedDelta, chronicleDelta, recallOf, recalledRowOf } from './ledger-ve
 // ★★「这一行是什么话」那张表**全仓只有一份**（`chronicle-brief.js`）⇒ 召回递出去的那一句
 //   与 `纪事`／`相关往事` 用的是**同一个洗法**（`briefLineText`：只去固定前后缀，不改写事实）。
 import { briefLineText } from './chronicle-brief.js';
+import { filterChatRecords } from './event-provenance.js';
 
 /** 每轮最多补嵌几件（★提案态：数字先报批，出曲线再定案；封顶是为了"一次别烧一大批调用"）。 */
 export const EMBED_PER_TURN_DEFAULT = 40;
@@ -108,13 +109,15 @@ export async function stepEmbed({ ssot, harness, client = null, floor, maxItemsP
  *   `chronicleOf` 同一份）——索引里**只有 id／轮次／向量**，正文要靠它现查。
  * @returns {{rows:string[], items:Array<{id,tick,text,line}>, report:object}}
  */
-export function recallForPack(ssot, store, { qVector = null, floor = 0, top = 6, minScore = 0, excludeIds = [], rippleIds = [], tickNow = null, withScore = false, rows = null } = {}) {
+export function recallForPack(ssot, store, { qVector = null, floor = 0, top = 6, minScore = 0, excludeIds = [], rippleIds = [], tickNow = null, withScore = false, rows = null, audience = 'world', volumes = null } = {}) {
     const cand = candidateIds(store, floor, excludeIds);
     if (!Array.isArray(qVector) || !qVector.length) {
         return { rows: [], items: [], report: { reason: 'no-query', candidates: cand.length, noVector: 0, noBody: 0, returned: 0, readOnly: true } };
     }
     const scored = recallOf(ssot, store, { qVector, floor, top: Number.MAX_SAFE_INTEGER, minScore: -1, excludeIds, rippleIds });
-    const got = scored.slice(0, Math.max(0, Number(top) || 0));
+    const filtered = audience === 'chat' ? filterChatRecords(ssot, scored, { volumes, rows }) : null;
+    const cap = Math.max(0, Number(top) || 0);
+    const got = filtered ? (cap ? filtered.items : []) : scored.slice(0, cap);
     // ★★★索引里**只有 id／轮次／向量**（`vector-store.js` 那三个等长数组）⇒ 正文必须**回账上现查**。
     //   索引单元是**编年行**（leg152 定案）⇒ 它的 id 是**编年行的 id**，正文在编年那儿。
     //   ★本笔接最后一根线时当场抓出来的真 bug（血证留在判据里）：原来只查 `ssot.events`，
@@ -131,6 +134,7 @@ export function recallForPack(ssot, store, { qVector = null, floor = 0, top = 6,
         if (!found.text) { noBody += 1; continue; }             // 查不到正文 ⇒ 不进（空壳比没有更坏：它占额度还骗人）
         const line = recalledRowOf({ id, tick: it.tick, score: it.score, title: found.text, ...(found.timeMark ? { timeMark: found.timeMark } : {}) }, { tickNow: now, withScore });
         items.push({ id, tick: it.tick, text: found.raw, line });
+        if (filtered && items.length >= cap) break;
     }
     return {
         rows: items.map((x) => x.line),
@@ -143,6 +147,7 @@ export function recallForPack(ssot, store, { qVector = null, floor = 0, top = 6,
             noBody,                                            // ★索引里有、账上却找不到那一行正文的有几件
             returned: items.length,
             readOnly: true,
+            ...(filtered ? { provenance: { ...filtered.report, selectedIds: items.map(it => it.id) } } : {}),
         },
     };
 }

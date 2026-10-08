@@ -149,6 +149,8 @@ export function volumeToChronicleRows(volume) {
         tick: chronTick(r),
         text: r.text ?? '',
         eventRef: r.eventRef ?? '',
+        ...(r.producer ? { producer: r.producer } : {}),
+        ...(r.recordType ? { recordType: r.recordType } : {}),
         ...(r.elapsed ? { elapsed: r.elapsed } : {}),
     }));
 }

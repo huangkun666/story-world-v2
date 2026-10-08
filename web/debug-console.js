@@ -41,7 +41,7 @@ const LEVEL_LABELS = { info: '信息', warn: '警告', error: '错误' };
 //   结果是那一页变成一面读数墙（实测：13 格环境事实把摘要撑成四行大卡，真正该看的那几个数被淹了）。
 //   ★它照样进 `diagnostics.report(摘要)`（报告走的是**整份 summary**，不经过这里的过滤）
 //     ⇒ 「复制报告 / 下载报告」一个字都不少。
-const REPORT_ONLY_KEYS = new Set(['modules', '环境自检']);
+const REPORT_ONLY_KEYS = new Set(['modules', '环境自检', '消息消费', '事件来源']);
 const SUMMARY_LABELS = {
     build: '当前构建', version: '当前构建', panelBuild: '面板构建',
     tick: '轮次', round: '轮次', turn: '轮次',
@@ -269,6 +269,17 @@ export function bindDebugConsole(win, options = {}) {
         const moduleSel = root.querySelector(`#${DEBUG_MODULE_ID}`);
         const levelSel = root.querySelector(`#${DEBUG_LEVEL_ID}`);
         const detailsBox = root.querySelector(`#${DEBUG_DETAILS_ID}`);
+        // 仅补上新出现的来源选项，保留选中的值、控件节点和焦点。
+        if (moduleSel?.options && moduleSel.ownerDocument?.createElement) {
+            try {
+                const all = deps.getSnapshot?.({}) || [];
+                const known = new Set(Array.from(moduleSel.options, o => o.value));
+                for (const name of moduleNames(all, readSummary())) if (!known.has(name)) {
+                    const option = moduleSel.ownerDocument.createElement('option');
+                    option.value = name; option.textContent = name; moduleSel.appendChild(option);
+                }
+            } catch (_) {}
+        }
         const filters = {
             module: moduleSel && moduleSel.value ? String(moduleSel.value) : '',
             level: levelSel && levelSel.value ? String(levelSel.value) : '',
@@ -378,10 +389,19 @@ export function bindDebugConsole(win, options = {}) {
     win.addEventListener('click', onClick);
     win.addEventListener('change', onChange);
 
+    let disposed = false, queued = false;
+    const unsubscribe = diagnostics.subscribe(() => {
+        if (disposed || queued) return;
+        queued = true;
+        queueMicrotask(() => { queued = false; if (!disposed) sync(); });
+    });
+
     const api = {
         sync,
         /** 摘监听（面板被拆掉时调用；重挂会重新走一遍绑定）。 */
         dispose() {
+            disposed = true;
+            unsubscribe();
             win.removeEventListener?.('click', onClick);
             win.removeEventListener?.('change', onChange);
             bindings.delete(win);

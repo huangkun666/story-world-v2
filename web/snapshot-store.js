@@ -55,7 +55,7 @@
 //        （本仓记过的那条病："纯函数测得动、接线另写一遍"）。
 //        ⇒ 本笔补的判据必须**打真接线**：`test/snapshot-chain-anchor.test.js` 连拍三份、再逐份恢复、
 //          逐字节比对（本笔**先证过红**：把这一行改回错的写法，第 3 份当场对不上，第 1/2 份照旧对）。
-import { describeSnapshots, planStep, planRetention, restoreFrom } from '../src/snapshot.js';   // 纯逻辑（可 Node 测）
+import { describeSnapshots, planStep, planRetention, restoreFrom, previewSnapshots } from '../src/snapshot.js';   // 纯逻辑（可 Node 测）
 import { isParamStoreKey } from '../src/param-store.js';   // 判"这个键是不是参数"（参数闸用）
 import { ENGINE_DERIVED } from '../src/params.js';         // ★leg53：引擎每轮算的那几格（不许当参数剥掉）
 // ★★★leg85：旧快照的"文风禁令/变量指令/其他"要在这里被摘掉（载入期那处迁移的**同一个函数**）。
@@ -221,8 +221,10 @@ export function requestSnapshot(world, reason, keepId = null) {
 export async function snapshotList() {
     try {
         const metas = await snapshotStore(freshCtx).list();
-        return { ok: true, list: metas, text: describeSnapshots(metas) };
+        const list = previewSnapshots(metas);
+        return { ok: true, list, text: `快照 ${list.length} 份 · 相同状态已合并` };
     } catch (err) {
+        diagnostics.record('快照', 'error', '快照清单读取失败', { error: err });
         return { ok: false, list: [], text: `快照不可读：${err?.message || err}` };
     }
 }
@@ -267,7 +269,10 @@ export async function restoreSnapshot(targetId) {
         const store = snapshotStore(freshCtx);
         const all = await store.listAll();
         const r = restoreFrom({ snapshots: all, targetId });
-        if (!r.ok) return { ok: false, error: r.error };
+        if (!r.ok) {
+            diagnostics.record('快照', 'error', '快照无法恢复', { id: targetId, error: r.error });
+            return { ok: false, error: r.error };
+        }
         const current = loadHotAccount(readHotMeta()) || accessLastWorld();
         if (current) await requestSnapshot(current, '恢复前自保', String(targetId));
         // ★★★leg85：**恢复前先跑载入期那处旧账清理**（leg74 立、连续七棒登记的待办，本棒收口）。
@@ -322,6 +327,7 @@ export async function restoreSnapshot(targetId) {
         const t = r.world?.meta?.tick;
         return { ok: true, tick: t, plan: r.plan, flushed };
     } catch (err) {
+        diagnostics.record('快照', 'error', '快照恢复失败', { id: targetId, error: err });
         return { ok: false, error: String(err?.message || err) };
     }
 }

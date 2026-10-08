@@ -310,7 +310,7 @@ test('leg89⑪：标签规范与名册是**纯函数**（逐字锁得住，且�
     //   ★为什么这条是判据而不是文案喜好：它锁的正是"上面那个病不许回潮"（软措辞一回来，功能就静默失效）。
     assert.ok(spec.includes('必须用标签标出'), '★必须是硬要求（用户实机证明"请"字软措辞模型不照做）');
     assert.ok(!spec.includes('本回合请用标签标出'), '★旧的软措辞（"请"）不得回潮——它正是模型不写的因');
-    assert.ok(spec.includes('这一轮白跑'), '★要写明**不写的后果**（否则模型把它当可选建议）');
+    assert.ok(spec.includes('没有标签块，插件收不到本轮标记'), '缺少标签块的后果要明确，不能把零事件当作整轮失败');
     assert.ok(spec.includes('写完之后自己数一遍'), '★要给模型一个可执行的**自检**动作');
     assert.ok(spec.includes('没有这个块 = 这一轮没达标'), '★自检要有明确的合格判据');
     assert.ok(spec.includes('这个块必须有'), '★收尾再钉一次（与"文风自由"并存，但块是硬要求）');
@@ -411,9 +411,9 @@ test('leg89⑯：不在名册上的人——**不造人、不进账，但行动�
     assert.deepEqual(nn.did, ['划船｜孟婆', '靠岸'], '★★他做过的事要原样留着（这才是"该不该让他入局"的证据）');
     // ③ ★绝不造人（`entities` 是只读的入参，抽完不该多出任何东西）
     assert.equal(f.actions.some((a) => a.actorId === null), false, '★notNoted 里的人不许混进 actions（那会让世界模型以为他们在账上）');
-    // ④ 读数行要说实话：这些人**没入账，但已经递下去了**（不许写成"丢了"或"入账了"）
+    // ④ 读数行只报告名字解析；普通动作不再递给世界模型，重要未知名字随结果保留。
     const line = tagReadoutLine(f);
-    assert.ok(line.includes('不在名册') && line.includes('已递给世界模型'), `★读数行措辞要如实：${line}`);
+    assert.ok(line.includes('不在名册') && line.includes('未建立实体') && !line.includes('已递给世界模型'), `读数行措辞要如实：${line}`);
     // ⑤ 进了包：turnFacts 里必须有 notNoted（否则"递下去"是假的）
     const world = { entities: ENTITIES, agendas: [], events: [], chronicle: [], context: { positions: LOCATIONS }, meta: {} };
     assert.equal('turnFacts' in buildEvolutionPack(world, null).pack, false);

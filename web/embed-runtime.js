@@ -95,7 +95,7 @@ export function createEmbedRuntime({ indexStore, client = null, clientFactory = 
             } catch (err) { return lastResult = { embedded: 0, pending: 0, note: String(err.message), failed: 1, blockedWorld: false }; }
             finally { busy = false; }
         },
-        async recallForTick({ ssot = null, tickNow = null, floor = null, volumes = null, top = undefined, minScore = undefined, queryText = null } = {}) {
+        async recallForTick({ ssot = null, tickNow = null, floor = null, volumes = null, top = undefined, minScore = undefined, queryText = null, audience = 'world' } = {}) {
             try {
                 const selectedClient = clientNow(); if (!selectedClient?.embed) return null;
                 syncScope(); const epoch = generation, raw = await readIndex();
@@ -110,7 +110,7 @@ export function createEmbedRuntime({ indexStore, client = null, clientFactory = 
                 const vector = vectors?.length === 1 && Array.isArray(vectors[0]) && vectors[0].length ? vectors[0] : null;
                 if (!vector) { lastRecall = { reason: 'bad-vector', returned: 0 }; return null; }
                 const r = recallForPack(ssot, store, { qVector: vector, floor: floorOf(ssot, floor), tickNow, rows,
-                    top: top ?? RECALL_TOP_DEFAULT, minScore: minScore ?? 0, rippleIds: movingIdsOf(ssot) });
+                    top: top ?? RECALL_TOP_DEFAULT, minScore: minScore ?? 0, rippleIds: movingIdsOf(ssot), audience, volumes });
                 lastRecall = { ...r.report }; return r;
             } catch (err) { lastRecall = { reason: 'error', note: String(err.message), returned: 0 }; onStatus?.('注意：向量检索失败：' + err.message); return null; }
         },

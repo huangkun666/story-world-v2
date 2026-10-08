@@ -20,6 +20,11 @@
 //   `lastActiveTick` 不存在 = **从没出过手**（不是"很久以前出过手"）：同属②，语义上更该让路。
 // ============================ leg24 片3「拆引擎裁定」============================
 export const QUIET_TICKS = 3;   // 提案（片3 新增）：静默判定里"久未出手"的轮数门（原 SILENCE_THRESHOLD 已删）
+import { eventEntityIds, checkEventContract } from './event-contract.js';
+import { resolveRefTarget, newEventIdsOf, judgeRef } from './ref-rules.js';
+import { resolveLimits } from './limits.js';
+import { validate } from './schema.js';
+import { worldStepSchema } from './schemas/world-step.schema.js';
 
 export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
     const agendaOwner = new Map((world.agendas || []).map((a) => [a.id, a.owner]));
@@ -37,13 +42,17 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
     // 本轮"点名"面（③的输入，同时是触发例外的依据）
     const named = new Set();
     for (const ev of world.events || []) {
-        if (!ev.closed) for (const r of ev.ripples || []) if (gated({ id: r })) named.add(r);
+        if (!ev.closed) for (const r of eventEntityIds(ev, world)) if (gated({ id: r })) named.add(r);
     }
     for (const a of step.actions || []) if (a.target && gated({ id: a.target })) named.add(a.target);
     if (moveFact?.object && gated({ id: moveFact.object })) named.add(moveFact.object);
 
     // 结构三条件（片3）：无在办盘算 ∧ 久未出手 ∧ 无人点名
     const tick = world?.meta?.tick ?? 0;
+    const protection = world?.meta?.turnProtection;
+    if (protection?.tick === tick) {
+        for (const id of protection.participantIds || []) if (gated({ id })) named.add(id);
+    }
     const hasOpenAgenda = new Set((world.agendas || []).filter((a) => !a.closed).map((a) => a.owner));
     const actedRecently = (id) => {
         const e = (world.entities || []).find((x) => x.id === id);
@@ -62,7 +71,13 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
     for (const ev of world.events || []) {
         if (ev?.source?.type !== 'dialogue') continue;
         if (!String(ev.id || '').startsWith(dlgPrefix)) continue;
-        for (const r of ev.ripples || []) if (gated({ id: r })) named.add(r);
+        for (const r of eventEntityIds(ev, world)) if (gated({ id: r })) named.add(r);
+    }
+    // 有明确事件因与缘由的具体反应可出手；公开范围本身不提供行动资格。
+    const knownEvent = ref => (world.events || []).some(e => e.id === ref) || (world.milestones || []).some(m => (m.ids || []).includes(ref));
+    for (const proposal of step.newAgendas || []) if (proposal.source?.type === 'event' && knownEvent(proposal.source.ref) && proposal.note?.trim() && gated({id:proposal.entity})) named.add(proposal.entity);
+    for (const ev of step.newEvents || []) if (ev.source?.type === 'ripple' && knownEvent(ev.source.ref)) {
+        for (const id of (ev.actors || []).map(a => a.ref).filter(Boolean)) if (gated({id})) named.add(id);
     }
 
     // top-1 保送（原"永不静默"防全静默；判据由分量改为实体序首个 active 实体——确定性、无分数）
@@ -80,6 +95,44 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         if (hasOpenAgenda.has(e.id)) continue;              // ① 手上有在办的事 → 不静默
         if (actedRecently(e.id)) continue;                  // ② 刚出过手 → 不静默
         silentSet.add(e.id);                                // 结构上静默（③"被点名"在下一段解除，语义与原版一致）
+    }
+    // 先按原提议认原因，再核对它能否留下。不能拿删源之后的新位次认另一件事。
+    const originalEvents = step.newEvents || [];
+    const originalIds = newEventIdsOf(step, tick + 1);
+    const sameRoundCause = ref => {
+        const known = resolveRefTarget(world, ref, {includeArchived:true});
+        if (known.target || known.archived || !originalIds.includes(ref)) return null;
+        return resolveRefTarget(world, ref, {step,includeSameRound:true}).target;
+    };
+    const validCauses = new Set(originalEvents.filter(ev =>
+        validate(ev,worldStepSchema.props.newEvents.items).ok &&
+        !checkEventContract(ev,step.eventProtocol,world).length &&
+        !judgeRef('newEvents.source',ev.source,{world,step})));
+    const baseNamed = new Set(named);
+    const closure = allowed => {
+        const found = new Set(baseNamed);
+        const eligible = ev => validCauses.has(ev) && (ev.source.type !== 'plot' ||
+            !silentSet.has(agendaOwner.get(ev.source.ref)) || found.has(agendaOwner.get(ev.source.ref)));
+        let changed;
+        do {
+            changed = false;
+            for (const proposal of step.newAgendas || []) {
+                if (proposal.source?.type !== 'event' || typeof proposal.note !== 'string' || !proposal.note.trim() || !gated({id:proposal.entity})) continue;
+                const cause = sameRoundCause(proposal.source.ref);
+                if (!cause || !allowed.has(cause) || !eligible(cause) || found.has(proposal.entity)) continue;
+                found.add(proposal.entity); changed = true;
+            }
+        } while (changed);
+        return {found,events:originalEvents.filter(eligible)};
+    };
+    let retainedCauses = new Set();
+    if (step.eventProtocol === 4) {
+        // 先证明反应链，再按现有事件额度保留原因；被额度拒建的事不能解除静默。
+        const first = closure(validCauses);
+        const capped = new Set(first.events.slice(0,resolveLimits(world).每轮事件));
+        const final = closure(capped);
+        for (const id of final.found) named.add(id);
+        retainedCauses = new Set(final.events.filter(ev => capped.has(ev)));
     }
     const lifted = [...silentSet].filter((id) => named.has(id));
     const liftedSet = new Set(lifted);
@@ -107,6 +160,10 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         return false;
     });
     const newAgendas = (step.newAgendas || []).filter((na) => {
+        const cause = na.source?.type === 'event' ? sameRoundCause(na.source.ref) : null;
+        if (step.eventProtocol === 4 && cause && !retainedCauses.has(cause)) {
+            dropped.newAgendas.push(na.entity); return false;
+        }
         // K14 出生裁判（细案 §3.2 → A-2）：新盘算提议 = 主动作——静默方提议被滤除（双面无痕）；
         // 被点名应答方（lifted）可以提议；下一轮重新判定。
         // ★leg32g：**本轮被轮到的人**也可以提议（`canStart`）——否则"模型照名单给他开线、引擎照样丢掉"，
@@ -114,6 +171,10 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         if (canStart(na.entity)) return true;
         dropped.newAgendas.push(na.entity);
         return false;
+    }).map(na => {
+        const cause = na.source?.type === 'event' ? sameRoundCause(na.source.ref) : null;
+        if (step.eventProtocol !== 4 || !cause) return na;
+        return {...na,source:{...na.source,ref:`ev_${tick+1}_${newEvents.indexOf(cause)+1}`}};
     });
     const agendaCancels = (step.agendaCancels || []).filter((ac) => {
         // K18 取消通道（因果链细案 §3.5 → A-5）：放弃提议 = 主动作——静默方提议被滤除（双面无痕，与出生对称）；
@@ -166,6 +227,8 @@ export function gateWorldStep(step, world, moveFact = null, spotlight = null) {
         //   ★上面那四段警告照旧有效、一个字没撤：**这是白名单式重建，漏一个键那条通道就哑**。
         //     撤走那一格是**有意的**（不是漏），留下这一格是**必须的**（「故事线」那一栏只是地图，不给经过）。
         step: {
+            ...(step.eventProtocol !== undefined ? {eventProtocol:step.eventProtocol} : {}),
+            ...(step.conditionUpdates !== undefined ? {conditionUpdates:step.conditionUpdates} : {}),
             actions, newEvents, agendaAdvances, newAgendas, agendaCancels, newEntities,
             entityFates: step.entityFates || [],
             entityUpdates: step.entityUpdates || [],

@@ -1,4 +1,5 @@
 // story-world-v2/src/panorama.js
+import { eventDetails, eventEntityIds, eventDetailText } from './event-contract.js';
 // ★★leg94「说书」视图（用户令：「你虽然能看懂整个因果，但是我看不懂，还要你给我讲解」）
 //   —— **零 LLM**：把账上现成的字重新编排成人话，一个字都不新编（同 chain.js 的纪律）。
 //
@@ -95,6 +96,11 @@ export function archivedEventsOf(world) {
                 id: String(r.id),
                 title: String(r.title),
                 source: r.source || null,
+                ...eventDetails(r),
+                ...(r.timeMark ? { timeMark: r.timeMark } : {}),
+                ...(r.producer ? { producer: r.producer } : {}),
+                ...(r.recordType ? { recordType: r.recordType } : {}),
+                ...(r.dialogueKind ? { dialogueKind: r.dialogueKind } : {}),
                 ...(r.position ? { position: String(r.position) } : {}),
                 ripples: Array.isArray(r.ripples) ? [...r.ripples] : [],
                 links: (r.links && typeof r.links === 'object') ? { up: [...(r.links.up || [])], down: [] } : { up: [], down: [] },
@@ -366,7 +372,7 @@ export function buildPanorama(world, opts = {}) {
         }
         // 地点与人物：账上写了的才写
         const places = [...new Set(evs.map((e) => e.position).filter((p) => p && p !== '未明'))];
-        const actors = [...new Set(evs.flatMap((e) => (e.ripples || []).map((r) => nameOf(world, r))).filter(Boolean))];
+        const actors = [...new Set(evs.flatMap((e) => eventEntityIds(e, world).map((r) => nameOf(world, r))).filter(Boolean))];
         const costs = [];
         for (const e of evs) {
             for (const t of tracesOf(e.id)) if (/代价|舍弃|重伤|透支|放弃|被迫|覆灭|断腕|断臂|命悬一线|独自|破产|无法|未能|失手/.test(t.text)) costs.push({ tick: t.tick, text: t.text });
@@ -386,7 +392,7 @@ export function buildPanorama(world, opts = {}) {
         threads.push({
             id: evs[0].id,
             name: clean(kicker?.goal) || clean(titleOf(head.id)) || '一条没留名的线',
-            actor: kicker?.actor || nameOf(world, evs[0].ripples?.[0]) || '',
+            actor: kicker?.actor || nameOf(world, eventEntityIds(evs[0], world)[0]) || '',
             from: Math.min(...ticks),
             to: Math.max(...ticks),
             count: evs.length,
@@ -398,6 +404,7 @@ export function buildPanorama(world, opts = {}) {
                 id: e.id,
                 tick: tickOfEvent(e),
                 title: e.title,
+                ...eventDetails(e),
                 // ★leg159b：归档行**没有 `source`** 时不许说"来路在账上没记"——
                 //   那句话对**归档**那一批是**假话**（账上是留了来路的，只是 leg111 之前的老格式没抄进 `rows`）。
                 why: e.archived && !e.source ? '这一段是从大事纪读回来的（那一版只留了标题）' : causeOf(e).text,
@@ -405,7 +412,7 @@ export function buildPanorama(world, opts = {}) {
                 // ★leg97：**认不出名号的，那一格就什么也不印**——第一版换成空串之后照样 join('、')，
                 //   真账上就印出一串空顿号「牵动 、、」（当玩家读一遍时当场读到）。
                 //   口径照旧：宁少一个名，不印一串码。
-                ripples: (e.ripples || []).map((r) => nameOf(world, r)).filter(Boolean),
+                ripples: eventEntityIds(e, world).map((r) => nameOf(world, r)).filter(Boolean),
                 closed: !!e.closed,
                 closedAt: e.closedAt ?? null,
                 // ★leg95：这两格只喂**悬停**（点层不再印任何状态标——见 threadHtml 那一段的注释）
@@ -793,7 +800,10 @@ function pointRows(t, onlyPlace) {
         const bits = [`<b>${esc(e.title)}</b>`];
         if (onlyPlace && e.position) bits.push(`<span class="sw2-pan-at">${esc(e.position)}</span>`);
         if (e.why) bits.push(`<span class="sw2-pan-why">${esc(e.why)}</span>`);
-        if (e.ripples.length) bits.push(`<span class="sw2-pan-who">牵动 ${esc(e.ripples.join('、'))}</span>`);
+        if (e.eventProtocol === 4) {
+            const detail = eventDetailText(e);
+            if (detail) bits.push(`<span class="sw2-pan-who">${esc(detail)}</span>`);
+        } else if (e.ripples.length) bits.push(`<span class="sw2-pan-who">牵动 ${esc(e.ripples.join('、'))}</span>`);
         const evTitle = e.closed
             ? ` title="${esc(e.closedBy === 'model' ? `这一段已收场${e.closedAt != null ? `（第 ${e.closedAt} 轮）` : ''}${e.closedWhy ? `：${e.closedWhy}` : ''}` : `已了结${e.closedAt != null ? `（第 ${e.closedAt} 轮）` : ''}`)}"`
             : '';

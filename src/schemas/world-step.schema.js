@@ -3,11 +3,14 @@
 // = 实体动作 / 新事件（带因果）/ Agenda 推进 / 状态变更
 // 提案标注：S3 落子契约实测后可能联动调整（来源/位置语义），届时按流程过细案。
 
+import { actorSchema, scopeSchema } from '../event-contract.js';
 export const worldStepSchema = {
     kind: 'object',
     additional: false,
     required: ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates'],
     props: {
+        eventProtocol: { kind: 'number', enum: [4] },
+        conditionUpdates: { kind: 'array', items: { kind: 'any' } },
         agendaCancels: {   // K18/因果链 T5：模型提议放弃盘算（带理由——提议权，裁决归引擎；与出生对称）
             kind: 'array',
             items: {
@@ -121,7 +124,7 @@ export const worldStepSchema = {
                     field: { kind: 'string', minLength: 1 },    // 字段名（黑名单见 check-step：id/name/kind 不可改）
                     value: { kind: 'string', minLength: 1 },    // ★文本，不许增量数值（四维被删的原因）
                     // ★`cause` = 「因果变更」与「模型随口改」的**唯一分界**（细案 §6.2 约束 1/3）：
-                    //   必须指向账上真实存在、**且未闭环**的事件或盘算。
+                    //   事件因须真实存在（完成/归档亦可）；盘算因须仍在办。
                     cause: {
                         kind: 'object',
                         additional: false,
@@ -160,7 +163,7 @@ export const worldStepSchema = {
                     to: { kind: 'string', minLength: 1 },     // 照抄输入实体 id（对谁）
                     type: { kind: 'string', minLength: 1 },   // ★模型的原话（"结下死仇"/"欠他一条命"）——不预设词表
                     // ★`cause` = 「玩出来的关系」与「抄书/随口编」的**唯一分界**（与 `entityUpdates.cause` 同格）：
-                    //   必须指向账上真实存在、**且未闭环**的事件或盘算。
+                    //   事件因须真实存在（完成/归档亦可）；盘算因须仍在办。
                     cause: {
                         kind: 'object',
                         additional: false,
@@ -263,6 +266,12 @@ export const worldStepSchema = {
                 additional: false,
                 required: ['title', 'source'],
                 props: {
+                    pending: { kind: 'boolean' },
+                    category: { kind: 'string', minLength: 1 },
+                    reportedContent: { kind: 'string', minLength: 1 },
+                    actors: { kind: 'array', items: actorSchema },
+                    affected: { kind: 'array', items: scopeSchema },
+                    audience: { kind: 'array', items: scopeSchema },
                     title: { kind: 'string', minLength: 1 },
                     source: {
                         kind: 'object',

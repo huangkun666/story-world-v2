@@ -75,6 +75,7 @@ const FAMILY_STATE = [
     'sw2HotMetaPendingWriteAt', 'sw2HotMetaLastFlushOkAt', 'sw2HotMetaFlushedCurrent',
     'sw2FlushChain', 'sw2FlushChainBusy', 'sw2FlushTimeoutMs',
     'sw2HotMetaWrittenFp', 'sw2HotMetaWrittenMeta',
+    'sw2HotMetaWrittenScope',
 ];
 // ★接线层要够到族的口（= 受控通道清单；下面第 ③ 条要求它真的被用）
 //   ★前三个是**解构**取的（`const { readHotMeta, … } = hotHub;` ⇒ 调用点是裸名），

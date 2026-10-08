@@ -1,4 +1,5 @@
 // story-world-v2/src/ledger-vector.js
+import { filterChatRecords } from './event-provenance.js';
 // ★★★leg152：**向量记忆层**（引擎层纯函数 · 零 IO · 零 DOM · 零网络）。
 //
 // 【它治什么】细案 `docs/spec-memory-engine.md` §5：账上"某个实体干过什么"这件事，
@@ -336,7 +337,7 @@ export function recallQueryOf(ssot, { tickNow = null, maxChars = 600 } = {}) {
  *
  * @returns {Array<{id,tick,timeMark,title,text,score,ripples,sourceRef}>} 已排序、已封顶
  */
-export function recallOf(ssot, store, { query, qVector = null, floor = 0, top = RECALL_TOP_DEFAULT, minScore = 0, excludeIds = [], rippleIds = [] } = {}) {
+export function recallOf(ssot, store, { query, qVector = null, floor = 0, top = RECALL_TOP_DEFAULT, minScore = 0, excludeIds = [], rippleIds = [], audience = 'world', volumes = null, rows: sourceRows = null } = {}) {
     const q = Array.isArray(qVector) ? qVector : (Array.isArray(query) ? query : null);
     if (!q || !q.length) return [];
     const f = Number(floor);
@@ -359,7 +360,8 @@ export function recallOf(ssot, store, { query, qVector = null, floor = 0, top = 
         rows.push({ ...it, score });
     }
     rows.sort((a, b) => (b.score - a.score) || (b.tick - a.tick) || (a.id < b.id ? -1 : 1));
-    return rows.slice(0, Math.max(0, Number(top) || RECALL_TOP_DEFAULT));
+    const eligible = audience === 'chat' ? filterChatRecords(ssot, rows, { volumes, rows: sourceRows }).items : rows;
+    return eligible.slice(0, Math.max(0, Number(top) || RECALL_TOP_DEFAULT));
 }
 
 /**

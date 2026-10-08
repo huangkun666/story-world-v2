@@ -145,7 +145,7 @@ test('★leg67 判据表 ⇄ 契约层：源码里写死的 enum 必须与判据
 const M1_CASES = [
     // [引用点, 源, 期望判据 code（null = 合法）]
     ['newAgendas.source', { type: 'event', ref: 'ev_2_1' }, null],
-    ['newAgendas.source', { type: 'event', ref: 'ev_2_2' }, 'event-closed-agenda'],
+    ['newAgendas.source', { type: 'event', ref: 'ev_2_2' }, null],
     ['newAgendas.source', { type: 'event', ref: 'ev_nope' }, 'event-missing'],
     ['newAgendas.source', { type: 'parent', ref: 'a_open' }, null],
     ['newAgendas.source', { type: 'parent', ref: 'a_closed' }, 'parent-agenda-closed'],
@@ -153,7 +153,7 @@ const M1_CASES = [
     ['newAgendas.source', { type: 'state' }, null],
     ['newAgendas.source', { type: 'state', ref: 'x' }, 'state-source-has-ref'],
     ['newEntities.source', { type: 'event', ref: 'ev_2_1' }, null],
-    ['newEntities.source', { type: 'event', ref: 'ev_2_2' }, 'event-closed-entity'],
+    ['newEntities.source', { type: 'event', ref: 'ev_2_2' }, null],
     ['newEntities.source', { type: 'event', ref: 'ev_nope' }, 'event-missing'],
     ['newEntities.source', { type: 'book', ref: '书里有' }, null],
     ['newEntities.source', { type: 'book', ref: '书里没有' }, 'book-source-missing'],
@@ -174,7 +174,7 @@ const M1_CASES = [
     ['newEvents.source', { type: 'plot', ref: 'a_nope' }, 'plot-agenda-missing'],
     ['newEvents.source', { type: 'state' }, null],
     ['entityUpdates.cause', { type: 'event', ref: 'ev_2_1' }, null],
-    ['entityUpdates.cause', { type: 'event', ref: 'ev_2_2' }, 'cause-closed-before-batch'],
+    ['entityUpdates.cause', { type: 'event', ref: 'ev_2_2' }, null],
     ['entityUpdates.cause', { type: 'event', ref: 'ev_nope' }, 'cause-event-missing'],
     ['entityUpdates.cause', { type: 'agenda', ref: 'a_open' }, null],
     ['entityUpdates.cause', { type: 'agenda', ref: 'a_closed' }, 'cause-agenda-settled'],
@@ -368,27 +368,20 @@ test('★leg67 M3：每条判据的文案都**给出往哪走**（含号、含�
     assert.deepEqual(offenders, [], `★这些判据的文案没给出路（模型会反复重试）：\n${offenders.join('\n')}`);
 });
 
-test('★★leg67 M3b（leg66 第二条裁定的原件）：已了结事件的报错必须**指名到号 + 给出拾遗那条路**', () => {
+test('事件打磨：旧事已经收场仍可直接引起新盘算，不要求制造中间事件', () => {
     // 用户实机原文（leg66 §2.5）：模型把 `closedRoots` 里的旧事写进了 `newAgendas`（源型给成 event），
     //   旧文案只给"换未决事件 / 改成 state"两条 —— **两条都把模型合法的心愿说成不可能**。
     const v = ask('newAgendas.source', { type: 'event', ref: 'ev_2_2' });
-    assert.ok(v, '已了结的事件必须判不合法（这条闸一个字不放宽）');
-    const text = renderVerdict(v);
-    assert.match(text, /ev_2_2/, '★必须**指名到号**（不许只说"那件事"）');
-    assert.match(text, /已经办完的一件事/, '★必须**指名到事**（把标题带上，模型才认得出是哪件）');
-    assert.match(text, /ripple/, '★必须给出「先接旧事」那条路（newEvents + ripple）');
-    assert.match(text, /closedRoots|拾遗/, '★必须指出那个号在输入的**拾遗**那一栏里');
-    assert.ok(!/不存在|没有这个号/.test(text), '★**不许把"已了结"说成"不存在"**（leg32i/leg64 同一条纪律）');
-    assert.match(text, /已经了结/, '★必须如实说是"已经了结"');
+    assert.equal(v, null, '收场不取消事实的存在');
+    assert.ok(ask('newAgendas.source', { type: 'event', ref: 'ev_missing' }), '虚构原因仍须拒收');
 });
 
-test('★leg67 M3c：`entityUpdates.cause` 的"不存在"与"已了结"必须**分成两句**（leg66 第一件裁定的原件）', () => {
+test('事件打磨：字段变更区分不存在的因与已经完成的真实因', () => {
     const missing = renderVerdict(ask('entityUpdates.cause', { type: 'event', ref: 'ev_nope' }));
     const closed = renderVerdict(ask('entityUpdates.cause', { type: 'event', ref: 'ev_2_2' }));
     assert.notEqual(missing, closed, '★两种情况必须是两句不同的话（合并成"不在账或已了结"会把读者引向"抄错号"）');
     assert.match(missing, /ev_nope/);
-    assert.match(closed, /已了结/);
-    assert.ok(!/不在账/.test(closed), '★"已了结"那句不许含"不在账"（它明明在账上——真账 ev_5_3 的教训）');
+    assert.equal(closed, '', '真实闭合事实不产生拒因');
 });
 
 // ═══════════════ ★leg100：收场那条出路必须**指对栏**（真机取证） ═══════════════
@@ -458,8 +451,7 @@ test('★leg67 M4b：快照口径 = "进入批次那一刻"（leg66 的治法**�
     assert.equal(v, null, '同一批次内被本轮关掉的因 ⇒ **照旧认**（引擎自己的收尾不许否掉刚放行的变更）');
     // ★真·旧事（进来时就已经关着）⇒ 照旧拒，且报错说清"在第几轮了结"
     const vOld = ask('entityUpdates.cause', { type: 'event', ref: 'ev_2_2' }, w, { entry: before });
-    assert.ok(vOld, '真·旧事必须照旧拒（这条闸一个字不放宽）');
-    assert.match(renderVerdict(vOld), /第 2 轮/, '必须说清"在第几轮了结"');
+    assert.equal(vOld, null, '已发生事实的因果价值不由事项是否收场决定');
 });
 
 // ═══════════════ ⑦ 净化面新增的三格：必须**丢掉**（不是放行） ═══════════════

@@ -29,6 +29,10 @@ import { classifyRulesByKind, RULE_PACK_TOP, RULE_PACK_STR_MAX, RULE_PACK_CHAR_T
 //     零 import ⇒ 三条边**没有回路**（`module-layout.test.js` 是 DFS 全图检测）。
 import { isChronicleBriefLine, briefLineText } from './chronicle-brief.js';
 import { recallLedger, RECALL_MODES, buildQuery, matchedKeysOf, chronicleOf } from './ledger-recall.js';
+import { prepareWorldInput, worldInputStats } from './world-input.js';
+import { protectedCharactersOf } from './simulation-protection.js';
+import { eventDetails, eventEntityIds, resolveScopes, memberEntitiesOf } from './event-contract.js';
+export { memberEntitiesOf };
 // ★★★leg128（用户令「把整个链路打通，包含多因点」· 设计见 `docs/spec-context-master.md` §4）：
 //   **故事线**——把账切成的一条条因果线（切树＋立线住在 `lines.js`：纯函数、零写账、零创作）。
 //   环基线不动：`pack.js → lines.js → setting.js`，而 `setting.js` 不 import 本文件 ⇒ 没有回路
@@ -247,7 +251,7 @@ export function deliverThreads(ssot, top) {
                 id: r.id,
                 title: r.title,
                 position: r.position,
-                people: (ev?.ripples || []).map((id) => nameOf.get(id) || id),
+                people: eventEntityIds(ev, ssot).map((id) => nameOf.get(id) || id),
                 _src: ev?.source?.type === 'seed' ? 0 : 1,          // a. 世界源起的根排最前
                 _fresh: pos && !oldPlaces.has(pos) ? 0 : 1,          // b. 不在老地盘里的排前面
             };
@@ -295,7 +299,7 @@ export function computeClosedRoots(ssot) {
             const pos = String(e.position || '').trim();
             return {
                 id: e.id, title: e.title, position: e.position,
-                people: (e.ripples || []).map((id) => nameOf.get(id) || id),
+                people: eventEntityIds(e, ssot).map((id) => nameOf.get(id) || id),
                 _born: Number(String(e.id).split('_')[1]) || 0,
                 _fresh: pos && !openPlaces.has(pos) ? 0 : 1,
             };
@@ -467,17 +471,6 @@ export function lensList(ssot, opts = {}) {
  * 实体名/其分支名 → 归该势力。★按**名号序**排（同值按 id 兜底）——确定性，与 `membersOf` 同一把尺。
  * @returns {object[]} 实体数组（**不截断**；没有成员 ⇒ 空数组）
  */
-export function memberEntitiesOf(world, faction) {
-    const scope = new Set([faction.name, ...(faction.branches || [])]);
-    return (world?.entities || [])
-        .filter((e) => e.kind === 'character' && e.parent && scope.has(e.parent))
-        .sort((a, b) => {
-            const an = String(a.name ?? ''), bn = String(b.name ?? '');
-            if (an !== bn) return an < bn ? -1 : 1;                   // ① 名号序（人可读，确定性）
-            return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;            // ② 同名兜底：id 序
-        });
-}
-
 // 麾下成员简表（C7 派生反查）：**呈现**那一半——取前 LENS_MEMBERS_TOP 个名号，超出记「等 N 人」。
 // leg25 b（A1）：排序键由 `world.weights`（那个 0-1 的数）改**名号序**——片3 定案「引擎不拿数值排序」的
 //   最后一处残留。旧法在 leg24 片2 之后必然退化：势力成员普遍四维为空 → 同取中立 floor → 分量全等 →
@@ -1148,6 +1141,10 @@ export function recordShownLines(ssot, roots) {
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
 // leg25：出包末尾**强制整包预算**（超限按固定剪枝序裁，包内留 `trimmed` 痕迹；见 trimPack）
 export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, turnFacts = null, volumes = null, vecRecall = null } = {}) {
+    const input = prepareWorldInput(ssot, turnFacts, volumes, vecRecall);
+    ssot = input.world;
+    volumes = input.volumes;
+    vecRecall = input.vecRecall;
     // K44：镜头选择器——全量棋盘有序入镜（保送+分量序），预算内前缀；分量不随行泄漏（P3）
     // 细案 spec-entity-field-lookup §3（用户 2026-09-11 批准）：**选择权归 LLM 时**传 picks——
     //   名单改用"本轮上场选择器"选的实体（引擎只做校验，见 entity-lookup.js），不再按预算截前缀。
@@ -1190,6 +1187,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
         return row;
     };
     const entities = lens.map(({ e }) => entityRow(e, 'full'));
+    const protectedCharacters = protectedCharactersOf(ssot);
     const agendas = (ssot.agendas || []).filter((a) => !a.closed).map((a) => ({
         id: a.id, owner: a.owner, goal: a.goal, stage: a.stage,
         visibility: a.visibility, progress: `${a.progress}/${a.maxSteps}`, memory: a.memory,
@@ -1203,9 +1201,10 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
         // ★leg32h：陈旧死链头不进包（见常量处注释）——它们让世界看起来"只有一个焦点"
         if (e.source?.type !== 'state') return true;                       // 只有 state 源会永不闭环
         const age = (ssot.meta?.tick ?? 0) - (Number(String(e.id).split('_')[1]) || 0);
-        return !(age >= STALE_CHAIN_HEAD_AGE && (e.ripples || []).length < STALE_CHAIN_HEAD_MIN_RIPPLES);
+        return e.eventProtocol === 4 || !(age >= STALE_CHAIN_HEAD_AGE && (e.ripples || []).length < STALE_CHAIN_HEAD_MIN_RIPPLES);
     }).map((e) => ({
         id: e.id, title: e.title, source: e.source, position: e.position,
+        ...eventDetails(e), ...(e.timeMark ? { timeMark: e.timeMark } : {}),
     }));
     // ★leg32c：已了结的**故事线台账**（长跑接得上的核心面）。
     //   病因（真账 tick 27 实测）：**11 条已了结盘算，包里 0 条**；28 条已关闭事件只带最近 2 条（且只有 id+title）。
@@ -1216,6 +1215,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     //            ③**信息最少化**：id + 谁 + 目标 + 起因型（+ 起因 ref）——详情用 id 回查，不抄全文。
     const closedEvents = (ssot.events || []).filter((e) => e.closed).slice(-EVENT_LEDGER_TAIL).map((e) => ({
         id: e.id, title: e.title, source: e.source,
+        ...eventDetails(e), ...(e.timeMark ? { timeMark: e.timeMark } : {}),
         // ★★★leg100（用户令「**可以按甲吧**」）：**给"已经收掉的事"盖一个记号**——它此前与
         //   `pendingEvents`（还没结束的事）**形状完全一样**（都是 id+title+source），模型分不出
         //   "哪个能动、哪个是墓碑"⇒ 真机上它就从这份**归档**里挑了两个号去收场（`ev_6_4`/`ev_7_2`，
@@ -1345,6 +1345,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
         } : undefined,
         positions: ssot.context?.positions,
         entities,
+        ...(protectedCharacters.length ? { protectedCharacters } : {}),
         agendas,
         pendingEvents,
         // ★leg34：离场名册——见上方注释（复活通道的**前提**，不是展示品）。        //   ★形状口径：**恒为数组**（空则 `[]`），与 `idleFaces`/`pendingEvents` 一致。
@@ -1491,6 +1492,13 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     //   ★它进的是**主调用的输入**，不是世界步：世界步仍由模型提议、引擎结算门控（红线不破）。
     //   ★`elapsed` 是**账外的料**——引擎一个字都不解析它（账按轮走，故事按时间走）。
     if (turnFacts) pack.turnFacts = turnFacts;
+    const conditions = (ssot.conditions || []).filter(c => c.state === 'active' || c.state === 'planned');
+    if (conditions.length) pack.conditions = conditions.map(c => ({ id: c.id, eventRef: c.eventRef,
+        statement: c.statement, state: c.state,
+        ...(c.scope ? { scope: resolveScopes(c.scope, ssot, ssot.meta?.tick) } : {}),
+        ...(c.effectiveFrom ? { effectiveFrom: c.effectiveFrom } : {}),
+        ...(c.effectiveUntil ? { effectiveUntil: c.effectiveUntil } : {}),
+        ...(c.supersedes ? { supersedes: c.supersedes } : {}) }));
     // ★★★leg120（A3 关系网，细案 `docs/spec-relationship-network.md`）：**关系那一栏**。
     //   为什么它必须进包：① 第 16 条教了模型"要了结就引那个号"，**而号只能从输入里来**
     //   （契约层不许它自己编）⇒ 不递这一栏，模型**永远了结不了**任何一条边；
@@ -1613,6 +1621,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     return {
         pack,
         text,
+        ...(turnFacts ? { inputStats: worldInputStats(pack, text) } : {}),
         estTokens: Math.ceil(text.length / TOKEN_RATIO),
         estBeforeTrim: cutByBudget.length ? estBeforeTrim : undefined,
     };
@@ -1651,11 +1660,13 @@ export function trimPack(pack, budgetTokens = EVOLUTION_BUDGET_TOKENS) {
     //   ★leg100：**记号 `closed` 必须跟着留**（不能只留 `{id}`）——那一格是本笔给"归档"盖的戳，
     //     而"只剩一串 id"恰恰是最容易被当成候选池的形态（真机上就是这么出的事，见 `closedEvents` 处注释）。
     stage('recentClosedEvents', () => {
-        if (pack.recentClosedEvents?.length) pack.recentClosedEvents = pack.recentClosedEvents.map((e) => ({ id: e.id, closed: true }));
+        if (pack.recentClosedEvents?.length) pack.recentClosedEvents = pack.recentClosedEvents.map((e) =>
+            e.eventProtocol === 4 ? e : { id: e.id, closed: true });
     });
     // ④ 未决事件详情：id+title 保住"有事在飞"，砍掉 source/position 细节
     stage('pendingEvents', () => {
-        if (pack.pendingEvents?.length) pack.pendingEvents = pack.pendingEvents.map((e) => ({ id: e.id, title: e.title }));
+        if (pack.pendingEvents?.length) pack.pendingEvents = pack.pendingEvents.map((e) =>
+            e.eventProtocol === 4 ? e : { id: e.id, title: e.title });
     });
     // ⑤ 在飞盘算细节：id+goal+progress 保住目标与进度，砍掉 stage/visibility/memory/parentId
     stage('agendas.detail', () => {
@@ -1814,6 +1825,22 @@ export function trimPack(pack, budgetTokens = EVOLUTION_BUDGET_TOKENS) {
     //     没挂过，末道自量整整少算了整个数组 ⇒ "不许静默炸预算"就是在这里变成空话的。
     //   ★口径：量体**永远是最终那一份包**（与上面额度守卫同一条纪律，别在这里另立一把尺）。
     if (cut.length) pack.trimmed = cut;
+    // 新版事件的范围不可裁成半条；仍超预算时整项移除并保留可回查的身份。
+    for (const key of ['recentClosedEvents', 'pendingEvents']) {
+        while (estTokensOf(pack) > budgetTokens) {
+            const index = pack[key]?.findLastIndex(e => e.eventProtocol === 4) ?? -1;
+            if (index < 0) break;
+            const [omitted] = pack[key].splice(index, 1);
+            cut.push(`${key}.${omitted.id}`);
+            pack.trimmed = cut;
+        }
+    }
+    // 条文和范围必须完整：其他内容裁过后，仍装不下才按整条条件移除。
+    while (pack.conditions?.length && estTokensOf(pack) > budgetTokens) {
+        const omitted = pack.conditions.pop();
+        cut.push(`conditions.${omitted.id}`);
+        pack.trimmed = cut;
+    }
     if (estTokensOf(pack) > budgetTokens) cut.push('budgetOverrun');
     if (cut.length) pack.trimmed = cut;
     return cut;

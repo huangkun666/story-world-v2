@@ -28,6 +28,8 @@ import { createSnapshotHub } from './snapshot-store.js';
 //   ★为什么不写在这里：本文件有**行数硬锁**（`< 3100`，余量见 `STATE.md` §1）——新功能与它的理由
 //     都该先进模块（照 leg107 把动作路由搬出去的同一条理由）。
 import { createEntityWindowHub, ENTITY_WINDOW_ACTION } from './entity-window.js';
+import { createSimulationProtectionHub } from './simulation-protection.js';
+import { createWorldWriteGuard } from './world-write-guard.js';
 // ★★★leg78（丙-web · 第三格）：热账（hot-meta）读写落盘子系统整族搬进 `web/hot-ledger.js`。
 //   本文件从此**不再持有一格热账状态**（11 格全在新家）。
 import { createHotLedgerHub } from './hot-ledger.js';
@@ -91,6 +93,7 @@ import { createLongTask, LONG_TASK_LABELS } from './long-task.js';
 //   别名（2 处读者）＋ 两个函数的**转出**（`test/plugin-master-switch.test.js:17` 照旧从本文件取）
 //   ＋ `syncActionbar` 的**依赖注入**（只有本文件同时够得着参数真源与账上镜像）。
 import { setStatus, injectCss, reportWinError, syncActionbar as syncActionbarImpl, ensureAutoAdvanceKey, autoAdvanceOn } from './status-bar.js';
+import { installRuntimeDiagnostics } from './runtime-diagnostics.js';
 // ★★★（2026-10-05 用户第二道令）：这里原来 import `tagReadoutLine` 来拼参数页那一行原始读数
 //   （`标签注入：…`）——那一行**已整行撤掉** ⇒ 这一条 import 也没了消费者（**整行删除**）。
 //   ★`tagReadoutLine` 本身仍在（`src/tick.js` 的落账读数用它：标签抽到了几条），别误删那边。
@@ -128,6 +131,7 @@ import { createIdbVolumeStore, createIdbVectorStore } from './idb-backend.js';
 // ★leg73：`../src/snapshot.js` 的 import **整条删掉**（判据②：那一族唯一的消费者是搬走的块；
 //   留着就是"块外还有人用"的假象，会让"谁拥有这块逻辑"重新变模糊）。
 import { createTickQueue } from '../src/async-tick.js';
+import { createMessageConsumptionHub, latestAssistantText, recordConsumption, chatScope } from './message-consumption.js';
 import { runTick } from '../src/tick.js';
 import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
 // ★★★leg87：单轮超时/输出上限那两个框的**出厂缺省**要从真源取（与 `createHttpTransport`
@@ -195,7 +199,7 @@ const NAMESPACE = 'STORY_WORLD_V2';
 // ★1.0.0（发布首版）：本常量与 `manifest.json` 的 `version` 是**同一个版本号的两处写法**，
 //   必须同批改——`test/browser-compat.test.js` 用 `sw2Version()` 锁住它，改一处不改另一处当场红。
 //   ⚠ 别把它当"内部构建号"用：内部构建号是 `src/render.js` 的 `PANEL_BUILD`（面板页脚印的那行）。
-const VERSION = '1.1.1';
+const VERSION = '1.1.2';
 const WINDOW_ID = 'story_world2_window';
 // ★leg93c：事件链**浮层**的容器 id（挂在 `document.body` 上、**不在面板窗口里** ⇒ 面板关着也能看）。
 //   一处定义、三处引用（建/收/查），免得又出现"同名副本 = 本仓最贵的病"。
@@ -299,7 +303,7 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //     最底部滚轮就失效、拉不上去"）：★**真动了样式**（grid 高度改由 flex 分配 ＋ 并页改 flex 列 ＋ 一条 `contain`）⇒ 同批升。为什么非改不可（`100%` 看着没毛病、其实让页多出 249px **够不着**的滚动）⇒ `web/style.css` 的 leg157 注释。
 //   ★★★leg160 → **`20261001-leg160-panel-window`**（用户令「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」）：★**真动了样式**——`.sw2-pan-range` 那两条规则整块撤掉、手机档名单里两格一并删 ⇒ 同批升。
 //   ★★★leg196 → **`20261005-leg196-map-mobile`**（手机端真机报的 bug：地图浮层"只在最顶上露一小块框"）：**真动了样式**——`.sw2-map-mask` 从"只有 `inset:0`"改成**自己声明 `width:100%;height:100%`**，手机档补 `height:100dvh`。为什么非改不可（宿主给 `<html>` 加了 transform/perspective ⇒ 固定定位的包含块变成那个 0 高的盒子 ⇒ 遮罩实测塌成 12px）⇒ 全量读数在 `web/style.css` 那一处 leg196 注释里。
-const CSS_VERSION = '20261005-leg200-prose-lists'; // 正文剥块改成玩家那两份名单（参数页两个多行框）——注入卡里那条 96px 不吃多行框。
+const CSS_VERSION = '20261008-leg209-character-protection-cleanup'; // 角色保护开关放进资料行，撤掉头部长说明。
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;
@@ -805,9 +809,17 @@ const snapHub = createSnapshotHub({
 //   ★`getWorld` 必须是**函数**且**调用时才求值**（`sw2LastWorld` 声明在本段更后面、且会被反复重新赋值
 //     ——传成值就是"第二份真相"，与 `getLastWorld` 那条留档同一个理由）。
 //   ★窗口挂在 `document.body` 上（不在面板窗口里）⇒ 面板开着关着都能看；`z-index` 压得住面板。
+const simulationProtection = createSimulationProtectionHub({
+    getWorld: () => readHotMeta()?.world || sw2LastWorld,
+    getScope: () => chatScope(freshCtx()), isBusy: () => Boolean(sw2TickQueue?.busy),
+    saveWorld: (world, guard) => hotHub.commitHotMeta(hotAccountShape(world), { guard }),
+    refresh: world => refreshWorld(world), setStatus,
+});
 const entityWindow = createEntityWindowHub({
     getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
+    getScope: () => chatScope(freshCtx()),
     setStatus,
+    setSimulationBlocked: (id, blocked, expected) => simulationProtection.set(id, blocked, expected),
 });
 
 // ★★★leg82：**自证面 / 撤销 / 写账补镜像**三块已随参数族搬进 `web/param-panel.js`。
@@ -894,73 +906,17 @@ function injectSwitchOn(key) {
     if (key === 'injectLedgerRecall') return String(modelSettings()?.[key] ?? '1') === '1';
     return String(modelSettings()?.[key] ?? '') === '1';   // 其余三个：**只有显式 '1' 算开**（全仓同口径）
 }
-// ★★★leg89：**"这条正文推进过了吗"的守卫**——一输入一推进。
-//   为什么必须有：自动路（`MESSAGE_RECEIVED`）与手动路（面板「推进一轮」）**是两条独立的入口**，
-//   总闸开着时先自动推一次，玩家再按一次「推进一轮」——两次读到的**是同一段正文**
-//   ⇒ 同一批标签被提两遍、同一批"已经发生的事"往世界模型里塞两遍（世界可能把它当两轮用）。
-//   旧口径没这个问题：`advance()` 零参 ⇒ 两处都没有正文可提（两处都恒为空），这个坑**是新接线带出来的**。
-//   ⇒ 口径：**同一段正文本轮只推进一次**；新消息来了（文本变了）自然放行。
-//   ★它**不是**"防重入"（那是 `async-tick.js` 的 `busy` 闩，管的是并发）：这里管的是**同一原料不许提两次**。
-let sw2LastAdvancedMes = null;
-/**
- * ★★★leg89：**读聊天正文**——"正则提取聊天llm输出的各角色的行动"里，正文从哪来。
- *   ★现取（`freshCtx()` 每调一次取一次）：抓死会读到上一个聊天的最后一条（本仓 leg79 的"不许抓死"，第四次）。
- *   ★取**最后一条**：`MESSAGE_RECEIVED` 是在消息**已经进 `chat`** 之后才发的 ⇒ 最后一条就是刚到的正文。
- *   ★拿不到就返回空串——**不猜、不退回更早的消息**（"这一轮没有正文"与"拿上一条冒充"是两件事）。
- */
-export function sw2LatestMessageText(ctx) {
-    const chat = ctx?.chat;
-    if (!Array.isArray(chat) || !chat.length) return '';
-    const last = chat[chat.length - 1];
-    return typeof last?.mes === 'string' ? last.mes : '';
-}
-
-/**
- * ★★★leg89：**"这条正文该不该推"的判据**——从 `sw2AdvanceOnce` 里提出来，为的是**能真测**
- *   （本仓铁律：要真 ctx 的接线，要么提成可导出函数真跑，要么写注入 fake 的测试）。
- *   三条口径：
- *   · 没有正文（空串/null）⇒ **该推**：那是"手动补推/老聊天"的正常情形（旧行为就是零参推进）；
- *   · 与上一次推进过的**同一条** ⇒ **不该推**（同一段正文提两遍 = 同一批标签喂两遍）；
- *   · 其余 ⇒ 该推。
- * @returns {{go: boolean, reason?: string}}
- */
+// Stable identities and committed history share one manual/automatic entry.
+const consumptionHub = createMessageConsumptionHub({ getCtx: freshCtx,
+    getWorld: () => loadHotAccount(readHotMeta()), getQueue: () => sw2TickQueue, onStatus: setStatus });
+export function sw2ConsumptionReadout() { return consumptionHub.readout(); }
+export function sw2LatestMessageText(ctx) { return latestAssistantText(ctx); }
+// Legacy helper; the live entry uses persisted message identities.
 export function sw2ShouldAdvance(mes, lastMes) {
-    const cur = typeof mes === 'string' ? mes : '';
-    if (!cur) return { go: true, reason: 'no-dialogue' };
-    if (lastMes && cur === lastMes) return { go: false, reason: 'same-message' };
-    return { go: true };
+    if (!mes) return { go: true, reason: 'no-dialogue' };
+    return mes === lastMes ? { go: false, reason: 'same-message' } : { go: true };
 }
-
-/**
- * ★★★leg89：**一输入一推进**——自动路（收到消息）与手动路（面板「推进一轮」）**共用这一格**。
- *   · 拿到最后一条正文；**与上一次推进过的那条相同 ⇒ 跳过**（如实出声，不是静默丢）。
- *   · 没有正文（拿空串）⇒ **照常推进**：那是"手动补推/老聊天"的正常情形，
- *     旧行为就是零参推进（`dialogue = ''` ⇒ 没有标签可提，世界以自身状态演）——不许因为新功能把它堵死。
- *   · 返回值照 `createTickQueue` 的口径透出（`{ok, skipped:'same-message'|'busy'|…}`），便于判据真跑。
- */
-export function sw2AdvanceOnce({ manual = false } = {}) {
-    if (!sw2TickQueue) return { ok: false, skipped: 'no-queue' };
-    const mes = sw2LatestMessageText(freshCtx());
-    const messageVerdict = sw2ShouldAdvance(mes, sw2LastAdvancedMes);
-    // ★★★leg156（用户实机报「推完了还显示这条、我想再推就显示这个」）：**手动那颗按钮不受这条闸管**。
-    //   闸问的是"这段正文要不要再提一遍标签"，那颗按钮问的是"世界要不要往前走一步"——两件事；
-    //   而挡它的后果是**按钮变哑**（最后一条正文没换人，它就永远推不动）。自动路照旧挡（一轮只提一次）。
-    const verdict = manual ? { go: true } : messageVerdict;
-    if (!verdict.go) {
-        setStatus(manual
-            ? '⏭ 这一条消息已经推过一轮了（同一段正文不重复提取）——想再推，等新的一条消息'
-            : '⏭ 这一条已经推过了（跳过重复提取）');
-        return { ok: false, skipped: 'same-message' };
-    }
-    // ★★★leg156：**只有真推成功才记账**（原来在推进之前就写 ⇒ 那一轮没成功也记成"推过了"、
-    //   从此重推不了，与 `src/async-tick.js` 自己的"失败…可立即重试"当场矛盾）。
-    const pushed = sw2TickQueue.advance(mes);
-    return pushed.then((res) => { if (res?.ok && mes) sw2LastAdvancedMes = mes; return res; })
-        .catch((err) => {
-            console.warn('[story-world-v2] 推进异常：', err?.message || err);
-            return { ok: false, error: String(err?.message || err) };
-        });
-}
+export function sw2AdvanceOnce(options = {}) { return consumptionHub.advance(options); }
 
 // ★★★leg79/leg81：**实体页视图态整族也已搬进 `web/view-state.js`**
 //   （`sw2EntsView` / `SW2_ENTS_KINDS` / `SW2_ENTS_FILTERS` / `sw2EntsViewReset` / `sw2EntsComposing`）。
@@ -1292,7 +1248,7 @@ export function sw2ToggleInject(key, on) {
 //   只能有一个模块级的把手（与 `sw2LastWorld` / `paramApi` 同一形状，本仓既有做法）。
 let modelChannel = null;
 let embedChannel = null, embedRuntime = null, memoryWiring = null;
-const panelTools = createPanelTools({ getCtx: freshCtx, getWorld: () => sw2LastWorld, getSettings: modelSettings, writeSetting, getRuntime: () => embedRuntime, getInjector: () => sw2Injector, onVectorChange: () => memoryWiring?.settingsChanged(), build: PANEL_BUILD });
+const panelTools = createPanelTools({ getCtx: freshCtx, getWorld: () => sw2LastWorld, getSettings: modelSettings, writeSetting, getRuntime: () => embedRuntime, getInjector: () => sw2Injector, onVectorChange: () => memoryWiring?.settingsChanged(), getConsumptionReadout: sw2ConsumptionReadout, build: PANEL_BUILD });
 
 function renderCfg(extra = {}) {
     // ★★leg46：把**参数真源**与**撤销态**注入渲染层（渲染层不持状态，照本仓既有纪律）：
@@ -1466,16 +1422,16 @@ export function extractionProgressHandler(events, { setText = setStatus, interva
     let startedAt = null;
     let lastText = null;
     let heartbeatAt = null;
-    const render = (elapsedOverride) => {
+    const render = (elapsedOverride, diagnostic = true) => {
         const elapsed = Number.isFinite(elapsedOverride) ? elapsedOverride : (startedAt == null ? null : now() - startedAt);
         const text = extractionProgressText(events, elapsed);
         lastText = text;
-        try { setText(text); } catch (_) {}
+        try { setText(text, { diagnostic }); } catch (_) {}
         return text;
     };
     const tick = () => {
         try {
-            render();
+            render(undefined, false);
             if (heartbeatAt == null || now() - heartbeatAt >= heartbeatMs) {
                 heartbeatAt = now();
                 const cur = (events || []).filter((e) => e && e.phase === 'start').slice(-1)[0] || null;
@@ -1525,6 +1481,7 @@ const sw2BookTextForEntity = (entity) => bookTextForEntity(entity, getCtx());
 export async function lookupOneEntity(id, { forceFields = null } = {}) {
     const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
     if (!world) return { ok: false, error: '还没有世界' };
+    const guard = createWorldWriteGuard({ world, getWorld: () => loadHotAccount(readHotMeta()) || sw2LastWorld, getScope: () => chatScope(freshCtx()) });
     const settings = modelSettings();
     const resolved = resolveBrowserTransport(settings);
     if (!resolved) return { ok: false, error: '模型通道未配置' };
@@ -1544,15 +1501,16 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
         onEvidence: diagEvidence,
     });
     if (!res.stats) return { ok: false, error: res.warning || '查书未成' };
-    writeHotMeta(hotAccountShape(res.ssot));
-    await flushHotMeta();
+    guard.prepare(res.ssot);
+    await hotHub.commitHotMeta(hotAccountShape(res.ssot), { guard });
     sw2LastWorld = res.ssot;
     refreshWorld(res.ssot, { oldVolumes: LISTED_VOLUMES });
     return { ok: true, stats: res.stats, warning: res.warning, entity: res.ssot.entities.find((x) => x.id === id) };
 }
 
 // ---------- K36：每轮演化（前置步 + 主调用 + 落盘点） ----------
-async function advanceTick({ world, dialogue }) {
+async function advanceTick({ world, dialogue, transaction }) {
+    if (simulationProtection.busy) return { ok: false, error: '禁止模拟设置正在保存，请稍候再推进世界' };
     const settings = modelSettings();
     sw2LastSettings = settings;
     // ★★★leg87（用户令「改也改不了是死的不会根据模型变化」）：主调用那两个数**从设置现读**。
@@ -1605,15 +1563,17 @@ async function advanceTick({ world, dialogue }) {
         // 落盘点：前置步的新字段**必须落盘**，否则 Ctrl+F5 一次就重查一遍（细案 §7）。
         onPreStep: async (pre) => {
             if (!pre?.ssot) return;
+            transaction.assertCurrent();
             if (pre.picks) sw2LastPicks = pre.picks;
             if (pre.warning) console.warn('[story-world-v2] 查书前置步:', pre.warning);
             const shapeBefore = readHotMeta()?.world;
             if (shapeBefore && pre.ssot.meta?.entityFields !== shapeBefore.meta?.entityFields) {
-                writeHotMeta(hotAccountShape(pre.ssot));   // 内存与盘上一致（导出/刷新读的就是这里）
-                await flushHotMeta();
+                await hotHub.commitHotMeta(hotAccountShape(pre.ssot), { guard: transaction });
+                transaction.acceptCurrent();
             }
         },
     });
+    transaction.assertCurrent();
     // ★leg40b 续（死锁修复）：降级路径**单独出一行**（此前只有 panel 裁定条里那句话）。
     //   为什么单独打：这条路径的语义是"这一轮不是模型写的那一轮"——它必须**能复盘**：
     //   丢了哪几条、原始拒因是什么。（面板裁定条只截前几条，控制台留全量。）
@@ -1644,11 +1604,13 @@ export function setupAsyncTicks(ctx) {
         load: () => loadHotAccount(readHotMeta()),
         // E2：轮转失败不再当成功——抛给队列（async-tick 的 save 失败面：报「落账失败…可重试」、
         // 不 refresh、世界原样；旧实现返回原世界被当 succeed → 界面报「已同步」而盘上什么都没写）。
-        save: async (ssot) => {
-            const rot = await ensureChronicleRotated(ssot);
+        getScope: () => chatScope(freshCtx()), beforeCommit: recordConsumption,
+        onOutcome: (outcome) => consumptionHub.onOutcome(outcome),
+        save: async (ssot, transaction, options) => {
+            const rot = await ensureChronicleRotated(ssot, transaction, false);
             if (!rot.ok) throw new Error(rot.error);
             // ★★★leg125：这里原来挂着"投给柚月の记忆"那一步（开关 `memoryEnabled`）——整条已删，见文件顶部留档。
-            return rot.hot;
+            return hotHub.commitHotMeta(hotAccountShape(rot.hot), { guard: transaction, saveMessages: options.saveMessages });
         },
         refresh: (hot) => {
             refreshWorld(hot, { oldVolumes: LISTED_VOLUMES });            // ★★★leg89：世界推完 ⇒ **重设注入**（名册可能刚长了新人）。
@@ -1721,6 +1683,7 @@ export function setupAsyncTicks(ctx) {
     // ★★★leg48：**吞错可以，沉默不行**（见 `initPanel` 里那句注释：载入失败被空 `.catch` 吞掉，
     //   是"世界没到"这件事十二轮不可见的直接原因）。
     es?.on?.(et.CHAT_CHANGED, () => {
+        sw2TickQueue?.invalidate();
         loadWorld().catch((err) => console.warn('[story-world-v2] 切聊天后载入世界失败（面板照常可用）：', err));
     });
 }
@@ -1746,28 +1709,32 @@ async function listOldVolumes() {
 //   绝不写热账、绝不返回剥了段的世界；返回 {ok:false} 由调用方如实上报（旧实现 catch 掉异常
 //   返回原世界，界面照报「已同步」= 内存改了、盘上没写、界面说成功）。
 // 返回 {ok, hot, volume}：ok:false = world 原样（热账/内存一致，无静默失败面）。
-async function ensureChronicleRotated(world) {
+async function ensureChronicleRotated(world, transaction = null, write = true) {
+    transaction?.assertCurrent();
     world = rememberHotHistory(world);
     const nextVolume = nextVolumeOfHotMeta();
+    const store = volumeStore();
     let volumes = [];
     try {
-        volumes = await volumeStore().list();   // 卷库清单（也作卷号校正依据）
+        volumes = await store.list();   // 卷库清单（也作卷号校正依据）
     } catch (err) {
         return { ok: false, hot: world, error: `卷库不可读：${shortErr(err)}` };
     }
+    transaction?.assertCurrent();
     const plan = planChronicleRotation({ world, nextVolume, volumes });
     if (!plan.mustRotate) {
-        writeHotMeta(hotAccountShape(world));   // 无轮转也写回（第十三棒语义不变）
+        if (write) writeHotMeta(hotAccountShape(world));   // 无轮转也写回（第十三棒语义不变）
         return { ok: true, hot: world, volume: null };
     }
     try {
-        await volumeStore().put(plan.volume);   // 先落卷：只有它成功，才允许提交"剥了段"的世界
+        await store.put(plan.volume);   // 先落卷：只有它成功，才允许提交"剥了段"的世界
     } catch (err) {
         // 写失败 = 世界不动（热账一行不少、内存与盘上一致），如实上报给调用方
         return { ok: false, hot: world, error: `卷「${plan.volume.id}」入卷失败：${shortErr(err)}` };
     }
     // E2 执行序收口：落卷成功之后才用 applied（剥段后 + nextVolume 已 +1）覆盖热账
-    writeHotMeta(hotAccountShape(plan.applied));
+    transaction?.assertCurrent();
+    if (write) writeHotMeta(hotAccountShape(plan.applied));
     return { ok: true, hot: plan.applied, volume: plan.volume };
 }
 
@@ -2463,9 +2430,10 @@ if (typeof window !== 'undefined') {
         const cur = loadHotAccount(readHotMeta()) || sw2LastWorld;
         const curTick = cur?.meta?.tick;
         const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
-            ? window.confirm(`确定回到快照 ${id}${tick == null ? '' : `（第 ${tick} 轮）`}？\n\n· 世界账回到第 ${curTick ?? '?'} 轮 → 第 ${tick ?? '?'} 轮\n· 只回世界账，**对话记录不动**，也不会重写你聊过的内容\n· 恢复前会**自动给当前状态拍一份**（回不来可以再退回去）\n\n确认后立即生效。`)
+            ? window.confirm(`确定回到第 ${tick ?? '?'} 轮的这次保存？${payload?.saved ? `\n保存时间：${payload.saved}` : ''}\n\n· 世界账回到第 ${curTick ?? '?'} 轮 → 第 ${tick ?? '?'} 轮\n· 只回世界账，对话记录不动\n· 恢复前自动保存当前状态\n\n确认后立即生效。`)
             : true;
         if (!ok) { setStatus('已取消（世界原样）'); return; }
+        sw2TickQueue?.invalidate();
         setStatus(`正在回到快照 ${id}…`);
         const r = await snapHub.restoreSnapshot(id);
         if (!r.ok) { setStatus(`注意：回不去（链不完整）——${r.error}`); return; }
@@ -2475,7 +2443,7 @@ if (typeof window !== 'undefined') {
         //   写成 `r.flushed ?` 是判**对象真值**（恒真）⇒ 真失败也印"已落盘"，
         //   与上面 `snapshot-store.js` 里那条"存根恒真"是**同一种病**（leg67–71 的形态）。
         //   ⇒ 必须按 `.ok` 分叉；这就是本仓那条「面板上印出来的必须现算」的落法。
-        setStatus(`已回到 ${id}（第 ${r.tick ?? '?'} 轮 · ${r.plan === 'full' ? '整份' : '锚点+增量'}）${r.flushed?.ok ? ' · 已落盘' : ' · 注意：落盘失败（见控制台）'}——对话记录未动`);
+        setStatus(`已回到第 ${r.tick ?? '?'} 轮${r.flushed?.ok ? ' · 已落盘' : ' · 注意：落盘失败（见控制台）'}——对话记录未动`);
     };
 
     bus['snapshot-clear'] = async () => {
@@ -3063,6 +3031,7 @@ function initPanel(ctx) {
     modalBoost();
     window.addEventListener('error', reportWinError);
     window.addEventListener('unhandledrejection', reportWinError);
+    installRuntimeDiagnostics(window);
     ensureWindow(ctx).then(() => {
         bindTabs();
         bindActions();

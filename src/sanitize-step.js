@@ -32,9 +32,11 @@ import {
 //     文案另走本文件自己的口（见下方 `SANITIZE_TEXT`）——净化器的理由是"丢掉理由"，
 //     与校验面（`$.foo[i].source: …` 整步拒）本来就不同形，两者都得是**逐字未变**（M4 判据锁着）。
 import { judgeRef, askRef, eventOrdinal } from './ref-rules.js';
+import { checkEventContract, applyConditionUpdates } from './event-contract.js';
 import { isSettingRef } from './setting.js';
 import { RIPPLE_TARGET_CAP } from './weight.js';
 import { normalizePosition } from './position.js';
+import { isProtectedForStep, currentTurnProtection } from './simulation-protection.js';
 import { validate } from './schema.js';
 import { worldStepSchema } from './schemas/world-step.schema.js';
 
@@ -45,8 +47,6 @@ import { worldStepSchema } from './schemas/world-step.schema.js';
  * ⚠没列在这里的 code 一律回落到 `ref-rules.js` 的文案（那份文案**带出路**，是模型能照做的那份）。
  */
 const SANITIZE_TEXT = {
-    'event-closed-agenda': (r) => `事件源「${r.ref}」已了结`,
-    'event-closed-entity': (r) => `事件源「${r.ref}」已了结`,
     'event-missing': (r) => `事件源「${r.ref}」不在账上（本轮也没新建它）`,
     'parent-agenda-missing': (r) => `父盘算「${r.ref}」不在飞`,
     'state-source-has-ref': () => 'state 源不该带 ref',
@@ -56,7 +56,6 @@ const SANITIZE_TEXT = {
     'agenda-source-missing': (r) => `源盘算「${r.ref}」不在账上`,
     'cause-event-missing': (r) => `因「${r.ref}」不在账上`,
     'cause-agenda-missing': (r) => `因「${r.ref}」不在账上`,
-    'cause-closed-before-batch': (r) => `因「${r.ref}」已了结（因果只能挂在正在发生的事上）`,
     'cause-agenda-settled': (r) => `因「${r.ref}」已结算`,
 };
 
@@ -135,16 +134,19 @@ export function dropInvalidProposals(step, ssot) {
     //     「如果有冲突那就说明本来就错了」）。本节只做"机械地不让它发生 + 如实报数"。
     const dlgTick = world.meta?.tick ?? 0;
     const dlgPrefix = `ev_${dlgTick}_`;
-    const dlgEvents = arr(world.events).filter((e) => e?.source?.type === 'dialogue' && String(e?.id || '').startsWith(dlgPrefix));
-    if (dlgEvents.length) {
-        const actedNow = new Set();
+    const protection = world.meta?.turnProtection;
+    // 旧账没有独立名单时才沿用 dialogue 事件保护；已有名单时不能借旧事件续期。
+    const dlgEvents = protection ? [] : arr(world.events).filter((e) => e?.source?.type === 'dialogue' && String(e?.id || '').startsWith(dlgPrefix));
+    const currentProtection = currentTurnProtection(world);
+    if (dlgEvents.length || currentProtection) {
+        const actedNow = new Set(arr(currentProtection?.actedIds));
         for (const ev of dlgEvents) {
-            if (ev.dialogueKind === 'change') continue;           // ★只有"出过手"（行动/承诺）才算
+            if (ev.dialogueKind === 'change' || ev.dialogueKind === 'result') continue;
             const subject = arr(ev.ripples)[0];
             if (subject) actedNow.add(subject);
         }
         const dlgIds = new Set(dlgEvents.map((e) => e.id));
-        const wroteNow = new Set();
+        const wroteNow = new Set(arr(currentProtection?.changedFields).map((r) => `${r.entityId}|${r.field}`));
         for (const [id, rec] of Object.entries(world.meta?.entityFields || {})) {
             for (const [f, r] of Object.entries(rec?.fields || {})) {
                 if (r?.tick === dlgTick && dlgIds.has(r?.cause)) wroteNow.add(`${id}|${f}`);
@@ -168,6 +170,8 @@ export function dropInvalidProposals(step, ssot) {
         ...cur,
         newEvents: cur.newEvents.filter((ev, i) => {
             if (!ev || typeof ev !== 'object') return keep(dropped, 'newEvents', i, ev, '不是对象');
+            const contractErrors = checkEventContract(ev, cur.eventProtocol, world);
+            if (contractErrors.length) return keep(dropped,'newEvents',i,ev,contractErrors.join('；'));
             if (!str(ev.title)) return keep(dropped, 'newEvents', i, ev, '缺标题');
             if (ev.position !== undefined && !str(normalizePosition(ev.position))) {
                 return keep(dropped, 'newEvents', i, ev, '位置已填写但没有非空地点（无法确定请省略该字段）');
@@ -254,9 +258,37 @@ export function dropInvalidProposals(step, ssot) {
         });
     }
 
+    // 权限与正常校验共用一份判定；降级重试不得放行受保护角色的提案。
+    const agendaOwner = id => arr(world.agendas).find(a => a.id === id)?.owner;
+    const protectedOwnerOf = {
+        actions: item => item.entity,
+        newAgendas: item => item.entity,
+        agendaAdvances: item => agendaOwner(item.agendaId),
+        agendaCancels: item => agendaOwner(item.agendaId),
+        newEntities: item => item.entity,
+        entityFates: item => item.entity,
+        entityUpdates: item => item.entity,
+        relationUpdates: item => item.from,
+        relationClosures: item => arr(world.relations).find(r => r.id === item.id)?.from,
+        newEvents: item => item.source?.type === 'plot' ? agendaOwner(item.source.ref) : null,
+    };
+    for (const [family, ownerOf] of Object.entries(protectedOwnerOf)) {
+        cur[family] = arr(cur[family]).filter((item, index) => {
+            const owner = ownerOf(item);
+            if (!isProtectedForStep(world, owner)) return true;
+            return keep(dropped, family, index, item, `角色「${owner}」受保护，模型不可代其行动、决定或改写事实`);
+        });
+    }
+    cur.newAgendas = cur.newAgendas.filter((item, index) => {
+        const parentOwner = item.source?.type === 'parent' ? agendaOwner(item.source.ref) : null;
+        if (!isProtectedForStep(world, parentOwner)) return true;
+        return keep(dropped, 'newAgendas', index, item, `父盘算属主「${parentOwner}」受保护，模型不可替其委派或承诺`);
+    });
+
     // 删除新事件会改变发号位次。依赖必须先按原始批次认身份：
     // 被删事件的依赖一起丢，幸存事件的依赖映射到新号；只改簿记引用，不改故事内容。
     const originalEvents = arr(src.newEvents);
+    const eventOrigins = new Map(cur.newEvents.map(ev => [ev,originalEvents.indexOf(ev)]));
     const eventIds = newEventIdsOf(cur, (world.meta?.tick ?? 0) + 1);
     for (const family of ['newAgendas', 'newEntities']) {
         cur[family] = cur[family].flatMap((item, index) => {
@@ -278,8 +310,10 @@ export function dropInvalidProposals(step, ssot) {
     //   净化器若按原文比对，会拿一个**引擎根本不会用的串**去判（两把尺子）。
     cur = {
         ...cur,
-        newEvents: cur.newEvents.map((ev) => (ev && typeof ev === 'object' && ev.position != null
-            ? { ...ev, position: normalizePosition(ev.position) } : ev)),
+        newEvents: cur.newEvents.map((ev) => {
+            const next = ev && typeof ev === 'object' && ev.position != null ? {...ev,position:normalizePosition(ev.position)} : ev;
+            eventOrigins.set(next,eventOrigins.get(ev)); return next;
+        }),
         actions: cur.actions.map((a) => (a && typeof a === 'object' && a.position != null
             ? { ...a, position: normalizePosition(a.position) } : a)),
     };
@@ -455,7 +489,8 @@ export function dropInvalidProposals(step, ssot) {
             const bad = arr(ev.ripples).filter(badRef);
             if (!bad.length) return ev;
             dropped.push({ family: 'newEvents', index: -1, label: str(ev.title), reason: `波及名单摘掉 ${bad.length} 个不存在的引用（${bad.join('/')}）` });
-            return { ...ev, ripples: arr(ev.ripples).filter((r) => !badRef(r)) };
+            const clean = { ...ev, ripples: arr(ev.ripples).filter((r) => !badRef(r)) };
+            eventOrigins.set(clean,eventOrigins.get(ev)); return clean;
         });
 
         // ★★★leg112（D1）：**这里原有一处"静默截断"**——超过每轮上限就砍掉尾巴、只往 `dropped` 记一条
@@ -472,6 +507,29 @@ export function dropInvalidProposals(step, ssot) {
         if (stable) break;
     }
 
+    if (cur.conditionUpdates !== undefined) {
+        if (cur.eventProtocol !== 4) {
+            arr(cur.conditionUpdates).forEach((u,i) => keep(dropped,'conditionUpdates',i,u,'条件必须声明 eventProtocol:4'));
+            delete cur.conditionUpdates;
+        } else {
+            const tick = (world.meta?.tick ?? 0) + 1;
+            const temp = JSON.parse(JSON.stringify(world));
+            const eventIds = cur.newEvents.map((_,i) => `ev_${tick}_${i+1}`);
+            temp.events.push(...cur.newEvents.map((ev,i) => ({...ev,id:eventIds[i]})));
+            const adjusted = arr(cur.conditionUpdates).flatMap((u,i) => {
+                if ((world.events || []).some(e => e.id === u?.eventRef) || (world.milestones || []).some(m => (m.ids || []).includes(u?.eventRef))) return [u];
+                const ordinal = eventOrdinal(u?.eventRef);
+                if (!ordinal) return [u];
+                const newIndex = cur.newEvents.findIndex(e => eventOrigins.get(e) === ordinal-1);
+                if (newIndex < 0) { keep(dropped,'conditionUpdates',i,u,'条件原因事件已被丢弃'); return []; }
+                return [{...u,eventRef:eventIds[newIndex]}];
+            });
+            const result = applyConditionUpdates(temp,adjusted,{tick});
+            const rejected = new Set(result.rejected.map(b => b.index));
+            for (const bad of result.rejected) keep(dropped,'conditionUpdates',bad.index,bad.update,bad.errors.join('；'));
+            cur.conditionUpdates = adjusted.filter((_,i) => !rejected.has(i));
+        }
+    }
     return { step: cur, dropped };
 }
 

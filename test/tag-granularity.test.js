@@ -159,18 +159,19 @@ const reg = (world, lines, tick = 7) => {
     return { prose, facts: extractTags(prose, CTX), stats: null, world };
 };
 
-test('G17：三条标签注册成 dialogue 型事件 ＋ 编年行——**发号走预留段，不与世界步撞号**', () => {
+test('G17：行动只提供保护；明确结果发号走预留段，不与世界步撞号', () => {
     const w = mkWorld();
-    const prose = tagIt(['【行动】薛铁衣｜迎战｜黄坤']);
+    const prose = tagIt(['【协议】3', '【行动】薛铁衣｜迎战｜黄坤', '【事件】E1｜双方约定停战｜薛铁衣、黄坤｜已完成']);
     const st = registerDialogueFacts(w, { facts: extractTags(prose, CTX), dialogue: prose, tick: 7 });
-    assert.equal(st.events, 1, '一条行动 = 一条事件');
+    assert.equal(st.events, 1, 'v3 明确结果才成为事件，行动不另建一条');
     assert.equal(w.events.length, 1);
-    assert.equal(w.events[0].source.type, 'dialogue', '★源的型叫 dialogue（"源就是正文本身"）');
-    assert.equal(w.events[0].id, `ev_7_${DIALOGUE_EVENT_BASE}`, '★世界步那批是 ev_7_1..n，我走 500+ ⇒ 永不撞号');
-    assert.equal(w.events[0].closed, false, '★开着：世界模型下一轮才看得见它、才能拿它当因');
-    assert.deepEqual(w.events[0].ripples, ['e_xue', 'e_p1'], '★波及 = 主语 + 对象（照抄 id）');
+    assert.equal(w.events[0].source.type, 'dialogue');
+    assert.equal(w.events[0].id, `ev_7_${DIALOGUE_EVENT_BASE}`);
+    assert.equal(w.events[0].closed, true, '已完成结果默认闭合，仍是合法因果源');
+    assert.deepEqual(w.events[0].ripples, ['e_xue', 'e_p1']);
+    assert.deepEqual(st.actedIds, ['e_xue']);
     assert.equal(w.chronicle.length, 1);
-    assert.equal(w.chronicle[0].eventRef, w.events[0].id, '★编年行挂回事件（链视图/检索层要它）');
+    assert.equal(w.chronicle[0].eventRef, w.events[0].id);
 });
 
 test('G18：★★【变化】落格——值逐字落上、原值与因同时留痕（照 applyEntityUpdates 同一形状）', () => {
@@ -384,7 +385,7 @@ test('G22：【承诺】→ 事件（两端进波及名单）——"让世界记
 
 test('G23：★时间走**两格**：`【此刻】`→事件与编年行的 `timeMark`（逐字、不带源）', () => {
     const w = mkWorld();
-    const prose = tagIt(['【此刻】复苏历三年 三月初七 卯时', '【行动】薛铁衣｜迎战｜黄坤']);
+    const prose = tagIt(['【协议】3', '【此刻】复苏历三年 三月初七 卯时', '【行动】薛铁衣｜迎战｜黄坤', '【事件】E1｜双方约定停战｜薛铁衣、黄坤｜已完成']);
     registerDialogueFacts(w, { facts: extractTags(prose, CTX), dialogue: prose, tick: 7 });
     assert.equal(w.events[0].timeMark, '复苏历三年 三月初七 卯时');
     assert.equal(w.chronicle[0].timeMark, '复苏历三年 三月初七 卯时');
@@ -395,12 +396,12 @@ test('G24：★★零扰动——没有三族料 ⇒ 账上一个字节都不碰
     const w = mkWorld();
     const before = JSON.stringify(w);
     const st = registerDialogueFacts(w, { facts: null, dialogue: '没有标签的正文', tick: 7 });
-    assert.deepEqual(st, { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0 });
+    assert.deepEqual(st, { events: 0, updates: 0, noop: 0, dropped: 0, capped: 0, resultEvents: [], actedIds: [], changedFields: [], rejected: [] });
     assert.equal(JSON.stringify(w), before, '★一个字节都不许动（老聊天/关着开关的世界逐字节不变）');
 });
 
 // ── ⑦ 接线：真跑一次 tick（本仓规矩：纯函数绿 ≠ 实机接线绿）──────────────────────────
-test('G25：★★真跑 runTick——标签里的行动与变化**真的落进账**（接线端到端）', async () => {
+test('G25：真跑 runTick——行动受保护，变化落已完成结果（接线端到端）', async () => {
     const w = mkWorld();
     const dialogue = tagIt(['【此刻】复苏历三年 三月初七', '【行动】薛铁衣｜迎战｜黄坤', '【变化】薛铁衣｜实力｜踏入元婴']);
     const STEP = {
@@ -412,9 +413,11 @@ test('G25：★★真跑 runTick——标签里的行动与变化**真的落进�
     });
     assert.equal(r.ok, true, `tick 应当跑通（实际：${r.error || ''}）`);
     const dlg = (r.ssot.events || []).filter((e) => e.source?.type === 'dialogue');
-    assert.equal(dlg.length, 2, '行动 1 条 + 变化 1 条 = 两条 dialogue 事件（★注册发生在出包之前）');
+    assert.equal(dlg.length, 1, '变化成为已完成结果，行动只作保护（注册仍在出包之前）');
+    assert.equal(dlg[0].closed, true);
+    assert.deepEqual(r.dialogueStats.actedIds, ['e_xue']);
     assert.equal(r.ssot.entities.find((e) => e.id === 'e_xue').实力, '踏入元婴', '★格真的落上了（不只是纯函数里成立）');
-    assert.equal(r.dialogueStats.events, 2, '★读数随 tick 返回（编排层据此出声）');
+    assert.equal(r.dialogueStats.events, 1, '读数只计算真实落下的结果事件');
     assert.equal(r.dialogueStats.updates, 1);
     assert.equal(dlg[0].timeMark, '复苏历三年 三月初七', '★时间点随事件落账（逐字、不带源）');
     // ★★轮次对齐（本笔实施时当场避开的一个坑）：注册发生在 settle **之前**，而落账轮次是 `meta.tick + 1`
@@ -446,7 +449,7 @@ const TIME_STEP = (withEvent) => ({
 test('★★★leg137①：模型给的那一格时间**逐字落账**——事件与编年行两处都写（检索层读的是编年）', async () => {
     const w = mkWorld();
     // ★正文那一轮也带【此刻】⇒ 账上"最后一个已知时间点"是有的（但**它不该被顺延给世界侧**）
-    const dialogue = tagIt(['【此刻】复苏历三年 三月初七 卯时', '【行动】薛铁衣｜迎战｜黄坤']);
+    const dialogue = tagIt(['【协议】3', '【此刻】复苏历三年 三月初七 卯时', '【行动】薛铁衣｜迎战｜黄坤', '【事件】E1｜双方约定停战｜薛铁衣、黄坤｜已完成']);
     const r = await runTick({
         transport: async () => ({ text: JSON.stringify(TIME_STEP(true)) }),
         ssot: w, dialogue, extractCtx: {}, recall: false,
@@ -472,7 +475,7 @@ test('★★★leg137②：模型**没写** ⇒ 一格都不许造（红线 2：
     // ★这条正是用户打回第一版的那个病：引擎拿账上最后一个时刻盖满本轮所有事件。
     //   ⇒ 现在必须**什么都不写**，哪怕账上明明有已知时间点。
     const w = mkWorld();
-    const dialogue = tagIt(['【此刻】复苏历三年 三月初七 卯时', '【行动】薛铁衣｜迎战｜黄坤']);
+    const dialogue = tagIt(['【协议】3', '【此刻】复苏历三年 三月初七 卯时', '【行动】薛铁衣｜迎战｜黄坤', '【事件】E1｜双方约定停战｜薛铁衣、黄坤｜已完成']);
     const step = TIME_STEP(true);
     delete step.newEvents[0].at;                  // ★模型这一件没写时间
     const r = await runTick({

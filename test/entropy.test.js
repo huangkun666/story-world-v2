@@ -112,19 +112,20 @@ test('Q2b：收声后必须等**新的**真实事件才能再收声——不能�
     assert.equal(openPumps(w).length, 1);
 });
 
-test('Q5：落账形状——可作盘算挂因（未决即合法；闭环后拒绝）、满热窗归档、链条不断', () => {
+test('Q5：落账形状——未决、完成及归档事实均可作因，链条不断', () => {
     let w = run(world(), QUIET_WINDOW + 2);          // t12：熵泵事件在册
     const step = emptyStep();
     step.newAgendas = [{ entity: 'e1', goal: '趁静养民', visibility: 'known', source: { type: 'event', ref: 'ev_pump_12_1' } }];
     assert.equal(checkWorldStep(step, w).ok, true, '未决熵泵事件当挂因合法');
-    // 世界动了 ⇒ 收声 ⇒ 该事件不再是合法挂因（因果正确：已了结的不算驱动马达）
+    // 世界动了后收声，但已发生的事实仍可产生新后果。
     w = run(w, 1, { newEvents: [{ title: '事一', source: { type: 'state' }, position: '临渊城', ripples: [] }] });
     w = run(w, 2);
-    assert.equal(checkWorldStep(step, w).ok, false, '闭环后挂因被拒');
+    assert.equal(checkWorldStep(step, w).ok, true, '完成状态不取消因果资格');
     // 走够热窗 ⇒ 归档进里程碑
     w = run(w, 60);
     const archived = (w.milestones || []).flatMap((m) => m.ids || []);
     assert.ok(archived.includes('ev_pump_12_1'), '闭环熵泵事件满热窗归档（热点进温层，指针仍可回溯）');
+    assert.equal(checkWorldStep(step, w).ok, true, '归档后原事件编号仍可作因');
     assert.equal(validate(w, ssotSchema).ok, true);
 });
 

@@ -31,8 +31,9 @@
  *   ③ 它拿得到**刚写下去的那份世界**（`hot`）与这一轮的正文（`dialogue`）——
  *      因为"这一轮发生了什么"要等结算完才知道。
  */
-export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick = null }) {
+export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick = null, getScope = () => '', beforeCommit = null, onOutcome = null }) {
     let running = false;
+    let generation = 0;
     /** ★旁路：绝不影响返回值、绝不抛出去（失败只经 `onStatus` 报一句） */
     function runAfterTick(payload) {
         if (typeof afterTick !== 'function') return;
@@ -44,7 +45,7 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
         }
     }
 
-    async function advance(dialogue = '') {
+    async function advance(dialogue = '', options = {}) {
         if (running) {
             onStatus?.('注意：上一轮还在演算，稍候再试（防重入）');
             return { ok: false, skipped: 'busy' };
@@ -56,9 +57,25 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
         }
         running = true;
         try {
+            const scope = getScope();
+            const epoch = generation;
+            let version = JSON.stringify(world);
+            const transaction = {
+                checkScope() {
+                    if (scope !== getScope() || epoch !== generation) throw new Error('聊天或快照已切换，迟到结果已作废');
+                },
+                assertCurrent() {
+                    this.checkScope();
+                    if (JSON.stringify(load()) !== version) throw new Error('世界版本已改变，迟到结果已作废');
+                    this.validateInput();
+                },
+                validateInput() { this.checkScope(); options.validate?.(); },
+                acceptCurrent() { this.checkScope(); version = JSON.stringify(load()); },
+            };
             onStatus?.('演算中…');
-            const res = await tick({ world, dialogue: String(dialogue ?? '') });
+            const res = await tick({ world, dialogue: String(dialogue ?? ''), transaction, messageRef: options.messageRef });
             if (!res.ok) {
+                onOutcome?.({ ok: false, save: false, error: res.error });
                 // 失败降级：世界原样不动（引擎不变式），状态条报错，重试路径=再点一次
                 onStatus?.(`注意：演算失败：${res.error}（世界原样未动，可重试）`);
                 return { ok: false, error: res.error };
@@ -69,16 +86,22 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
             //  状态条被后写的「已同步」覆盖——面板永远卡在推进前的旧内容。）
             let hot;
             try {
-                hot = await save(res.ssot);
+                transaction.assertCurrent();
+                beforeCommit?.(res.ssot, { world, messageRef: options.messageRef, result: res });
+                hot = await save(res.ssot, transaction, options);
+                transaction.checkScope();
             } catch (err) {
+                onOutcome?.({ ok: false, save: true, error: String(err?.message || err) });
                 onStatus?.(`注意：落账失败：${err?.message || err}（世界已演算未保存，可重试）`);
                 return { ok: false, error: String(err?.message || err), save: true };
             }
             refresh?.(hot ?? res.ssot);
+            onOutcome?.({ ok: true, save: true, tick: res.ssot?.meta?.tick, messageRef: options.messageRef });
             onStatus?.(`已同步 · 刚刚演完第 ${res.ssot?.meta?.tick ?? '?'} 轮`);
             runAfterTick({ hot: hot ?? res.ssot, world: res.ssot, dialogue: String(dialogue ?? '') });   // ★旁路（不挡、不抛）
             return { ok: true, tick: res.ssot?.meta?.tick };
         } catch (err) {
+            onOutcome?.({ ok: false, error: String(err?.message || err) });
             onStatus?.(`注意：演算异常：${err?.message || err}（世界原样未动，可重试）`);
             return { ok: false, error: String(err?.message || err), thrown: true };
         } finally {
@@ -88,6 +111,7 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
 
     return {
         advance,
+        invalidate() { generation++; },
         get busy() { return running; },
     };
 }

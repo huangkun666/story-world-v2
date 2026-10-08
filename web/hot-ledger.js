@@ -105,7 +105,7 @@ export function readHotMeta() {
     return ctx?.chatMetadata?.[HOT_META_KEY] ?? null;
 }
 
-export function writeHotMeta(meta) {
+export function writeHotMeta(meta, { transactional = false } = {}) {
     const ctx = freshCtx();
     if (!ctx || typeof ctx.updateChatMetadata !== 'function') return;
     // ★★leg41（本笔的核心简化）：这里原来有一层 `sw2WithParamOverlay(meta)`——它的作用是
@@ -118,6 +118,8 @@ export function writeHotMeta(meta) {
     sw2HotMetaPendingWriteAt = sw2HotMetaLastWriteAt;   // 这一笔写还没被确认落盘覆盖
     sw2HotMetaWrittenMeta = meta;   // 被覆盖时拿它抢回来（同一个对象，零拷贝）
     sw2HotMetaWrittenFp = hotMetaSignatureOf(meta);   // 回读核对基线（见 hotMetaSignatureOf）
+    sw2HotMetaWrittenScope = hotLedgerScope(ctx);
+    if (transactional) return; // Critical paths schedule snapshots only after confirmed save.
     try {
         if (typeof ctx.saveMetadataDebounced === 'function') ctx.saveMetadataDebounced();
         else if (typeof ctx.saveChat === 'function') ctx.saveChat().catch(() => {});
@@ -177,16 +179,17 @@ function sw2HostIsTauriTavern() {
  *   那道闸是按官方 ST 的 fetch 往返校准的（10ms），TT 走 Tauri IPC，返回速度根本不是一回事
  *   （在 TT 上它会**恒判失败** ⇒ 白跑满三次重试环，正是"每次落账都报一次错"的放大器）。
  */
-async function sw2CallSaveChat(ctx) {
-    if (sw2HostIsTauriTavern() && typeof ctx.saveMetadata === 'function') {
+async function sw2CallSaveChat(ctx, { saveMessages = false } = {}) {
+    if (!saveMessages && sw2HostIsTauriTavern() && typeof ctx.saveMetadata === 'function') {
         const t0 = Date.now();
         await ctx.saveMetadata();
         return { ms: Date.now() - t0, fast: false };
     }
-    const chatName = sw2ExplicitChatName();
+    if (typeof ctx.saveChat !== 'function') throw new Error('宿主没有完整聊天保存接口，消息身份未保存，未消费');
+    const chatName = ctx?.chatId ?? ctx?.getCurrentChatId?.();
     const t0 = Date.now();
     await (chatName ? ctx.saveChat({ chatName }) : ctx.saveChat());
-    return { ms: Date.now() - t0, fast: Date.now() - t0 < SW2_SAVE_MIN_MS };
+    return { ms: Date.now() - t0, fast: !sw2HostIsTauriTavern() && Date.now() - t0 < SW2_SAVE_MIN_MS };
 }
 
 // 我们最后写进账本那份形状的签名（判"账本还是不是我写的那一份"）。
@@ -207,6 +210,7 @@ export function hotMetaFingerprint() {
 }
 let sw2HotMetaWrittenFp = null;   // `writeHotMeta` 写下去那一份的签名（回读核对基线）
 let sw2HotMetaWrittenMeta = null; // 写下去的那一份本体（被别的副本覆盖时**拿它抢回来**）
+let sw2HotMetaWrittenScope = null; // A prior chat's candidate must never be reasserted into the current chat.
 
 /**
  * ★★leg40c 续·二：**把被抢走的账本抢回来**（用户实机「点跑一轮后参数又回到默认」的正面治法）。
@@ -231,12 +235,24 @@ function reassertWrittenMetaIfClobbered(want) {
     return true;
 }
 
-export async function flushHotMeta() {
+function hotLedgerScope(ctx) {
+    return JSON.stringify([ctx?.chatId ?? ctx?.getCurrentChatId?.() ?? null, ctx?.characterId ?? null, ctx?.groupId ?? null]);
+}
+
+export async function flushHotMeta({ strict = false, saveMessages = false } = {}) {
     const ctx = freshCtx();
+    const scope = hotLedgerScope(ctx);
+    const isCurrent = () => hotLedgerScope(freshCtx()) === scope;
     if (!ctx) return { ok: false, reason: 'no-ctx' };
     // ★leg197：TT 上我们走 `saveMetadata()`（header-only）⇒ 有它也算"有可用的保存入口"。
     if (typeof ctx.saveChat !== 'function' && typeof ctx.saveMetadata !== 'function') {
         return { ok: false, reason: 'no-save-chat' };
+    }
+    if (strict && sw2HotMetaFlushing) {
+        const deadline = Date.now() + sw2FlushTimeoutMs;
+        while (sw2HotMetaFlushing && Date.now() < deadline && isCurrent()) await new Promise(r => setTimeout(r, 10));
+        if (!isCurrent()) return { ok: false, reason: 'stale-scope' };
+        if (sw2HotMetaFlushing) return { ok: false, reason: 'timeout' };
     }
     if (sw2HotMetaFlushing) {
         // 在飞：不假装成功、也不假装失败——排一次补写，如实回报"排队中"
@@ -251,7 +267,7 @@ export async function flushHotMeta() {
             sw2FlushChainBusy = true;
             sw2FlushChain = sw2FlushChain
                 .then(() => new Promise((r) => { setTimeout(r, 0); }))
-                .then(() => flushHotMeta())
+                .then(() => isCurrent() ? flushHotMeta() : { ok: false, reason: 'stale-scope' })
                 .then((r) => { if (!r.ok) console.warn('[story-world-v2] 排队补落盘未成', r.reason); })
                 .catch((err) => { console.warn('[story-world-v2] 排队补落盘抛错', String(err?.message || err)); })
                 .finally(() => { sw2FlushChainBusy = false; });
@@ -269,7 +285,9 @@ export async function flushHotMeta() {
     //   ⇒ 枚举照旧（`flushOutcomeText` 按它分派人话），原文另挂一格 `detail`，一路带到状态条。
     let lastDetail = null;
     // ★冻结本次落盘的基线（见 `reassertWrittenMetaIfClobbered` 的 `want` 说明）
-    const want = { fp: sw2HotMetaWrittenFp, meta: sw2HotMetaWrittenMeta };
+    const want = sw2HotMetaWrittenScope === scope
+        ? { fp: sw2HotMetaWrittenFp, meta: sw2HotMetaWrittenMeta }
+        : { fp: hotMetaSignatureOf(ctx.chatMetadata?.[HOT_META_KEY]), meta: ctx.chatMetadata?.[HOT_META_KEY] };
     try {
         // ★★回读核对的重试环（见本函数头注释：`saveChatConditional` 会**静默不写**）
         for (let attempt = 1; attempt <= SW2_FLUSH_TRIES; attempt += 1) {
@@ -278,13 +296,15 @@ export async function flushHotMeta() {
                 await new Promise((r) => { setTimeout(r, wait); });
                 console.info(`[story-world-v2] 热账落盘核对未过 —— 第 ${attempt}/${SW2_FLUSH_TRIES} 次重试`);
             }
+            if (!isCurrent()) return { ok: false, reason: 'stale-scope' };
+            if (strict && hotMetaFingerprint() !== want.fp) return { ok: false, reason: 'replaced' };
             reassertWrittenMetaIfClobbered(want);   // ★被别的副本覆盖 ⇒ 先抢回来（否则重存的还是被覆盖掉的那份）
             sw2HotMetaLastCallAt = Date.now();
             let timer = null;
             let saveMs = null;
             try {
                 const raced = await Promise.race([
-                    sw2CallSaveChat(ctx),
+                    sw2CallSaveChat(ctx, { saveMessages }),
                     new Promise((r) => { timer = setTimeout(() => r('__sw2_timeout__'), sw2FlushTimeoutMs); }),
                 ]);
                 if (raced === '__sw2_timeout__') throw new Error(`saveChat 超过 ${sw2FlushTimeoutMs}ms 未返回`);
@@ -312,6 +332,7 @@ export async function flushHotMeta() {
             //     **抓不到**"ST 静默没写盘"（那件事从浏览器侧根本判不了：内存与磁盘无法区分）。
             //     ⇒ 故语义定成：相等 ⇒ "我们写下去的账本还在"（可报已落盘）；
             //       不相等 ⇒ 账本被人换了 ⇒ **抢回来 + 重存**（这才是重试环真正拦得住的那一类）。
+            if (!isCurrent()) return { ok: false, reason: 'stale-scope' };
             const after = hotMetaFingerprint();
             if (want.fp && after === want.fp) {
                 console.info('[story-world-v2] 热账已落盘', new Date().toISOString(), { 耗时ms: saveMs });
@@ -335,6 +356,49 @@ export async function flushHotMeta() {
         //   放开它不会造成并发双写失控：真正写下去的那次早已开始，它带的是**当时**那份账；
         //   后来的写由这次（或排队那次）负责。ST 侧 `isChatSaving` 自己会把并发收敛掉。
         sw2HotMetaFlushing = false;
+    }
+}
+
+/** Save a candidate without publishing failed metadata or snapshots to the live world. */
+export async function commitHotMeta(meta, { guard = null, saveMessages = false } = {}) {
+    guard?.assertCurrent();
+    const initialScope = hotLedgerScope(freshCtx()), deadline = Date.now() + sw2FlushTimeoutMs;
+    while (sw2HotMetaFlushing && Date.now() < deadline && hotLedgerScope(freshCtx()) === initialScope) await new Promise(r => setTimeout(r, 10));
+    if (sw2HotMetaFlushing) throw new Error('热账落盘仍在进行，世界未写入，可重试');
+    if (hotLedgerScope(freshCtx()) !== initialScope) throw new Error('等待保存时聊天已切换');
+    guard?.assertCurrent();
+    const ctx = freshCtx(), metadata = ctx?.chatMetadata;
+    if (!ctx || !metadata || typeof ctx.updateChatMetadata !== 'function') throw new Error('宿主没有可写聊天元数据');
+    const scope = hotLedgerScope(ctx), before = metadata[HOT_META_KEY], candidateVersion = JSON.stringify(meta);
+    const bookkeeping = [sw2HotMetaLastWriteAt, sw2HotMetaPendingWriteAt, sw2HotMetaWrittenMeta, sw2HotMetaWrittenFp, sw2HotMetaLastFlushOkAt, sw2HotMetaWrittenScope];
+    writeHotMeta(meta, { transactional: true });
+    let hostSaved = false;
+    try {
+        const flushed = await flushHotMeta({ strict: true, saveMessages });
+        hostSaved = flushed.ok && !flushed.queued;
+        guard?.checkScope();
+        if (!flushed.ok || flushed.queued) throw new Error(`热账落盘失败：${flushed.detail || flushed.reason || '未确认'}`);
+        if (hotLedgerScope(freshCtx()) !== scope || readHotMeta() !== meta || JSON.stringify(meta) !== candidateVersion) throw new Error('保存期间聊天或世界版本已改变');
+        guard?.validateInput?.();
+        try { getSnapHub()?.requestSnapshot(meta.world, '落账'); } catch (_) { /* Snapshot failure cannot undo a saved world. */ }
+        return meta.world;
+    } catch (err) {
+        // A stale captured ctx must never invoke the new chat's global metadata setter.
+        if (metadata[HOT_META_KEY] === meta && JSON.stringify(meta) === candidateVersion) {
+            if (before === undefined) delete metadata[HOT_META_KEY]; else metadata[HOT_META_KEY] = before;
+            if (hotLedgerScope(freshCtx()) === scope) {
+                ctx.updateChatMetadata({ [HOT_META_KEY]: before ?? null });
+                [sw2HotMetaLastWriteAt, sw2HotMetaPendingWriteAt, sw2HotMetaWrittenMeta, sw2HotMetaWrittenFp, sw2HotMetaLastFlushOkAt, sw2HotMetaWrittenScope] = bookkeeping;
+                // The host already acknowledged the candidate. Restore its persisted
+                // metadata too when an input changed while that save was pending.
+                if (hostSaved && before) {
+                    writeHotMeta(before, { transactional: true });
+                    const restored = await flushHotMeta({ strict: true, saveMessages: true });
+                    if (!restored.ok || restored.queued) throw new Error(`${err?.message || err}；原账回存未确认：${restored.detail || restored.reason || '未确认'}`);
+                }
+            }
+        }
+        throw err;
     }
 }
 
@@ -377,7 +441,7 @@ export function createHotLedgerHub(deps) {
     HOT_META_KEY = deps.hotMetaKey;
     getSnapHub = deps.getSnapHub;
     return {
-        readHotMeta, writeHotMeta, flushHotMeta,
+        readHotMeta, writeHotMeta, flushHotMeta, commitHotMeta,
         hotMetaUnflushed, hotMetaFingerprint, hotMetaSignatureOf,
         sw2ExplicitChatName, sw2SetFlushTimeout, resetHotLedgerState,
         flushTimeoutMs,

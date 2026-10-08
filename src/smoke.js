@@ -47,6 +47,7 @@ export async function runSmoke({ ssot, extractCtx, ticks = DEFAULT_TICKS, stepGe
         const dialogue = dialogueGen
             ? dialogueGen(t, world)
             : (stepGen ? '（继续）' : (t <= BEGIN ? '我沿商路去看看' : '（静默）'));
+        // 合成传输只返回原主调用步骤，不发起额外核验。
         const transport = async () => ({ text: JSON.stringify(step) });
         const r = await runTick({ transport, ssot: world, dialogue, extractCtx });
         if (!r.ok) throw new Error(`冒烟 tick ${t} 失败: ${r.error}`);

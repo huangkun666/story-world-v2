@@ -12,7 +12,6 @@ import { MAIN_PROMPT, MAIN_PROMPT_V, OUTPUT_TEMPLATE, assembleMainPrompt } from 
 // leg31：行式表格的往返判据（判据 D）与分隔符自检（判据 C）直接打真源函数，不自建副本
 import { packTextOf, parseEntityTableBlock, entityTableAnomalies, ENTITY_TABLE_HEADER, buildEvolutionPack, trimPack, EVOLUTION_BUDGET_TOKENS } from '../src/pack.js';
 // leg29：告知面上限不写字面量——直接读真源常量，改上限则本用例随之成立（与 worldstep 那条同法）
-import { RIPPLE_TARGET_CAP } from '../src/weight.js';
 // leg32d：七组必填的**真源**（与其在提示词里抄一遍，不如直接读 schema——数字/清单只允许一个真源）
 import { worldStepSchema } from '../src/schemas/world-step.schema.js';
 
@@ -65,7 +64,7 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-31：★le
     //   ★为什么必须同批撤提示词（不是只撤代码）：留着一句"照抄「刻度目录」里的表名"，
     //     而那份目录已经**不再进包**（leg135「全塞」之后它本来就是空的）⇒ 那是**叫模型去抄一份
     //     不存在的东西** = 本仓最忌的"提示词替机制承诺一个它做不到的事"（这一条当初就是为治那个病而立的）。
-    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-34');
+    assert.equal(MAIN_PROMPT_V, 'v2-agenda-t1-37');
     assert.ok(MAIN_PROMPT.includes('按意思找回的旧事'), '★那一栏的名字必须出现在指路里（名字对不上＝说了等于没说）');
     assert.ok(MAIN_PROMPT.includes('三种找法，一种东西'), '★必须点破"三栏是同一种东西的三种找法"');
     assert.ok(MAIN_PROMPT.includes('都不是这一轮新发生的事'), '★★否则模型会把翻出来的旧事当成刚发生的事');
@@ -195,24 +194,16 @@ test('契约锁：主调用模板版本与铁律语义（v2-agenda-t1-31：★le
     // 铁律 4（leg25 c 改写）：引用必须真实存在——不再提 stateChanges
     assert.ok(MAIN_PROMPT.includes('actions 的 entity、agendaAdvances 的 agendaId 必须引用输入中存在的 id'),
         '铁律 4 只提 actions/agendaAdvances 两条引用纪律（stateChanges 已删）');
-    // 铁律 8：ripples 只收实体 id，事件引用走 source.type=ripple + ref
-    assert.ok(MAIN_PROMPT.includes('newEvents[].ripples 只收被波及的**实体 id**'));
-    assert.ok(MAIN_PROMPT.includes('绝对不是事件引用'));
-    // 字段说明同步
-    assert.ok(MAIN_PROMPT.includes('newEvents[].ripples=被波及的**实体 id 列表**'));
-    // ★leg29 告知面（用户令「事件波及也改成 15 个」+「写进提示词」）：上限必须出现在提示词里——
-    //   改前 prompts/pack/tick/entity-lookup 四处一字未提，模型写超限只会撞"拒整步"、白烧一整轮。
-    assert.ok(MAIN_PROMPT.includes(`一次事件的波及名单至多 1..${RIPPLE_TARGET_CAP} 人`),
-        `铁律 8 必须写出波及上限真值（真源 RIPPLE_TARGET_CAP=${RIPPLE_TARGET_CAP}）`);
-    //   且必须带上更早咬人的那道闸：涉及 = 属主 + 本步所有 action 的 entity/target + 波及名单 ≤15
-    //   ⇒ 只写"至多 15 个"会诱导模型写出必被拒的条数（本次要防的正是这个）
-    assert.ok(MAIN_PROMPT.includes('涉及的实体') && MAIN_PROMPT.includes('故一次事件的波及名单实际最多 14 人'),
-        '铁律 8 必须写出「涉及 ≤15 ⇒ 波及实际最多 14 人」这条咬合（否则提示词在教模型撞闸）');
-    assert.ok(MAIN_PROMPT.includes('超过任一条**整步会被拒**'), '超限后果（拒整步）必须如实交代');
-    assert.ok(MAIN_PROMPT.includes('★**上限 15 人，且计入"单盘算一轮涉及 ≤15"⇒ 实际最多 14 人**'),
-        '字段说明与铁律 8 同口径（同一条上限不许两处不一致）');
-    // 模板示例仍是实体 id（防止示例被改成事件 id 而语义漂移）
-    assert.ok(OUTPUT_TEMPLATE.includes('"ripples": ["e_dayu", "e_xie"]'));
+    // 新协议群体范围不依赖具体名单；旧入口的名单上限仍由其契约测试守住。
+    assert.ok(MAIN_PROMPT.includes('eventProtocol:4'));
+    assert.ok(MAIN_PROMPT.includes('影响范围 affected 与公开范围 audience 分开'));
+    assert.ok(MAIN_PROMPT.includes('新事件不写旧 ripples'));
+    assert.ok(MAIN_PROMPT.includes('不要求先建知情记录'));
+    const example = JSON.parse(OUTPUT_TEMPLATE);
+    assert.equal(example.eventProtocol, 4);
+    assert.equal(example.newEvents[0].pending, false);
+    assert.deepEqual(example.newEvents[0].affected, [{ kind: 'text', text: '北门驻军' }]);
+    assert.equal(Object.hasOwn(example.newEvents[0], 'ripples'), false);
     // K37：newEntities/entityFates 形状与提议权语义进模板
     assert.ok(OUTPUT_TEMPLATE.includes('"newEntities"') && OUTPUT_TEMPLATE.includes('"entityFates"'));
     assert.ok(MAIN_PROMPT.includes('可以提议新实体入局') && MAIN_PROMPT.includes('覆灭与否全归引擎复核'));
@@ -421,8 +412,9 @@ test('leg32g·铁律 12：待启用名单在位，且要求"一轮至少用一�
 //   反面也要锁：**不许**把"点名"写成"把人塞进波及名单"（那是噪声，不是因果）。
 test('leg32d·铁律 10：世界变宽靠点名（点名 ⇒ 解锁 ⇒ 他下一轮能自己立线）', () => {
     assert.ok(MAIN_PROMPT.includes('怎么让世界变宽'), '铁律 10 在位');
-    assert.ok(MAIN_PROMPT.includes('一次都没被点名过的人，永远出不了第一次手'), '要点破"没点名就没资格"这个死循环');
-    assert.ok(MAIN_PROMPT.includes('被点到的人**下一轮就有资格自己行动'), '要讲清点名的**效果**（下一轮解锁）');
+    assert.ok(MAIN_PROMPT.includes('已核对的影响对象'), '实际影响能提供反应依据');
+    assert.ok(MAIN_PROMPT.includes('候选资格不表示已经知情'), '候选不能冒充知情状态');
+    assert.ok(MAIN_PROMPT.includes('有具体因和合理获知途径的新后果'), '本轮合理因果反应不能被旧静默规则封死');
     assert.ok(MAIN_PROMPT.includes('再点一两个"会因此坐不住"的第三方'), '要给出可操作的做法（点会坐不住的第三方）');
     assert.ok(MAIN_PROMPT.includes('不是**把不相干的人塞进波及名单'), '★反面锁：点名 ≠ 塞不相干的人（防噪声）');
     assert.ok(MAIN_PROMPT.includes('不要整轮只演那两三家'), '要对"就那么几家一直演"给出直接指令');

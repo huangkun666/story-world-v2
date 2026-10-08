@@ -804,7 +804,7 @@
 // ★★★leg201b（用户 2026-10-05 当场裁「**太多了，就放在复制报告里就行了，别展示出来**」）：
 //   环境自检那十三格**只进报告、不上屏**（`debug-console.js` 的 `REPORT_ONLY_KEYS`）。
 //   玩家可见面又变了一次（调试页摘要回到原来的大小）⇒ 再升一格。
-export const PANEL_BUILD = 'leg201b-report-only-selfcheck';
+export const PANEL_BUILD = 'leg209-character-protection-cleanup';
 
 export const LABELS = {    env: { 民生度: '民生', 动乱度: '乱象', 天时: '天时', 张力推手: '时局' },
     kind: { faction: '势力', character: '角色' },

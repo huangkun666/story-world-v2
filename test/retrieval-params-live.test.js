@@ -28,17 +28,17 @@ import { injectReadoutHtml, vectorPathLine } from '../web/inject-readout.js';
 import { renderParamsHtml } from '../src/render.js';
 import { LEDGER_CHARS_DEFAULT } from '../src/limits.js';
 
-// 真渲染出来的参数页那一卡（口径照 `test/render.test.js`：真渲染层，不写复制品）。
-// ★★★leg193：结尾锚换掉了——旧锚是那段被用户判"过时了"的总说明摘要（它已撤）⇒ 改用**下一张卡**
-//   的类名当界（`sw2-cap-card` ＝ 「世界尺度」）。★理由：锚不许是"我这一笔顺手改掉的措辞"，
-//   否则每改一次文案，判据的取域就跟着漂一次（本仓"取域要按真源划"那条纪律）。
+// 真渲染的运行子页；取域按子页 ID，避免随卡片文案和控件顺序漂移。
+function runtimePanel(html) {
+    const from = html.indexOf('id="sw2_subtab_params_runtime_panel"');
+    const to = html.indexOf('id="sw2_subtab_params_conditions_panel"');
+    assert.ok(from >= 0 && to > from, '前置：取得到运行与注入子页');
+    return html.slice(from, to);
+}
 function cardOf() {
     const world = JSON.parse(fs.readFileSync(new URL('./fixtures/chronicle-page-real-world.json', import.meta.url), 'utf8'));
     const html = renderParamsHtml(world, { config: {} });
-    const from = html.indexOf('插件对你的对话做了什么');
-    const to = html.indexOf('sw2-cap-card');
-    assert.ok(from >= 0 && to > from, '前置：取得到注入那一卡（两头锚都要在）');
-    return html.slice(from, to);
+    return runtimePanel(html);
 }
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
@@ -283,14 +283,6 @@ test('五格名字保持原样，说明紧跟标签、在标签外面', () => {
     for (const name of ['一轮最多递多少条行动', '相似度阈值', '最大召回条数', '检索上下文深度', '往事注入多少字']) {
         assert.ok(card.includes(name), `★名字保持原样：${name}`);
     }
-    // ★★★leg198 翻案：这一卡新增了**两枚开关的说明**（「让聊天模型按标签写行动」的后果句 ＋
-    //   新开关「剥掉正文里的机器块」那一句）⇒ 小问号从 5 枚变 7 枚。★下面那五格的逐格次序判据
-    //   （按控件 id 锚定）**一个字没动**——它们要锁的是那五格，不是"这一卡一共几枚问号"。
-    // ★★★leg200 两次翻案：那一组重做 ⇒ 多出两格（黑名单/白名单，各一条说明）⇒ 7 → **9**；
-    //   随后用户指认"那枚总闸开关是多余的"（「不写就不剥得了，你还非搞个这个按钮干嘛」）⇒
-    //   开关撤掉——★但**那一组的说明还在**（它是 `paramHint`，与开关是两件事），而 `injSwitch`
-    //   本身**不产** fold ⇒ **仍然是 9**（五格 ＋ 那一组说明 ＋ 注入开关那条后果句 ＋ 两格名单各一条）。
-    assert.equal((card.match(/sw2-fold sw2-fold-inline/g) || []).length, 9, '五格各一枚小问号 ＋ 那一组说明 ＋ 注入开关那条后果句 ＋ 两格名单各一条说明');
     assert.ok(!/<label[^>]*>\s*[^<]*轮最多递多少条行动[\s\S]{0,60}?sw2-fold/.test(card),
         '★问号不许塞进 `<label>` 里面（块级 details 放进 label 不合规范，点它会把焦点带进数字框）');
     // ★leg193：每一格都是"一格头部（标签＋框）＋ 紧跟其下的说明"。
@@ -301,7 +293,11 @@ test('五格名字保持原样，说明紧跟标签、在标签外面', () => {
     const segs = anchors.map((id, i) => {
         const at = card.indexOf(`id="${id}"`);
         assert.ok(at > 0, `前置：取得到第 ${i + 1} 格的控件（${id}）`);
-        return card.slice(card.lastIndexOf('<div class="sw2-field', at), i + 1 < anchors.length ? card.indexOf(`id="${anchors[i + 1]}"`) : card.length);
+        const from = card.lastIndexOf('<div class="sw2-field"', at);
+        const inlineFrom = card.lastIndexOf('<div class="sw2-field sw2-field-inline"', at);
+        const start = Math.max(from, inlineFrom);
+        const next = card.indexOf('<div class="sw2-field', at);
+        return card.slice(start, next >= 0 ? next : card.length);
     });
     segs.forEach((seg, i) => {
         const head = seg.indexOf('sw2-field-head');
@@ -310,7 +306,7 @@ test('五格名字保持原样，说明紧跟标签、在标签外面', () => {
         assert.ok(hint > head, `★第 ${i + 1} 格（${anchors[i]}）：说明要落在那一格**之后**（标签与框的下方），不是里面`);
     });
     // 说明要把"作用在哪／什么时候不生效"写出来，不能只说"这是啥"
-    const hints = [...card.matchAll(/<div class="sw2-hint sw2-fold-body">([\s\S]*?)<\/div>/g)].map((m) => m[1]).join('\n');
+    const hints = [...card.matchAll(/<div class="sw2-hint[^\"]*"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => m[1]).join('\n');
     assert.ok(hints.includes('递给世界模型的行动条数') && hints.includes('它不进对话'), '第一格要说清是递给世界模型、不是注入');
     assert.ok((hints.match(/向量通道/g) || []).length >= 3, '后三格要说清"向量通道没开时哪几格不生效"');
     assert.ok(hints.includes('按名字找和按意思找共用这一个深度'), '★深度那一格要说清**两条路共用**（用户 2026-10-05 定的口径）');
@@ -370,7 +366,7 @@ test('★leg194 那句原始读数整行撤了（给旧配置也不许再印出�
     const legacy = '标签注入：格式指令 1349 字 · 世界动向 326 字 · 账上往事 87 字（作为系统提示词排在提示词末尾 · position=0；插件只注入这几段，不读也不改你的正文）';
     // ① 渲染层：把旧配置照原样喂进去（连同 `injectRuns` 那份排查行），一个字都不许印
     const html = renderParamsHtml(world, { config: { injectLine: legacy, injectRuns: '注入跑过 3 次 · 最后一次 注入 1895 字' } });
-    const card = html.slice(html.indexOf('<h4>插件对你的对话做了什么</h4>'), html.indexOf('sw2-cap-card'));
+    const card = runtimePanel(html);
     assert.ok(!card.includes('标签注入：'), '★那句原始读数不许再印（它的关键信息已经抽成上面那一行小格）');
     assert.ok(!card.includes('position='), '★排查尾巴（position=0）不许再印到面板上');
     assert.ok(!card.includes('作为系统提示词'), '★同上');

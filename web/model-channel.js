@@ -70,6 +70,7 @@ export const SETTINGS_NUM_RANGE = {
     retrievalTop: [1, 50],
     retrievalDepth: [1, 20],
     retrievalMinScore: [0, 1],
+    retrievalMaxChars: [1, 20000],
 };
 
 /** ★leg161：**小数**设置键（现在只有「相似度阈值」一个）——范围照 `SETTINGS_NUM_RANGE`。 */
@@ -98,6 +99,7 @@ export const SETTINGS_NUM_LABEL = {
     retrievalMinScore: '相似度阈值',
     retrievalTop: '最大召回条数',
     retrievalDepth: '检索上下文深度',
+    retrievalMaxChars: '往事注入多少字',
 };
 
 /** 数字设置的归一：合法 ⇒ 整数；非法/越界 ⇒ null（调用方**不写盘**并如实出声，绝不写 NaN）。 */
@@ -314,10 +316,12 @@ export function createModelChannelHub(deps = {}) {
             //   非法值（空框 / 负数 / 中文）**不写盘、当场如实出声**（静默写 NaN = 每轮调用失败且看不出为什么）。
             const numKey = e.target?.getAttribute?.('data-settings');
             if (numKey) {
-                const n = sw2NormalizeNumericSetting(numKey, e.target.value);
+                const isFloat = SETTINGS_FLOAT_KEYS.has(numKey);
+                const n = isFloat ? sw2NormalizeFloatSetting(numKey, e.target.value)
+                    : sw2NormalizeNumericSetting(numKey, e.target.value);
                 if (n == null) {
                     const [lo, hi] = SETTINGS_NUM_RANGE[numKey] || [];
-                    status(`注意：「${SETTINGS_NUM_LABEL[numKey] || numKey}」要填 ${lo}–${hi} 之间的整数——这一下没有写入（世界账没动）`);
+                    status(`注意：「${SETTINGS_NUM_LABEL[numKey] || numKey}」要填 ${lo}–${hi} 之间的${isFloat ? '数值（可填小数）' : '整数'}——这一下没有写入（世界账没动）`);
                     return;
                 }
                 write(numKey, n);

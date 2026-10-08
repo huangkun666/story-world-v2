@@ -60,13 +60,12 @@ export function eventOrdinal(ref) {
 /**
  * ★★同一个号**只能有一个解析法**（这是 leg40b 续那条"两把尺子会长歪"的正面落实）。
  *
- * 口径（三条，按顺序，与收口前逐字相同）：
+ * 解析顺序：热账与归档事实优先于同轮位次别名。
  *   ① **世界账优先**：账上有这个 id ⇒ 就是它（有则以账为准，不看位次）。
- *   ② **同轮按位次**：账上没有 ⇒ 看 `opts.step.newEvents` 的第 m 件（模型写 `ev_<任意轮号>_<m>`，
+ *   ② **归档入纪**：`opts.includeArchived` 时，里程碑中已有的号仍指向原事实。
+ *   ③ **同轮按位次**：账上和归档都没有 ⇒ 看 `opts.step.newEvents` 的第 m 件（模型写 `ev_<任意轮号>_<m>`，
  *      位次对就认——**这是必须的，不是宽容**：`newEvents` 是封闭形状、模型不许写 id
  *      ⇒ 它在结构上无法知道"本轮即将新建的那件事"会被发什么号，只能按位次说）。
- *   ③ **归档入纪**：`opts.includeArchived` 时，`ssot.milestones[].ids` 里出现过的号**算存在**
- *      （覆灭那条通道要它："尘埃落定再言灭"，而入纪的里程碑已经尘埃落定）。
  *
  * @param {object} ssot  世界账（只读）
  * @param {string} ref   模型写的号
@@ -79,6 +78,9 @@ export function resolveRefTarget(ssot, ref, opts = {}) {
     if (!ref) return miss;
     const onWorld = (ssot?.events || []).find((e) => e.id === ref);
     if (onWorld) return { target: onWorld, archived: false, viaSameRound: false };
+    if (opts.includeArchived && (ssot?.milestones || []).some((m) => (m.ids || []).includes(ref))) {
+        return { target: null, archived: true, viaSameRound: false };
+    }
     if (opts.includeSameRound && opts.step) {
         const list = opts.step.newEvents || [];
         const ord = eventOrdinal(ref);
@@ -86,9 +88,6 @@ export function resolveRefTarget(ssot, ref, opts = {}) {
             const hit = list[ord - 1];
             if (hit) return { target: hit, archived: false, viaSameRound: true };
         }
-    }
-    if (opts.includeArchived && (ssot?.milestones || []).some((m) => (m.ids || []).includes(ref))) {
-        return { target: null, archived: true, viaSameRound: false };
     }
     return miss;
 }
@@ -108,11 +107,11 @@ export function findFateEventSource(ssot, ref) {
  *   **进入结算那一刻，账上哪些事件/盘算是开着的**——以及已关的那些是在**第几轮**关的。
  *
  * 为什么要快照而不是实时读：`settleTick` 在结算尾声会**自己关掉一批**
- *   （源结清 / 涟漪平息 / 盘算满步结算），而"变更的因必须未闭环"的判定时点 = **批次开始时**。
+ *   （源结清 / 涟漪平息 / 盘算满步结算）。盘算因是否仍在办，以批次开始时为准。
  *   实时读 ⇒ 引擎会用自己的收尾动作，去否掉一条它**刚刚放行过**的合法变更
  *   （真账实测：`meta.entityFields['e_bk_297']` 零留痕，那条合法变更被静默吞掉）。
  * ★口径：**判定时点 = 进入 settle 那一刻**；引擎自己的收尾不许反过来宣布"它从来不算数"。
- *   ⚠只放宽这一格：**进来时就已经关着的真旧事照旧拒**。
+ *   完成事件仍可作因；已结算盘算仍拒。事件快照字段保留给既有调用方。
  */
 export function captureOpenCauseState(ssot) {
     const openEvents = new Set();
@@ -139,31 +138,7 @@ export function captureOpenCauseState(ssot) {
 
 /** 事件源（event）的三种结局，按**消费者**分档。 */
 const EVENT = {
-    // ① 引一件未决事件（newAgendas / newEntities 两处享用"同轮新建的那批"）
-    //    文案取材：leg66 §2.5 用户实机第二条裁定（`ev_7_1`）——**三条出路**，第三条才是模型想要的。
-    //    ⚠「拾遗（closedRoots）→ newEvents + ripple → 再用那件新事件当源」这条**不许删**：
-    //      旧文案只给"换未决事件 / 改成 state"两条，把模型合法的心愿说成不可能 ⇒ 它反复换号重试、白烧轮次。
-    closedAgenda: {
-        code: 'event-closed-agenda',
-        message: (r) => `「${r.id}」（${r.label}）**已经了结**——`
-            + '起盘算要挂在**正在发生**的事上；这件已经办完了。三条出路：'
-            + '① 换一件**未决**事件当源；'
-            + `② 若这就是你要接的那条旧线（它在输入的"拾遗/closedRoots"一栏里）——**先接它**：`
-            + `用 newEvents 写一条 source.type="ripple" + ref="${r.id}" 的新事件（"那件事的余波现在显出来了"），`
-            + '那条**新事件**就是未决的，再用它当本条的 event 源；'
-            + '③ 真是局势自己拱出来的处境，才把源改成 state',
-    },
-    closedEntity: {
-        code: 'event-closed-entity',
-        message: (r) => `「${r.id}」（${r.label}）**已经了结**——`
-            + '新人要因**正在发生**的事入场；这件已经办完了，请引一件未决事件，或改用 book/dialogueFact 源',
-    },
-    // ② 因必须是未闭环的事（entityUpdates.cause）——判定时点见上方 `captureOpenCauseState`
-    //   ★这一格渲染的是**模型写的那个号**（`r.ref`），不是判官查到的对象 id。
-    closedCause: {
-        code: 'cause-closed-before-batch',
-        message: (r) => `因必须是**未闭环**的事（"${r.ref}" 已了结）——不许拿旧事解释今天的变化`,
-    },
+    // 已发生事实即使完成或归档也可产生新后果；事件因仍须真实存在。
     // entityUpdates.cause 的"不存在"文案（收口前它与 newAgendas/newEntities 那两个串**不同**，本棒原样保留）
     missingCause: {
         code: 'cause-event-missing',
@@ -189,7 +164,7 @@ const EVENT = {
     //     写成 `r.ref` 会让"模型没给号"渲染成 `ref="undefined"`（本棒探针实测抓到过）。
     missing: {
         code: 'event-missing',
-        message: (r) => `event 源必须引已存在未决事件（当前 ref="${r.ref ?? ''}"）`,
+        message: (r) => `event 源必须引已存在事件（当前 ref="${r.ref ?? ''}"；完成或归档事实亦可）`,
     },
 };
 
@@ -266,16 +241,8 @@ export const REF_RULES = {
     // ── newAgendas.source（K13 盘算树：源三型 event/parent/state） ──
     'newAgendas.source': {
         event: (c) => {
-            const hit = resolveRefTarget(c.world, c.ref, { step: c.step, includeSameRound: true, includeArchived: false });
-            if (!hit.target) return { ...EVENT.missing, ref: c.ref };
-            if (hit.target.closed) {
-                return {
-                    ...EVENT.closedAgenda,
-                    ref: c.ref,
-                    id: hit.target.id,
-                    label: String(hit.target.title || '').slice(0, 24),
-                };
-            }
+            const hit = resolveRefTarget(c.world, c.ref, { step: c.step, includeSameRound: true, includeArchived: true });
+            if (!hit.target && !hit.archived) return { ...EVENT.missing, ref: c.ref };
             return null;
         },
         parent: (c) => {
@@ -302,16 +269,8 @@ export const REF_RULES = {
     // ── newEntities.source（K37 入局：源四型 book/event/dialogueFact/entity） ──
     'newEntities.source': {
         event: (c) => {
-            const hit = resolveRefTarget(c.world, c.ref, { step: c.step, includeSameRound: true, includeArchived: false });
-            if (!hit.target) return { ...EVENT.missing, ref: c.ref };
-            if (hit.target.closed) {
-                return {
-                    ...EVENT.closedEntity,
-                    ref: c.ref,
-                    id: hit.target.id,
-                    label: String(hit.target.title || '').slice(0, 24),
-                };
-            }
+            const hit = resolveRefTarget(c.world, c.ref, { step: c.step, includeSameRound: true, includeArchived: true });
+            if (!hit.target && !hit.archived) return { ...EVENT.missing, ref: c.ref };
             return null;
         },
         book: (c) => (c.bookNames?.has(c.ref)
@@ -372,10 +331,10 @@ export const REF_RULES = {
 
     // ── newEvents.source（源三型 plot/state/ripple） ──
     'newEvents.source': {
-        // ★只认**世界账**上的事件 id（与收口前逐字相同；归档入纪不在这条路上）
-        ripple: (c) => ((c.world?.events || []).some((e) => e.id === c.ref)
-            ? null
-            : { ...EVENT.missingRipple, ref: c.ref }),
+        ripple: (c) => {
+            const hit = resolveRefTarget(c.world, c.ref, { includeArchived: true });
+            return hit.target || hit.archived ? null : { ...EVENT.missingRipple, ref: c.ref };
+        },
         plot: (c) => ((c.world?.agendas || []).some((a) => a.id === c.ref)
             ? null
             : { ...AGENDA.missingPlot, ref: c.ref }),
@@ -473,27 +432,12 @@ export const REF_RULES = {
     //   ——校验期（`check-step`）与净化期（`sanitize-step`）都在 settle 之前，两者等价。
     'entityUpdates.cause': {
         event: (c) => {
-            const hit = resolveRefTarget(c.world, c.ref, { step: c.step, includeSameRound: false, includeArchived: false });
-            if (!hit.target) {
+            const hit = resolveRefTarget(c.world, c.ref, { step: c.step, includeSameRound: false, includeArchived: true });
+            if (!hit.target && !hit.archived) {
                 return { ...(c.entry ? EVENT.missingCauseEntry : EVENT.missingCause), ref: c.ref };
             }
-            if (c.entry) {
-                // 有快照 ⇒ 按**进来时**的状态判（leg66 的治法：引擎自己的收尾不许否掉刚放行的变更）
-                if (!c.entry.openEvents.has(c.ref)) {
-                    const at = c.entry.closedEventsAt.get(c.ref);
-                    const title = String(hit.target.title || '').slice(0, 20);
-                    return {
-                        code: 'cause-closed-before-batch',
-                        ref: c.ref,
-                        closedAt: at ?? null,
-                        label: title,
-                        message: () => `的因「${c.ref}」（${title}）`
-                            + `**在本批次开始前就已经了结${at != null ? `（第 ${at} 轮）` : ''}**——因果只能挂在还没了结的事上`,
-                    };
-                }
-                return null;
-            }
-            if (hit.target.closed) return { ...EVENT.closedCause, ref: c.ref };
+            // 事件收场不抹去已发生的事实；新后果可以引用闭合或已归档事实。
+            // 盘算是否仍在办、收场请求是否重复，仍由各自的判据检查。
             return null;
         },
         agenda: (c) => {
@@ -520,8 +464,7 @@ export const REF_RULES = {
     },
 
     // ── eventClosures.event（★leg95 模型收场通道：判"这一段讲完了"） ──
-    //   ★与 `entityUpdates.cause` **正相反**的一格，别搞混：那里要求"因果只能挂在**还没了结**的事上"，
-    //     这里要求"只能收**还没收场**的事"——同一个号在两条通道里的资格恰好是反面。
+    //   完成事实可产生新后果，但收场是一次性的，只能收尚未收场的事。
     //   ★为什么查"当前账"而不是"同轮新立的事"：`includeSameRound:false` —— 模型只能收**已经落过账**的事，
     //     不许"刚立就收"（同轮新生的事还没发生过，收它等于把刚落的事按死，那是形态错乱不是收场）。
     'eventClosures.event': {
@@ -575,7 +518,7 @@ export const REF_RULES = {
 
     // ── relationUpdates.cause（★leg120 A3：**"玩出来的关系"与"抄书/随口编"的唯一分界**） ──
     //   ★与 `entityUpdates.cause` **同一条口径、同一份实现**（**委托**过去，不抄第二份）：
-    //     因必须指向账上真实存在、**且未闭环**的事件或盘算。
+    //     事件因须真实存在（完成/归档亦可）；盘算因须仍在办。
     //   ★★为什么这一格是关系网的脊梁（细案 §2.3）：书里的静态关系**指不出账上的事** ⇒
     //     **结构上写不进这张表** ⇒ leg24 当年"不抄书"的决定被**形状**保住，不靠自律。
     //   ★不在这里另写一套文案：委托回来的判词与字段写回那格**逐字相同**（M3 的"带出路"要求一并继承）。
