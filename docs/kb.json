@@ -1,9 +1,9 @@
 {
   "version": 1,
   "generatedNote": "★生成物，**别手改**：改源文件或改抽卡代码之后跑 `node scripts/build-kb.mjs`；守门 R10 会对指纹，过期即红。",
-  "fingerprint": "6c3b3fb0-d7b6c977",
+  "fingerprint": "27c07051-d7b6c977",
   "codeFingerprint": "d7b6c977",
-  "sourceFingerprint": "6c3b3fb0",
+  "sourceFingerprint": "27c07051",
   "sources": [
     "STATE.md",
     "docs/session-handoff-2026-09-16-leg48.md",
@@ -163,6 +163,7 @@
     "docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md",
     "docs/session-handoff-2026-10-08-leg208-character-simulation-protection.md",
     "docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md",
+    "docs/session-handoff-2026-10-08-leg209-publish-112.md",
     "docs/spec-abstract-passes.md",
     "docs/spec-abstraction-input-cleanup.md",
     "docs/spec-b2-chronicle-via-recall.md",
@@ -335,10 +336,10 @@
     "webModules": 43,
     "tests": 183,
     "demos": 76,
-    "docs": 239,
-    "latestHandoff": "session-handoff-2026-10-08-leg209-character-protection-cleanup.md",
+    "docs": 240,
+    "latestHandoff": "session-handoff-2026-10-08-leg209-publish-112.md",
     "lastCommits": [
-      "179b69f release: bump version to 1.1.2 and publish leg202-leg209 to the release repo",
+      "a40f7dd release: bump version to 1.1.2 and publish leg202-leg209 to the release repo",
       "8530f84 feat: land leg204-leg209 work (snapshot, params, diagnostics, character protection)",
       "a765292 docs: record event scope implementation and verified local installation",
       "56b500b fix: preserve complete event scopes under budget and expose current conditions",
@@ -353,13 +354,13 @@
     ]
   },
   "counts": {
-    "cards": 383,
+    "cards": 384,
     "byKind": {
       "入口/规矩": 7,
       "活儿": 12,
       "待拍板": 4,
       "缺口": 19,
-      "交接": 157,
+      "交接": 158,
       "细案": 33,
       "索引": 2,
       "知识库": 11,
@@ -617,7 +618,7 @@
       "title": "最近几道令（倒序 · 一行一道 ＋ 落点）",
       "kind": "活儿",
       "src": "docs/work-current.md",
-      "line": 1415,
+      "line": 1429,
       "where": "1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒",
       "keys": [
         "最近几道令",
@@ -6535,6 +6536,30 @@
       ]
     },
     {
+      "id": "handoff#209",
+      "title": "交接 leg209（2026-10-08）",
+      "kind": "交接",
+      "src": "docs/session-handoff-2026-10-08-leg209-publish-112.md",
+      "line": 1,
+      "where": "一、接手位置与两个提交 ／ 四、验收和证据（全是亲手跑的） ／ 五、边界（如实登记，不掩盖） ／ 六、留给下一棒的现场知识（会再撞的两条） ／ 七、文档收尾",
+      "keys": [
+        "交接",
+        "leg209",
+        "2026-10-08",
+        "做了什么",
+        "history",
+        "docs",
+        "session-handoff-2026-10-08-leg209-publish-112.md",
+        "一、接手位置与两个提交",
+        "二、版本号升在哪（三处锁 ＋ 两处文档 ＋ 生成物）",
+        "三、路上被发布闸咬出来的那个真 bug（本笔最值钱的一条）",
+        "四、验收和证据（全是亲手跑的）",
+        "五、边界（如实登记，不掩盖）",
+        "六、留给下一棒的现场知识（会再撞的两条）",
+        "七、文档收尾"
+      ]
+    },
+    {
       "id": "spec#abstract-passes",
       "title": "细案 abstract-passes",
       "kind": "细案",
@@ -8478,7 +8503,7 @@
       "kind": "当前值",
       "src": "STATE.md",
       "line": 66,
-      "where": "**`a075423`** · 构建号 **`leg201b-report-only-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址 ｜ 复量：`node scripts/verify-release.mjs`",
+      "where": "**`2a71ba5`** · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**； ｜ 复量：`node scripts/verify-release.mjs`",
       "keys": [
         "当前值",
         "读数",

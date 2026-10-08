@@ -1,7 +1,7 @@
 # 知识索引（生成物 · 别手改）
 
-> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**383 张卡**，每一张都指得出**源文件与行号**。
-> 指纹 `6c3b3fb0-d7b6c977`（源文件 6c3b3fb0 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
+> 由 `node scripts/build-kb.mjs` 从仓里**现抽**：**384 张卡**，每一张都指得出**源文件与行号**。
+> 指纹 `27c07051-d7b6c977`（源文件 27c07051 · 抽卡代码 d7b6c977）——**对不上就是索引过期**（守门 R10）。
 
 **怎么用**：想查什么就搜关键词（`${cards.length}` 张卡全在下面，按类分组）——
 机器可读的那份在 `docs/kb.json`，带搜索框的那份在 `docs/kb-search.html`（浏览器直接打开）。
@@ -14,8 +14,8 @@
 | 构建号 | `leg209-character-protection-cleanup` |
 | 提示词号 | `v2-agenda-t1-37` |
 | 版本 | `1.1.2`（ST 扩展） |
-| 规模 | src **72** · web **43** · 判据 **183** · 探针 **76** · 文档 **239** |
-| 最新交接 | `session-handoff-2026-10-08-leg209-character-protection-cleanup.md` |
+| 规模 | src **72** · web **43** · 判据 **183** · 探针 **76** · 文档 **240** |
+| 最新交接 | `session-handoff-2026-10-08-leg209-publish-112.md` |
 
 ## 卡片（按类分组）
 
@@ -36,7 +36,7 @@
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
 | 现在做什么（用户最后一道令 · 逐字） | `docs/work-current.md:14` |  |
-| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1415` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
+| 最近几道令（倒序 · 一行一道 ＋ 落点） | `docs/work-current.md:1429` | 1. 2026-09-25（本笔）：★★★这些设定总共也就几千字吧？干脆全塞得了然后我预算抬到50000token＋ ／ 2. 2026-09-25：★★★没用的设计全给我摒弃＋不能本轮检索到⇒ |
 | 还剩哪些活儿（批次表指针 ＋ 怎么用） | `docs/work-current.md:1` | 唯一一份批次表：`docs/session-handoff-2026-09-22-leg109b-defects.md` §3 |
 | 批次 第 0 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:141` | C1 换书检测 · D1 撤 `entityUpdates` 上限 |
 | 批次 第 1 批 · 已办结 | `docs/session-handoff-2026-09-22-leg109b-defects.md:142` | B2 编年进包 · B1 世界动向默认开 |
@@ -81,7 +81,7 @@
 | 缺口 E2 | `docs/session-handoff-2026-09-22-leg109b-defects.md:122` | 名册只列活人 ⇒ 账上死了的人从聊天模型视野里整个消失；而给世界模型的"离场名册"不报死没死（有意为之，防编事实） |
 | 缺口 E3 | `docs/session-handoff-2026-09-22-leg109b-defects.md:123` | 同一人的 实力 两边可以不同（账本可改、聊天模型看到的是书里原值） |
 
-### 交接（157）
+### 交接（158）
 
 | 卡片 | 在哪 | 是什么 |
 |---|---|---|
@@ -242,6 +242,7 @@
 | 交接 leg207（2026-10-08） | `docs/session-handoff-2026-10-08-leg207-params-runtime-ui.md:1` | 参数页运行与注入布局交接 ／ 最终行为 ／ 交互中发现并修正的保存问题 ／ 检索说明的核实 ／ 验证与集成 ／ 本地复测 |
 | 交接 leg208（2026-10-08） | `docs/session-handoff-2026-10-08-leg208-character-simulation-protection.md:1` | 玩家、禁止模拟角色与本轮行动事实保护 |
 | 交接 leg209（2026-10-08） | `docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md:1` | 撤销未经批准的额外调用，调整角色保护界面 |
+| 交接 leg209（2026-10-08） | `docs/session-handoff-2026-10-08-leg209-publish-112.md:1` | 一、接手位置与两个提交 ／ 四、验收和证据（全是亲手跑的） ／ 五、边界（如实登记，不掩盖） ／ 六、留给下一棒的现场知识（会再撞的两条） ／ 七、文档收尾 |
 
 ### 细案（33）
 
@@ -324,7 +325,7 @@
 | 当前值 · MAIN_PROMPT_V | `STATE.md:63` | **`v2-agenda-t1-37`** ｜ 复量：`src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
 | 当前值 · web/index.js 行数 | `STATE.md:64` | **3068 / 3100**（硬锁 `<3100`） ｜ 复量：Node `split('\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。 |
 | 当前值 · CACHE_VERSION | `STATE.md:65` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） ｜ 复量：`src/fp-h |
-| 当前值 · 发布仓 main | `STATE.md:66` | **`a075423`** · 构建号 **`leg201b-report-only-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一 |
+| 当前值 · 发布仓 main | `STATE.md:66` | **`2a71ba5`** · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `m |
 | 当前值 · release tag | `STATE.md:67` | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发 |
 | 当前值 · 发布点读数的语义（leg124 立） | `STATE.md:68` | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） ｜ 复量：守门 R8 |
 | 当前值 · 版本号 | `STATE.md:69` | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 |
@@ -459,7 +460,7 @@
 
 ## 最近提交（接手时判"现在到哪一棒了"）
 
-- `179b69f release: bump version to 1.1.2 and publish leg202-leg209 to the release repo`
+- `a40f7dd release: bump version to 1.1.2 and publish leg202-leg209 to the release repo`
 - `8530f84 feat: land leg204-leg209 work (snapshot, params, diagnostics, character protection)`
 - `a765292 docs: record event scope implementation and verified local installation`
 - `56b500b fix: preserve complete event scopes under budget and expose current conditions`

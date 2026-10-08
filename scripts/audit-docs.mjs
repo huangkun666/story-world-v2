@@ -64,7 +64,17 @@ const src = {
 //     ① 源码现在是什么号（`current.panelBuild`，现读）；
 //     ② 人上次核过的发布点（本常量 + git 里读得到的发布子树哈希）。
 //     远端真值一律由 `node scripts/verify-release.mjs` 出手（会联网）；本文件**不猜**。
-const PUBLISHED_BUILD = 'leg201b-report-only-selfcheck';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+const PUBLISHED_BUILD = 'leg209-character-protection-cleanup';    // ★人核过的"当前发布点"；改它 = 一次发布（STATE.md §1 与 §5.1）
+//   ★★★leg209（2026-10-08）：用户令「**帮我推送并更新版本号**」（当次问定：**只推 main ＋ 升号**，
+//     不打 tag、不发 release）⇒ 发布仓 main `a075423`（leg201b）一次推到 **`2a71ba5`**
+//     （构建号 `leg209-character-protection-cleanup` · 版本号 **1.1.1 → 1.1.2**）：**leg202–leg209 八棒一次上线**
+//     （事件范围与条件生命周期 · 快照选择与实时诊断 · 参数页运行/注入重排 · 玩家与禁止模拟角色的事实保护 ·
+//     撤掉未经同意的额外核验调用 · CI 工作流与 README 图位）。脚本自带核验 **8/8 ✔**（含 6 处逐字节）·
+//     只读终检 `verify-release.mjs` **20/20 ✔**。
+//     ★这一笔还修了**一处被发布闸自己咬出来的真 bug**：`web/runtime-diagnostics.js` 原先从**所在目录名**
+//       现算控制台前缀 ⇒ 仓外导出件（目录叫 `out`）算成 `[out]`、本插件自己那 100 处日志一条都认不出，
+//       导出件判据 **2235/2236**（`test/runtime-diagnostics.test.js` 2 行变 1 行）⇒ 改成认产品那一个字面量
+//       `[story-world-v2]`（真机目录名本就是它，行为逐字节不变）。**没有这一修，这一版推不出去。**
 //   ★★★leg201b（2026-10-05，同日第二笔）：用户看了 leg201 的调试页截图后当场裁
 //     「**太多了，就放在复制报告里就行了，别展示出来**」⇒ 环境自检那十三格**只进报告、不上屏**。
 //     发布点 = `a075423`（父 `05811c7`）。远端核验 `node scripts/verify-release.mjs` **20/20 ✔**。
@@ -111,14 +121,15 @@ const PUBLISHED_BUILD = 'leg201b-report-only-selfcheck';    // ★人核过的"�
 //   ★leg154 那一笔的留档（**发布点已前移，但那次撤正的教训照旧管用**）：第一次推 `2e066dc` 是"导出整棵树"
 //     ⇒ 把分支上还没在真机验过的几笔一起带了出去，用户当场点出来（「还没测试的功能放上去干嘛？
 //     要不然我新开分支的意义在哪？」）⇒ 改成"上个发布树 ＋ 只这一处修复"，用 REST 推成 `824abc5`。
-const PUBLISHED_COMMIT_REF = '3fac63c6b701d8c16674345eecb8460ae6031f9b';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）· leg200b 那一笔
+const PUBLISHED_COMMIT_REF = '2a71ba57f7632f30a5a8bb453066eebec8ae92c7';   // ★同一发布点的**代码提交**＝远端 main 那一笔（STATE.md §1 "发布仓 main" 那行）· leg209 那一笔（发布 1.1.2；上一值 `3fac63c…` = leg200b）
 // ★★（2026-09-28 用户拍板「**tag 只跟 release 走**」之后）：**`tag` 与 `commit` 不再是同一笔，这是设计使然**——
 //   main 每推一次就往前走，而 tag **只在发一个 release 时才另打一个**（旧的永不挪：tag 不可变）。
 //   ⇒ 下面两个 tag 常数记的是**最近那个 release 点**，与 `build` / `commit` 可以差好几笔。
 //   ★**别把 `tagCommit` 接回 `PUBLISHED_COMMIT_REF`**——那会让生成物谎报"tag 指着 main 的尖端"。
 //   ★★leg196–leg200（2026-10-05）**五笔都没发新 tag**：用户每次只点了"推 main"（leg199 那次另加"升号"；
 //     leg200 那次明说"**不用打版本号**"）——推 main / 打 tag / 发 release 是三件事、各要一次明令
-//     ⇒ 下面两格照旧是 leg195 那个 release。**版本号已是 `1.1.1`、而最近那个 release 还是 `1.1.0` 那棵**
+//   ★★leg201–leg209（2026-10-05 → 2026-10-08）**同样一个 tag 都没发**（leg209 那次也只点了"推 main ＋ 升号"）
+//     ⇒ 下面两格照旧是 leg195 那个 release。**版本号已是 `1.1.2`、而最近那个 release 还是 `1.1.0` 那棵**
 //     ——这是用户当次知情的取舍，**不是漏做**，别"顺手"把它对齐。
 const PUBLISHED_TAG = 'v1.1.0';                  // ★最近那个 release 的 tag（★**正式版**：`prerelease: false`）
 const PUBLISHED_TAG_COMMIT = 'e28be61';          // ★它**真的**指向哪一笔（= leg195 那一版，构建号 `leg194-original-line-gone`；更旧的 `v1.0.1` → `ec5416d`、`v1.0.0` → `778af70`、`v1.0.0-preview.2` → `2a86cfa`、`v1.0.0-preview.1` → `1a54424` 同样留着）
@@ -133,7 +144,7 @@ const PUBLISHED_TAG_COMMIT = 'e28be61';          // ★它**真的**指向哪一
 //     （实测原文：`release.published.commit: 类型不同 ｜ release.published.date: 类型不同`）。
 //   ★口径回到本脚本 leg106 自己那条："一切'问本机'的结果不进这个文件"。
 //     日期与哈希一样是**人核过的事实**：值仍照 `git log -1 --format=%cs <REF>` 取，取完写死在这里。
-const PUBLISHED_COMMIT_DATE = '2026-10-05';
+const PUBLISHED_COMMIT_DATE = '2026-10-08';
 // ★守门用的禁词（见 R8）：这几个名字在生成物里**一律不许再出现**——它们分不清"本地号"与"已发布号"。
 const FORBIDDEN_RELEASE_KEYS = ['publishedBuild', 'publishedTag', 'publishedTagCommit'];
 const entriesDeep = (o, path = '', acc = []) => {

@@ -36,7 +36,7 @@
 | **还剩哪些活儿** | 同一份的 §2 ⇒ 总表在 `docs/session-handoff-2026-09-22-leg109b-defects.md` **§3**（全文唯一一份；数 `⬜`／`△`）★**现读：没做 1 · 做了一半 0** |
 | **要查什么（全仓可搜）** | `docs/kb-index.md` · `docs/kb-search.html`（浏览器直接打开）· `docs/kb.json`（给 AI）★**生成物、别手改**：改了源就跑 `node scripts/build-kb.mjs`（守门 **R10** 咬指纹） |
 | **当前值／红线／现场** | **§1** · **§2** · **§5** |
-| **交接文档放哪** | `F:/deepseek/plugins/story-world-v2/docs/`；当前交接：`docs/session-handoff-2026-10-08-leg209-character-protection-cleanup.md`。此前角色保护、参数界面、快照、诊断与聊天提示词交接作为历史保留。 |
+| **交接文档放哪** | `F:/deepseek/plugins/story-world-v2/docs/`；当前交接：`docs/session-handoff-2026-10-08-leg209-publish-112.md`（发布 1.1.2）。此前角色保护、参数界面、快照、诊断与聊天提示词交接作为历史保留。 |
 
 ---
 
@@ -63,7 +63,7 @@
 | `MAIN_PROMPT_V` | **`v2-agenda-t1-37`** | `src/prompts.js`；玩家、手动禁止模拟与本轮已行动实体共用事实保护，标题等间接描述同样不能编造受保护角色的处境。 |
 | `web/index.js` 行数 | **3068 / 3100**（硬锁 `<3100`） | Node `split('\n').length`；角色保护按钮与查书通过现有保存事务落账，保存期间禁止开始演算。 |
 | `CACHE_VERSION` | **`11`**（★leg199 **不升**：抽取的问法没变；它升到 11 是 leg198 那一笔——**起根那一问的问法变了**：`title` 立时态纪律 ＋ 撤掉死格 `why`） | `src/fp-hash.js` |
-| 发布仓 main | **`a075423`** · 构建号 **`leg201b-report-only-selfcheck`** · 版本号 **`1.1.1`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg201b 推的（用户令「**推送吧**」；同日 leg201 → leg201b 两笔，版本号仍停在 1.1.1，未打 tag） | `node scripts/verify-release.mjs` |
+| 发布仓 main | **`2a71ba5`** · 构建号 **`leg209-character-protection-cleanup`** · 版本号 **`1.1.2`**（★leg156 起它就是开发目录那棵树的导出、**只有 `main` 一支**；★填仓库地址装的拿 main 尖端，点 release 下载的拿 **`v1.1.0`** 那棵——★tag/release 仍未动，见下一格）。★leg209 推的（用户 2026-10-08 令「**帮我推送并更新版本号**」；当次问定**只推 main ＋ 升号**）：**leg202–leg209 八棒一次上线**（上一发布点 `a075423` / leg201b），脚本自带核验 **8/8 ✔**、只读终检 **20/20 ✔**；本机酒馆安装位克隆已按 §10.0 收尾 `fetch` ＋ `reset --hard origin/main` 到这一笔 | `node scripts/verify-release.mjs` |
 | release tag | **`v1.1.0` → `e28be61`**（leg195 · 正式版，`prerelease:false`）· 旧四个 tag 原样不动。★**leg196–leg200 五笔都没动它**（1.1.1 那一版也没发新 tag）⇒ **点 release 下载的仍是那一棵** | `node scripts/verify-release.mjs`（会联网） |
 | 发布点读数的**语义**（leg124 立） | **"已发布到哪一版"只有本行是人核过的真值**；`docs/index.json` 分 `sourceBuild`（现读）/ `published`（人核过的常数） | 守门 R8 |
 | 版本号 | `manifest.json` = `web/index.js` 的 `VERSION` = **`1.1.2`**（两处，判据锁着第二处）。★**这一版升了号**（1.1.1 → 1.1.2；用户 2026-10-08 令「帮我推送并更新版本号」）——升号正是为了让人**看得出自己更新没更新**（leg156 登记的那个坑）。★**tag/release 这一版没动**（用户当次只点了"推 main ＋ 升号"）⇒ 点 release 下载的仍是 `v1.1.0` 那棵 | `test/browser-compat.test.js` |
@@ -213,11 +213,18 @@ leg198 已办结（用户 2026-10-05 两道令，逐字：「**这个词表按�
   `F:/deepseek/plugins/story-world-v2/docs/session-handoff-2026-10-07-f-drive-migration.md`。
 - **活跃部署位（都住 F 盘；`F:\jiuguanai\…` 这两处是宿主安装的发布位，搬家不动它们）**：
   ① **实际加载的那一份**＝`F:\jiuguanai\SillyTavern-Launcher\SillyTavern\data\default-user\extensions\story-world-v2`
-  ＝**发布仓的一个真实 git 克隆**（★leg156 起**不再是 junction**；2026-10-08 现读：remote
-  `https://github.com/huangkun666/story-world-v2.git`、当前本地预览由安装前基线 **`05ea0ea`** 增量撤销额外调用并调整角色保护开关；最终安装提交与运行文件核验见本次 `install-verification.json`，**不是联接**、**与 C 盘无关**）
-  ⇒ ★**开发目录改的东西不会自己进酒馆**：本次已通过
-    `F:/deepseek/tmp/character-protection-cleanup-2026-10-08/integrate-install.mjs` 备份后增量安装；用户在酒馆 **Ctrl+Shift+R** 后即可测试。
-    安装前 Git bundle 与原树归档在同目录 `backup/`，现场核验见 `install-verification.json`；安装目录验证日志为 `installed-tests.log`、`installed-smoke.log`、`installed-doc-audit.log`，HTTP 核验见 `http-verification.json`。本次仅本地预览，未推送远端；本次证据目录为 `F:/deepseek/tmp/character-protection-cleanup-2026-10-08/`。额外模型核验已完全撤销；自由文本事实保护沿用原生成提示词，不宣称程序能硬判所有叙述。此前各次安装证据保留。
+  ＝**发布仓的一个真实 git 克隆**（★leg156 起**不再是 junction**；2026-10-08 发布 1.1.2 之后现读：remote
+  `https://github.com/huangkun666/story-world-v2.git`、**HEAD = `2a71ba5` = `origin/main`**、工作区干净、
+  `manifest.json` 读 **1.1.2**——这是按 `docs/dev-process.md` §10.0 的收尾做的 `git fetch` ＋
+  `git reset --hard origin/main`，leg206–leg209 那几笔本地预览提交因此退出分支（仍在 reflog 里）；
+  **不是联接**、**与 C 盘无关**）
+  ⇒ ★**开发目录改的东西不会自己进酒馆**：这一版是**推上发布仓之后从远端拉回来的**，用户在酒馆 **Ctrl+Shift+R** 后即见 1.1.2。
+    发布前的本地预览（leg206–leg209）走的是
+    `F:/deepseek/tmp/character-protection-cleanup-2026-10-08/integrate-install.mjs` 备份后增量安装，其证据
+    （安装前 Git bundle 与原树归档在同目录 `backup/`、`install-verification.json`、`installed-tests.log`、
+    `installed-smoke.log`、`installed-doc-audit.log`、`http-verification.json`）保留在该证据目录
+    `F:/deepseek/tmp/character-protection-cleanup-2026-10-08/`。额外模型核验已完全撤销；自由文本事实保护沿用原生成提示词，
+    不宣称程序能硬判所有叙述。此前各次安装证据保留。
   ② `…\SillyTavern\public\scripts\extensions\third-party\story-world-v2`（`docs/dev-process.md` §4 记的那个旧 junction 位）
   ——**2026-10-07 现读：这一格已不存在**；真实入口就是 ①。
 - **面板构建号在哪看**：★**不在「设置」页**。真在两处：① **「参数」页最上面那行**（`src/render.js:784`）；
