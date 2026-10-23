@@ -1,0 +1,196 @@
+{
+  "format": "story-world-api-protocol",
+  "version": 1,
+  "target": "es2020",
+  "entryPoint": "index.js",
+  "pins": {
+    "ai": "7.0.142",
+    "@ai-sdk/anthropic": "4.0.81",
+    "@ai-sdk/openai": "4.0.95",
+    "@ai-sdk/openai-compatible": "3.0.70",
+    "esbuild": "0.28.2"
+  },
+  "packages": [
+    {
+      "name": "@ai-sdk/anthropic",
+      "version": "4.0.81",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/anthropic"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@ai-sdk/gateway",
+      "version": "4.0.115",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/gateway"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@ai-sdk/openai-compatible",
+      "version": "3.0.70",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/openai-compatible"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@ai-sdk/openai",
+      "version": "4.0.95",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/openai"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@ai-sdk/provider-utils",
+      "version": "5.0.61",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/provider-utils"
+      },
+      "licenseFiles": [
+        "apache-2.0-provider-utils-5.0.61.txt"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@ai-sdk/provider",
+      "version": "4.0.28",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/provider"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@vercel/oidc",
+      "version": "3.2.0",
+      "license": "Apache-2.0",
+      "repository": {
+        "directory": "packages/oidc",
+        "type": "git",
+        "url": "git+https://github.com/vercel/vercel.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@workflow/serde",
+      "version": "4.1.0",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/workflow.git",
+        "directory": "packages/serde"
+      },
+      "licenseFiles": [
+        "LICENSE.md"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "ai",
+      "version": "7.0.142",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/ai"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "eventsource-parser",
+      "version": "3.1.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+ssh://git@github.com/rexxars/eventsource-parser.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "zod",
+      "version": "4.6.7",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/colinhacks/zod.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    }
+  ],
+  "licenseFallbacks": [
+    {
+      "name": "@ai-sdk/provider-utils",
+      "version": "5.0.61",
+      "file": "apache-2.0-provider-utils-5.0.61.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/Apache-2.0.txt",
+      "basis": "published package.json license declaration; full canonical SPDX license text; upstream license file absent",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vercel/ai",
+        "directory": "packages/provider-utils"
+      },
+      "sourceCheck": "发布件内逐文件列过：没有 licen*e/copying/notice 文件（同仓其余 @ai-sdk 包与 ai 都自带 LICENSE）",
+      "bytes": 10280,
+      "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff"
+    }
+  ],
+  "files": [
+    {
+      "file": "LICENSES.txt",
+      "bytes": 27873,
+      "sha256": "7cc78e0246e03f402eb2f9a067b20c482bc5960444ff07987231545d52b7fc04"
+    },
+    {
+      "file": "index.js",
+      "bytes": 1141393,
+      "sha256": "3779d93f81f513c8d6f8c0ac519be8ab81685c566e83616f8b8fe530263510a0"
+    }
+  ]
+}

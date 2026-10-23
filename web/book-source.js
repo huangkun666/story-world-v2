@@ -65,16 +65,51 @@ export function characterBookEntries(character) {
 }
 
 
+// 宿主能力按实际选择取书名；已安装书目不能当作挂载选择。
+function mountedWorldNames(ctx, character, { includeCharacter = true } = {}) {
+    const names = [], seen = new Set(), state = [];
+    let incomplete = false;
+    const push = value => {
+        for (const raw of Array.isArray(value) ? value : [value]) {
+            if (typeof raw !== 'string') continue;
+            const name = raw.trim();
+            if (name && !seen.has(name)) { seen.add(name); names.push(name); }
+        }
+    };
+    const read = (label, fn) => {
+        try {
+            const value = fn();
+            // 公开挂载接口为同步字符串数组；异常形状不能冒充“未选择”。
+            if (value != null && typeof value !== 'string' && !Array.isArray(value)) throw new TypeError('invalid mount selection');
+            state.push([label, value ?? null]); push(value);
+        } catch { incomplete = true; state.push([label, 'unreadable']); }
+    };
+    if (includeCharacter) push(characterWorldNames(character));
+    const fileName = typeof character?.avatar === 'string' ? character.avatar.replace(/\.[^/.]+$/, '') : '';
+    if (typeof ctx?.getCharaAuxWorlds === 'function') read('aux', () => ctx.getCharaAuxWorlds(fileName));
+    else {
+        const lore = ctx?.extensionSettings?.world_info?.charLore;
+        read('aux', () => Array.isArray(lore) ? lore.find(item => item?.name === fileName)?.extraBooks : null);
+    }
+    const chat = ctx?.chatWorldInfo;
+    if (typeof chat?.getNames === 'function') read('chat', () => chat.getNames(ctx?.chatMetadata, { onlyExisting: false }));
+    else read('chat', () => ctx?.chatMetadata?.world_info);
+    // 新接口存在时，空数组也是明确选择；不把遗留别名里的旧值补回来。
+    if (chat && 'globalSelection' in chat) read('global', () => chat.globalSelection);
+    else if (ctx?.extensionSettings?.world_info && 'globalSelect' in ctx.extensionSettings.world_info) read('global', () => ctx.extensionSettings.world_info.globalSelect);
+    else if (typeof ctx?.getGlobalWorldInfoNames === 'function') read('global', () => ctx.getGlobalWorldInfoNames());
+    else read('global', () => null);
+    return { names, state, incomplete };
+}
+
+function mountIdentity(ctx) {
+    return JSON.stringify(mountedWorldNames(ctx, pickCharacter(ctx), { includeCharacter: false }).state);
+}
+
 export async function collectWorldInfoEntries(ctx, character) {
-    const legacy = ctx?.worldInfo;
-    const legacyEntries = Array.isArray(legacy) ? legacy : Array.isArray(legacy?.entries) ? legacy.entries : null;
-    const names = [];
-    const seenName = new Set();
-    const push = (n) => { if (n && typeof n === 'string' && n.trim() && !seenName.has(n)) { seenName.add(n); names.push(n.trim()); } };
-    for (const name of characterWorldNames(character)) push(name);
-    const chatWi = ctx?.chatMetadata?.['world_info']; // 聊天级挂载（ST assignLorebookToChat 写 chat_metadata.world_info）
-    if (typeof chatWi === 'string') push(chatWi); else if (Array.isArray(chatWi)) for (const n of chatWi) push(n);
-    for (const n of (ctx?.extensionSettings?.world_info?.globalSelect ?? [])) push(n);
+    const legacyEntries = legacyEntriesOf(ctx, character);
+    const mounts = mountedWorldNames(ctx, character);
+    const names = mounts.names;
     const entries = [];
     const seenFp = new Set();
     let dupEntries = 0;
@@ -87,32 +122,31 @@ export async function collectWorldInfoEntries(ctx, character) {
         }
         entries.push(e);
     };
-    for (const e of characterBookEntries(character)) addEntry({ ...e, _sw2Source: `character:${character?.name || ''}` });
+    // Only current host-mounted books are sources; do not append the card export copy.
     if (legacyEntries) {
         for (const entry of legacyEntries) addEntry(entry);
-        return { entries, worldSources: null, readable: true, incomplete: false, dupEntries };
+        return { entries, worldSources: null, readable: true, incomplete: mounts.incomplete, dupEntries, sourceMode: 'legacy' };
     }
     let loadedAny = false;
-    let failedAny = false;
+    let failedAny = mounts.incomplete;
     const worldSources = [];
     for (const name of names) {
+        let list = null;
         try {
             const w = typeof ctx?.loadWorldInfo === 'function' ? await ctx.loadWorldInfo(name) : null;
             const raw = w?.entries;
-            const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : null);
-            const ok = Boolean(list);
-            if (ok) loadedAny = true; else failedAny = true;
-            worldSources.push({ name, ok, entries: list?.length ?? 0 });
-            if (list) for (const e of list) addEntry({ ...e, _sw2Source: name });
-        } catch (err) {
-            failedAny = true;
-            worldSources.push({ name, ok: false, entries: 0 });
-        }
+            list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : null);
+        } catch { /* 挂载书未读到不能用卡内旧副本冒充成功。 */ }
+        const ok = Boolean(list);
+        if (ok) loadedAny = true; else failedAny = true;
+        worldSources.push({ name, ok, entries: list?.length ?? 0 });
+        // The same mounted name is loaded once even when several host scopes select it.
+        if (list) for (const e of list) addEntry({ ...e, _sw2Source: name });
     }
     // ★★（Task 1 复查项 3）：**"读到空书"与"没读全"必须分形**——
     //   `readable` 只说"至少有一处读到了"；`incomplete` 说"还有挂载来源没读到"。
     //   把两者并成一个，就会把"某本挂载书没读到"当成"书里没有该名号"（引擎据此写永久 absent）。
-    return { entries, worldSources, readable: loadedAny || entries.length > 0, incomplete: failedAny, dupEntries };
+    return { entries, worldSources, readable: loadedAny || entries.length > 0, incomplete: failedAny, dupEntries, sourceMode: 'mounted' };
 }
 
 // ★★★（Task 1 二次复查 Important 2）：**legacy 世界书来源的引用与版本**。
@@ -128,7 +162,10 @@ export async function collectWorldInfoEntries(ctx, character) {
 //     "只比长度"：正文长度相同的**换书**（同 uid 同长度、内容不同）正是这份缓存最容易静默串书的一格
 //     （重审夹具就是它）——那正是这条口径要治的病，省掉它等于没治。取书本身是异步 I/O，这个量级可接受。
 //   ★不改宿主数据、不缓存外来对象；旧宿主没有 `worldInfo` 时恒为 `'null'`（零动作）。
-function legacyEntriesOf(ctx) {
+function legacyEntriesOf(ctx, character = pickCharacter(ctx)) {
+    // Named mounted books are authoritative when the host can load them. The legacy
+    // aggregate may contain only active entries and omits their book namespace.
+    if (typeof ctx?.loadWorldInfo === 'function' && mountedWorldNames(ctx, character).names.length) return null;
     const legacy = ctx?.worldInfo;
     return Array.isArray(legacy) ? legacy : Array.isArray(legacy?.entries) ? legacy.entries : null;
 }
@@ -216,7 +253,10 @@ export async function currentBookFingerprint(ctx) {
         const generation = bookGeneration;
         const legacyAtStart = legacySnapshot(ctx);                      // ★二次复查：这份 legacy 来源的引用 + 版本
         const readLive = readsLiveCtx(ctx, bookContextIdentity(ctx), legacyAtStart);   // ★复查项 4：进入时抓的是不是 live 那本
-        const character = await ensureCharacterLoaded(ctx);   // ★leg154：懒加载卡先要全卡（否则算出的是"名册那一层"的合订文本）
+        const sourceAtStart = captureSourceOwner(ctx);
+        const character = await ensureCharacterLoaded(ctx);   // 懒加载后只接受同一卡的加载推进
+        const loadedCtx = readLive ? getCtx() : ctx;
+        if (sourceOwnerSuperseded(sourceAtStart, loadedCtx) && !sourceOwnerLoadingAdvanced(sourceAtStart, loadedCtx)) return { fresh: '', usedChars: 0, entries: 0 };
         const owner = bookContextIdentity(ctx);
         const { entries, worldSources, incomplete } = await collectWorldInfoEntries(ctx, character);
         if (generation !== bookGeneration || session !== JSON.stringify([ctx?.chatId, ctx?.characterId, ctx?.groupId]) || ownerSuperseded(ctx, owner, legacyAtStart, readLive)) return { fresh: '', usedChars: 0, entries: 0 };
@@ -261,7 +301,11 @@ export async function checkCurrentBook(world, { ctx = null } = {}) {
 }
 
 export function pickCharacter(ctx) {
-    if (ctx?.character && typeof ctx.character === 'object') return ctx.character; // 已解析好的 ST 卡
+    const direct = ctx?.character;
+    // Luker 的 character.presets 是服务接口；实卡需要可识别的卡字段。
+    if (direct && typeof direct === 'object' && !Array.isArray(direct)
+        && ['name', 'avatar', 'data', 'world', 'extensions', 'character_book', 'description',
+            'scenario', 'personality', 'first_mes', 'shallow'].some(key => Object.hasOwn(direct, key))) return direct;
     const chars = ctx?.characters;
     if (!Array.isArray(chars)) return null;
     if (ctx?.groupId != null) {
@@ -319,7 +363,7 @@ export function resetBookCache() { sw2BookCache = null; bookGeneration += 1; }
 export function bookContextIdentity(ctx) {
     const character = pickCharacter(ctx);
     return JSON.stringify([ctx?.chatId, ctx?.characterId, ctx?.groupId, character?.avatar, character?.name, characterWorldNames(character), character?.shallow,
-        ctx?.chatMetadata?.world_info, ctx?.extensionSettings?.world_info]);
+        ctx?.chatMetadata?.world_info, ctx?.extensionSettings?.world_info, mountIdentity(ctx)]);
 }
 
 // ★★★（Task 2 复查 · Important 1/2）：**跨模块共用的"来源所有者"**（页面接线与取书缓存同一把尺）。
@@ -358,7 +402,7 @@ export function captureSourceOwner(ctx) {
     const legacy = legacySnapshot(ctx);
     const identity = bookContextIdentity(ctx);
     return { scope: String(ctx?.chatId || 'default'), key: `${identity}\u0000${legacy.version}`, identity,
-        slot: cardSlotOf(ctx), mounts: JSON.stringify([ctx?.chatMetadata?.world_info, ctx?.extensionSettings?.world_info]),
+        slot: cardSlotOf(ctx), mounts: mountIdentity(ctx),
         shallow: pickCharacter(ctx)?.shallow === true, legacy };
 }
 /** 这一份所有者还是不是现在这一份（聊天/卡/挂载/浅卡状态/legacy 书的内容，全等）。 */
@@ -374,7 +418,7 @@ export function sourceOwnerLoadingAdvanced(owner, ctx) {
     if (pickCharacter(ctx)?.shallow === true) return false;  // 仍是浅卡，不是加载完成
     if (String(ctx?.chatId || 'default') !== owner.scope) return false;
     if (cardSlotOf(ctx) !== owner.slot) return false;         // 换了卡槽就不是"同一张卡在加载"
-    if (JSON.stringify([ctx?.chatMetadata?.world_info, ctx?.extensionSettings?.world_info]) !== owner.mounts) return false;
+    if (mountIdentity(ctx) !== owner.mounts) return false;
     return sameLegacyContent(owner.legacy, ctx);
 }
 
@@ -393,7 +437,10 @@ async function worldBookCached(ctx) {
     //   就不再是同一本书（此前只比 `ctx.worldInfo` 引用，原地改看不见；重审夹具正是换数组那一格）。
     if (sw2BookCache && sw2BookCache.owner === owner && sw2BookCache.worldInfo === ctx?.worldInfo
         && sw2BookCache.legacyVersion === legacyBookVersion(legacyEntriesOf(ctx))) return resolve(sw2BookCache);
-    const character = await ensureCharacterLoaded(ctx);   // ★leg154：懒加载卡先要全卡（否则卡上那本书根本看不见）
+    const sourceAtStart = captureSourceOwner(ctx);
+    const character = await ensureCharacterLoaded(ctx);   // 懒加载后重新核对聊天、卡与挂载
+    const loadedCtx = readLive ? getCtx() : ctx;
+    if (sourceOwnerSuperseded(sourceAtStart, loadedCtx) && !sourceOwnerLoadingAdvanced(sourceAtStart, loadedCtx)) return { readable: false, entries: [], incomplete: true, composed: { text: '', sourceItems: [] } };
     const loadedOwner = bookContextIdentity(ctx);
     const { entries, readable, worldSources, incomplete } = await collectWorldInfoEntries(ctx, character);
     if (generation !== bookGeneration || session !== JSON.stringify([ctx?.chatId, ctx?.characterId, ctx?.groupId]) || ownerSuperseded(ctx, loadedOwner, legacyAtStart, readLive)) return { readable: false, entries: [], incomplete: true, composed: { text: '', sourceItems: [] } };

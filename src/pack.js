@@ -4,6 +4,7 @@
 // ★leg32g：门控的"久未出手"阈值**直接读门控真源**（`gate.js` 的 `QUIET_TICKS`），不在这里另抄一个数
 //   ——"待启用名单"的筛选口径必须与门控的静默判据**同一把尺子**，否则会出现"引擎说他不静默、名单里却当他冷门"。
 import { QUIET_TICKS } from './gate.js';
+import {worldFieldWritePrompt,maskRetiredWorldFields,readWorldFieldSchema} from './source-field-table.js';
 import { geographyPack } from './geography.js';
 import { fitGeography } from './geography-fit.js';
 // ★leg62：刻度块要按**概念表**分组 ⇒ 读那一份"概念表唯一读取口"（新账读 `刻度`、旧账纯函数推导）。
@@ -163,6 +164,13 @@ export function computeIdleFaces(ssot, top = IDLE_FACES_TOP) {
         return !(typeof e.lastActiveTick === 'number' && (tickNow - e.lastActiveTick) < QUIET_TICKS);
     }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     if (!pool.length) return [];
+    // ★Task 2：`top` 可能是「不限」翻出来的运行安全上界（十亿）或 `Infinity`——
+    //   池子比它小就**直接全给**，绝不走 `tickNow * top` 那一步：
+    //   · 旧写法在巨量上界下会先做一次超安全整数范围的乘法（精度丢失），
+    //     `(tickNow * top) % pool.length` 得到小数/NaN ⇒ `pool[off]` 是 `undefined`
+    //     ⇒ 名单里出现没有 id/name 的条目（正是本轮要掐掉的形态）；
+    //   · 全给这一支对 `Infinity` 同样成立（`Infinity % n` 就是 `NaN`）。
+    if (!Number.isFinite(top) || top >= pool.length) return pool.map((e) => ({ id: e.id, name: e.name, kind: e.kind }));
     const off = (tickNow * top) % pool.length;                        // 轮转（确定性）
     // ★带 name/kind（不只是 id）：模型要"从名单里挑人"，光给一串 id 它无从判断谁是谁、是势力还是角色。
     //   成本实测：12 条 id+name+kind ≈ 180 token（预算余量两万，仍是为"看得见"花的小钱）。
@@ -335,6 +343,7 @@ const ENTITY_TABLE_COLS = ENTITY_TABLE_HEADER.split('\t');
 
 // 一行的取值（缺列返回 ''）
 const entityCell = (r, f) => {
+    if (f === 'attributes') return r.attributes ? JSON.stringify(r.attributes) : '';
     if (f === 'location') return r.location == null ? '' : `${r.location}${r.locationNote ?? ''}`;
     if (f === 'members') return Array.isArray(r.members) && r.members.length ? r.members.join('、') : '';
     return r[f] == null ? '' : String(r[f]);
@@ -342,7 +351,7 @@ const entityCell = (r, f) => {
 // ★**保留全列对齐**（细案 §2.2/§8 的决定）：尾部空列**不收**——虽然收掉能多省 481 est（51.8% vs 49.3%），
 //   但"某行少几列"会让模型误判列序（`e_p1` 那行若只剩 4 列，"第 6 列是 members"这条就读不出来了）。
 //   **不拿可读性换这 1.6 个百分点**。空列一律写空字符串（TAB 相邻）。
-const entityRowText = (r) => ENTITY_TABLE_COLS.map((f) => entityCell(r, f)).join('\t');
+const entityRowText = (r, cols = ENTITY_TABLE_COLS) => cols.map((f) => entityCell(r, f)).join('\t');
 
 // ★自检（不改变输出，只上报）：任一格的**值本身**含 TAB/换行 ⇒ 会串列，必须显形（判据 C）。
 //   ⚠实现纪律：**不许用"数 TAB 个数"判**——`entityRowText` 会收掉尾部空列（`e_p1` 只有 4 列），
@@ -359,7 +368,8 @@ export function entityTableAnomalies(rows) {
 // 行式块：表头 + 每行一条（每行末尾的 `\n` 在 JSON 里要转义成 2 字符 ⇒ 用 join 拼、不留尾空行）
 function entityTableBlock(rows) {
     if (!Array.isArray(rows) || !rows.length) return '';
-    return ENTITY_TABLE_HEADER + '\n' + rows.map(entityRowText).join('\n');
+    const cols = rows.some(r => r.attributes && Object.keys(r.attributes).length) ? [...ENTITY_TABLE_COLS, 'attributes'] : ENTITY_TABLE_COLS;
+    return cols.join('\t') + '\n' + rows.map(r => entityRowText(r, cols)).join('\n');
 }
 
 // 行式块 → 对象数组（**仅供判据 D 做无损核对**，生产路径不回读：check-step 校验拿的是 ssot，不是 pack）
@@ -369,7 +379,7 @@ export function parseEntityTableBlock(block) {
     return lines.filter((l) => l !== '').map((l) => {
         const parts = l.split('\t');
         const row = {};
-        cols.forEach((f, i) => { if (parts[i]) row[f] = parts[i]; });
+        cols.forEach((f, i) => { if (parts[i]) row[f] = f === 'attributes' ? JSON.parse(parts[i]) : parts[i]; });
         const m = /^(.+?)（推）$/.exec(row.location ?? '');
         if (m) { row.location = m[1]; row.locationNote = '（推）'; }
         if (row.members) row.members = row.members.split('、');
@@ -755,13 +765,13 @@ export function ruleAnchorCore(canon) {
     let chars = 0;
     for (const s of 判据) {
         if (out.length >= RULE_PACK_TOP) break;
-        const cut = s.length > RULE_PACK_STR_MAX ? s.slice(0, RULE_PACK_STR_MAX) : s;
-        if (chars + cut.length > RULE_PACK_CHAR_TOP) break;
+        const cut = s; // A rule and its condition are indivisible.
+        if (chars + cut.length > RULE_PACK_CHAR_TOP) continue;
         out.push(cut);
         chars += cut.length;
     }
     // 空着就是空着（与 env/刻度 同一条纪律）：一条判据都没有 ⇒ 键不出现，老账与旧行为**逐字节相同**。
-    if (!out.length) return { anchor: null, fit: null };
+    if (!out.length) return { anchor: null, fit: 判据.length ? { 判据: { 进包: 0, 共: 判据.length } } : null };
     // ★leg69（A1）：`共` = **判据这一类**的总数（分类之后、三道闸之前）——口径与面板"几/几进包"同一把尺。
     return { anchor: out, fit: { 判据: { 进包: out.length, 共: 判据.length } } };
 }
@@ -1141,7 +1151,8 @@ export function recordShownLines(ssot, roots) {
 // K2/P3：分量不再入包（ANCHOR §3③：模型看不到分量、不参与分量；门控在引擎侧兜底）
 // leg25：出包末尾**强制整包预算**（超限按固定剪枝序裁，包内留 `trimmed` 痕迹；见 trimPack）
 export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, turnFacts = null, volumes = null, vecRecall = null } = {}) {
-    const input = prepareWorldInput(ssot, turnFacts, volumes, vecRecall);
+    const fieldPrompt=worldFieldWritePrompt(ssot),fieldSchema=readWorldFieldSchema(ssot);
+    const input = prepareWorldInput(maskRetiredWorldFields(ssot), turnFacts, volumes, vecRecall);
     ssot = input.world;
     volumes = input.volumes;
     vecRecall = input.vecRecall;
@@ -1184,13 +1195,18 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
             const members = membersOf(ssot, e);                   // C7：麾下成员简表（派生；逐行最重的可选字段）
             if (members) row.members = members;
         }
+        // Confirmed properties travel separately from fixed identity, membership and player columns.
+        const attributes = Object.fromEntries(fieldSchema.fields.filter(f => f.enabled !== false && f.kinds.includes(e.kind)
+            && Object.hasOwn(e, f.name) && !(f.name === '实力' && Object.hasOwn(row, '实力')) && f.name !== 'location')
+            .map(f => [f.name, structuredClone(e[f.name])]));
+        if (Object.keys(attributes).length) row.attributes = attributes;
         return row;
     };
     const entities = lens.map(({ e }) => entityRow(e, 'full'));
     const protectedCharacters = protectedCharactersOf(ssot);
     const agendas = (ssot.agendas || []).filter((a) => !a.closed).map((a) => ({
         id: a.id, owner: a.owner, goal: a.goal, stage: a.stage,
-        visibility: a.visibility, progress: `${a.progress}/${a.maxSteps}`, memory: a.memory,
+        visibility: a.visibility, progress: Number.isSafeInteger(a.maxSteps) ? `${a.progress}/${a.maxSteps}` : String(a.progress ?? 0), memory: a.memory,
         parentId: a.parentId,   // K14（K13 施工补差，细案 §3.5）：树形是"谋划的结构"，可见；分量数字不可见原则 P3 不动
         // ★leg32c（长跑接得上）：**出生理由**进包。leg29 已把理由落账（`agenda.source`），但**从没进过包**
         //   ⇒ 模型每轮看得见"万法阁在办什么"，**看不见"他为什么起这件事"** ⇒ 三十轮后接不上因果。
@@ -1257,7 +1273,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
         // ★★★leg136：这一句原来**写死了** `条≤160` —— 而 `RULE_PACK_TOP` 已抬到 256（leg135）
         //   ⇒ 包里那句"原因"是**假话**。本笔照 leg135 给 `刻度` 那一句定的口径改成**从常量现读**
         //   （同一条纪律：读数量体不许写死数字，写死就是第二份真相）。
-        ...(ruleFitRes.fit && Number(ruleFitRes.fit.判据?.共) > Number(ruleFitRes.fit.判据?.进包) ? { 法则: { ...ruleFitRes.fit, 原因: `块级预算（条≤${RULE_PACK_TOP}/单条≤${RULE_PACK_STR_MAX}字/总≤${RULE_PACK_CHAR_TOP}字）` } } : {}),
+        ...(ruleFitRes.fit && Number(ruleFitRes.fit.判据?.共) > Number(ruleFitRes.fit.判据?.进包) ? { 法则: { ...ruleFitRes.fit, 原因: `块级预算（条≤${RULE_PACK_TOP}/完整规则总≤${RULE_PACK_CHAR_TOP}字）` } } : {}),
     };
     const scaleDropped = Object.keys(dropped).length ? dropped : null;
     // K38 补差包（敲定稿 C 条）：对话依据册摘要进包——"谁反复被点名"模型看得见（dialogueFact 源/镜头依据；
@@ -1621,6 +1637,7 @@ export function buildEvolutionPack(ssot, moveFact, { picks = null, lim = null, t
     return {
         pack,
         text,
+        fieldPrompt,
         ...(turnFacts ? { inputStats: worldInputStats(pack, text) } : {}),
         estTokens: Math.ceil(text.length / TOKEN_RATIO),
         estBeforeTrim: cutByBudget.length ? estBeforeTrim : undefined,

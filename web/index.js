@@ -1,3 +1,14 @@
+import {SOURCE_AB_PROTOCOL} from '../src/source-ab-contract.js';
+import { createPromptPresetPanel } from './prompt-preset-panel.js';
+import { validatePromptPresets } from '../src/prompt-presets.js';
+import {createChatViewController} from './chat-view.js';
+import {closeInjectPreviews} from './inject-preview.js';
+import {diagnostics} from '../src/diagnostics.js';
+import { withHostGlobalWorldInfo } from './host-world-info.js';
+import {createSourceEditPanel} from './source-edit-panel.js';
+import {composeFromHostSource} from './source-compose-reader.js';
+import {createCreationRuntime} from './creation-runtime.js';
+import {createCreationStore} from './creation-store.js';
 // story-world-v2/web/index.js
 // K30 骨架 + K34 渲染接线（编排层·浏览器侧）：ST 插件入口——面板挂载 + 八页签渲染刷新。
 // 范式实读 v1（manifest/js/settings.html/ui.js）后仿写，命名空间 sw2_ 全隔离：
@@ -17,7 +28,8 @@ import { LABELS, PANEL_BUILD } from '../src/render-base.js';
 //   ——那两个工厂现在由新模块直接问渲染层取（默认值的真源照旧只有一份，只是取它的地方少了一处）。
 //   ★够到那一族一律走**受控口** `viewState`（见下面建 hub 那一段）。
 import { createViewStateHub } from './view-state.js';
-import { createMapPopupHub } from './map-reader.js';
+import {createWorldBrowser} from './world-browser.js';
+import {createWorldBrowserSource} from './world-browser-data.js';
 import { bindSettingReader } from './setting-reader.js';
 import { bindPageSubtabs } from './page-subtabs.js'; import { bindPanoramaReader } from './panorama-reader.js';
 // ★★★leg73（丙-web · 第二格）：快照容错子系统整族搬进 `web/snapshot-store.js`。
@@ -30,6 +42,11 @@ import { createSnapshotHub } from './snapshot-store.js';
 import { createEntityWindowHub, ENTITY_WINDOW_ACTION } from './entity-window.js';
 import { createSimulationProtectionHub } from './simulation-protection.js';
 import { createWorldWriteGuard } from './world-write-guard.js';
+import { createLocalWorldHost } from './local-world-host.js';
+import { createLocalMemoryPanel } from './local-memory-panel.js';
+import { createLocalTransfer } from './local-transfer.js';
+import { bindLocalWorldActions } from './local-world-actions.js';
+import { createIdbSnapshotStore } from './idb-backend.js';
 import { createExtractionTaskHub } from './extraction-task.js';
 import { bindExtractionActions } from './extraction-actions.js';
 import { extractionProgressHandler as progressHandler } from './extraction-progress.js';
@@ -134,7 +151,8 @@ import { createIdbVolumeStore, createIdbVectorStore } from './idb-backend.js';
 import { createTickQueue } from '../src/async-tick.js';
 import { createMessageConsumptionHub, latestAssistantText, recordConsumption, chatScope } from './message-consumption.js';
 import { runTick } from '../src/tick.js';
-import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
+import { resolveBrowserTransport } from '../src/transport-config.js';
+import { extractionCallLimits } from '../src/runtime-settings.js';
 // ★★★leg210：**补回一个漏了二十多天的裸引用**——下面 `getWindowTurns` 那一行裸调 `resolveLimits(…)`，
 //   而本文件从没 import 过它 ⇒ 一调就 `ReferenceError`，又被 `web/settings-channels.js` 那格的
 //   `catch (_) { return undefined; }` **吞掉** ⇒ 症状是**静默**：玩家设的「往事轮数」对向量召回窗口
@@ -201,7 +219,7 @@ export { characterWorldNames, characterBookEntries, bookEntriesForInherit, reset
 // ★★★leg76 收尾（本次补齐）：`planBatches` 的 import **已摘掉**——它在接线层的唯一调用点
 //   （`planBatchesLazy`，随全册批量补全整族撤除）没了 ⇒ 只收未用 import，**`src/` 一个字不动**
 //   （`planBatches` 在 `src/entity-lookup.js` 里仍是活的纯函数：`runBatchLookup` 内部就调它）。
-import { runEntityLookupStep, runBatchLookup, pickOneForLookup, deriveLocationFromBook } from '../src/entity-lookup.js';
+import { runBatchLookup, pickOneForLookup, deriveLocationFromBook } from '../src/entity-lookup.js';
 
 const NAMESPACE = 'STORY_WORLD_V2';
 // ★1.0.0（发布首版）：本常量与 `manifest.json` 的 `version` 是**同一个版本号的两处写法**，
@@ -222,7 +240,7 @@ const CHAIN_MASK_ID = 'sw2_chain_mask';
 //       （★地图那一层用户已裁「先不改」⇒ 只搬位置，不动口径）。
 //   ★为什么不把两块塞进 `renderAll` 的两个键：`panorama.js` 是**零 import 的真叶子**（模块图有判据锁着），
 //     而 `board` 是**五块对象**（直填 `innerHTML` 会渲染成 `[object Object]`）⇒ 组合只能在**接线层**做。
-const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'params', 'snapshots', 'settings'];
+const SECTIONS = ['panorama', 'chronicle', 'graph', 'entities', 'setting', 'params', 'snapshots', 'settings'];
 // ★★★leg98 补四（用户令：「**你总得把这个放在上面吧？而且我要往下翻很久才能看到这些**」）：
 //   并页那一页怎么拼（页头 ＋ 信息带升成页头 ＋ 两栏）**整族搬进 `web/page-compose.js`**。
 //   ★为什么搬：本文件有条行数锁（`test/web-view-state-layout.test.js` 与 `…hot-ledger…` 都钉着
@@ -311,7 +329,7 @@ const SECTIONS = ['panorama', 'chronicle', 'archive', 'entities', 'setting', 'pa
 //     最底部滚轮就失效、拉不上去"）：★**真动了样式**（grid 高度改由 flex 分配 ＋ 并页改 flex 列 ＋ 一条 `contain`）⇒ 同批升。为什么非改不可（`100%` 看着没毛病、其实让页多出 249px **够不着**的滚动）⇒ `web/style.css` 的 leg157 注释。
 //   ★★★leg160 → **`20261001-leg160-panel-window`**（用户令「**还是把这个删了吧，只放最近的就行了**」＋「**把看多少轮之前改成旋钮给用户**」）：★**真动了样式**——`.sw2-pan-range` 那两条规则整块撤掉、手机档名单里两格一并删 ⇒ 同批升。
 //   ★★★leg196 → **`20261005-leg196-map-mobile`**（手机端真机报的 bug：地图浮层"只在最顶上露一小块框"）：**真动了样式**——`.sw2-map-mask` 从"只有 `inset:0`"改成**自己声明 `width:100%;height:100%`**，手机档补 `height:100dvh`。为什么非改不可（宿主给 `<html>` 加了 transform/perspective ⇒ 固定定位的包含块变成那个 0 高的盒子 ⇒ 遮罩实测塌成 12px）⇒ 全量读数在 `web/style.css` 那一处 leg196 注释里。
-const CSS_VERSION = '20261008-leg209-character-protection-cleanup'; // 角色保护开关放进资料行，撤掉头部长说明。
+const CSS_VERSION = '20261021-leg266-simple-presets'; // 用户批准预设只保留名称正文；样式缓存随实际CSS变化更新。
 // leg24 片1：leg21 增量补抽的会话态（refining / refinedFailed / refinedFp / syncRefinedFp）随补抽入口一并删除
 
 export const sw2Version = () => VERSION;
@@ -322,7 +340,8 @@ export const sw2Version = () => VERSION;
 function getCtx() {
     if (typeof window === 'undefined') return null;
     try {
-        return window.SillyTavern?.getContext ? window.SillyTavern.getContext() : null;
+        const ctx = window.SillyTavern?.getContext ? window.SillyTavern.getContext() : null;
+        return withHostGlobalWorldInfo(ctx, typeof document === 'undefined' ? null : document);
     } catch (_) {
         return null;
     }
@@ -350,11 +369,13 @@ setAbstractSelectionSource(() => abstractSelectionFor(getCtx())); setDiagnosticD
 //     `viewState.resetChronicle()` / `viewState.resetEntities()` **必须出现在接线层里**
 //     （`test/web-view-state-layout.test.js` 的丙-web⑩ 锁着"八个状态只有一个家、接线层走受控口
 //     且**真的在用**"）。壳只管窗口本身，视图态归接线层。
-const shell = createWindowShell({ windowId: WINDOW_ID, setStatus });
+const shell = createWindowShell({ windowId: WINDOW_ID, setStatus, onOpen: () => { syncWorldBrowser(); queueLocalPanelStatus(); } });
 const { modalBoost, ensureWindow, openWindow, ensureWandEntry } = shell;
 
 /** 收起面板：窗口那一半归壳，**视图态那一半归这里**（见上那一段留档）。 */
 function closeWindow() {
+    if(sourceEditPanel.isOpen())return;
+    worldBrowser.unmount();
     shell.closeWindow();
     // ★细案实体页：视图态随关面板重置（照编年页"纯视图态、关面板重置"的口径）
     viewState.resetEntities();
@@ -380,7 +401,13 @@ const longTask = createLongTask({ setStatus });
 const abstractCache = createCache();
 const extractionTasks = createExtractionTaskHub({ getScope: () => chatScope(freshCtx()),
     getWorld: () => loadHotAccount(readHotMeta()), cache: abstractCache, setStatus,
-    getRoot: () => typeof document === 'undefined' ? null : document.getElementById(WINDOW_ID) });
+    getRoot: () => typeof document === 'undefined' ? null : document.getElementById(WINDOW_ID), getAdvanceState: () => sw2TickQueue && ({busy:sw2TickQueue.busy || legacyBridge.busy,advancing:sw2TickQueue.advancing ?? sw2TickQueue.busy,cancellable:sw2TickQueue.cancellable,resumable:sw2TickQueue.resumable}) });
+let creationStore=null;
+const getCreationStore=()=>creationStore??=createCreationStore();
+const creationJournal=new Proxy({}, {get:(_,key)=>{if(key==='available')return !!globalThis.indexedDB?.open&&!!globalThis.IDBKeyRange;const journal=getCreationStore().journal;const value=journal[key];return typeof value==='function'?value.bind(journal):value;}});
+const creationRuntime = createCreationRuntime({sourceCreationProtocol:SOURCE_AB_PROTOCOL,getCtx:freshCtx,store:getCreationStore,execute:true,onStatus:setStatus,onState:state=>{if(!state)setStatus('',{diagnostic:false});},
+    getRoot:()=>typeof document==='undefined'?null:document.getElementById(WINDOW_ID),
+    onPublished:async task=>{if(task.scope===chatScope(freshCtx()))await serviceHost.reloadBinding();}});
 export function extractionProgressHandler(events, options = {}) { return progressHandler(events, { setText: setStatus, ...options }); }
 
 // ★★leg40c 续（用户实机「只是展开下拉就弹一句，点了还是改不了值」）：
@@ -415,7 +442,8 @@ if (typeof document !== 'undefined') {
 }
 
 // ---------- K34：渲染接线（纯函数产物 → DOM；面板零第二份状态） ----------
-export function refreshWorld(world, { oldVolumes = [] } = {}) {
+export function refreshWorld(world, { oldVolumes = [], resetChat = false } = {}) {
+    worldBrowser.checkScope();
     if (typeof document === 'undefined') return;
     const win = document.getElementById(WINDOW_ID);
     if (!win) return;
@@ -425,7 +453,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         //   "忘了加参数不报错"是这类静默丢弃最坏的地方：以后往 config 塞一个开关，面板会安静地不认。
         //   现在把这个形参撤掉，只留**一条**配置路：`renderCfg()`（= 活设置 + 任务/快照/记忆自证）。
         //   判据同步：`test/render.test.js` 里那条"不许整页重绘"的用例仍锁 `renderCfg()` 这条真路。
-        extractionTasks.syncButtons();
+        extractionTasks.syncButtons();creationRuntime.syncButtons();
         sw2LastWorld = world;   // K41：链视图入口持引用（同一对象，零第二份状态）
         // ★★★leg92（真缺陷修 · 用户报「开关写着 1、构建号是新的、`sw2_` 一个都没有」）：
         //   **注入必须在"世界进内存之后"再设一次**——`setupAsyncTicks` 里那次 `apply()` 跑在
@@ -449,7 +477,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         //   参数页**整块按 `paramEnv` 画**（下拉与格一起画，它们天然一致），**再按控件对齐一遍格**。
         //   把清单里不存在的键也一起交给渲染层 ⇒ 渲染层不会画"默认"小标（那个小标本身就在误导玩家：
         //   "默认"与"你改的值"在同一格里分不清）。
-        const live = paramApi.sw2CollectLiveParamValues();
+        const live = resetChat ? {} : paramApi.sw2CollectLiveParamValues();
         const cfgForRender = renderCfg(live.env ? { paramEnv: live.env } : {});
         const out = renderAll(world, { config: cfgForRender, oldVolumes, view: viewState.views() });
         // ★★leg46 续·六（**格与控件同源**）：页面刚用 `cfg.paramEnv` 画完 ⇒ 顺手用**同一份**把显示格对齐。
@@ -467,11 +495,12 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         for (const name of SECTIONS) {
             const el = win.querySelector(`#sw2_view_${name}`);
             if (!el) continue;
+            if (name === 'graph') { syncWorldBrowser({refresh:true}); continue; }
             // ★★leg40c 续：**不许在玩家手下抢 DOM**（见 `refreshSections` 的注释）。
             //   这里押后的是**当前那一页**：玩家正拉开下拉/按着按钮时，那一页的 innerHTML 一换，
             //   原生下拉当场关闭、那一次点击作废 —— 用户看到的正是"点了还是改不了值"。
             //   口径：其余页照常刷新（观棋页照旧随每轮更新），押后的那页在失焦时补上。
-            if (paramApi.playerIsTouchingParams() && el.contains(document.activeElement)) {
+            if (!resetChat && paramApi.playerIsTouchingParams() && el.contains(document.activeElement)) {
                 pendingSectionRefresh.add(name);
                 console.info(`[story-world-v2] ${name} 页上有控件正被操作 —— 本轮整页刷新押后该页`);
                 continue;
@@ -484,7 +513,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
             } else {
                 el.innerHTML = out[name];
             }
-            bindPageSubtabs(win).sync(); panelTools.bind(win); if (name === 'setting') bindSettingReader(win).sync(); if (name === 'panorama') bindPanoramaReader(win).sync(freshCtx()?.chatId, keep); else restoreScrollPositions(el, keep); // 先恢复阅读状态，切聊天不沿用旧滚动。
+            bindPageSubtabs(win).sync(); panelTools.bind(win); localPanel.bind(win); promptPresetPanel.bind(win); if (name === 'setting') bindSettingReader(win).sync(); if (name === 'panorama') bindPanoramaReader(win).sync(freshCtx()?.chatId, keep); else restoreScrollPositions(el, keep); // 先恢复阅读状态，切聊天不沿用旧滚动。
         }
         refreshSettingsHints(); // 密钥 placeholder 随渲染刷新（表单值由 cfg 注入）
         // 第十三棒：每轮进展计数——「编年 +N 行」直接区分模型空步 vs 引擎未落账（账目可读性）
@@ -497,7 +526,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
         const lastWarns = Array.isArray(lastLog?.warnings) ? lastLog.warnings : [];
         const droppedNow = lastWarns.filter((x) => typeof x === 'string' && (x.startsWith('提议丢弃') || x.startsWith('裁定:') || x.startsWith('校验拒绝:'))).length;
         const dropLine = droppedNow ? ` · 本轮丢/拒 ${droppedNow} 条提议（细节见动态流）` : '';
-        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`}${dropLine} · 窗口只读，不参与剧情`);
+        setStatus(`已同步 · 刚演完 ${out.header.tick}${delta == null ? '' : ` · 编年 ${delta >= 0 ? '+' : ''}${delta} 行`}${dropLine} · 窗口只读，不参与剧情`, { diagnostic: droppedNow > 0 });
     } catch (err) {
         setStatus(`注意：渲染失败：${err?.message || err}`);
         console.warn('[story-world-v2] render failed:', err);
@@ -511,6 +540,7 @@ export function refreshWorld(world, { oldVolumes = [] } = {}) {
 //   既漏了英文动作名，又违反本仓 A-3「玩家可见文本零引擎术语」。现在兜底改成人话，并把动作名收进控制台。
 //   （`player-desc` 那个历史残留的 data-action 已撤，见 render.js 设置页那段注释。）
 function dispatchAction(action, payload, event) {
+    if (action === 'advance-world' && sw2TickQueue?.busy && !sw2TickQueue?.resumable) { sw2TickQueue.cancel(); return; }
     const bus = typeof window !== 'undefined' ? window.__sw2Actions : null;
     if (bus && typeof bus[action] === 'function') {
         bus[action](payload, event);
@@ -703,11 +733,37 @@ const paramHub = createParamHub({
 const hotHub = createHotLedgerHub({
     freshCtx,
     hotMetaKey: HOT_META_KEY,
+    canWrite: () => false,
     getSnapHub: () => snapHub,      // ★取值函数：调用那一刻才解析（那时快照 hub 已经建好了）
 });
 // ★leg78：读 / 写 / 落盘三个口**解构**取回 ⇒ 全文件那些调用点（27/15/10 处）**一字未改**
 //   （搬迁不是重写；这也是判据 ⑤ 咬的"受控通道"形状）。
 const { readHotMeta, writeHotMeta, flushHotMeta } = hotHub;
+let localPanelStatusTimer=null;
+function queueLocalPanelStatus(){if(localPanelStatusTimer!==null)return;localPanelStatusTimer=setTimeout(()=>{localPanelStatusTimer=null;localPanel.refresh().catch(()=>{});},50);}
+const serviceHost = createLocalWorldHost({creationDiagnostics:()=>creationRuntime.getSourceTaskDiagnostics(),journal:creationJournal,metaKey:'story_world_v2_creation_world',getCtx:freshCtx,onStatus:text=>{setStatus(text);queueLocalPanelStatus();},onStateChange:()=>{extractionTasks.syncButtons();creationRuntime.syncButtons();queueLocalPanelStatus();},getBusy:()=>legacyBusy() || legacyBridge.busy,getReprocessBusy:()=>extractionTasks.busy(),onSnapshots:()=>refreshSections(['snapshots']),
+    onOutcome:outcome=>consumptionHub.onOutcome(outcome),onWorld:world=>{
+        sw2LastWorld=world;LISTED_VOLUMES=[];paramApi.setLastWorld(world);memoryWiring?.invalidate(true);
+        sw2Injector?.clear();refreshWorld(world,{oldVolumes:[]});sw2Injector?.apply();
+    }});
+const legacyBusy=()=>!!sw2LegacyTickQueue?.busy || extractionTasks.legacyBusy() || longTask.busy().length>0 || hotHub.hotMetaUnflushed();
+const legacyBridge=createLocalTransfer({getCtx:freshCtx,host:serviceHost,getLegacyBusy:legacyBusy,onStateChange:()=>extractionTasks.syncButtons(),
+    getWorld:ctx=>loadHotAccount(ctx.chatMetadata?.[HOT_META_KEY]),getVolumeStore:ctx=>createIdbVolumeStore(String(ctx.chatId||'default')),
+    getSnapshotStore:ctx=>createIdbSnapshotStore(String(ctx.chatId??ctx.chatMetadata?.chat_id_hash??'default'))});
+const localPanel=createLocalMemoryPanel({host:serviceHost,onStatus:setStatus,bridge:legacyBridge});
+export const sw2ServiceSession = serviceHost.session;
+// Explicit compatibility entry for callers exercising the retained legacy ledger.
+export const sw2LegacyActions = {};
+function activeWorld() { return serviceHost.session.active ? serviceHost.session.readWorld() : loadHotAccount(readHotMeta()); }
+const worldBrowser=createWorldBrowser({source:createWorldBrowserSource({getWorld:()=>serviceHost.session.active?serviceHost.session.readWorld():loadHotAccount(readHotMeta())||sw2LastWorld,getCtx:freshCtx,serviceSession:serviceHost.session,
+    getVolumeStore:ctx=>createIdbVolumeStore(String(ctx?.chatId||'default')),
+    getSnapshotStore:ctx=>createIdbSnapshotStore(String(ctx?.chatId??ctx?.chatMetadata?.chat_id_hash??'default'))}),canExtract:true});
+function syncWorldBrowser({refresh=false}={}) {
+    const win = document.getElementById(WINDOW_ID), section = win?.querySelector('#sw2_view_graph');
+    if (win?.classList.contains('sw2-open') && section?.classList.contains('sw2-active')) worldBrowser.mount(section, {refresh}).catch(error => setStatus('图谱读取失败：'+(error?.message||error)));
+    else worldBrowser.unmount();
+}
+
 // ★`sw2ExplicitChatName` 单独一行取（判据要的那一行是**逐字**的三口解构，不许夹第四个名字）。
 const { sw2ExplicitChatName } = hotHub;
 // ★leg112（C1）：换书检测那一族在这里注入依赖。★位置必须在热账三口解构之后（第一版放 `longTask` 下面 ⇒ 动态导入当场炸 `Cannot access 'readHotMeta'…`）——建 hub 的位置由依赖决定，不是由"看着顺眼"决定。
@@ -823,16 +879,19 @@ const snapHub = createSnapshotHub({
 //     ——传成值就是"第二份真相"，与 `getLastWorld` 那条留档同一个理由）。
 //   ★窗口挂在 `document.body` 上（不在面板窗口里）⇒ 面板开着关着都能看；`z-index` 压得住面板。
 const simulationProtection = createSimulationProtectionHub({
-    getWorld: () => readHotMeta()?.world || sw2LastWorld,
+    getWorld: () => activeWorld() || sw2LastWorld,
     getScope: () => chatScope(freshCtx()), isBusy: () => Boolean(sw2TickQueue?.busy),
-    saveWorld: (world, guard) => hotHub.commitHotMeta(hotAccountShape(world), { guard }),
+    saveWorld: (world, guard) => serviceHost.session.active ? serviceHost.commitWorld(world, guard, {kind:'simulation-protection'}) : hotHub.commitHotMeta(hotAccountShape(world), { guard }),
     refresh: world => refreshWorld(world), setStatus,
 });
+const sourceEditPanel = createSourceEditPanel({host:serviceHost,getWorld:()=>activeWorld(),getScope:()=>chatScope(freshCtx()),onStatus:setStatus,
+    onSaved:spec=>{refreshWorld(activeWorld());if(spec.kind==='entity'&&entityWindow.isOpen())entityWindow.open(spec.entityId);}});
 const entityWindow = createEntityWindowHub({
-    getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
+    getWorld: () => activeWorld() || sw2LastWorld,
     getScope: () => chatScope(freshCtx()),
     setStatus,
     setSimulationBlocked: (id, blocked, expected) => simulationProtection.set(id, blocked, expected),
+    editSource:id=>sourceEditPanel.openEntity(id),canEditSource:(world,id)=>sourceEditPanel.canEditEntity(world,id),
 });
 
 // ★★★leg82：**自证面 / 撤销 / 写账补镜像**三块已随参数族搬进 `web/param-panel.js`。
@@ -887,7 +946,7 @@ function volumeStore() {
 }
 
 // K36：轮次队列（setupAsyncTicks 装一次；dispatchAction 的手动补推要用它）
-let sw2TickQueue = null;
+let sw2TickQueue = null, sw2LegacyTickQueue = null;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // ★★★leg79/leg81（丙-web · **第四格**）：**视图态族已整族搬进 `web/view-state.js`**——本族的**八个状态**
@@ -911,7 +970,6 @@ let sw2PrevChronicle = null;      // 上一渲染的编年行数（第十三棒�
 let sw2LastWorld = null;          // K41：链视图入口持引用（同一对象，零第二份状态）
 // ★leg73：`sw2SnapshotCache` 已随快照族搬进 `web/snapshot-store.js`（状态只许有一个家）；
 //   面板要那份清单 ⇒ 走受控口 `snapHub.readSnapshotCache()`（见下面 `renderCfg` 与复位那段）。
-let sw2LastPicks = null;          // 细案 §3：上一轮"上场实体"名单（选人调用失败时退回它，再退兜底名单）
 // ★★★leg89：**标签读数的会话级自证面**（`{tagReadout, tagFacts}`）——不落账、不入卷，
 //   只活在内存里（与 `sw2LastPicks` 同性质）：它是"这一轮正文长什么样"的读数，不是世界状态。
 //   ★为什么不像 `picks` 那样写进世界：世界步没有"标签"这一格（`worldStepSchema` 顶层 `additional:false`），
@@ -921,18 +979,21 @@ let sw2LastTagFacts = null;
 let sw2Injector = null;
 /** 注入开关的人话名（状态条与那一卡共用；★玩家可见文本，零引擎术语）。★leg143：那一卡现住**参数页**。 */
 const INJECT_SWITCH_LABEL = { injectTagSpec: '让聊天模型按标签写行动', injectRoster: '把名号表递进对话',
-    injectWorldTide: '把上轮世界动向递进对话', injectLedgerRecall: '把账上往事递进对话',};
+    injectWorldTide: '把上轮世界动向递进对话', injectLedgerRecall: '把账上往事递进对话',
+    injectSceneState: '把当前可见状态递进对话',};
 // ★★★leg115：**第四段（账上往事）默认开**——另外三个"缺省=关"是当年**有意**定的，不许顺手翻过来
 //   （用户立的要求是「聊天llm**不知道**什么时候世界发生了什么事」⇒ 默认关就等于白做）；口径：**从没设过才算开**。
 // ★★★leg200b（用户令「**不写就不剥得了，你还非搞个这个按钮干嘛**」）：**「剥掉正文里的机器块」那枚开关已撤**——
 //   正文剥块只由玩家那两份名单说了算（不填＝不剥）；旧设置里那个键成无主键（无读者）⇒ 旧账无害、不迁移。
 function injectSwitchOn(key) {
-    if (key === 'injectLedgerRecall') return String(modelSettings()?.[key] ?? '1') === '1';
+    // ★★★（2026-10-12 · 用户令）：**当前可见状态**与账上往事同档——**从没设过才算开**。
+    //   ★另外三个"缺省=关"照旧（leg115 的有意口径，不许顺手翻过来）。
+    if (key === 'injectLedgerRecall' || key === 'injectSceneState') return String(modelSettings()?.[key] ?? '1') === '1';
     return String(modelSettings()?.[key] ?? '') === '1';   // 其余三个：**只有显式 '1' 算开**（全仓同口径）
 }
 // Stable identities and committed history share one manual/automatic entry.
 const consumptionHub = createMessageConsumptionHub({ getCtx: freshCtx,
-    getWorld: () => loadHotAccount(readHotMeta()), getQueue: () => sw2TickQueue, onStatus: setStatus });
+    getWorld: activeWorld, getQueue: () => sw2TickQueue, onStatus: setStatus });
 export function sw2ConsumptionReadout() { return consumptionHub.readout(); }
 export function sw2LatestMessageText(ctx) { return latestAssistantText(ctx); }
 // Legacy helper; the live entry uses persisted message identities.
@@ -976,7 +1037,7 @@ function writeSetting(key, value) {
     const s = readSettings();
     if (!s) return;
     s[key] = value;
-    if (key.startsWith('embed')) { sw2Injector?.clearVectors?.(); memoryWiring?.settingsChanged(); }
+    if (key.startsWith('embed')) { sw2Injector?.clearVectors?.(); if(serviceHost.session.active)serviceHost.refreshMemory();else memoryWiring?.settingsChanged(); }
     try { ctx?.saveSettingsDebounced?.(); } catch (_) {}
 }
 
@@ -1086,34 +1147,8 @@ export function namePlayerPiece(world, parsedName) {
 //     `bookEntriesCached()`（真名是 `worldBookCached`）⇒ 点面板行的「查/重查」当场 `ReferenceError`；
 //     位置继承那三条路也因此断了两条（`bookEntries` 压根没送进收口）⇒ 用户真账 563 实体的
 //     `location` 全是占位值「未明」。这些口现在只有新家一处实现，接线层只负责**把书递进去**。
-export async function autoComposeSource() {
-    const ctx = getCtx();
-    const session = JSON.stringify([ctx?.chatId, ctx?.characterId, ctx?.groupId]);
-    const character = await ensureCharacterLoaded(ctx);   // ★leg154：懒加载卡（ST 的 performance.lazyLoadCharacters）先要全卡——不问就会报「四件套全空」而书其实在卡上
-    const owner = bookContextIdentity(ctx);
-    const { entries: worldInfoEntries, worldSources } = await collectWorldInfoEntries(ctx, character);
-    if (session !== JSON.stringify([getCtx()?.chatId, getCtx()?.characterId, getCtx()?.groupId]) || owner !== bookContextIdentity(getCtx())) return { ok: false, reason: '聊天或来源已切换，请重新读取', text: '', sourceItems: [], effectiveEntries: [], worldInfoEntries: [] };
-    const res = composeInitSource({ character, worldInfoEntries, worldSources, macroNames: macroNamesFromCtx(() => ctx, character), selection: abstractSelectionFor(ctx) });
-    res.sourceDiag = { // 诊断附加元数据（非契约字段，仅控制台消费）
-        identity: { characterId: ctx?.characterId ?? null, groupId: ctx?.groupId ?? null, chatId: ctx?.chatId ?? null },
-        character: { name: character?.name ?? null, world: character?.world ?? null, hasBook: Boolean(character?.character_book || character?.data?.character_book) },
-        worldSources, excluded: res.excluded || [], warnings: res.warnings || [],
-    };
-    if (!res.ok) {
-        try {
-            console.warn('[story-world-v2] 初始化设定源失败诊断', {
-                ctxKeys: ctx ? Object.keys(ctx).slice(0, 40) : null,
-                sourceDiag: res.sourceDiag,
-                worldInfoType: ctx?.worldInfo ? (Array.isArray(ctx.worldInfo) ? 'array' : typeof ctx.worldInfo) : null,
-                reason: res.reason,
-            });
-        } catch (_) {}
-    }
-    // 第二十五棒 e：把**真书条目**随源一起交出去——名册落账那一步（seedBookEntities）的零 token 兜底
-    //   （成员行反推归属 / 紧贴名号的档位标签 / 势力规模原话）**必须读正文**，而 canon 名册条目只是名号表。
-    //   这里已经收过一次条目，顺手带出，免得为了拿正文再收一遍（同一份数据取两次＝两次真实取书）。
-    res.worldInfoEntries = res.effectiveEntries;
-    return res;
+export async function autoComposeSource({completeSelectedSources=false}={}) {
+    return composeFromHostSource({getCtx,getSelection:ctx=>abstractSelectionFor(ctx),completeSelectedSources});
 }
 
 // 抽取调用诊断包装（第十八棒）：transport 返回裸字符串（transport-http 契约）或 {text} 对象都吃——
@@ -1272,7 +1307,27 @@ export function sw2ToggleInject(key, on) {
 //   只能有一个模块级的把手（与 `sw2LastWorld` / `paramApi` 同一形状，本仓既有做法）。
 let modelChannel = null;
 let embedChannel = null, embedRuntime = null, memoryWiring = null;
-const panelTools = createPanelTools({ getCtx: freshCtx, getWorld: () => sw2LastWorld, getSettings: modelSettings, writeSetting, getRuntime: () => embedRuntime, getInjector: () => sw2Injector, onVectorChange: () => memoryWiring?.settingsChanged(), getConsumptionReadout: sw2ConsumptionReadout, build: PANEL_BUILD });
+const panelTools = createPanelTools({ getCtx: freshCtx, getWorld: () => sw2LastWorld, getSettings: modelSettings, writeSetting, getRuntime: () => embedRuntime, getInjector: () => sw2Injector, onVectorChange: () => serviceHost.session.active?serviceHost.refreshMemory():memoryWiring?.settingsChanged(), getConsumptionReadout: sw2ConsumptionReadout, getSourceTaskDiagnostics: () => serviceHost.getSourceTaskDiagnostics?.()??null, build: PANEL_BUILD });
+
+const promptPresetPanel = createPromptPresetPanel({
+    getWin: () => typeof document === 'undefined' ? null : document.getElementById(WINDOW_ID),
+    getSettings: () => freshCtx()?.extensionSettings?.story_world_v2 ?? {},
+    onStatus: setStatus,
+    saveConfig: async config => {
+        const ctx = freshCtx(), settings = readSettings();
+        if (!settings || typeof ctx?.saveSettingsDebounced !== 'function') throw new Error('没有可用的设置保存入口');
+        const had = Object.hasOwn(settings, 'promptPresets'), previous = settings.promptPresets;
+        const next = validatePromptPresets(config);
+        settings.promptPresets = next;
+        try { const result = ctx.saveSettingsDebounced(); const queued = !result || typeof result.then !== 'function'; await result; return { queued }; }
+        catch (error) {
+            if (settings.promptPresets === next) {
+                if (had) settings.promptPresets = previous; else delete settings.promptPresets;
+            }
+            throw error;
+        }
+    },
+});
 
 function renderCfg(extra = {}) {
     // ★★leg46：把**参数真源**与**撤销态**注入渲染层（渲染层不持状态，照本仓既有纪律）：
@@ -1290,6 +1345,7 @@ function renderCfg(extra = {}) {
     return {
         ...(modelSettings() || {}),
         ...panelTools.config(),
+        promptPresetState: promptPresetPanel.renderState(),
         // ★★★leg142：「模型通道」那两格的**渲染态**（模型清单 ＋ 连通结论）住在 hub 里，由这里摊进 config；
         // ★★★leg172：**记忆通道那一格清单（`embedCatalog`）也走这里**（两条通道各持一份、互不覆盖）——不摊进来 ⇒ 整页重画会吞掉刚取到的清单。
         ...((modelChannel?.renderState?.()) || {}), ...((embedChannel?.renderState?.()) || {}),
@@ -1308,13 +1364,16 @@ function renderCfg(extra = {}) {
         retrievalTop: Number.isFinite(Number((modelSettings() || {}).retrievalTop)) ? Number((modelSettings() || {}).retrievalTop) : undefined,
         retrievalDepth: Number.isFinite(Number((modelSettings() || {}).retrievalDepth)) ? Number((modelSettings() || {}).retrievalDepth) : undefined,
         retrievalMaxChars: Number.isFinite(Number((modelSettings() || {}).retrievalMaxChars)) ? Number((modelSettings() || {}).retrievalMaxChars) : undefined,
+        // ★★★（2026-10-12）：「当前状态注入多少字」的现值——与往事额度**各自独立**；
+        //   没填过 ⇒ 渲染层退回出厂值（唯一真源住 `src/limits.js` 的 `SCENE_STATE_CHARS_DEFAULT`）。
+        sceneStateMaxChars: Number.isFinite(Number((modelSettings() || {}).sceneStateMaxChars)) ? Number((modelSettings() || {}).sceneStateMaxChars) : undefined,
         // ★★★（2026-10-05 · 用户令「**把图片的第一段话中的关键信息抽取出来展示在参数页**」＋
         //   「**第二段话可以删了，这是用来调试的**」）：参数页那一行读数走 `injectReadoutHtml`
         //   （措辞住 `web/inject-readout.js`；数据直接问注入器 `_facts()`——**本层不再存第二份**，
         //     `web/index.js` 的 3100 行硬锁逼的）。★`vectorOn` ＝ 向量通道（设置页「记忆通道」）——
         //   它就是"往事走向量还是走关键词"的那个对齐开关（用户 2026-10-05 拍板：只做自动对齐）。
         injectReadout: injectReadoutHtml({ facts: sw2Injector?._facts?.() || null, vectorOn: embedChannel?.enabled?.() === true, rosterOn: injectSwitchOn('injectRoster') }),
-        snapshots: snapHub.readSnapshotCache(),
+        snapshots: serviceHost.session.active ? serviceHost.readSnapshotCache() : snapHub.readSnapshotCache(),
         paramEnv: paramApi.displayEnv(w),
         paramUndo: sw2ParamUndoState(),
         // ★★leg46 续：自检卡要的读数（世界名/桶键 · 真源 · 引擎镜像 · 主路能不能写）——
@@ -1344,7 +1403,12 @@ function renderCfg(extra = {}) {
         injectSwitches: {
             injectTagSpec: injectSwitchOn('injectTagSpec'), injectRoster: injectSwitchOn('injectRoster'),
             injectWorldTide: injectSwitchOn('injectWorldTide'), injectLedgerRecall: injectSwitchOn('injectLedgerRecall'),
+            injectSceneState: injectSwitchOn('injectSceneState'),
         },
+        worldMode: serviceHost.session.active || !serviceHost.legacyState().legacy ? 'browser' : 'legacy',
+        extractChunkChars: (modelSettings() || {}).extractChunkChars ?? 30000,
+        extractCallMaxTokens: (modelSettings() || {}).extractCallMaxTokens, extractCallTimeoutSec: (modelSettings() || {}).extractCallTimeoutSec,
+        worldRetrievalTop: (modelSettings() || {}).worldRetrievalTop, worldRetrievalDepth: (modelSettings() || {}).worldRetrievalDepth, worldRetrievalMinScore: (modelSettings() || {}).worldRetrievalMinScore,
         tagMaxActions: (modelSettings() || {}).tagMaxActions ?? 12,
         proseLists: proseStripLists({ settings: modelSettings() }),
         // ★★★（2026-10-05 · 用户令「**第二段话可以删了，这是用来调试的**」）：这里原来还画着
@@ -1396,6 +1460,7 @@ function refreshSections(names) {
         for (const name of names || []) {
             const el = win.querySelector(`#sw2_view_${name}`);
             if (!el) continue;
+            if (name === 'graph') { syncWorldBrowser({refresh:true}); continue; }
             // ★玩家正在这一页上下拉/点按钮 ⇒ 这一页押后（否则等于把他的手从控件上打掉）
             if (paramApi.playerIsTouchingParams() && el.contains(document.activeElement)) {
                 pendingSectionRefresh.add(name);
@@ -1408,7 +1473,7 @@ function refreshSections(names) {
             } else if (typeof out[name] === 'string') {
                 el.innerHTML = out[name];
             }
-            bindPageSubtabs(win).sync(); panelTools.bind(win); if (name === 'setting') bindSettingReader(win).sync(); if (name === 'panorama') bindPanoramaReader(win).sync(freshCtx()?.chatId, keep); else restoreScrollPositions(el, keep);
+            bindPageSubtabs(win).sync(); panelTools.bind(win); localPanel.bind(win); promptPresetPanel.bind(win); if (name === 'setting') bindSettingReader(win).sync(); if (name === 'panorama') bindPanoramaReader(win).sync(freshCtx()?.chatId, keep); else restoreScrollPositions(el, keep);
         }
     } catch (err) {
         console.warn('[story-world-v2] 局部重绘失败（不影响落账）', String(err?.message || err));
@@ -1429,11 +1494,13 @@ function refreshSections(names) {
 const sw2BookTextForEntity = (entity) => bookTextForEntity(entity, getCtx());
 
 export async function lookupOneEntity(id, { forceFields = null } = {}) {
-    const world = loadHotAccount(readHotMeta()) || sw2LastWorld;
+    const diagnosticScope=chatScope(freshCtx());
+    if (serviceHost.session.active) return {ok:false,error:'请从固定资料原件核对实体'};
+    const world = (serviceHost.session.active ? serviceHost.session.readWorld() : loadHotAccount(readHotMeta()) || sw2LastWorld);
     if (!world) return { ok: false, error: '还没有世界' };
-    const guard = createWorldWriteGuard({ world, getWorld: () => loadHotAccount(readHotMeta()) || sw2LastWorld, getScope: () => chatScope(freshCtx()) });
+    const guard = createWorldWriteGuard({ world, getWorld: () => (serviceHost.session.active ? serviceHost.session.readWorld() : loadHotAccount(readHotMeta()) || sw2LastWorld), getScope: () => chatScope(freshCtx()) });
     const settings = modelSettings();
-    const resolved = resolveBrowserTransport(settings);
+    const resolved = resolveBrowserTransport(settings,{presetPurpose:'abstract',getPresetSettings:modelSettings});
     if (!resolved) return { ok: false, error: '模型通道未配置' };
     const { entity, missing } = pickOneForLookup(world, id, { forceFields });
     if (!entity) return { ok: false, error: '账上没有这个实体' };
@@ -1448,7 +1515,7 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
         // ★★★Task 4：查书是**严格出处道**（默认即 strict）：每条字段要"该名号自己的来源编号 + 逐字原话"。
         //   原始凭证（编号/原话）**只进受门控的诊断面**（`diagEvidence`，`debugDetails` 为真才带原话）——
         //   不进世界账、不进快照（与抽取/起根同一条纪律）。
-        onEvidence: diagEvidence,
+        onEvidence: rec=>diagEvidence(rec,diagnosticScope),
     });
     if (!res.stats) return { ok: false, error: res.warning || '查书未成' };
     guard.prepare(res.ssot);
@@ -1459,7 +1526,7 @@ export async function lookupOneEntity(id, { forceFields = null } = {}) {
 }
 
 // ---------- K36：每轮演化（前置步 + 主调用 + 落盘点） ----------
-async function advanceTick({ world, dialogue, transaction }) {
+async function advanceTick({ world, dialogue, transaction, signal, diagnosticScope }) {
     if (simulationProtection.busy) return { ok: false, error: '禁止模拟设置正在保存，请稍候再推进世界' };
     const settings = modelSettings();
     sw2LastSettings = settings;
@@ -1470,64 +1537,36 @@ async function advanceTick({ world, dialogue, transaction }) {
         ...(Number.isFinite(settings?.callTimeoutSec) ? { timeoutMs: settings.callTimeoutSec * 1000 } : {}),
         ...(Number.isFinite(settings?.callMaxTokens) ? { maxTokens: settings.callMaxTokens } : {}),
     };
-    const resolved = resolveBrowserTransport(settings, { limits });
+    const resolved = resolveBrowserTransport(settings, { limits,presetPurpose:'simulate',getPresetSettings:modelSettings });
     if (!resolved) {
         return { ok: false, error: '模型通道未配置（设置页填写服务地址/密钥/模型）' };
     }
+    const transport = diagExtract({ ...resolved, transport: prompt => {
+        transaction.validateInput(); return transaction.wait(resolved.transport(prompt, { signal }));
+    } });
     const res = await runTick({
         // ★★★leg88 撤回留档：这里曾是 `extractCtx: buildExtractCtx(world)`（"从你发的话里提取落子"）——
         //   用户裁示那不是他要的提取 ⇒ 连同 `web/dialogue.js` 整族撤回。
         // ★★★leg200：`stripBlocks` 撤了（提取那一趟不再剥块——它只扫围栏里面的行）；★剥只剩**一个**消费者：检索查询串（见下 `queryTextOf`）。
         // ★★★leg119：`ledgerVolumes`（冷档里的旧编年）——不递它，轮转之后「纪事」栏会**悄悄少一半**，细案 `docs/spec-volumes-into-recall.md`。
-        transport: diagExtract(resolved), ssot: world, dialogue, ledgerVolumes: ledgerVolumes(),
+        transport, ssot: world, dialogue, ledgerVolumes: ledgerVolumes(),
         // ★★★leg161（接回来）：**世界模型那一栏的召回口**——`runTick` 在 `registerDialogueFacts`
         //   之后、`buildEvolutionPack` 之前调它（顺序是机制的一部分，判据 P7 钉着）。
         //   ★没配通道 / 抛错 ⇒ 那一栏不出现，世界照常推进（`recallForTick` 自己永不抛）。
-        recallVec: (o) => embedChannel?.recallForTick(o) ?? null,
+        recallVec: (o) => transaction.wait(Promise.resolve(embedChannel?.recallForTick(o) ?? null)),
         // ★★★leg89：单轮注入行动条数上限（设置页那个可填数字框；没填 ⇒ 引擎缺省）。
         tagMaxActions: Number.isFinite(settings?.tagMaxActions) ? settings.tagMaxActions : undefined,
-        // 前置步：① 选本轮上场实体（LLM，≤15）→ ② 只对缺字段者查书（模型）→ ③ 引擎回写查书标记。
-        // 失败零阻塞：任一步失败都退回引擎镜头，世界照常推进（细案 §4）。
-        // ★★★leg76 收尾（本次补齐）：原先这里还有一段"**批量补全借轮次搭车**"（每轮 ≤BATCH_PER_TICK 批、
-        //   跑完把 ssot 换成批量后的那份）——它随全册批量补全整族撤除。撤掉之后这一格**只剩前置步本身**：
-        //   前置步是真在干活的那条路（不是被撤的对象），所以它一个字未动，只是不再有搭车的那一段。
-        preStep: async ({ ssot: cur, move }) => {
-            const pre = await runEntityLookupStep({
-                ssot: cur,
-                transport: diagExtract(resolved),
-                bookText: sw2BookTextForEntity,
-                tick: cur?.meta?.tick ?? 0,
-                moveFact: move,
-                // ★★★Task 4：前置步这条真在干活的路也是**严格出处道**（与面板「查/重查」同一把尺子）；
-                //   凭证只进受门控的诊断面（`diagEvidence`）。
-                onEvidence: diagEvidence,
-                prevPicks: sw2LastPicks,
-                // leg25 f：每轮前置步那条路也要吃位置继承（零 token，不占模型预算）
-                bookEntries: await bookEntriesForInherit(),
-            });
-            // ★leg34：世界书检索注入**不在这里**——它放在 `runTick` 里（`injectWorldBookRecall`），
-            //   因为那一步要读**本轮选中的 picks**（`pre.picks`），而 `runTick` 正好在 preStep 之后、
-            //   出包之前拿到它 ⇒ **一处执行、顺序天生正确**，也不会重复检索。
-            return pre;
-        },
-        // 落盘点：前置步的新字段**必须落盘**，否则 Ctrl+F5 一次就重查一遍（细案 §7）。
-        onPreStep: async (pre) => {
-            if (!pre?.ssot) return;
-            transaction.assertCurrent();
-            if (pre.picks) sw2LastPicks = pre.picks;
-            if (pre.warning) console.warn('[story-world-v2] 查书前置步:', pre.warning);
-            const shapeBefore = readHotMeta()?.world;
-            if (shapeBefore && pre.ssot.meta?.entityFields !== shapeBefore.meta?.entityFields) {
-                await hotHub.commitHotMeta(hotAccountShape(pre.ssot), { guard: transaction });
-                transaction.acceptCurrent();
-            }
-        },
+        // 推进只有一次生成：提供全部在册实体，谁行动由同一次推演决定。
+        // 不再额外调用选人器或字段抽取器；已有字段随包提供，缺字段保持缺省。
+        retryOnce: false,
+        preStep: ({ ssot: cur }) => ({ ssot: cur, picks: (cur.entities || [])
+            .filter(entity => !entity.status || entity.status === 'active').map(entity => entity.id) }),
     });
     transaction.assertCurrent();
     // ★leg40b 续（死锁修复）：降级路径**单独出一行**（此前只有 panel 裁定条里那句话）。
     //   为什么单独打：这条路径的语义是"这一轮不是模型写的那一轮"——它必须**能复盘**：
     //   丢了哪几条、原始拒因是什么。（面板裁定条只截前几条，控制台留全量。）
-    diagTickOutcome(res, world?.meta?.tick);
+    diagTickOutcome(res, world?.meta?.tick,diagnosticScope);
     if (res?.healed?.used) {
         console.warn('[story-world-v2] 本轮提议校验处理', {
             kind: res.ok ? '降级重试（合法提议已落账）' : '演算失败（世界未推进，可重试）',
@@ -1550,7 +1589,8 @@ export function setupAsyncTicks(ctx) {
     const es = ctx?.eventSource;
     const et = ctx?.eventTypes || ctx?.event_types;
     sw2TickQueue = createTickQueue({
-        tick: advanceTick,
+        tick: args => advanceTick({...args,diagnosticScope:chatScope(freshCtx())}),
+        onStateChange: () => extractionTasks.syncButtons(), isBlocked: () => extractionTasks.busy(),
         load: () => loadHotAccount(readHotMeta()),
         // E2：轮转失败不再当成功——抛给队列（async-tick 的 save 失败面：报「落账失败…可重试」、
         // 不 refresh、世界原样；旧实现返回原世界被当 succeed → 界面报「已同步」而盘上什么都没写）。
@@ -1578,8 +1618,10 @@ export function setupAsyncTicks(ctx) {
             }
         },
         onStatus: setStatus,
-        afterTick: () => memoryWiring?.catchUp(),
+        afterTick: () => !serviceHost.session.active && memoryWiring?.catchUp(),
     });
+    sw2LegacyTickQueue = sw2TickQueue;
+    sw2TickQueue = serviceHost.routeQueue(sw2TickQueue,{isBlocked:()=>extractionTasks.busy() || legacyBridge.busy});
     // ★★★leg89：**注入器装配**。三件事按顺序说清：
     //   ① 注入什么：标签格式指令 + 名号对照（两段，可分别关；世界动向默认关——见 `web/inject.js` 头注）；
     //   ② 什么时候设：世界每推完一轮**重设一次**（`MESSAGE_RECEIVED` 之后就会走到），
@@ -1588,9 +1630,11 @@ export function setupAsyncTicks(ctx) {
     //      **不许抓死**（抓死 = 换了聊天还在给新对话注入上一个世界的名册）。
     sw2Injector = createInjector({
         getCtx: freshCtx,
-        getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
+        serviceSession: serviceHost.session,
+        queryLists: () => proseStripLists({settings:modelSettings()}),
+        getWorld: () => activeWorld() || sw2LastWorld,
         isOn: injectSwitchOn,
-        vectorEnabled: () => embedChannel?.enabled?.() === true,
+        vectorEnabled: () => !serviceHost.session.active && embedChannel?.enabled?.() === true,
         // ★★★（2026-10-05）参数页那三格改成**现读**：这一格是本模块唯一读设置的地方，
         //   注入器与召回口都从这里取 ⇒ 填了就生效（旧法读的是 `RETRIEVAL_PARAMS` 那个冻结常数）。
         retrievalParams: () => liveRetrievalParams(modelSettings()),
@@ -1605,7 +1649,7 @@ export function setupAsyncTicks(ctx) {
         //     （这正是用户那句「**保证相关度最大就不用管时间了**」的落点）。
         vectorRecall: makeVectorRecall({
             getCtx: freshCtx,
-            getWorld: () => sw2LastWorld || readHotMeta()?.world || null,
+            getWorld: () => activeWorld() || sw2LastWorld,
             getRuntime: () => embedRuntime,
             getVolumes: () => ledgerVolumes(),
             queryTextOf: (ctx, depth) => sw2RecallQueryText(ctx, 400, depth, proseStripLists({ settings: modelSettings() })),
@@ -1618,7 +1662,7 @@ export function setupAsyncTicks(ctx) {
         // ★leg33d 总闸：关掉时**不自动推进**（但说一句，别让用户以为插件坏了或以为推过了）。
         //   闸的判据提成导出的纯函数 `sw2OnMessageReceived` —— 为的是**能真测**（本仓铁律：
         //   "要真 ctx 的接线，要么提成可导出函数真跑，要么写注入 fake ctx 的测试"）。
-        sw2OnMessageReceived(loadHotAccount(readHotMeta()), {
+        sw2OnMessageReceived(activeWorld(), {
             // ★★★leg89：**传正文**——`advanceTick` 的 `dialogue` 形参本来就是"这一轮的对话"，
             //   新口径的标签就长在里面（`runTick` 内 `extractTags(dialogue)`）。
             //   ★为什么不在里面自己读 `ctx.chat`：形参已经在、已经有测试面（`async-tick` 的 fake 注入），
@@ -1637,6 +1681,7 @@ export function setupAsyncTicks(ctx) {
         //   而快照库的键是 `${chatId}:${id}` ⇒ 不复位就会拿上一本的序号给这一本出号、
         //   覆盖这一本已有的旧快照（静默丢历史），且锚世界还停在上一本（增量对不上）。
         //   头注见 `web/snapshot-store.js` 的 `resetChainState`。
+        legacyBridge.invalidate();worldBrowser.invalidate();
         snapHub.resetChainState();
         sw2TickQueue?.invalidate();
         extractionTasks.cancel({ chatChanged: true });
@@ -1739,25 +1784,43 @@ export function inheritLocations(world, { entries = [] } = {}) {
     return { ssot: d.ssot, inherited: d.stats?.inherited ?? 0 };
 }
 
+const chatView=createChatViewController({
+    getScope:()=>chatScope(freshCtx()),setLogScope:scope=>diagnostics.setScope(scope),
+    clearInjection:()=>{sw2Injector?.clear();memoryWiring?.invalidate(true);},
+    resetWorld:()=>{sw2LastWorld=EMPTY_WORLD;LISTED_VOLUMES=[];paramApi.setLastWorld(null);resetBookCache();},
+    closeReaders:()=>{entityWindow.close();worldBrowser.invalidate();closeVolumePopup();globalThis.window?.__sw2Actions?.['chain-close']?.();if(typeof document!=='undefined')closeInjectPreviews(document);},
+    switchEditor:()=>{sourceEditPanel.scopeChanged?.();globalThis.window?.__sw2Actions?._sw2LocalActions?.scopeChanged?.();},
+    renderEmpty:()=>{pendingSectionRefresh.clear();viewState.resetEntities();viewState.resetChronicle();refreshWorld(EMPTY_WORLD,{oldVolumes:[],resetChat:true});sw2Injector?.clear();setStatus('',{diagnostic:false});},
+});
 let worldLoadGeneration = 0;
 export async function loadWorld() {
-    extractionTasks.scopeChanged();
+    chatView.sync();
+    extractionTasks.scopeChanged();void creationRuntime.scopeChanged();
     const generation = ++worldLoadGeneration, scope = JSON.stringify(chatScope(freshCtx()));
     const transaction = { assertCurrent() {
         if (generation !== worldLoadGeneration || scope !== JSON.stringify(chatScope(freshCtx()))) {
             throw Object.assign(new Error('聊天或载入版本已改变，旧载入已丢弃'), { sw2Cancelled: true });
         }
     } };
-    try { return await loadWorldCurrent(transaction); }
+    try { const result=await loadWorldCurrent(transaction);transaction.assertCurrent();await creationRuntime.refreshCurrent();transaction.assertCurrent();return result; }
     catch (err) { if (!err?.sw2Cancelled) throw err; return { cancelled: true }; }
 }
 
 async function loadWorldCurrent(transaction) {
-    transaction.assertCurrent();
+    await serviceHost.ready();transaction.assertCurrent();
+    if (serviceHost.session.active) return serviceHost.session.load();
     memoryWiring?.invalidate(true); sw2Injector?.clearVectors?.();
     resetBookCache();   // leg25 d：取书缓存与聊天/卡绑定——每次载入世界都必须重取（否则换卡换书还吃旧缓存）
     const meta = readHotMeta();
     const world = meta ? structuredClone(loadHotAccount(meta)) : null;
+    if (world) {
+        LISTED_VOLUMES = await listOldVolumes(); transaction.assertCurrent();
+        sw2LastWorld = world; paramApi.setLastWorld(world);
+        refreshWorld(world, {oldVolumes: LISTED_VOLUMES});
+        await snapHub.refreshSnapshots(); transaction.assertCurrent();
+        setStatus('这是旧存档，请先导出再导入；导入前仅供查看');
+        return;
+    }
     if (!world) {
         LISTED_VOLUMES = [];
         refreshWorld(EMPTY_WORLD, { oldVolumes: [] });
@@ -1904,7 +1967,7 @@ async function loadWorldCurrent(transaction) {
     await runBookLoadCheck(world2, transaction);   // 量完后仍必须属于本次载入。
     transaction.assertCurrent();
     refreshWorld(world2, { oldVolumes: LISTED_VOLUMES });
-    snapHub.refreshSnapshots(); memoryWiring?.settingsChanged();
+    if(!serviceHost.session.active){snapHub.refreshSnapshots();memoryWiring?.settingsChanged();}
     // ★leg33d：关着的时候**明说**（否则"世界怎么不动了"会被当成 bug；面板照常可用）
     if (!autoAdvanceOn(world2)) {
         setStatus('⏸ 插件已关 · 自动推进不生效（发消息/切聊天都不动世界）· 参数页「插件总闸」可开 · 也可按窗口顶部的「推进一轮」手动推');
@@ -1950,18 +2013,19 @@ if (typeof window !== 'undefined') {
             worldLoadGeneration++;   // Supersede old reads before publishing a new extraction candidate.
             return hotHub.commitHotMeta(hotAccountShape(world), { guard });
         } });
-    const mapPopup = createMapPopupHub({ getWorld: () => loadHotAccount(readHotMeta()) || sw2LastWorld, onExtract: () => bus['extract-map']?.(), setStatus });
-    bus['open-map'] = () => mapPopup.open();
-    const geographyHub = createGeographyHub({ getWorld: () => loadHotAccount(readHotMeta()) || sw2LastWorld,
+    const openAtlas = () => { openWindow(); document.getElementById(WINDOW_ID)?.querySelector('.sw2-tab[data-view="graph"]')?.click(); };
+    bus['open-map'] = openAtlas;
+    bus['open-world-browser'] = openAtlas;
+    const geographyHub = createGeographyHub({ getWorld: () => (serviceHost.session.active ? serviceHost.session.readWorld() : loadHotAccount(readHotMeta()) || sw2LastWorld),
         getIdentity: () => JSON.stringify([freshCtx()?.chatId, freshCtx()?.characterId, freshCtx()?.groupId, abstractSelectionFor(freshCtx())]),
         getSource: autoComposeSource, setStatus,
         extract: async prompt => {
-            const resolved = resolveBrowserTransport(modelSettings() || {}, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+            const resolved = resolveBrowserTransport(modelSettings() || {}, { extraction: true, extractionLimits: extractionCallLimits(modelSettings() || {}),presetPurpose:'abstract',getPresetSettings:modelSettings });
             if (!resolved) throw new Error('模型通道未配置');
             return diagExtract(resolved)(prompt);
         },
         persist: async next => { writeHotMeta(hotAccountShape(next)); sw2LastWorld = next; refreshWorld(next); return flushHotMeta(); } });
-    bus['extract-map'] = () => geographyHub.backfill();
+    bus['extract-map'] = serviceHost.guardLegacyAction(() => geographyHub.backfill());
     // ★★★leg142（用户令「把获取模型列表（点击某一项自动填入模型id）和测试是否连通做一下」）：
     //   **模型通道那一族的新家** —— 设置表单写通道（原住本文件，整段搬走）＋ 两枚新按钮。
     //   ★三枚动作**都进总线**：设置页上"画了按钮就必须有人接"那条判据锁着这一页，
@@ -1992,7 +2056,7 @@ if (typeof window !== 'undefined') {
     });
     const embedWiring = createEmbedWiring({
         indexStore: { load: () => createIdbVectorStore(String(freshCtx()?.chatId || 'default')).load(), save: data => createIdbVectorStore(String(freshCtx()?.chatId || 'default')).save(data), drop: () => createIdbVectorStore(String(freshCtx()?.chatId || 'default')).drop() },
-        getWorld: () => sw2LastWorld, getScope: () => String(freshCtx()?.chatId || 'default'), getVolumes: () => loadLedgerVolumes(freshCtx()?.chatId, sw2LastWorld),
+        getWorld: () => serviceHost.session.active?null:sw2LastWorld, getScope: () => String(freshCtx()?.chatId || 'default'), getVolumes: () => loadLedgerVolumes(freshCtx()?.chatId, sw2LastWorld),
         getSettings: () => modelSettings(), writeSetting, getWin: () => document.getElementById(WINDOW_ID),
         getWindowTurns: () => Number(resolveLimits(sw2LastWorld || readHotMeta()?.world || null)?.往事轮数),
         onStatus: (m) => setStatus(m),
@@ -2002,6 +2066,7 @@ if (typeof window !== 'undefined') {
     memoryWiring = embedWiring;
     embedRuntime = embedWiring.embedRuntime;
     Object.assign(bus, embedWiring.actions);
+    Object.assign(bus, promptPresetPanel.actions);
 
     // ★★★leg89：注入开关**改由 `bindActions` 的 click 委托直接收**（见那一处的注释与沿革）。
     //   这里原来注册的 `inject-toggle` 总线动作**已撤**——不是每个按钮都必须走总线，
@@ -2175,10 +2240,12 @@ if (typeof window !== 'undefined') {
         paramApi.setLastWorld(r.mirror?.world || world || paramApi.lastWorld() || null);
         // ★★★leg48：**世界没到就出声**（旧版这条路上一个字都不说，于是"世界对象没拿到"这件事
         //   在玩家与维护者两边都不可见——十二轮里缺的就是这一行）。
-        if (!world) {
+        if (!world && meta) {
             console.warn(`[story-world-v2] 这一刻拿不到世界对象（载入还没跑完或失败）——`
                 + `参数**照常写进真源**，引擎那一格（世界账）等世界载入后由 flushPending 补上`
                 + `（见控制台里 loadWorld 的报错；面板参数页自检卡有「世界对象」一行）`);
+        } else if (!world && r.changed && r.store?.ok) {
+            console.info('[story-world-v2] 当前聊天尚未建立世界，参数设置已保存。');
         }
         // ★★★leg46 续·五（**用户第三次实机：「我点了四次为啥有八次写入，在点击旁边空白的时候会直接写入两次」**）：
         //   八次写入 = 四组"**写成功 → 40 毫秒后丢掉**"，每一对的第二笔**都是同一个 `bus.set-param`**
@@ -2240,20 +2307,21 @@ if (typeof window !== 'undefined') {
             if (r.after === '1') {
                 const hotNow = loadHotAccount(readHotMeta());
                 setStatus('插件已开 · 发消息会自动推进世界（要停请回参数页按「关」）'
-                    + (hotNow ? '' : ' · 注意：但还没有世界：先「开始新世界」'));
+                    + (hotNow ? '' : ' · 注意：但还没有世界：先「开始新世界」'), { diagnostic: !hotNow });
             } else {
-                setStatus('⏸ 插件已关 · 世界原样留在盘上（没有清账、没有拆线）· 要看按观棋窗口、要推按窗口顶部的「推进一轮」');
+                setStatus('⏸ 插件已关 · 世界原样留在盘上（没有清账、没有拆线）· 要看按观棋窗口、要推按窗口顶部的「推进一轮」', { diagnostic: false });
             }
             return;
         }
         // ★★状态条 = hub 的原话（**不许在这里另写一套口径**——leg41 的"说得比做得好听"就是两套口径）
-        setStatus(r.humanLine);
+        if (r.ok === false || r.mirror?.ok === false && !r.mirror?.pending) setStatus(r.humanLine);
+        else setStatus(r.humanLine, { diagnostic: false });
     }
     // ---------- leg41：撤销（参数页那一枚；照 v1 的撤销栈）----------
     bus['param-undo'] = async () => {
         const r = paramApi.sw2UndoParam();
         if (!r.ok) { setStatus(`↶ ${r.reason}`); return; }
-        setStatus(`↶ 已撤销：${r.label} —— 档位回到那一步之前（世界已经发生的事不回退）`);
+        setStatus(`↶ 已撤销：${r.label} —— 档位回到那一步之前（世界已经发生的事不回退）`, { diagnostic: false });
     };
 
     // ---------- leg25 d：查书补全（只剩面板行内「查/重查」这一条路）----------
@@ -2286,7 +2354,7 @@ if (typeof window !== 'undefined') {
         const id = payload?.snap;
         if (!id) return;
         const tick = payload?.tick === '' || payload?.tick == null ? null : Number(payload.tick);
-        const cur = loadHotAccount(readHotMeta()) || sw2LastWorld;
+        const cur = (serviceHost.session.active ? serviceHost.session.readWorld() : loadHotAccount(readHotMeta()) || sw2LastWorld);
         const curTick = cur?.meta?.tick;
         const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
             ? window.confirm(`确定回到第 ${tick ?? '?'} 轮的这次保存？${payload?.saved ? `\n保存时间：${payload.saved}` : ''}\n\n· 世界账回到第 ${curTick ?? '?'} 轮 → 第 ${tick ?? '?'} 轮\n· 只回世界账，对话记录不动\n· 恢复前自动保存当前状态\n\n确认后立即生效。`)
@@ -2318,10 +2386,12 @@ if (typeof window !== 'undefined') {
 
     // ---------- K35：阅卷 / 编年五筛 / 链视图 / 导出导入 ----------
     bus['read-volume'] = async (payload) => {
+        const scope=chatScope(freshCtx());
         const volId = payload?.vol;
         if (!volId) return;
         try {
             const volume = await volumeStore().get(volId);
+            if(scope!==chatScope(freshCtx()))return;
             if (!volume) { setStatus(`注意：卷「${volId}」不在库中`); return; }
             const rows = volumeToChronicleRows(volume);
             // ★★★leg104（A4）：进**浮层**，不再插进编年页——那一页每轮整块重绘（`refreshWorld`／
@@ -2331,7 +2401,7 @@ if (typeof window !== 'undefined') {
             openVolumePopup(renderVolumeReadHtml(volId, rows));
             setStatus(`已展开旧卷「${volId}」（${rows.length} 行 · 只读）`);
         } catch (err) {
-            setStatus(`注意：阅卷失败：${err?.message || err}`);
+            if(scope===chatScope(freshCtx()))setStatus(`注意：阅卷失败：${err?.message || err}`);
         }
     };
     // ★leg104（A4）：收起旧卷浮层（浮层里那枚「收起」/ 点空白 / ESC 三条路都走它；这里给总线留一个点名）。
@@ -2460,7 +2530,7 @@ if (typeof window !== 'undefined') {
                 const goto = t?.closest?.('.sw2-goto');
                 if (goto) {
                     // 「阅卷」= 要看旧卷页 ⇒ **先把浮层收掉**，否则挡住了玩家要看的东西（用户那句抱怨的另一面）
-                    const view = goto.getAttribute('data-view') || 'archive';
+                    const view = goto.getAttribute('data-view') || 'graph';
                     closeChainPopup();
                     document.getElementById(WINDOW_ID)?.querySelector(`.sw2-tab[data-view="${view}"]`)?.click();
                     return;
@@ -2625,15 +2695,29 @@ if (typeof window !== 'undefined') {
             : '参数自检：注意：本地存储里**没有**参数这一格（写没落下去，或被清了）';
         setStatus(`${head} · ${copied ? '读数已复制到剪贴板，直接粘给我' : '读数已打进控制台（Console）'}`);
     };
+    composeActions(bus);
+}
+
+function composeActions(legacyBus) {
+    if(legacyBus && !legacyBus._sw2ServiceGuarded){
+        legacyBus._sw2ServiceGuarded=true;
+        for(const action of ['init-world','reextract-setting','extract-scales','adopt-scale-draft','lookup-entity','snapshot-restore','snapshot-clear','import-world','export-world','reset-dynamic','clear-evolution','set-param','param-undo']){
+            if(typeof legacyBus[action]==='function')legacyBus[action]=serviceHost.guardLegacyAction(legacyBus[action]);
+        }
+    }
+
+    if(legacyBus&&!legacyBus._sw2LocalBound)Object.assign(sw2LegacyActions,legacyBus);
+    if(legacyBus)bindLocalWorldActions({bus:legacyBus,host:serviceHost,getSource:autoComposeSource,onStatus:setStatus,getScope:()=>chatScope(freshCtx()),panel:localPanel,paramApi,taskHub:extractionTasks,creation:creationRuntime,onFieldsSaved:()=>{sw2Injector?.clear();sw2Injector?.apply();},refresh:()=>refreshWorld(activeWorld())});
 }
 
 function bindActions() {
+    composeActions(typeof window==='undefined'?null:window.__sw2Actions);
     const win = document.getElementById(WINDOW_ID);
     if (!win) return;
     // ★★★leg107：点击委托那一段（注入开关早退 / `.sw2-goto` 早退 / 拼 payload / 派发）
     //   **整段搬进 `web/action-router.js`**，连同 leg89 那段定案说明一起（避免第二份真相）。
     //   本处只剩这一句装配：模块顶层零 DOM，判据能在 Node 里真点一下（`test/action-router.test.js`）。
-    createActionRouter({ win, dispatch: dispatchAction, toggleInject: sw2ToggleInject }); bindSettingReader(win); bindPageSubtabs(win); panelTools.bind(win);
+    createActionRouter({ win, dispatch: dispatchAction, toggleInject: sw2ToggleInject }); bindSettingReader(win); bindPageSubtabs(win); panelTools.bind(win); localPanel.bind(win); promptPresetPanel.bind(win);
     // ★细案实体页：搜索框（`#sw2_ents_q`）走 input 通道——`refreshSections` 换掉 innerHTML 会**夺焦点**，
     //   ⇒ 重绘后必须把焦点与光标还回去（不还，用户打到第二个字就掉焦点——这是"面板抢玩家的手"的另一种形态）。
     // ★★终审 C1：**中文输入法（IME）组合期一律不许抢 DOM**。
@@ -2712,11 +2796,14 @@ function bindTabs() {
             const view = tab.getAttribute('data-view');
             for (const t of tabs) t.classList.toggle('sw2-active', t === tab);
             for (const v of views) v.classList.toggle('sw2-active', v.id === `sw2_view_${view}`);
+            syncWorldBrowser();
         });
     }
     document.getElementById('sw2_window_close')?.addEventListener('click', closeWindow);
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeWindow();
+        if (e.key !== 'Escape' || e.isComposing || e.keyCode === 229) return;
+        if (sourceEditPanel.handleMenuEscape(e) || sourceEditPanel.isOpen()) return;
+        closeWindow();
     }, true);
 }
 
@@ -2732,7 +2819,8 @@ function initPanel(ctx) {
     ensureWindow(ctx).then(() => {
         bindTabs();
         bindActions();
-        extractionTasks.syncButtons();
+        sourceEditPanel.bind(document.getElementById(WINDOW_ID));
+        extractionTasks.syncButtons();creationRuntime.syncButtons();
         modelChannel?.bindSettingsForm?.(); // K36：设置表单写通道（extension_settings）★leg142 起住 web/model-channel.js
         loadWorld().catch((err) => {
             // ★★★leg48：**这里原来是一个空函数 `.catch(() => {})`** —— 载入路的一切失败都被它吞掉。

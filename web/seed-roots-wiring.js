@@ -45,7 +45,7 @@ export async function seedRootsForWorld(hotWorld, { sourceText = '', extract = n
     const pool = Array.isArray(candidates) ? candidates : buildSeedCandidatePool(hotWorld, src, SEED_CANDIDATES_TOP);
     // ★★★Task 4：**带行号**的分块（与 `chunkBookText` 同一把尺子的唯一实现）——
     //   严格道要把"这一块展示了哪些行"交回来源块（`scopeForRows`），分块与作用域必须是同一把尺子。
-    const chunks = chunkBookTextWithRanges(src, chunkChars);
+    const chunks = chunkBookTextWithRanges(src, chunkChars, allowedSources);
     const r = await seedRootsChunked({
         ssot: hotWorld, chunks, extract, candidates: pool, fingerprint: fp, at: new Date().toISOString(),
         maxPerChunk: maxRootsPerChunk(chunks.length),

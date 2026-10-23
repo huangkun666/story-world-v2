@@ -24,7 +24,7 @@
 //   ③ 依赖一律**注入**（`getSnapshot`/`getSummary`/`onDetails`），本模块不反向 import 接线层。
 
 import { escapeHtml } from '../src/render-base.js';
-import { diagnostics, redact } from '../src/diagnostics.js';
+import { diagnostics, redact, passesLevel } from '../src/diagnostics.js';
 
 /** 面板根节点的标记（接线层只要把片段插进去，`sync()` 靠它找得到自己那一块）。 */
 export const DEBUG_CONSOLE_ATTR = 'data-debug-console';
@@ -33,15 +33,30 @@ export const DEBUG_MODULE_ID = 'sw2_debug_module';
 export const DEBUG_LEVEL_ID = 'sw2_debug_level';
 export const DEBUG_DETAILS_ID = 'sw2_debug_details';
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★2026-10-09（用户实机报障 ·「**社区用户老是说报错**」）：面板**默认只看"警告及以上"**。
+//
+// 病：报告实测 75 条里 **65 条是 info 流水**（每次模型调用记 4 条：请求/用量/结束原因/调用完成；
+//   每张快照、每次状态同步、每条抽取依据各一条）⇒ 社区用户打开调试台看到的**是一面流水墙**，
+//   每行还都带彩色徽章 ⇒ 他读到的是"一屏错误"，于是"报错一大堆"。
+//
+// 口径（leg201 用户当场那条裁示的同一句：「太多了，就放在复制报告里就行了，别展示出来」）：
+//   · **面板**默认折叠信息流水（切「全部级别」照旧一条不落地看得到）；
+//   · **报告（复制/下载）一条不少**——那条路走 `diagnostics.report()`，压根不经过这里；
+//   · 档位判据**只有一处实现**（`src/diagnostics.js` 的 `passesLevel`），面板与记录器共用它。
+//   ★为什么首屏就要折叠（不能等 `sync()`）：面板渲染与绑定之间有一段空档，而"安静"不能靠时序。
+/** 面板默认的级别档（"警告及以上"）。改这里一处即可——档位判据与下拉都照它。 */
+export const DEFAULT_LEVEL_FILTER = 'warn+';
+
 const LEVEL_ORDER = ['info', 'warn', 'error'];
-const LEVEL_LABELS = { info: '信息', warn: '警告', error: '错误' };
+const LEVEL_LABELS = { info: '信息', warn: '警告', error: '错误', 'warn+': '警告及以上' };
 /** 摘要里常见事实的中文名（对不上就照原键名印——宁可印英文，也不假装认识）。 */
 // ★★leg201：**只进报告、不上屏**的那一格（用户 2026-10-05 当场裁：「**太多了，就放在复制报告里
 //   就行了，别展示出来**」）。理由：**摘要是给人扫一眼的，取证是给人复制的**——两者挤同一格，
 //   结果是那一页变成一面读数墙（实测：13 格环境事实把摘要撑成四行大卡，真正该看的那几个数被淹了）。
 //   ★它照样进 `diagnostics.report(摘要)`（报告走的是**整份 summary**，不经过这里的过滤）
 //     ⇒ 「复制报告 / 下载报告」一个字都不少。
-const REPORT_ONLY_KEYS = new Set(['modules', '环境自检', '消息消费', '事件来源']);
+const REPORT_ONLY_KEYS = new Set(['modules', '环境自检', '消息消费', '事件来源', 'injection']);
 const SUMMARY_LABELS = {
     build: '当前构建', version: '当前构建', panelBuild: '面板构建',
     tick: '轮次', round: '轮次', turn: '轮次',
@@ -190,11 +205,15 @@ export function renderDebugConsole({ summary = {}, records = [], details = false
     const moduleOpts = ['<option value="">全部模块</option>']
         .concat(moduleNames(list, summary).map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`))
         .join('');
-    const levelOpts = ['<option value="">全部级别</option>']
+    // ★★★2026-10-09：默认档排在最前并**预选中**（"警告及以上"）——见文件头那段降噪口径。
+    const levelOpts = [`<option value="${DEFAULT_LEVEL_FILTER}" selected>${LEVEL_LABELS[DEFAULT_LEVEL_FILTER]}</option>`, '<option value="">全部级别</option>']
         .concat(LEVEL_ORDER.map((level) => `<option value="${level}">${LEVEL_LABELS[level]}</option>`))
         .join('');
+    // ★首屏就按默认档折叠（不能等 `sync()`：渲染与绑定之间有一段空档，"安静"不许靠时序）。
+    //   ★模块下拉仍吃**全量** `list`：只在流水里出现过的模块不许从下拉里消失（那是"看得见"的一半）。
+    const shown = list.filter((entry) => passesLevel(String(entry?.level ?? 'info'), DEFAULT_LEVEL_FILTER));
     return `<div class="sw2-debug-console" ${DEBUG_CONSOLE_ATTR}="1">
-  <div class="sw2-debug-summary" data-debug-summary>${summaryHtml(summary, list)}</div>
+  <div class="sw2-debug-summary" data-debug-summary>${summaryHtml(summary, shown)}</div>
   <div class="sw2-debug-bar">
     <label class="sw2-debug-field">模块<select id="${DEBUG_MODULE_ID}" data-debug-filter="module">${moduleOpts}</select></label>
     <label class="sw2-debug-field">级别<select id="${DEBUG_LEVEL_ID}" data-debug-filter="level">${levelOpts}</select></label>
@@ -205,7 +224,7 @@ export function renderDebugConsole({ summary = {}, records = [], details = false
     <button type="button" class="sw2-btn sw2-debug-btn" data-debug-action="clear">清空日志</button>
     <span class="sw2-debug-result" data-debug-result role="status"></span>
   </div>
-  <div class="sw2-debug-log" data-debug-records>${recordsHtml(list, details)}</div>
+  <div class="sw2-debug-log" data-debug-records>${recordsHtml(shown, details)}</div>
 </div>`;
 }
 
@@ -256,7 +275,11 @@ export function bindDebugConsole(win, options = {}) {
     /** 报告全文（复制与下载**同一个来源**：`diagnostics.report(摘要)`——两处一个字节都不许差）。 */
     function reportText() {
         try {
-            return diagnostics.report(readSummary());
+            const text=deps.getReport ? deps.getReport() : diagnostics.report(readSummary());
+            if(typeof deps.getReportData!=='function')return text;
+            let taskData;
+            try { taskData = deps.getReportData(); } catch (_) { taskData = Promise.reject(new Error("Task diagnostics unavailable")); }
+            return Promise.resolve(taskData).then(data=>{const report=JSON.parse(text);report.source_task=data??null;return JSON.stringify(report,null,2);},()=>{const report=JSON.parse(text);report.source_task={export_error:'当前任务诊断读取失败，未补全回执'};return JSON.stringify(report,null,2);});
         } catch (_) {
             return JSON.stringify({ title: 'Story World v2 调试报告', count: 0, summary: {}, records: [] });
         }
@@ -306,7 +329,7 @@ export function bindDebugConsole(win, options = {}) {
 
     /** 清空：★走单例 `diagnostics.clear()`（细案点名），然后当场重画空态。 */
     function clearLog() {
-        try { diagnostics.clear(); } catch (_) { /* 清不动也要把面板刷成空态 */ }
+        try { if (deps.clearRecords) deps.clearRecords(); else diagnostics.clear(); } catch (_) { /* 清不动也要把面板刷成空态 */ }
         state.count = 0;
         sync();
         setResult('日志已清空');
@@ -314,7 +337,7 @@ export function bindDebugConsole(win, options = {}) {
 
     /** 复制：剪贴板可用就复制；不可用/被拒 ⇒ 结果那行字如实说明并指向"下载报告"。 */
     async function copyReport() {
-        const text = reportText();
+        const text = await reportText();
         try {
             const clip = (win.ownerDocument?.defaultView || win).navigator?.clipboard;
             if (clip && typeof clip.writeText === 'function') {
@@ -330,6 +353,9 @@ export function bindDebugConsole(win, options = {}) {
     /** 下载：Blob URL 造一条链，**用完立刻 revoke**（不许把 URL 一直挂着）。 */
     function downloadReport() {
         const text = reportText();
+        return text&&typeof text.then==='function'?text.then(saveReport):saveReport(text);
+    }
+    function saveReport(text) {
         try {
             const host = win.ownerDocument?.defaultView || win;
             const BlobCtor = host.Blob;

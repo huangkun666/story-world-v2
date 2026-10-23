@@ -90,10 +90,7 @@ export function collectAbstractSources({ worldInfoEntries = [], character = null
             worldSource: listOf(worldSources).find(s => s.name === entry._sw2Source) ?? null });
     }
     for (const e of listOf(worldInfoEntries)) if (e && typeof e === 'object') add(e);
-    const embedded = character?.character_book?.entries ?? character?.data?.character_book?.entries;
-    for (const e of listOf(embedded)) if (e && typeof e === 'object') add({ ...e, uid: e.uid ?? e.id, key: Array.isArray(e.keys) ? e.keys : e.key ?? [],
-        comment: String(e.comment ?? '').trim() || String(e.name ?? '').trim(), disable: e.enabled === undefined ? Boolean(e.disable) : !e.enabled,
-        _sw2Source: `character:${character?.name || ''}` });
+    // World entries are supplied by the mounted-book collector, never re-read from the card.
     if (character) for (const field of CHARACTER_SOURCE_FIELDS) {
         add({ uid: field, _sw2Source: `character-fields:${character.avatar || character.name || character.data?.name || ''}`,
             comment: `角色卡 ${field}`, content: characterFieldText(character, field) }, 'character-field', field);

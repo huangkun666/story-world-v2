@@ -1,6 +1,7 @@
 // Pure read projections: source geography and free-text observations stay separate.
-import { GEOGRAPHY_VERSION } from './schemas/geography.schema.js';
+import { GEOGRAPHY_VERSION, BEARING_DIRECTIONS } from './schemas/geography.schema.js';
 
+const LINK_TYPES = ['within', 'adjacent', 'passage', 'bearing'];
 const text = value => typeof value === 'string' ? value.trim() : '';
 const clone = value => structuredClone(value);
 const rows = value => Array.isArray(value) ? value : [];
@@ -53,7 +54,9 @@ export function buildMapData(world) {
     }));
     const byId = new Map(places.map(p => [p.id, p]));
     const links = rows(geography?.links).filter(l => l && l.from !== l.to && byId.has(l.from) && byId.has(l.to)
-        && ['within', 'adjacent', 'passage'].includes(l.type)).map(clone);
+        && LINK_TYPES.includes(l.type)
+        // 方位边必须带八向之一；错误/缺失方位整条拒绝（旧包含/相邻/通道不受影响）。
+        && (l.type !== 'bearing' || BEARING_DIRECTIONS.includes(l.bearing))).map(clone);
     for (const link of links) if (link.type === 'within') {
         const child = byId.get(link.from), parent = byId.get(link.to);
         if (!child.parents.includes(parent.id)) child.parents.push(parent.id);
@@ -101,7 +104,7 @@ export function geographyPack(world, {moveFact = null} = {}) {
     }
     const links = map.links.map(link => {
         const fact = {};
-        for (const key of ['from', 'to', 'type', 'via', 'direction', 'condition']) {
+        for (const key of ['from', 'to', 'type', 'bearing', 'via', 'direction', 'condition']) {
             if (link[key] !== undefined) fact[key] = clone(link[key]);
         }
         return fact;

@@ -70,7 +70,7 @@ function agendaNode(world, ags, a) {
     if (!a) return { kind: 'gap', reason: 'missing' };
     const compact = (x) => ({
         id: x.id, goal: x.goal, owner: x.owner, visibility: x.visibility,
-        closed: !!x.closed, progress: x.progress ?? 0, maxSteps: x.maxSteps ?? 0,
+        closed: !!x.closed, progress: x.progress ?? 0, maxSteps: x.maxSteps,
     });
     const node = {
         kind: 'agenda',
@@ -79,7 +79,7 @@ function agendaNode(world, ags, a) {
         owner: a.owner,
         visibility: a.visibility,
         stage: a.stage ?? '',
-        maxSteps: a.maxSteps ?? 0,
+        maxSteps: a.maxSteps,
         progress: a.progress ?? 0,
         closed: !!a.closed,
         doneTail: (a.memory?.done || []).at(-1) ?? null,

@@ -226,7 +226,7 @@
 //     （真账上没发生过；会发生的是"表多且平均档数 ≳7"的大书）。
 //   ★契约面：`MAIN_PROMPT_V` → **v2-agenda-t1-32**；版本锁在 `test/prompts.test.js`。
 // leg190：新事件位置可省；无法确定时保留事件，不猜地点。
-export const MAIN_PROMPT_V = 'v2-agenda-t1-37';
+export const MAIN_PROMPT_V = 'v2-agenda-t1-39';
 
 // ★★leg40b 续（**尺度上限参数化·配套**）：线捆那一栏的"几条"**必须由包自己说**。
 //   病灶（本棒 leg40c 归因实测）：这几句原来把条数**写死成"三条"**（「这三条线」「三条里只写一条」
@@ -294,7 +294,7 @@ export const MAIN_PROMPT = `你就是这个世界本身。这不是比喻——�
 3. 事件与动作的位置**写出来就行**——唯一不许的是**为贴近玩家棋子而把谁搬过去**。
    ★**位置值**：优先写**输入 positions 里出现过的那个地名本身**（如 "北俱荒洲"）——那是这本书的地点表。
    ★newEvents[].position **可省**：无法确定事件发生在哪里就省略该键，不猜地点、不补玩家驻地或「未明」，不写空串或 null；事件照常保留。
-   ★输入 geography 是有来源依据的地点关系：within 是包含，adjacent 仅是相邻，passage 是已记录的通道；方向未载就不猜，通行条件照记录考虑。
+   ★输入 geography 是有来源依据的地点关系：within 是包含，adjacent 仅是相邻，passage 是已记录的通道，bearing 是 from 相对 to 的明述八向方位，仅供理解方向、不表示路程；方向未载就不猜，通行条件照记录考虑。
    共同上层区域不等于同处现场，包含关系不表示路程；未记录的关系不代表不存在。coverage 若有省略计数，表示本轮只装入部分地图。
    人物位置沿用账上记录及其来源；不能凭事件 ripples 或 actions.position 把相关人物搬过去。确实迁移时用 entityUpdates 的 location 字段并写明 cause；不凭地图虚构移动耗时或瞬间到达。
    ★但**位置不是闸**：书里真有的别处地名（书的层级写法，如 "太清境"）**也照写**，引擎照收、不会因此拒整步。
@@ -326,6 +326,16 @@ export const MAIN_PROMPT = `你就是这个世界本身。这不是比喻——�
    **影响范围 affected 与公开范围 audience 分开**，均为 [{kind,text,ref?}]：entity=明确对象，members=明确在册组织的成员，place=地点范围，text=尚不能完整识别的原文范围。text 必须非空；entity/members 的 ref 必须真实在册；地点以 text 保留地名。复杂限定、排除项、未知群体整段保留 text。不要把“全体学生”展开成此轮有戏份的几个人，不把所有当事人当受众，不填引擎自己的 resolution。新事件不写旧 ripples。
    audience 只说向谁公开或发送，不能认定范围内每个人已看过、理解或行动。人可以通过合理途径得知消息并行动；**获知途径写在 actions[].note 或盘算说明中**，普通查阅不另建事件，不要求先建知情记录。私密信息引起外人反应时写明合理渠道；你读到全局事实，不等于所有人物都知情。密信被截、秘密泄露等改变局势的传播才写普通新结果，source.type="ripple" + 原事件 ref。重提或无新影响的转述不重建原公告。错误公告只记“某方发布了某说法”，说法可填 reportedContent，不把内容直接当成客观事实。
    **持续条件使用可省的 conditionUpdates**，输入 conditions 给出尚未生效或仍有效的条文及条件 ID，原公告完成/归档不使条件消失。创建写 {op:"create",localId,eventRef,statement,state,scope?,effectiveFrom?,effectiveUntil?,supersedes?}，state=planned/active/ended，分别是尚未生效/有效/已结束；eventRef 为账上原因事件，或同轮第几件事件的临时 ev_轮次_位次 引用（按输入的本轮轮次写，示例仅示意）。范围同上，期限照原话，不推算日历。状态变更写 {op:"state",conditionRef,state:"active"或"ended",eventRef}。内容或适用范围改变时创建新条件并用 supersedes 指旧条件，不覆写旧条文，不重启已结束条件。不因标题像规定就自动创建条件，不编缺失条文；七个必填组照旧。
+   ★**显式观察（observation，可省）**：当你的推进改变了**玩家能感知的环境/实体/关系**时，必须用 observation 声明这份**已经提交的结果**对外是什么样、以及**谁够格感知到**：
+   observation = { mode: "encounter" 或 "known", scope: [ { kind: "entity" 或 "members" 或 "place" 或 "text", text, ref? } ] }，可挂在 conditionUpdates(create/state) / entityUpdates / entityFates / relationUpdates / relationClosures 上。
+   · **encounter** = 有人**当下**处在范围内就能看到（place 比对双方位置；entity/members 指认对象或组织的成员）。
+   · **known** = 已**明确传达**给列出的实体/成员、之后仍能查到 ⇒ **只能用 entity/members，不许用 place/text**。
+   · 观察披露的是**已经提交的那份状态/值本身**，不是另编事实、不是摘要字符串。**隐秘的起因仍然隐秘**——条件条文或可见字段值**只描述真正落账的结果**，不要写"即将短缺/可能……"这类**并没有提交**的推断。
+   · 观察只描述**够格接收的人或范围**，**不代表**玩家已经看过；不要从 affected、同处一地、死亡、性情或私密值**自动推断**可见性。
+   · **状态的可见性必须逐次续报**：一次状态变更若没带 observation，旧观察许可不能授予新值；历史告知与旧值仍留在正式历史。用 encounter 表示持续可见的环境（如已了结条件按其地点范围），用 known 表示对具名对象/群体的明确告知。
+   · 可见结果必须自带对象与必要地点，不能只写“关闭”而不说明哪里关闭。只能看到人物缺席时，记录缺席这个实际结果；不知道其去向，就不要把私密的新 location 标为可观察。
+   · 范围**不能为空**；未解析的 text 或未知引用**不授予任何权限**（text 可与已解析的有效范围并存，但单独出现不算观察）。
+   · resolution 与 tick 由引擎填写，你**不许**自带。
 8b. ★★**事件标题（newEvents[].title）必须自带对象**——★标题是**讲故事那一侧唯一拿得到的一句**：正文侧只收到标题，**拿不到上下文**（本轮的"纪事"那一栏是递给你自己看的，不递到正文侧）。所以：
    · **知道对象就写进标题里**：谁做的、对谁做的，一句话说全（写「万魔之祖完成初步接引血屠魔君」，不写「万魔之祖完成初步接引」）；
    · **不知道对象就不要编**——写成讲得通的一句客观描述就好，**绝不猜一个名字填进去**（编出来的对象会被当成账上的事实往下传，比不写坏得多）；
@@ -406,7 +416,7 @@ export const MAIN_PROMPT = `你就是这个世界本身。这不是比喻——�
    ★**也别把名单当任务清单全塞进去**：一轮动用**一两个**就够，宁少勿滥。
 13. ★★**人会长、会变，死的也能回来——但你每次都得给得出"因为哪件事"**（一个可选组：entityUpdates）。
     · **entityUpdates[].field/value：改一个人的现在**。实力能涨能落、性情能大变、身份能挪、门庭能换、
-      也能写一个**账上还没有的新名目**（比如"称号""心境""伤势"）——你写什么就落什么，
+      仅允许本世界已确认可更新的属性字段；字段名、含义和适用对象见本包字段表。空表或未确认时不提议自定义属性变化，
       **引擎不判对错、不算数、不进任何公式**（它是账房，不是裁判）。但三条硬规矩，缺一条就丢：
       ① **必带 cause**（形如 {"type":"event","ref":"…"}）——因必须真实存在；event 可引用已完成或归档事实，agenda 必须仍在办。
           新变化须说明旧事实带来的新后果；已经发生的事实保持原样，后续变化向前落账。
@@ -415,8 +425,8 @@ export const MAIN_PROMPT = `你就是这个世界本身。这不是比喻——�
          "这句出自哪本书"的凭据——填它们等于伪造出处）。
          **不能改玩家棋子**（他的行为与承诺是唯一真相源）。
          **不能把 status 写成 "dead"**——覆灭只有 entityFates 一条路（那里有独立复核）；status 只用来"带因复活"（见下条）。
-      ③ **值写文本**（照书/照事的说法，如 "T8 破妄"），**不要写数字增量**——本项目早就没有"编数"这一说了。
-      ★**位置与种族也照这个来**：搬了家、逃亡、飞升去了别界就改 location；妖化、夺舍、脱去凡胎就改 race。
+      ③ **值写文本**（沿本世界明确的新状态原话），**不要写数字增量**——本项目早就没有"编数"这一说了。
+      ★位置仍走 location 的固定因果操作；自定义属性必须先确认，系统字段不从属性表开放。
     · **★让人死而复生（带因复活）**：把 status 改回 "active"，但**必须**是"**本回合新落账的事点到了他的名字**"
       （那件事的 ripples 里得有他）——也就是说：**先发生一件把他重新拉回场上的事，再让他回来**，
       同一回合里两件事一起写。一条理由换不回一个人：**复活只能挂在一件正在发生的事上**。
@@ -490,7 +500,7 @@ export const MAIN_PROMPT = `你就是这个世界本身。这不是比喻——�
 
 ${OUTPUT_TEMPLATE}
 
-字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。★newEvents[].title=事件标题，**一句话、自带对象**（「谁对谁做了什么」；知道对象就写进去、不知道就不要编——见第 8b 条）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；eventProtocol=4；newEvents[].pending 为必填 boolean；category/actors/affected/audience/reportedContent 可省，结构及含义见第 8 条；不用 ripples 表达群体或知情。conditionUpdates 创建/状态变更需真实事件原因，条文和期限保留原话，不能填引擎 ID 或 resolution。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；★visibility=明暗（**必填**，known/concealed 二选一，**不许省略**）；★source.type=来源（**必填**：event/parent/state）；stage=起始阶段（可省）；maxSteps=步数上限（1..8，可省，引擎钳制）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（优先取输入 positions 里的地名，书里别处的地名也照写）；entity=提议者实体 id（可省——dialogueFact 源可省略）；数值限定 0..1，省略=这一维空着（没有据）——只有你提议才会落账）；parent=所属势力名（可省——书/对话中已知的门派或势力，未明述不填；引擎校验目标在册且为势力，不满足则弃关系）；source.type=来源（book/event/dialogueFact/entity）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名、entity=在册实体 id）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
+字段说明：actions[].entity=实体 id（照抄输入）；actions[].verb=动词；target=对象（可省）；note=一句说明（可省）。★newEvents[].title=事件标题，**一句话、自带对象**（「谁对谁做了什么」；知道对象就写进去、不知道就不要编——见第 8b 条）。newEvents[].source.type=事件源（plot/state/ripple）；ref=上游引用；eventProtocol=4；newEvents[].pending 为必填 boolean；category/actors/affected/audience/reportedContent 可省，结构及含义见第 8 条；不用 ripples 表达群体或知情。conditionUpdates 创建/状态变更需真实事件原因，条文和期限保留原话，不能填引擎 ID 或 resolution（observation 见第 8 条显式观察）。agendaAdvances[].step=本步具体做了什么（必填）；stage=盘算新阶段（可省）。newAgendas[].entity=开这个盘算的实体 id（照抄输入）；goal=目标（一句话）；★visibility=明暗（**必填**，known/concealed 二选一，**不许省略**）；★source.type=来源（**必填**：event/parent/state）；stage=起始阶段（可省）；maxSteps=步数上限（1..8，可省，引擎钳制）；ref=来源引用（event/parent 必填，state 不带）；note=一句说明（可省）。agendaCancels[].agendaId=要放弃的盘算 id（照抄输入，必须是在飞盘算）；reason=放弃理由（一句话，可省）。newEntities[].name=新实体名（书内条目或对话中反复出现的名）；kind=势力/角色（可省，缺省角色）；location=驻点（优先取输入 positions 里的地名，书里别处的地名也照写）；entity=提议者实体 id（可省——dialogueFact 源可省略）；数值限定 0..1，省略=这一维空着（没有据）——只有你提议才会落账）；parent=所属势力名（可省——书/对话中已知的门派或势力，未明述不填；引擎校验目标在册且为势力，不满足则弃关系）；source.type=来源（book/event/dialogueFact/entity）；ref=来源引用（book=书名录条目名、event=未决事件 id、dialogueFact=对话依据册对象名、entity=在册实体 id）。输入中的 dialogueBook=对话依据册（反复被点名的对象及其次数/最近提及轮）——它是新实体 dialogueFact 源的名册，也是"谁在风口"的客观依据。entityFates[].entity=提议覆灭的实体 id（照抄输入，必须存在且非已覆灭）；verdict=dead；source.type=来源（event/agenda）；ref=来源引用（必须真实落账）；reason=覆灭理由（一句话，可省）。凡是标"可省"的字段，没有就整个省略该键，绝对不要写 null。
 
 只输出 JSON 本体，不要解释。`;
 
@@ -516,5 +526,5 @@ export function assembleMainPrompt(pack) {
     const prompt = MAIN_PROMPT
         .replaceAll('TH_CN', cnNum(nThreads))
         .replaceAll('TH_N', String(nThreads));
-    return `${prompt}\n\n${ENTITY_TABLE_LEGEND}\n\n【世界状态与落子事实】\n${pack.text}`;
+    return `${prompt}\n\n${ENTITY_TABLE_LEGEND}\n\n【世界状态与落子事实】\n${pack.text}${pack.fieldPrompt?'\n\n'+pack.fieldPrompt:''}`;
 }

@@ -1,0 +1,103 @@
+{
+  "format": "story-world-browser-dependencies",
+  "version": 1,
+  "bundle": {
+    "file": "world-memory.js",
+    "bytes": 250414,
+    "sha256": "e5468ad72e204097ccfc97f6df5a050a1a8805a5ac3ba6a0db861d4cb1dfa2ac"
+  },
+  "licenses": {
+    "file": "LICENSES.txt",
+    "sha256": "0efa03f4ea9f0c33fa0ac83aa5055feec3649867a7370224d0be0df48a62dbb3"
+  },
+  "packages": [
+    {
+      "name": "@noble/hashes",
+      "version": "2.4.0",
+      "license": "MIT",
+      "licenseFile": "LICENSE"
+    },
+    {
+      "name": "@orama/orama",
+      "version": "3.1.18",
+      "license": "Apache-2.0",
+      "licenseFile": "LICENSE.md"
+    },
+    {
+      "name": "@orama/tokenizers",
+      "version": "3.1.18",
+      "license": "Apache-2.0",
+      "licenseFile": "LICENSE.md"
+    },
+    {
+      "name": "dexie",
+      "version": "4.4.6",
+      "license": "Apache-2.0",
+      "licenseFile": "LICENSE",
+      "noticeFile": "NOTICE"
+    },
+    {
+      "name": "events",
+      "version": "3.3.0",
+      "license": "MIT",
+      "licenseFile": "LICENSE"
+    },
+    {
+      "name": "graphology",
+      "version": "0.26.0",
+      "license": "MIT",
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "name": "graphology-indices",
+      "version": "0.17.0",
+      "license": "MIT",
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "name": "graphology-traversal",
+      "version": "0.3.1",
+      "license": "MIT",
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "name": "graphology-utils",
+      "version": "2.5.2",
+      "license": "MIT",
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "name": "mnemonist",
+      "version": "0.39.8",
+      "license": "MIT",
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "name": "obliterator",
+      "version": "2.0.5",
+      "license": "MIT",
+      "licenseFile": "LICENSE.txt"
+    }
+  ],
+  "modifications": [
+    "@orama/tokenizers: optional Intl.Segmenter; fallback Unicode Han characters and letter/number words"
+  ],
+  "patches": [
+    {
+      "package": "@orama/tokenizers@3.1.18",
+      "source": "dist/esm/mandarin.js",
+      "originalSha256": "cfc70f3b01524fcb7aa07abd5eb1766b786b6e6d743b72e8968d5bf79e05590e",
+      "bundledSourceSha256": "0c52c87faaf3a83c5a299ffe195ef5de8ee5e26eb1d6a3ab09e27a72297885d0",
+      "replacements": [
+        {
+          "from": "const segmenter = new Intl.Segmenter(\"zh-CN\", { granularity: \"word\" });",
+          "to": "const segmenter = typeof Intl.Segmenter === \"function\" ? new Intl.Segmenter(\"zh-CN\", { granularity: \"word\" }) : null;"
+        },
+        {
+          "from": "const segments = segmenter.segment(text);",
+          "to": "const segments = segmenter ? segmenter.segment(text) : Array.from(text.matchAll(/\\p{Script=Han}|[\\p{L}\\p{N}]+/gu), match => ({ segment: match[0], isWordLike: true }));"
+        }
+      ]
+    }
+  ]
+}

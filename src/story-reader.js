@@ -177,7 +177,7 @@ function storyArticle(story, index, contexts, mention) {
         + (people.length || places.length ? `<div class="sw2-story-context-links"><span>人物与地点</span>${[...people, ...places].map(contextButton).join('')}</div>` : '')
         + `<div class="sw2-story-jumps"><button type="button" data-story-jump="${first}">起头</button><button type="button" data-story-jump="${last}">最新进展</button></div>`
         + chapters
-        + '<p class="sw2-story-source">来路、经过与收场取自已有记录。更早的旧事可在「大事纪·旧卷」查看。</p></article>';
+        + '<p class="sw2-story-source">来路、经过与收场取自已有记录。更早的旧事可在「世界图谱」查看。</p></article>';
 }
 
 export function renderStoryReaderHtml(world, opts = {}) {
@@ -206,7 +206,7 @@ export function renderStoryReaderHtml(world, opts = {}) {
         + '<p data-story-no-results hidden></p><p class="sw2-story-source">每条故事只列一次，按最近一次有轮次记录的进展排列。</p></section>'
         + recent.map((story, index) => storyArticle(story, index, contexts, mention)).join('') + '</div>'
         + '<aside class="sw2-story-drawer" data-story-drawer hidden role="dialog" aria-label="人物与地点"><div class="sw2-story-drawer-head"><span>人物与地点</span><button type="button" data-story-close-context aria-label="关闭人物与地点">关闭 ×</button></div>'
-        + '<section data-story-world-panel hidden><h2>查世界</h2><details class="sw2-story-world-facts" data-pan-key="story-world-facts"><summary>世界现状、各方打算与地图</summary><!-- STORY_WORLD_ATTACH --></details><h3>查人物与地点</h3><input type="search" data-story-world-input aria-label="搜索世界名册" placeholder="输入人物、势力或地点"><div class="sw2-story-world-index">'
+        + '<section data-story-world-panel hidden><h2>查世界</h2><details class="sw2-story-world-facts" data-pan-key="story-world-facts"><summary>世界现状与各方打算</summary><!-- STORY_WORLD_ATTACH --></details><h3>查人物与地点</h3><input type="search" data-story-world-input aria-label="搜索世界名册" placeholder="输入人物、势力或地点"><div class="sw2-story-world-index">'
         + contexts.map(context => `<button type="button" data-story-world-entry data-story-context="${esc(context.key)}"><span>${esc(context.name)}</span><small>${context.kind}</small></button>`).join('') + '</div><p data-story-world-empty hidden>没有找到匹配的名号或地点。</p></section>'
         + contexts.map(context => `<section data-story-context-panel data-story-context-id="${esc(context.key)}" hidden><button type="button" data-story-world>← 查世界</button><h2>${esc(context.name)}</h2><p class="sw2-story-caption">${context.kind}</p>`
             + (context.location ? `<p>所在：${esc(context.location)}</p>` : '')

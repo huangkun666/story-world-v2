@@ -21,22 +21,27 @@
 
 /** 状态条那一个 `<span>` 的 id（`settings.html` 与 `web/index.js` 的兜底模板里都挂着它）。 */
 import { diagnostics } from '../src/diagnostics.js';
+import {syncSourceProgress} from './source-progress.js';
 import { withoutConsoleCapture, isPluginError } from './runtime-diagnostics.js';
 export const STATUS_ID = 'sw2_status_text';
 
 /** 关键状态留在调试页；中性界面动作和重复读秒可跳过记录。 */
-export function setStatus(text, { diagnostic = true } = {}) {
+export function setStatus(text, { diagnostic = true, progress = null, scope = diagnostics.getScope(), level = null, visible = null } = {}) {
     const line = String(text ?? '');
-    const warning = /失败|异常|注意/.test(line);
-    if (diagnostic) diagnostics.record('状态', warning ? 'warn' : 'info', line);
+    const recordLevel = ['info', 'warn', 'error'].includes(level) ? level : /失败|异常|注意/.test(line) ? 'warn' : 'info';
+    const warning = recordLevel === 'warn' || recordLevel === 'error';
+    if (diagnostic) diagnostics.forScope(scope).record('状态', recordLevel, line);
+    if (scope !== diagnostics.getScope()) return;
     if (typeof document === 'undefined') return;
     const el = document.getElementById(STATUS_ID);
     if (!el) return;
-    el.textContent = line;
+    if(el.textContent!==line)el.textContent = line;
+    syncSourceProgress(el,progress);
     const bar = el.closest?.('.sw2-statusbar');
     if (bar) {
         const inProgress = /^(?:⏳|正在)|^[^·。]*中[（(…]/u.test(line);
-        bar.style.display = warning || inProgress ? '' : 'none';
+        const show = typeof visible === 'boolean' ? visible : warning || inProgress || progress;
+        bar.style.display = show ? '' : 'none';
     }
 }
 

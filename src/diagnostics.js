@@ -25,6 +25,10 @@
 //
 // ＝＝ 有界（内存不许被日志撑爆）＝＝
 //   · 条数：只留最近 `limit` 条（1..5000，缺省 200）；
+//     ★2026-10-09：裁旧**先裁 info**（红黄保命）——流水不许把真错误挤出环形账；
+//       一条 info 都没有时才退回"裁最旧"（有界这条硬保证不变）。
+//   · 档位：`snapshot({level})` 支持 `'warn+'` = **该档及以上**（面板默认档，见 `passesLevel`）；
+//     精确档位（`'warn'`）语义不变。报告（`report`）**不受档位影响，永远全量**。
 //   · 单条：消息 ≤ 500 字、载荷里的单个字符串 ≤ 1000 字、嵌套 ≤ 8 层 ⇒ 截断处留 `…`（不假装是全文）。
 //
 // ＝＝ 接得住任何值（记录器绝不许把调用方带崩）＝＝
@@ -203,6 +207,38 @@ const cloneRecord = (rec) => ({
 /** 级别归一：只留 info/warn/error 三档（大小写与常见别名都认，字典外的落到 info）。 */
 const normalizeLevel = (level) => LEVEL_ALIAS[String(level ?? '').trim().toLowerCase()] || 'info';
 
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+// ★★★2026-10-09（用户实机报障 ·「**社区用户老是说报错**」）：**级别档位**与**红黄保命**。
+//
+// 病（用户导出的那份报告，75 条）：**真红 2 条、黄 8 条、info 流水 65 条**，而那 8 条黄里还有 6 条
+//   是同一次故障被记了 6 遍。一个 tick 3 次以上模型调用 ⇒ 每次 4 条流水 ⇒ 一轮十几条。
+//   社区用户打开调试台看到的**是一面流水墙**，每行还都带彩色徽章 ⇒ 他读到的是"一屏错误"。
+//
+// 两处口径（沿用 leg201 用户当场那条裁示「太多了，就放在复制报告里就行了，别展示出来」）：
+//   ① **档位支持"及以上"**：`'warn+'` = 警告与错误（面板的**默认**档）。精确档位（`'warn'`）语义
+//     一个字不改——那是既有判据锁着的旧口径（`diagnostics-console.test.js` 诊断③）。
+//   ② **裁旧先裁 info**：环形账只有 200 格，而流水把它占满 ⇒ 几轮之前那条真错误**根本留不到你来看**
+//      （"查不到原因"有一半是这个）。有界内存的硬保证一个字不改：仍 ≤ LIMIT。
+/** 级别高低（`'warn+'` 这类"及以上"档靠它比大小）。 */
+const LEVEL_RANK = { info: 0, warn: 1, error: 2 };
+
+/**
+ * 级别档位判据（**全仓唯一实现**：记录器筛选与面板的默认视图共用它，不许各写一套）。
+ * @param {string} level 记录自己的级别（info/warn/error）
+ * @param {string} filter 档位：`''`=全部 · `'warn'`=精确那一档 · `'warn+'`=**该档及以上**
+ * @returns {boolean}
+ * ★认不出的前缀（`'nope+'`）返回 **false**（空）——**不许静默当成"全部"**，否则降噪会变成假动作。
+ */
+export function passesLevel(level, filter) {
+    const want = String(filter ?? '');
+    if (!want) return true;
+    if (want.endsWith('+')) {
+        const min = LEVEL_RANK[want.slice(0, -1)];
+        return min === undefined ? false : LEVEL_RANK[String(level ?? '')] >= min;
+    }
+    return String(level ?? '') === want;
+}
+
 /** 模块名归一：空着就叫 `(未知)`（不许出现空模块——面板的下拉要靠它分组）。 */
 const normalizeModule = (module) => {
     const text = String(module ?? '').trim();
@@ -233,6 +269,8 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
     const wanted = Math.floor(Number(limit));
     const LIMIT = Number.isFinite(wanted) && wanted > 0 ? Math.min(wanted, MAX_LIMIT) : DEFAULT_LIMIT;
     const list = [];
+    let currentScope = null;
+    const normalizeScope = scope => scope == null ? null : String(scope);
     const listeners = new Set();
     let notifying = false;
     function notify() {
@@ -250,9 +288,10 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
      * @param {*} [data] 载荷（递归脱敏 + 克隆；缺省 null）
      * @returns {object|null} 存进去的那条（克隆）；失败 null
      */
-    function record(module, level, message, data = null) {
+    function record(module, level, message, data = null, scope = currentScope) {
         try {
             const rec = {
+                scope: normalizeScope(scope),
                 time: Date.now(),
                 module: normalizeModule(module),
                 level: normalizeLevel(level),
@@ -260,7 +299,12 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
                 data: data === null || data === undefined ? null : redact(data),
             };
             list.push(rec);
-            if (list.length > LIMIT) list.splice(0, list.length - LIMIT);   // 只留最近 LIMIT 条
+            // ★★★2026-10-09：**裁旧先裁 info**（红黄保命）——见上面那段。
+            //   有界内存的硬保证一个字不改：裁完仍是 ≤ LIMIT（没有 info 可裁时退回"裁最旧"）。
+            while (list.length > LIMIT) {
+                const at = list.findIndex((row) => row.level === 'info');
+                list.splice(at >= 0 ? at : 0, 1);
+            }
             notify();
             return cloneRecord(rec);
         } catch (_) {
@@ -274,21 +318,26 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
      * @returns {Array<{time:number,module:string,level:string,message:string,data:*}>}
      */
     function snapshot(filters = {}) {
+        const scope = Object.hasOwn(filters || {}, 'scope') ? normalizeScope(filters.scope) : currentScope;
         const wantModule = String(filters?.module ?? '');
         const wantLevel = String(filters?.level ?? '');
         const out = [];
         for (const rec of list) {
+            if (rec.scope !== scope) continue;
             if (wantModule && rec.module !== wantModule) continue;
-            if (wantLevel && rec.level !== wantLevel) continue;
+            if (!passesLevel(rec.level, wantLevel)) continue;   // ★档位判据只有一处实现（支持 'warn+'）
             out.push(cloneRecord(rec));
         }
         return out;
     }
 
     /** 清空（返回清掉几条——调用方要如实知道"本来就空"与"清掉了"是两件事）。 */
-    function clear() {
-        const removed = list.length;
-        list.length = 0;
+    function clear(scope = currentScope) {
+        const wantedScope = normalizeScope(scope);
+        let removed = 0;
+        for (let i = list.length - 1; i >= 0; i--) {
+            if (list[i].scope === wantedScope) { list.splice(i, 1); removed++; }
+        }
         notify();
         return removed;
     }
@@ -297,11 +346,15 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
      * 出一份报告（JSON 字符串，给复制/下载用）。
      * ★摘要那一头也要递归脱敏（它是调用方现传的，没经过 `record`）。
      */
-    function report(summary = {}) {
-        const records = snapshot();
+    function report(summary = {}, { scope = currentScope } = {}) {
+        scope = normalizeScope(scope);
+        const records = snapshot({ scope });
         const safeSummary = summary === null || summary === undefined ? {} : redact(summary);
         const doc = {
             title: 'Story World v2 调试报告',
+            scope,
+            globalRecords: scope === null ? [] : snapshot({ scope: null }),
+            globalRecordsNote: '以下启动或控制台记录无法确认发起聊天，单独保留，不计入当前聊天日志。',
             generatedAt: new Date().toISOString(),
             limit: LIMIT,
             count: records.length,
@@ -328,7 +381,14 @@ export function createDiagnostics({ limit = DEFAULT_LIMIT } = {}) {
         listeners.add(fn);
         return () => listeners.delete(fn);
     }
-    return { record, snapshot, clear, report, subscribe, limit: LIMIT, size: () => list.length };
+    function setScope(scope) { currentScope = normalizeScope(scope); notify(); return currentScope; }
+    function forScope(scope = currentScope) {
+        const captured = normalizeScope(scope);
+        return { scope: captured, record: (module, level, message, data = null) => record(module, level, message, data, captured),
+            snapshot: filters => snapshot({ ...filters, scope: captured }), clear: () => clear(captured),
+            report: summary => report(summary, { scope: captured }), size: () => snapshot({ scope: captured }).length };
+    }
+    return { record, snapshot, clear, report, subscribe, setScope, getScope: () => currentScope, forScope, limit: LIMIT, size: () => snapshot().length };
 }
 
 /** 插件共用的那一只（设置面板、网络与存储那几处都记到它上面）。 */

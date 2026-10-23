@@ -1,0 +1,41 @@
+{
+  "name": "elkjs",
+  "version": "0.12.0",
+  "license": "EPL-2.0 OR GPL-3.0-or-later",
+  "repository": {
+    "url": "git+https://github.com/kieler/elkjs.git",
+    "type": "git"
+  },
+  "tarball": "https://registry.npmjs.org/elkjs/-/elkjs-0.12.0.tgz",
+  "integrity": "sha512-YZcKynxVxYoKIOEpywEPwCFdg+BTbxQRNf3pbwdDCvc8O3kQD8bmIwSxKU1eOTVc4Xo+VG9Te+575mlfvOrhEQ==",
+  "files": [
+    {
+      "file": "LICENSE.md",
+      "bytes": 14443,
+      "sha256": "637e81f4a1b6b4079535c499fca05e238cf7605c1ff5b76d60d7da7ce96700c9"
+    },
+    {
+      "file": "elk-api.js",
+      "bytes": 9782,
+      "sha256": "ccca46175c05bbd280b5de6c9853103711e52c666a101f145b717e345363e24d"
+    },
+    {
+      "file": "elk-worker.min.js",
+      "bytes": 1595334,
+      "sha256": "e4f5c51c6f2fd564bb64e52e81c4a85a316ef2f24f8b90e1db5eb886c765b030"
+    }
+  ],
+  "build": {
+    "tool": "esbuild 0.28.2",
+    "entry": "entry.js",
+    "options": {
+      "bundle": true,
+      "format": "esm",
+      "platform": "browser",
+      "minify": true,
+      "legalComments": "inline"
+    },
+    "output": "index.js",
+    "sha256": "d5b3fa88ec54314e6e06c11fd302c5192a95f2308acddbf624f985c4e38aa7a5"
+  }
+}

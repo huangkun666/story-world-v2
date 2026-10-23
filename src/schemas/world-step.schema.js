@@ -4,6 +4,8 @@
 // 提案标注：S3 落子契约实测后可能联动调整（来源/位置语义），届时按流程过细案。
 
 import { actorSchema, scopeSchema } from '../event-contract.js';
+// 显式观察元数据的公共入口（`state-observation → event-contract` 单向，不成环）。
+import { observationSchema } from '../state-observation.js';
 export const worldStepSchema = {
     kind: 'object',
     additional: false,
@@ -104,6 +106,8 @@ export const worldStepSchema = {
                         },
                     },
                     reason: { kind: 'string' },
+                    // 可选：披露这份**已提交的覆灭状态**在当下/对谁可见。缺省 = 不推断可见性（覆灭本身可见 ≠ 自动观察）。
+                    observation: observationSchema,
                 },
             },
         },
@@ -135,6 +139,8 @@ export const worldStepSchema = {
                         },
                     },
                     note: { kind: 'string' },                   // 为什么这次事件让它变了
+                    // 可选：披露这份**已提交的新值**在当下/对谁可见（不是另编事实、不是摘要）。
+                    observation: observationSchema,
                 },
             },
         },
@@ -174,6 +180,8 @@ export const worldStepSchema = {
                         },
                     },
                     note: { kind: 'string' },                 // 一句话：这次事件让它怎么变了
+                    // 可选：披露这条**已提交的关系**在当下/对谁可见。
+                    observation: observationSchema,
                 },
             },
         },
@@ -193,6 +201,8 @@ export const worldStepSchema = {
                 props: {
                     id: { kind: 'string', minLength: 1 },     // 照抄输入里那条边的 id（引擎发的 rel_<轮次>_<第几条>）
                     why: { kind: 'string' },                  // 一句话：为什么这条关系不再算数了（进编年）
+                    // 可选：披露这次**了结**在当下/对谁可见。缺省 = 不推断（隐秘结束不许保留旧知识）。
+                    observation: observationSchema,
                 },
             },
         },

@@ -5,7 +5,7 @@ import { diagExtract } from './diagnostic-transport.js';
 
 export const extractionCancelled = () => Object.assign(new Error('用户已中止抽取'), { sw2Cancelled: true });
 
-export function createExtractionTaskHub({ getScope, getWorld, cache, setStatus, getRoot = () => null }) {
+export function createExtractionTaskHub({ getScope, getWorld, cache, setStatus, getRoot = () => null, getAdvanceState = () => null }) {
     let active = null;
     const sameScope = task => JSON.stringify(getScope()) === task.scope;
     function syncButtons() {
@@ -14,19 +14,32 @@ export function createExtractionTaskHub({ getScope, getWorld, cache, setStatus, 
             b.disabled = !active || active.signal.aborted || active.committed;
             b.setAttribute?.('aria-disabled', String(b.disabled));
         }
+        const advance = getAdvanceState();
+        const advancing = advance?.advancing ?? advance?.busy;
+        for (const [action, label, stop, running, canCancel, blocked] of [
+            ['init-world', '开始新世界', '停止抽象', Boolean(active), active && !active.signal.aborted && !active.committed && !active.committing, advance?.busy],
+            ['advance-world', '推进一轮', '停止推进', advancing, advance?.cancellable, Boolean(active || (advance?.busy&&!advance?.resumable))],
+        ]) for (const b of root?.querySelectorAll?.(`[data-action="${action}"]`) || []) {
+            if (b.getAttribute?.('data-action') !== action) continue;
+            b.textContent = running ? stop : label;
+            b.disabled = Boolean(running ? !canCancel : blocked);
+            b.setAttribute?.('aria-disabled', String(b.disabled));
+        }
     }
     function cancel({ chatChanged = false } = {}) {
-        if (!active || active.committed) return;
+        if (!active || active.committed || active.committing) return;
         active.chatChanged ||= chatChanged;
         active.controller.abort();
         syncButtons();
         if (!chatChanged && sameScope(active)) setStatus('正在中止抽取 · 已发请求可能仍在服务端运行，结果将丢弃…');
     }
-    async function run(action, label, handler) {
+    async function run(action, label, handler, {browser=false} = {}) {
+        if (getAdvanceState()?.busy) { setStatus('上一轮还在推进，请先停止或等待完成'); return; }
         if (active) { setStatus(`⏳ 上一次还在跑（${active.label}）——这一下没有重复发`); return; }
         const controller = new AbortController(), started = Date.now(), pendingCache = new Map();
-        const task = { action, label, controller, signal: controller.signal, scope: JSON.stringify(getScope()),
-            result: null, diagnostic: null, progress: null, committed: false,
+        const task = { action, label, browser, controller, signal: controller.signal, scope: JSON.stringify(getScope()),
+            result: null, diagnostic: null, progress: null, committed: false, committing: false,
+            beginCommit() { task.assertCurrent();task.committing=true;syncButtons(); },
             assertCurrent() {
                 if (active !== task || task.signal.aborted || !sameScope(task)) throw extractionCancelled();
             },
@@ -70,7 +83,7 @@ export function createExtractionTaskHub({ getScope, getWorld, cache, setStatus, 
         task.guard = Object.fromEntries(['assertCurrent', 'checkScope', 'validateInput', 'prepare'].map(key => [key, (...args) => {
             task.assertCurrent(); return worldGuard[key](...args);
         }]));
-        active = task; syncButtons();
+        active = task; syncButtons();let finalResult;
         try {
             await handler(task);
         } catch (err) {
@@ -82,16 +95,18 @@ export function createExtractionTaskHub({ getScope, getWorld, cache, setStatus, 
                     : `注意：${label}失败：${err?.message || err}——世界未动，可再点重试`);
             }
         } finally {
+            if(task.signal.aborted&&task.stopReady)try{await task.stopReady}catch(error){task.commitError=error}
             task.progress?.stop(); pendingCache.clear();
             if (!task.diagnostic && task.configuration) {
                 const { resolved, configuration } = task.configuration;
                 task.diagnostic = diagExtract(resolved, { ...configuration, task: action, sourceChars: null, signal: task.signal });
             }
-            const result = { ...task.result, ok: Boolean(task.committed || task.result?.ok && action === 'extract-scales'), cancelled: !task.committed && (task.signal.aborted || task.result?.cancelled) };
+            const result = { ...task.result, ok: Boolean(task.committed || task.result?.pending || task.result?.ok && action === 'extract-scales'), cancelled: !task.committed && (task.signal.aborted || task.result?.cancelled) };
             if (result.cancelled) result.ok = false;
+            finalResult=result;
             const stats = task.diagnostic?.stats() || {};
             result.timing = { ...result.timing, ...stats, ms: Date.now() - started };
-            result.warnings = [...(result.warnings || []), ...(result.errors || []).filter(error => /超长原文行/.test(error))];
+            result.warnings = [...(result.warnings || []), ...(result.errors || []).filter(error => /超长原文行|超长来源条目/.test(error))];
             task.diagnostic?.finish(result);
             if (task.signal.aborted && sameScope(task) && !task.chatChanged) {
                 if (task.commitError && !task.commitError.sw2Cancelled) setStatus(`注意：抽取已中止，原账保存状态未确认：${task.commitError.message || task.commitError}`);
@@ -100,6 +115,7 @@ export function createExtractionTaskHub({ getScope, getWorld, cache, setStatus, 
             if (active === task) active = null;
             syncButtons();
         }
+        return finalResult;
     }
-    return { run, cancel, syncButtons, scopeChanged: () => { if (active && !sameScope(active)) cancel({ chatChanged: true }); }, busy: () => Boolean(active) };
+    return { run, cancel, syncButtons, scopeChanged: () => { if (active && !sameScope(active)) cancel({ chatChanged: true }); }, busy: () => Boolean(active), legacyBusy: () => Boolean(active && !active.browser) };
 }

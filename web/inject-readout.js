@@ -33,6 +33,27 @@ const int = (value) => (Number.isFinite(Number(value)) ? Math.max(0, Math.floor(
 const chip = (label, value) => `<span class="sw2-inject-item"><b>${esc(label)}</b>${esc(value)}</span>`;
 
 /**
+ * ★★★（2026-10-12 · 用户令「**浏览器里看到的东西不是远端服务**」）：**本地方案**那一侧的来路口径。
+ *
+ * 病：那一格原来只有两档——`service` 印"服务核对可见内容"，**其余一律**印"向量＋关键词/关键词"。
+ *   而本地方案（浏览器世界）的检索既不是远端服务，也不只是"关键词"⇒ 不把来路说准，
+ *   玩家会以为"我看到的是某个远端服务核对过的"（对本地世界是**假话**）。
+ * 治法：`source === 'local'` 一律印"**本地…**"，并按读数自报的 `mode` 说清是哪几路；
+ *   `mode` 没报 ⇒ 三路合起来说（**不许把没发生的事说成发生了**）。`source === 'service'` 照旧。
+ */
+function localRecallLabel(mode) {
+    const m = String(mode ?? '').toLowerCase();
+    if (m === 'vector') return '本地向量';
+    if (m === 'graph' || m === 'world' || m === 'task' || m === 'tasks') return '本地图';
+    if (m === 'literal' || m === 'fulltext' || m === 'text' || m === 'keyword') return '本地全文';
+    if (m === 'fulltext-graph') return '本地全文与图';
+    if (m === 'hybrid-graph') return '本地全文、向量与图';
+    if (m === 'references') return '本地直接引用';
+    if (m === 'not-requested') return '本轮未请求';
+    return '本地检索';
+}
+
+/**
  * 往事那一路的说明（**哪几路真跑了、各取回几条**）——★这是"向量到底进没进去"的唯一可见处。
  * @param {object|null} past `facts.recall`
  * @param {boolean} vectorOn 向量通道开着没有（**它才是"走向量/走关键词"的开关**）
@@ -40,6 +61,10 @@ const chip = (label, value) => `<span class="sw2-inject-item"><b>${esc(label)}</
  */
 export function vectorPathLine(past = null, vectorOn = false) {
     if (!past) return '';
+    if (past.source === 'service') return past.mode === 'limited' || past.limited ? '聊天可见内容：检索受限，已提供可确认的记录' : '聊天可见内容：已按版本核对';
+    if (past.source === 'local') return past.limited ? '往事：本地检索受限，已提供可确认的记录'
+        : past.mode === 'not-requested' ? '往事：本轮未请求检索'
+        : `往事：${localRecallLabel(past.mode)}，已按固定版本核对`;
     const lit = int(past.literal), vec = int(past.vector);
     const keptLit = int(past.keptLiteral), keptVec = int(past.keptVector);
     if (!vectorOn) return '往事：只走关键词路（向量通道没开）';
@@ -76,20 +101,49 @@ export function injectReadoutHtml({ facts = null, vectorOn = false, rosterOn = f
     //   不拿"现在开关在哪"去追认上一次的结果（本仓"过期货冒充新检索"那条老病）。
     const ledgerOn = Boolean(facts.ledgerOn);
     const items = [];
-    // ① 格式指令 ＋ 名号表（合成一段写进去的，所以照实合成一格说；它俩都不是 0 字才报）
+    const fullState = Object.hasOwn(facts, 'movementBytes');
+    if(fullState){
+        const stateOn=Boolean(facts.sceneOn),limited=Boolean(facts.stateLimited)||int(facts.stateOmitted)>0;
+        const state=!stateOn?'未开':int(facts.stateBytes)?`${int(facts.stateBytes)} 字${limited?' · 受限':' · 完整'}`:facts.recall?'没有相关状态':'待准备';
+        const movement=!stateOn?'未开':`${int(facts.movementBytes)} 字${int(facts.movementOmitted)?' · 未带入 '+int(facts.movementOmitted)+' 条':''}`;
+        const history=!ledgerOn?'未开':past?`${past} 字`:'本次没有相关历史';
+        return '<div class="sw2-inject-row">'+chip('当前状态',state)+chip('本批动向',movement)+chip('相关往事',history)+'</div>'
+            +(facts.recall?.limited?'<div class="sw2-hint">历史检索受限，已提供可确认的记录。</div>':'');
+    }
+    // ① 这里只显示实际格式指令，不再声称包含名号表。
     items.push((tags || rosterOn)
-        ? chip('格式指令＋名号表', `${tags} 字`)
-        : chip('格式指令＋名号表', '未开'));
+        ? chip('格式指令', `${tags} 字`)
+        : chip('格式指令', '未开'));
     // ② 世界动向
     items.push(tide ? chip('世界动向', `${tide} 字`) : chip('世界动向', '未开'));
+    // ③b 当前可见状态（★★★2026-10-12：本地方案那一段"眼前情形"的读数）
+    //   ★只有注入器**真把这一格递进来了**（读数里有 `sceneOn`）才画——老账与服务链路的读数里
+    //     根本没有它 ⇒ 照旧一个字都不出现（**老读数行为逐字不变**，见用户"没 sceneOn 就照旧"那条）。
+    //   ★三态分得开（本仓"读数不许留空"那条）：开而有内容 ⇒ N 字；开着但这一轮没有可见变更 ⇒
+    //     "本场景无可见变更"；关着 ⇒ "未开"。★溢出如实报条数并指明该拧哪一格，且把这一段标成受限。
+    if (Object.prototype.hasOwnProperty.call(facts, 'sceneOn')) {
+        const sceneOn = Boolean(facts.sceneOn);
+        const stateBytes = int(facts.stateBytes);
+        const omitted = int(facts.stateOmitted);
+        const limited = Boolean(facts.stateLimited) || omitted > 0;
+        const body = !sceneOn ? '未开' : (stateBytes === 0 ? (limited?'当前状态读取受限':fullState?'没有相关状态':'本场景无可见变更') : `${stateBytes} 字${fullState&&!limited?' · 完整':''}`);
+        items.push(chip(fullState?'当前状态':'当前可见状态', sceneOn && limited ? `${body}（受限）` : body));
+        if (sceneOn && omitted > 0) items.push(chip('状态未装入', fullState?`${omitted} 条，读取受限`:`${omitted} 条，请增加状态字数`));
+        if(fullState)items.push(chip('本批动向',sceneOn?`${int(facts.movementBytes)} 字${int(facts.movementOmitted)?' · 未带入 '+int(facts.movementOmitted)+' 条':''}`:'未开'));
+    }
     // ③ 账上往事（跟书不一样那一段**不依赖检索**，取不到往事时它照样在 ⇒ 分开报）
     if (!ledgerOn && !past && !div) items.push(chip('账上往事', '未开'));
     else {
         items.push(chip('账上往事', past ? `${past} 字` : '这一轮没取到'));
         if (div) items.push(chip('跟书不一样', `${div} 字`));
     }
-    // ④ 向量路：**哪一路真在找**（自动对齐的可见处）
-    items.push(chip('往事怎么找', vectorOn ? '向量＋关键词' : '关键词'));
+    // ④ 来路：**哪一路真在找**（自动对齐的可见处）。
+    //   ★★★（2026-10-12）：本地方案（浏览器世界）**不是远端服务** ⇒ `source === 'local'`
+    //     一律印"本地…"（按读数自报的 mode 说清是哪几路）；只有真服务回执才印"服务核对可见内容"。
+    const recallSource = facts.recall?.source;
+    items.push(chip('往事怎么找', recallSource === 'service' ? '服务核对可见内容'
+        : recallSource === 'local' ? localRecallLabel(facts.recall?.mode)
+        : vectorOn ? '向量＋关键词' : '关键词'));
     if (facts.count) items.push(chip('注入', `${int(facts.count)} 次`));
     const path = vectorPathLine(facts.recall, vectorOn);
     const total = int(facts.totalBytes);
@@ -98,6 +152,6 @@ export function injectReadoutHtml({ facts = null, vectorOn = false, rosterOn = f
         : `插件上一次往你的对话里塞了 <b>${total} 字</b>`;
     return `<div class="sw2-inject-row">${items.join('')}</div>`
         + `<div class="sw2-inject-row sw2-inject-row-wide"><span class="sw2-inject-lead">${lead}</span>`
-        + `${path ? `<span class="sw2-inject-sub">${esc(path)}${int(facts.recall?.overflow) ? ` · 额度装不下 ${int(facts.recall.overflow)} 条` : ''}</span>` : ''}`
+        + `${path ? `<span class="sw2-inject-sub">${esc(path)}${int(facts.recall?.omitted) ? ` · 额度装不下 ${int(facts.recall.omitted)} 条` : ''}${int(facts.recall?.overflow) ? ` · 额度装不下 ${int(facts.recall.overflow)} 条` : ''}</span>` : ''}`
         + `</div>`;
 }

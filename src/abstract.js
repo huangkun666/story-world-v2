@@ -80,7 +80,7 @@ import { runParallel } from './parallel-run.js';
 //   ★为什么切出去：本文件已 3400+ 行，而这两件事**与"怎么抽"无关**——
 //     `abstract-evidence.js` 是"这段材料是不是本次允许的、这句原话在不在里面"；
 //     `entity-identity.js` 是"这个名字/别名指哪一个实体"。两处都是纯函数、零 DOM。
-import { freezeAllowedSources, evidenceDictionary, verifyQuote, presenceIn, evidenceRecord, summarizeEvidence, formatEvidenceLine, materialRowsOf, scopeForRows } from './abstract-evidence.js';
+import { freezeAllowedSources, evidenceDictionary, verifyQuote, presenceIn, evidenceRecord, summarizeEvidence, formatEvidenceLine, materialRowsOf, scopeForRows, sourceRowGroups, chunkSourceRowsWithRanges } from './abstract-evidence.js';
 //   ★复查第二轮（finding ④）：解析**只有一处实现**（`resolveEntityIdentityWithCanon`）——归属、关系端点、
 //     标签、查书四个消费者共用；`Preferred`/`Name` 两个旧出口住在 `entity-identity.js`，本文件不再各留一份。
 import { resolveEntityIdentityWithCanon, mergeEntityAliases, entityKeysOf } from './entity-identity.js';
@@ -291,7 +291,7 @@ export function buildRosterPrompt(sourceText, declared = [], { sources = null, s
         //   ★★为什么**只要书里明写的**：账本从书出发，然后由玩的过程推翻它（那是模拟的活）。
         //     开局这一批只负责"把书里已经有的那张网摆上桌"，**不负责替作者补全**。
         '纪律：',
-        ...(evidence ? ['地图 geography 只收本次材料明述的地点、确认别名与 within/adjacent/passage；每个地点与关系都带 ev。保留原文完整名称，同名不同地点用不同 key，可带原文明述的 qualifier；不凭名字包含、所属势力猜地点关系。方向未载就省略 direction，不默认双向；条件照原文保留。没有地图资料可省略 geography。'] : []),
+        ...(evidence ? ['地图 geography 只收本次材料明述的地点、确认别名与 within/adjacent/passage/bearing；bearing 的 from 地点在 to 地点的八向方位必须原文明述，缺失就不写，不从名字或通道猜；每个地点与关系都带 ev。保留原文完整名称，同名不同地点用不同 key，可带原文明述的 qualifier；不凭名字包含、所属势力猜地点关系。方向未载就省略 direction，不默认双向；条件照原文保留。没有地图资料可省略 geography。'] : []),
         '1. 只收原文名，不收泛指称呼；地名（洲/山/谷/城等）标 location。',
         '2. 纯种族的群体名号（如 人族、妖族、鬼族、魔族、灵族、仙族、神族等）不算势力——不要给它们标 faction；只有书中明述的组织（如某族的宗族、门派、联盟、国度）才是势力。',
         '3. **所属（角色的所属势力）= 必抄项**：本书的常见写法是「组织条目的正文里列出成员行」（如 `- 吞天妖王 (男, T8大乘中期): 现任盟主`）——',
@@ -1886,7 +1886,8 @@ function withExtractSignal(work, signal) {
 }
 export async function extractWorldSetting(options = {}) {
     const { signal = null, extract, cache } = options;
-    const chunkChars = normalizeExtractChunkChars(options.chunkChars);
+    const normalizedChunkChars = normalizeExtractChunkChars(options.chunkChars);
+    const chunkChars = normalizedChunkChars === 'unlimited' ? Number.MAX_SAFE_INTEGER : normalizedChunkChars;
     const started = Date.now();
     const steps = [];
     let calls = 0, live = 0, peak = 0, failure = null;
@@ -1994,25 +1995,8 @@ async function callOnce(extract, text, buildPrompt = buildAbstractPrompt, eviden
 // 行级分块：按累计字符 ≤ maxChar 切块（保行完整；超长单行自成一块）
 // ★复查③④：**带行号**的版本是唯一实现——`chunkRows` 只是它的薄壳（分块与"本次展示了哪些行"
 //   必须是同一把尺子，否则作用域会与真实分块错位）。
-export function chunkRowsWithRanges(rows, maxChar) {
-    const chunks = [];
-    let cur = [];
-    let curLen = 0;
-    let from = 0;
-    for (let i = 0; i < rows.length; i += 1) {
-        const r = rows[i];
-        const len = Array.from(r).length;
-        if (cur.length && curLen + len > maxChar) {
-            chunks.push({ text: cur.join('\n'), from, to: i - 1 });
-            cur = [];
-            curLen = 0;
-            from = i;
-        }
-        cur.push(r);
-        curLen += len;
-    }
-    if (cur.length) chunks.push({ text: cur.join('\n'), from, to: rows.length - 1 });
-    return chunks;
+export function chunkRowsWithRanges(rows, maxChar, groups) {
+    return chunkSourceRowsWithRanges(rows, maxChar, groups);
 }
 export function chunkRows(rows, maxChar) {
     return chunkRowsWithRanges(rows, maxChar).map((c) => c.text);
@@ -2508,7 +2492,7 @@ function mergeCleaned(a, b) {
 //   治法：`buildPrompt` 的签名定为**工厂** `(childText, childScope) => prompt`：
 //     · 顶层与每个子块都调 `promptFor(自己的文本, 自己的作用域)`（来源清单 = 子块真正见到的那几块）；
 //     · 递归把**同一个工厂**继续往下传 ⇒ 模式（名册遍 / 属性遍 / 设定遍）在降级里保持不变。
-async function tryRosterChunk(extract, text, depth, probeState, { declared = [], onProgress = null, progressLog = null, buildPrompt = null, stopWhen = null, evidence = null, scope = null, rowIndexes = null, scopeOf = null, rootsPolicy = null } = {}) {
+async function tryRosterChunk(extract, text, depth, probeState, { declared = [], onProgress = null, progressLog = null, buildPrompt = null, stopWhen = null, evidence = null, scope = null, rowIndexes = null, scopeOf = null, rootsPolicy = null, splitAt = null } = {}) {
     const ev = evidence ? { ...evidence, scope } : null;
     const promptFor = buildPrompt || ((t, sc) => buildRosterPrompt(t, declared, ev ? { sources: ev.frozen, scope: sc } : {}));   // leg23：本块内按书声明给召回清单
     // ★★★Task 4（integration boundaries · 复审 F3/接口①）：**根在这一次调用里处理**。
@@ -2554,17 +2538,17 @@ async function tryRosterChunk(extract, text, depth, probeState, { declared = [],
     }
     if (depth < ROSTER_CHUNK_DEPTH) {
         const lines = text.split('\n').filter(Boolean);
-        if (lines.length > 1) {
-            const mid = Math.ceil(lines.length / 2);
+        const mid = splitAt ? splitAt(rowIndexes) : Math.ceil(lines.length / 2);
+        if (lines.length > 1 && mid > 0) {
             // ★Task 3：拆半后的两个子块**各自**带自己的文本当 span（`callOnce` 的 `text` 就是子块本身）
             //   ⇒ 子块借不到"没见过的"原话（核不过就拒收并留原因）。
             //   ★复查③：**作用域跟着同一刀切**（`rowIndexes` 的前半/后半）——子块只认自己见到的那几行。
             const idx = Array.isArray(rowIndexes) ? rowIndexes : null;
             const halfAIdx = idx ? idx.slice(0, mid) : null;
             const halfBIdx = idx ? idx.slice(mid) : null;
-            const halfA = await tryRosterChunk(extract, lines.slice(0, mid).join('\n'), depth + 1, probeState, { declared, onProgress, progressLog, evidence, buildPrompt: promptFor, rowIndexes: halfAIdx, scopeOf, scope: scopeOf ? scopeOf(halfAIdx) : null, rootsPolicy });
+            const halfA = await tryRosterChunk(extract, lines.slice(0, mid).join('\n'), depth + 1, probeState, { declared, onProgress, progressLog, evidence, buildPrompt: promptFor, rowIndexes: halfAIdx, scopeOf, scope: scopeOf ? scopeOf(halfAIdx) : null, rootsPolicy, splitAt });
             if (halfA.aborted) return halfA;
-            const halfB = await tryRosterChunk(extract, lines.slice(mid).join('\n'), depth + 1, probeState, { declared, onProgress, progressLog, evidence, buildPrompt: promptFor, rowIndexes: halfBIdx, scopeOf, scope: scopeOf ? scopeOf(halfBIdx) : null, rootsPolicy });
+            const halfB = await tryRosterChunk(extract, lines.slice(mid).join('\n'), depth + 1, probeState, { declared, onProgress, progressLog, evidence, buildPrompt: promptFor, rowIndexes: halfBIdx, scopeOf, scope: scopeOf ? scopeOf(halfBIdx) : null, rootsPolicy, splitAt });
             if (halfB.aborted) return halfB;
             // ★Task 4：**已经各自核过的**根/关系跟着合并走（`mergeCleaned` 不再把它们丢掉）。
             return {
@@ -2921,9 +2905,16 @@ async function extractWorldSettingInner({ sourceText, extract, cache, force = fa
     //     但**每次调用都短**、不再有"烧满超时再拆"的浪费；总调用数与"级联拆半"同量级或更少。
     //   ★口径不变：仍是"读全 + 块间纯函数合并"，只是块更小（`chunkRows` 同一把行级尺子）。
     //   ★复查③④：改成**带行号**的分块——每一块的作用域（本次展示了哪几块的哪一段）由它的行号区间算出来。
-    const chunks = chunkRowsWithRanges(rows, chunkChars);
+    const groups = sourceRowGroups(frozen, { text: src, rows: materialRows });
+    const boundaries = new Set(groups.map(group => group.from));
+    const splitAt = indexes => {
+        const cuts = indexes.map((index, i) => i > 0 && boundaries.has(index) ? i : 0).filter(Boolean);
+        return cuts.sort((a, b) => Math.abs(a - indexes.length / 2) - Math.abs(b - indexes.length / 2))[0] || 0;
+    };
+    const chunks = chunkRowsWithRanges(rows, chunkChars, groups);
     for (const [i, chunk] of chunks.entries()) {
         if (rows.slice(chunk.from, chunk.to + 1).some(row => Array.from(row).length > chunkChars)) errors.push(`第 ${i + 1}/${chunks.length} 块含超长原文行，完整保留（超过 ${chunkChars} 字符）`);
+        if (groups.some(group => group.from >= chunk.from && group.to <= chunk.to && Array.from(rows.slice(group.from, group.to + 1).join('\n')).length > chunkChars)) errors.push(`第 ${i + 1}/${chunks.length} 块含超长来源条目，完整保留（超过 ${chunkChars} 字符，条目内部不拆分）`);
     }
     const chunkIndexes = (c) => {
         const out = [];
@@ -2995,7 +2986,7 @@ async function extractWorldSettingInner({ sourceText, extract, cache, force = fa
         const idx = chunkIndexes(chunk);
         const { cleaned } = await tryRosterChunk(extract, chunk.text, 0, probeState, {
             declared, onProgress, progressLog: taskLog, evidence,
-            rowIndexes: idx, scope: scopeOfIndexes(idx), scopeOf: scopeOfIndexes,
+            rowIndexes: idx, scope: scopeOfIndexes(idx), scopeOf: scopeOfIndexes, splitAt,
         });
         if (!cleaned) {
             degrade();   // ★失败即退回串行（见上）
@@ -3085,7 +3076,7 @@ async function extractWorldSettingInner({ sourceText, extract, cache, force = fa
             // ★复查 Minor：给**工厂**（`(childText, childScope)`），拆半后的子块才留得住"设定/属性遍"的模式，
             //   也才拿得到子块自己的来源清单（旧写法把父块作用域闭包死了）。
             buildPrompt: (t, sc) => settingPass(t, first, sc),
-            evidence, rowIndexes: idx, scope: scopeOfIndexes(idx), scopeOf: scopeOfIndexes,
+            evidence, rowIndexes: idx, scope: scopeOfIndexes(idx), scopeOf: scopeOfIndexes, splitAt,
             // ★Task 4：首块**不问根**（用户拍的 P2：roots 只塞第 2..N 块）⇒ 首块也不设根闸——
             //   语义与旧法逐字相同（旧法无条件丢掉首块交回的根），只是把"问"与"核"都收在非首块。
             rootsPolicy: first ? null : rootsPolicy,

@@ -1,8 +1,10 @@
+import {resolveWorldPropertyField} from './source-field-table.js';
+import {worldRecordMetrics} from './world-record-metrics.js';
 // story-world-v2/src/settle.js
 // 结算管线（S5）：按序 校验 → 薄裁定 → 因果挂链 → 一致性检查 → 分量重算（常量占位）→ 落账 → 编年 → GC/度量。
 // 纯函数：输入 SSOT 不被修改，返回新世界。硬规则出处：ANCHOR §3②/§4.2/§4.4/§4.5、切片细案 S5、长跑防线细案 §2.5。
 import { checkWorldStep, newEventIdsOf, normalizeSameStepEventRefs } from './check-step.js';
-import { eventDetails, eventEntityIds, eventDetailText, resolveScopes, checkEventContract, applyConditionUpdates, remapConditionEventRefs } from './event-contract.js';
+import { eventDetails, eventEntityIds, eventDetailText, resolveScopes, checkEventContract, applyConditionUpdates, remapConditionEventRefs, storeObservation } from './event-contract.js';
 // ★★★leg67（甲案）：**引用完整性收成单一主人**——"因必须未闭环"这条判据（含 leg66 的"判定时点 = 进入批次那一刻"）
 //   整段搬进 `src/ref-rules.js` 的 `'entityUpdates.cause'` 表；本文件只传 `entry` 快照并渲染裁定文案。
 //   ★为什么必须收口：这条判据原先在**三处**各写一份（校验期 `check-step`、净化期 `sanitize-step`、
@@ -549,7 +551,7 @@ export function spawnAgendas(world, gstep, tick, warnings, chronicle, lim = reso
             const parent = world.agendas.find((x) => x.id === agenda.parentId);
             parent.memory.promises.push(agenda.id);   // A-5 前半：委派承诺写入（清 promises 写入执行债）
             // K21 暗处渲染（因果链细案 §3.4 → A-4）：concealed 委派不留痕——数据照写（父 promises 属账），编年抑制（暗处不曝光）
-            if (agenda.visibility !== 'concealed') {
+            if (agenda.visibility === 'known') {
                 chronicle.push({
                     id: `ch_${tick}_ag_${agenda.id}`,
                     tick,
@@ -630,7 +632,7 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
         a.memory.done.push(`t${tick}: ${ad.step}`);
         a.memory.turnsAlive += 1;
         // K21 暗处渲染（因果链细案 §3.4 → A-4）：concealed 推进不留痕——memory.done 属账照写，动态流条目抑制（暗处合法）
-        if (a.visibility !== 'concealed') {
+        if (a.visibility === 'known') {
             chronicle.push({ id: `ch_${tick}_adv_${ad.agendaId}`, tick, text: `盘算「${a.goal}」推进：${ad.step}`, kind: 'scheme' });
         }
         if (a.progress >= a.maxSteps) {
@@ -674,7 +676,7 @@ function applyAgendaAdvances(world, step, tick, chronicle, warnings) {
                 if (parent) {
                     parent.memory.done.push(`兑现：${a.goal}`);
                     // K21 暗处渲染：concealed 兑现不留痕——父 done 属账照写，编年抑制（子结清是暗处的成果，不上桌）
-                    if (a.visibility !== 'concealed') {
+                    if (a.visibility === 'known') {
                         chronicle.push({
                             id: `ch_${tick}_ful_${a.id}`,
                             tick,
@@ -860,13 +862,14 @@ function chronicleEvents(world, step, tick, chronicle) {
 // ⑧ GC/度量（切片版）：simLog 记账（长跑细案 §2.5 四字段；K2 起含门控审计；K9 起含 playerAffected 影响审计）。
 // K38 观测台（敲定稿 I 条）：entry 增 proposals（提议条数=拒签率分母）/ rejected（静默滤除+裁定拒=分子）——
 //   只在有值时写（旧账零扰动；观测台对缺字段走 warnings 兜底口径）。
-function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate, playerAffected = [], proposals = 0, rejected = 0, packTokensBeforeTrim = null) {
+function recordMetrics(world, tick, packTokens, calls, warnings, chronicle, gate, playerAffected = [], proposals = 0, rejected = 0, packTokensBeforeTrim = null, worldView = null) {
     world.meta.simLog = world.meta.simLog || [];
     const entry = {
         tick,
         packTokens,
         ssotBytes: JSON.stringify(world).length,
         events: world.events.length,
+        ...worldRecordMetrics(world,worldView),
         chronicle: chronicle.length,
         calls,
         warnings: [...warnings],
@@ -926,33 +929,27 @@ export function spawnEntities(world, gstep, tick, warnings, chronicle, lim = { �
             continue;
         }
         const kind = ne.kind || 'character';
-        // ★leg32f：位置不在集内 ⇒ 归一到「未明」并留痕（不拒整步、不拒这个人）。
-        //   为什么归一：位置线已定案"不可靠、不参与机制、包里'有就给'"，拿它当硬闸会把"这个人该不该存在"
-        //   和"他站在哪"混为一谈。座标编错，人还是该入场的（空着就是空着）。
-        let location = ne.location;
-        // ★leg33：同一趟归一——模型可能把实体表格子里的「（推）」注解一起抄进 location
-        //   （`normalizePosition` 与 check-step 的位置段读同一份真源）。
-        // ★leg33c（用户拍板「位置变成自由文本，位置集干脆删了」）：**位置集不再是闸**——
-        //   集外地名**照收**（模型的创作权），只留痕。旧法把它归一到「未明」，
-        //   于是"大书里写得出、账上却记不住"（书里 134 个地点被截到 60，模型写 `太清境` 就被抹成未明）。
-        //   只有**空值**才归「未明」（空着就是空着——这是形态，不是判据）。
-        const locNorm = normalizePosition(location);
+        // ★★★用户新令（2026-10-12）：**有位置就填，没位置就不填**。旧法把没给位置的新实体
+        //   一律落「未明」占位——那既是一个编出来的地名，又让"两个都没写位置的人"在可见性判断里
+        //   看起来站在同一处。⇒ 现在**不落 location 键**（空着就是空着）。
+        //   集外地名照收（位置集不是闸，只留痕：leg32f/leg33c 的创作权口径不变）；
+        //   归一后仍为空 ⇒ 这一格不存在，绝不补占位。
+        let location;
+        const locNorm = normalizePosition(ne.location);
         if (typeof locNorm === 'string' && locNorm.trim()) {
             location = locNorm.trim();
             if (!new Set(world.context?.positions || []).has(location)) {
                 warnings.push(`位置集外: 「${ne.name}」的位置「${location}」不在参照表内（照收——参照表不是闸）`);
             }
-        } else {
-            location = '未明';
         }
         // leg25 c：入局**不再落任何数值**——四维已不存在（书里的说法走 `实力` 文本态）。
         const ent = {
             id: `e_${tick}_${born.length + 1}`,
             kind,
             name: ne.name,
-            location,
             lastActiveTick: tick,
         };
+        if (location !== undefined) ent.location = location;
         // K45/C7（用户 2026-09-09 拍板：提示词约束为主）：newEntities 可带 parent=所属势力名——目标在册且为势力且未灭才落；否则弃关系+警告（照常入局）
         const parent = typeof ne.parent === 'string' && ne.parent.trim() ? ne.parent.trim() : null;
         if (parent) {
@@ -961,6 +958,8 @@ export function spawnEntities(world, gstep, tick, warnings, chronicle, lim = { �
             else warnings.push(`裁定: 「${ne.name}」的从属「${parent}」不在册/非势力/已灭——弃关系（照常入局）`);
         }
         world.entities.push(ent);
+        world.meta??={};world.meta.entityOrigins??={};
+        world.meta.entityOrigins[ent.id]={type:ne.source.type==='book'?'book':'runtime',source:structuredClone(ne.source),tick};
         born.push(ent);
         const why = ne.source.type === 'event'
             ? `因事件「${(world.events || []).find((e) => e.id === ne.source.ref)?.title ?? ''}」而生`
@@ -1006,7 +1005,21 @@ function applyEntityFates(world, gstep, tick, warnings, chronicle) {
             if (!hot && !archived) { warnings.push(`裁定: 覆灭复核拒绝——源事件「${f.source.ref}」不在账`); continue; }
             if (hot && !hot.closed) { warnings.push(`裁定: 覆灭复核拒绝——源事件「${f.source.ref}」未了结（尘埃未定）`); continue; }
         }
+        const prevStatus = ent.status || 'active';
         ent.status = 'dead';
+        // ★显式观察元数据（可选）：覆灭这一步也把 `status` 变更写进 `entityFields` 留痕
+        //   （值 / 前值 / 因 / 因型 / tick / 出处 "变更" / prior），与 `applyEntityUpdates` 同形。
+        //   ★**不自动推断**：覆灭本身可见 ≠ 对谁观察得到 ⇒ 没写 observation 就不落这一格。
+        world.meta.entityFields = world.meta.entityFields || {};
+        const fateRec = world.meta.entityFields[ent.id] ? { ...world.meta.entityFields[ent.id] } : {};
+        const fateFields = { ...(fateRec.fields || {}) };
+        const fatePrior = fateFields.status || null;
+        const fateRecord = { value: 'dead', prev: prevStatus, cause: f.source.ref, causeType: f.source.type, tick, source: '变更', prior: fatePrior };
+        const fateObs = storeObservation(f.observation, world, tick);
+        if (fateObs) fateRecord.observation = fateObs;
+        fateFields.status = fateRecord;
+        fateRec.fields = fateFields;
+        world.meta.entityFields[ent.id] = fateRec;
         chronicle.push({
             id: `ch_${tick}_fate_${ent.id}`,
             tick,
@@ -1031,8 +1044,12 @@ function applyEntityFates(world, gstep, tick, warnings, chronicle) {
 function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAtEntry) {
     const updates = gstep.entityUpdates || [];
     const stats = { applied: 0, revived: 0 };
-    for (const u of updates) {
-        const ent = (world.entities || []).find((e) => e.id === u.entity);
+    for (const proposed of updates) {
+        const target = (world.entities || []).find(e=>e.id===proposed.entity);
+        const property = ['status','location'].includes(proposed.field)?null:resolveWorldPropertyField(world,target,proposed.field);
+        if(!['status','location'].includes(proposed.field)&&!property){warnings.push('裁定: 属性字段未获当前世界确认许可');continue;}
+        const u={...proposed,field:property?.storageKey??proposed.field};
+        const ent = target;
         if (!ent) continue;                                          // check 已拒（防御）
         const prev = ent[u.field];
         // 复核（check 已核，此处是"不信上游"的防御——照 applyEntityFates 的惯例）
@@ -1096,9 +1113,12 @@ function applyEntityUpdates(world, gstep, tick, warnings, chronicle, openCauseAt
         //     而**原来那条记录整条进 `prior`** ⇒ "书里怎么说"与"后来怎么变"**同时在场、互不覆盖**。
         //     （不改 `entity.fieldSource`：那张发票是"书里原话"的证据，只由名册/查书写，本函数不碰。）
         fieldsRec[u.field] = {
-            value: u.value, prev, cause: ref, causeType: u.cause?.type, tick, source: '变更',
+            value: u.value, ...(prev!==undefined?{prev}:{}), cause: ref, causeType: u.cause?.type, tick, source: '变更',
             prior,                                   // ← 上一版记录（可能是查书的「书里原话」，也可能是上一次变更）
         };
+        // ★观察元数据随**现值那条留痕**落账（可选）。这一条每次都是新记录 ⇒ 没续报观察时旧知识**自然被清除**。
+        const updateObs = storeObservation(u.observation, world, tick);
+        if (updateObs) fieldsRec[u.field].observation = updateObs;
         rec.fields = fieldsRec;
         world.meta.entityFields[ent.id] = rec;
     }
@@ -1261,7 +1281,8 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
     for (const c of facts.changes || []) {
         const ent = byId.get(c.entityId);
         const isPlace = c.field === CHANGE_PLACE_FIELD;
-        if (!ent || (!isPlace && !CHANGE_FIELDS.includes(c.field))) { reject('change', { entityId: c.entityId, field: c.field }); continue; }
+        const property=isPlace?null:resolveWorldPropertyField(world,ent,c.fieldName??c.field,{fieldId:c.fieldId??null,schemaRevision:c.schemaRevision??null});
+        if (!ent || (!isPlace && (!property||!c.fieldId||!c.schemaRevision||property.storageKey!==c.field))) { reject('field-schema', { entityId: c.entityId, field: c.field }); continue; }
         const val = String(c.value ?? '').trim();
         if (!val) { reject('value', { entityId: c.entityId, field: c.field }); continue; }
         const linked = association(c);
@@ -1269,7 +1290,7 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
         if (typeof ent[c.field] === 'string' && ent[c.field].trim() === val) { stats.noop += 1; continue; }
         const pair = `${c.entityId}|${c.field}`;
         if (wrote.has(pair)) { reject('duplicateField', { entityId: c.entityId, field: c.field }); continue; }
-        const node = linked || addResult({ title: `${ent.name}的${isPlace ? '所在' : c.field}变成了「${val}」`,
+        const node = linked || addResult({ title: `${ent.name}的${isPlace ? '所在' : property.name}变成了「${val}」`,
             participantIds: [c.entityId], quote: c.raw || null, position: c.location, family: 'change' });
         attach(node, [c.entityId]);
         const prev = ent[c.field];
@@ -1278,7 +1299,7 @@ export function registerDialogueFacts(world, { facts = null, dialogue = '', tick
         world.meta.entityFields ||= {};
         const rec = { ...(world.meta.entityFields[ent.id] || {}) };
         const fieldsRec = { ...(rec.fields || {}) };
-        fieldsRec[c.field] = { value: val, prev, cause: node.id, causeType: 'event', tick: t, source: '变更', prior: fieldsRec[c.field] || null };
+        fieldsRec[c.field] = { value: val, ...(prev!==undefined?{prev}:{}), cause: node.id, causeType: 'event', tick: t, source: '变更', prior: fieldsRec[c.field] || null };
         rec.fields = fieldsRec;
         world.meta.entityFields[ent.id] = rec;
         wrote.add(pair);
@@ -1340,6 +1361,8 @@ function applyRelationChanges(world, gstep, tick, warnings, chronicle, openCause
         if (!(world.entities || []).some((e) => e.id === ru.to)) return;
         world.relations = world.relations || [];
         const id = `rel_${tick}_${i + 1}`;
+        // ★显式观察（可选）：known 在此固化成员（`storeObservation` 内 `resolveScopes`），encounter 原样存。
+        const relObs = storeObservation(ru.observation, world, tick);
         world.relations.push({
             id,
             from: ru.from,
@@ -1348,7 +1371,10 @@ function applyRelationChanges(world, gstep, tick, warnings, chronicle, openCause
             cause: { type: ru.cause.type, ref: ru.cause.ref },
             tick,
             ...(ru.note ? { note: ru.note } : {}),             // 空着就是空着：没写就不落这一格
+            ...(relObs ? { observation: relObs } : {}),
         });
+        world.meta??={};world.meta.relationOrigins??={};
+        world.meta.relationOrigins[id]={type:'runtime',source:{type:ru.cause.type,ref:ru.cause.ref},tick};
         stats.born += 1;
         chronicle.push({
             id: `ch_${tick}_rel_${id}`,
@@ -1364,6 +1390,12 @@ function applyRelationChanges(world, gstep, tick, warnings, chronicle, openCause
         if (!rel || rel.endedTick != null) continue;
         rel.endedTick = tick;
         if (rc.why) rel.endedWhy = rc.why;
+        // ★观察随了结**替换或清除**：带了就换成这次了结的观察，没带就清掉——
+        //   不许拿旧的"谁早知道"掩盖一次隐秘的结束。
+        if (rc.observation !== undefined) {
+            const closeObs = storeObservation(rc.observation, world, tick);
+            if (closeObs) rel.observation = closeObs; else delete rel.observation;
+        } else delete rel.observation;
         stats.ended += 1;
         chronicle.push({
             id: `ch_${tick}_relc_${rel.id}`,
@@ -1477,7 +1509,7 @@ export const SETTLE_ORDER = Object.freeze([
     { call: 'chronicleEvents', args: ['world', 'gstep', 'tick', 'chronicle'], why: '编年落在所有改世界的步骤**之后**：编年必须记"这一轮最终发生了什么"' },
     { call: 'archiveClosedEvents', args: ['world', 'tick'], why: 'K20 档案摘要化：闭环满热窗 + 整链结清 ⇒ 里程碑温层（零编年零注入）' },
     { call: 'buildEvolutionPack', args: ['world', 'moveFact', 'null'], why: '递包读的是**本轮最终那份账**（含编年与归档），故排在归档之后' },
-    { call: 'recordMetrics', args: ['world', 'tick', 'pack.estTokens', 'calls', 'warnings', 'chronicle', 'gate', 'playerAffected', 'proposals', 'rejected', 'pack.estBeforeTrim'], why: 'K38 观测台记账最后：分子/分母由 `gate.droppedCounts` + `warnings` 现算，放在末尾才是终结账。★leg114 末尾多一格 `pack.estBeforeTrim`（**裁之前有多大**）——它是本笔唯一新增的实参，锁跟着加一项；那一格没裁时是 `undefined` ⇒ 账上不写（旧账零扰动）' },
+    { call: 'recordMetrics', args: ['world', 'tick', 'pack.estTokens', 'calls', 'warnings', 'chronicle', 'gate', 'playerAffected', 'proposals', 'rejected', 'pack.estBeforeTrim', 'ctx.world_view'], why: 'K38 观测台记账最后：分子/分母由 `gate.droppedCounts` + `warnings` 现算，放在末尾才是终结账。★leg114 末尾多一格 `pack.estBeforeTrim`（**裁之前有多大**）——它是本笔唯一新增的实参，锁跟着加一项；那一格没裁时是 `undefined` ⇒ 账上不写（旧账零扰动）' },
 ]);
 
 // ═══════════════ ★★★leg84（乙-2 · 细案 `docs/leg84-settle-stages-spec.md`）：`settleTick` 显式阶段化 ═══════════════
@@ -1746,7 +1778,10 @@ export function recordAndArchive(world, ctx) {
     const moveFact = ctx.moveFact;
     chronicleEvents(world, gstep, tick, chronicle);
     world.chronicle = [...world.chronicle, ...chronicle];   // 编年落账（推进留痕 + 事件条目）
-    archiveClosedEvents(world, tick);   // K20 档案摘要化（细案 §3.3 → A-3）：闭环满热窗 + 整链结清 → 里程碑温层（零编年零注入）
+    // 正式浏览器链路保存完整事件；直接旧入口仍保留历史归档兼容。
+    if (ctx.archiveEvents !== false) {
+        archiveClosedEvents(world, tick);
+    }
 
     // ★★★leg114：**这一处原来没递 `lim`**（全仓只有 `tick.js:259` 那一处递了）⇒ 它一直按**出厂
     //   `每轮递线`** 建包，而真发出去的包按**账上设的**建 ⇒ 账上那个 `packTokens` 与真包**不一致**。
@@ -1769,7 +1804,7 @@ export function recordAndArchive(world, ctx) {
     //   漏掉它会让拒签率**低估**（丢掉的东西不计入分子 ⇒ 读数失真）。
     const rejected = Object.values(gate.droppedCounts).reduce((a, b) => a + b, 0)
         + warnings.filter((w) => w.startsWith('裁定:') || w.startsWith('校验拒绝:') || w.startsWith('提议丢弃')).length;
-    recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected, pack.estBeforeTrim);
+    recordMetrics(world, tick, pack.estTokens, calls, warnings, chronicle, gate, playerAffected, proposals, rejected, pack.estBeforeTrim, ctx.world_view);
     return world;
 }
 
@@ -1790,7 +1825,7 @@ export const SETTLE_STAGES = Object.freeze([
     recordAndArchive,        // 10 编年 → 归档 → 递包 → 观测台
 ]);
 
-export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }) {
+export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [], archiveEvents = true, world_view = null }) {
     // ★★★leg84（乙-2）：本函数从 140 行**顺序过程**收成**薄驱动**——
     //   10 个显式阶段住在本文件上方（定义序 = `SETTLE_ORDER` 的**登记序**，那条"源码序"锁咬的就是它），
     //   运行时顺序由 `SETTLE_STAGES` 唯一驱动，每一步"为什么在这个位置"仍由 `SETTLE_ORDER` 唯一承载。
@@ -1799,7 +1834,7 @@ export function settleTick({ ssot, step, moveFact, calls = 1, preWarnings = [] }
         // 入参（★`ssot` 必须留在 ctx 里：两处早退返回的都是**原件**，不是工作副本）
         // ★★而且**门控与待启用名单读的也是它**（不是工作副本）—— 这是施工期最贵的一处，
         //   见 `gateAndSnapshot` 与驱动里 spotlight 那两处的注解。
-        ssot, step, moveFact, calls, preWarnings,
+        ssot, step, moveFact, calls, preWarnings, archiveEvents, world_view,
         // 本轮共享产物（★就地收集：与原实现逐字节等价，见阶段块头注的口径收窄说明）
         tick: null, warnings: [], chronicle: [], playerAffected: [],
         // 跨阶段产物（按阶段顺序逐个填入）

@@ -3,15 +3,6 @@
 // ——编排层纯函数 + 注入式模型调用。
 // 细案：docs/spec-entity-field-lookup.md（用户 2026-09-11 批准：「a,做吧」= R2 取拒整步）。
 //
-// 为什么是"按需"而不是"初始化全量"（用户定调）：
-//   · 623 实体里每轮真正上场的只有几个（实测 silent 稳定 620-622），全量初始化＝给永不出场者预取；
-//   · 按需只为"真进镜头又被点到"的角色付一次，且中途新生的人同样能补。
-// 为什么选择权归 LLM（不是引擎镜头）：
-//   pack.js 的 lensList 是**引擎**纯函数按 30k 预算截前缀——镜头外的人连"想让谁动"都表达不了；
-//   leg24 片3 前按分量算的静默线实测把 345/346 全判静默（引擎实际上禁止了所有人出手）。
-//   故本模块的"选人"交给模型，**引擎只提供全量事实（书序、不排序不裁剪）并只做校验**：
-//   不在册/已灭/已退休 → 拒；去重；超上限（ROUND_PICK_CAP=15）→ 拒整条并退回上轮名单。
-//
 // 三个失败态必须在账上分开（本模块的核心判据，出处=用户提问"如果部分字段加载不出来怎么办
 // （注意，这是 llm 没有加载到而不是这个字段没有的情况）"）：
 //   ok      = 模型回了非空字符串 → 落值 + 留痕（from/sources/fetchedAt）
@@ -24,14 +15,13 @@
 import { ABSTRACT_FACT_RULES } from './abstract-shape.js';
 import { resolveEntityIdentityWithCanon } from './entity-identity.js';
 // ★★★Task 4（integration boundaries）：查书这条路的**出处协议**（与抽取/起根同一把尺子）。
-//   复审接口②：`buildLookupPrompt → runLookup → runBatchLookup/runEntityLookupStep → applyLookup`
+//   复审接口②：`buildLookupPrompt → runLookup → runBatchLookup → applyLookup`
 //   此前**没有任何证据协议**——模型回什么字符串就写什么（`{'陆青':{'实力':'凭空捏造的渡劫境'}}` 照落账）。
 //   治法：提示词给**每个名号自己的来源清单**（发射端/取书面交出来的最终正文），
 //   回文每条字段带 `ev:{s,q}`；引擎用 `verifyQuote` 核"编号属于该名号 + 原话在该来源的展示文本里 +
 //   字段值在它自己的 `ev.q` 里"（别人的值在别处出现**不算**）。原始凭证只进受门控的诊断，不落世界账。
 import { freezeAllowedSources, verifyQuote, presenceIn, evidenceRecord, materialRowsOf, scopeForRows } from './abstract-evidence.js';
 
-export const ROUND_PICK_CAP = 15;          // 提案（用户 2026-09-11 拍板）：每轮上场实体上限
 // ★leg25 f（用户拍板「X4 摘掉位置查书腿」）：本模块的**面从 `['实力','位置']` 收窄为 `['实力']`**。
 //   为什么摘掉「位置」这条腿（依据 `docs/spec-failure-verdict-and-visibility.md` §4.2）：
 //   ①**零 token 的结构推断已经吃到位置**（`deriveLocationFromBook`：组织条目驻地 → 成员，真账实测 173 个，
@@ -62,53 +52,6 @@ function resolveByName(entities, raw) {
     const r = resolveEntityIdentityWithCanon(entities, [], raw);
     return r.status === 'ok' ? r.entity : null;
 }
-// 可被选中的实体：在册且未灭/未退休（门控面同一口径）
-const pickable = (e) => Boolean(e) && e.status !== 'dead' && e.status !== 'retired';
-
-// ---------- ① 选人（LLM）：引擎只给全量名号，不排序、不裁剪、不给优先级 ----------
-export function selectCandidates(world, { cap = ROUND_PICK_CAP } = {}) {
-    const ents = (world?.entities || []).filter(pickable);
-    const idIndex = new Map(ents.map((e) => [e.id, e]));
-    return { ents, idIndex, cap };
-}
-
-// 选人名单的一行。leg25 d（细案 spec-lookup-batch-refresh §5）：补上账上**已有**的「实力/位置」原话——
-//   为什么必须有：选人原先只给 id/名字/类别，而主调用（pack.js:111）反而带实力 ⇒ **选拔的人比用人的信息还少**，
-//   于是"两个差距极大的实体被摆到同一场斗争"这件事引擎既无从避免、也无环节拦得住（用户 2026-09-11 提出）。
-//   口径（一条都不能破）：①只摆**书里的原话**（引擎不换算、不排序、不比较——design-core §4 第 1 条）；
-//   ②**未查/没有的写 `—`，绝不填占位值/默认值**（硬规矩二「空着就是空着」）；③势力不显示实力（旧口径）。
-export function selectRosterLine(e) {
-    const kind = e.kind === 'faction' ? '势力' : '角色';
-    const val = (f) => (typeof e[f] === 'string' && e[f].trim() ? e[f].trim() : '—');
-    const power = e.kind === 'faction' ? '—' : val('实力');
-    return `${e.id}\t${e.name}\t${kind}\t${power}\t${val('位置')}`;
-}
-
-export function buildSelectPrompt(world, { cap = ROUND_PICK_CAP, moveFact = null } = {}) {
-    const { ents } = selectCandidates(world, { cap });
-    const agendas = (world?.agendas || []).filter((a) => !a.closed);
-    const events = (world?.events || []).filter((e) => !e.closed);
-    const player = (world?.entities || []).find((e) => e.id === world?.context?.playerId);
-    return [
-        '你是世界模拟器的"本轮上场选择器"。世界不围绕任何一方转：选人只看局势，不看主角特殊。',
-        `任务：从下面的【在册名号】里选出**本轮会出手或会被牵动的实体**，最多 ${cap} 个。`,
-        '纪律：',
-        `1. 只能用【在册名号】里给出的 id 原样照抄，不许发明 id、不许写名号代替 id；`,
-        `2. 最多 ${cap} 个，宁可少不可凑数；没有该出手的就少选；`,
-        '3. 只输出严格 JSON，不要任何解释文字：{"pick":["<id>","<id>"]}',
-        '———— 在册名号（书序，未排序、未裁剪）————',
-        '（列：id / 名号 / 类别 / 实力 / 位置。实力与位置是**书里的原话**，未查到的写 — 。',
-        '  它只帮你判断"谁做得到、谁跟谁碰得上"，**不是分数、不含引擎判断**；不要拿它推断剧情。）',
-        ents.map(selectRosterLine).join('\n'),
-        '———— 在飞盘算 ————',
-        agendas.length ? agendas.map((a) => `${a.owner}：${a.goal}（${a.progress ?? 0}/${a.maxSteps ?? 0}）`).join('\n') : '（无）',
-        '———— 未决事件 ————',
-        events.length ? events.map((e) => `${e.title}（牵动 ${(e.ripples || []).join('、') || '—'}）`).join('\n') : '（无）',
-        '———— 玩家落子事实 ————',
-        player ? `${player.name}（${player.id}）：${String(moveFact?.verb || '（本轮无落子）')}` : '（本世界无玩家棋子）',
-    ].join('\n');
-}
-
 function parseJson(text) {
     const s = String(text ?? '').replace(/```(?:json)?/gi, '').trim();
     const m = /\{[\s\S]*\}/.exec(s);
@@ -116,44 +59,7 @@ function parseJson(text) {
     try { return JSON.parse(m[0]); } catch { return null; }
 }
 
-/**
- * runSelect({ world, transport, cap }) → { picks, error, warning }
- * 失败语义（细案 §4）：调用失败/坏 JSON/超限/空 → picks=null + warning（调用方退回上轮名单），**绝不替模型改选**。
- */
-export async function runSelect({ world, transport, cap = ROUND_PICK_CAP, moveFact = null } = {}) {
-    const { idIndex } = selectCandidates(world, { cap });
-    let text = '';
-    try {
-        text = await transport(buildSelectPrompt(world, { cap, moveFact }));
-    } catch (err) {
-        return { picks: null, error: String(err?.message || err), warning: `选人调用失败：${String(err?.message || err)}` };
-    }
-    const obj = parseJson(text);
-    if (!obj || !Array.isArray(obj.pick)) {
-        return { picks: null, error: 'bad-json', warning: '选人回文无法解析（本轮退回上轮名单）' };
-    }
-    const raw = obj.pick.map((x) => String(x ?? '').trim()).filter(Boolean);
-    const unknown = raw.filter((id) => !idIndex.has(id));
-    if (unknown.length) {
-        return { picks: null, error: 'unknown-id', warning: `选人含不在册/已灭 id（${unknown.slice(0, 3).join('、')}）——本轮退回上轮名单` };
-    }
-    const uniq = [...new Set(raw)];
-    if (uniq.length > cap) {
-        return { picks: null, error: 'over-cap', warning: `选人超上限（当前 ${uniq.length}/${cap}）——本轮退回上轮名单` };
-    }
-    return { picks: uniq, warning: null };
-}
-
-// 兜底候选（选人失败时的地板名单）：玩家 + 在飞盘算属主 —— 引擎事实，不含任何"谁更重要"的判断
-export function fallbackCandidates(world) {
-    const out = [];
-    const push = (id) => { if (id && !out.includes(id)) out.push(id); };
-    push(world?.context?.playerId);
-    for (const a of (world?.agendas || [])) if (!a.closed) push(a.owner);
-    return out;
-}
-
-// ---------- ② 查书（LLM）：只喂"选中且缺字段"的实体在世界书里的原文 ----------
+// ---------- 查书（LLM）：只喂调用方指定且缺字段的实体在世界书里的原文 ----------
 const bookNameOf = (world, e) => (world?.entities || []).find((x) => x.name === e.name && x.id === e.id)?.name || e.name;
 const bookEntriesFor = (world, e) => {
     const book = world?.context?.setting?.frozen?.canon?.bookEntities || [];
@@ -269,8 +175,7 @@ export async function planBatches({ world, ids = [], fields = ENTITY_LOOKUP_FIEL
 
 /**
  * runBatchLookup({ ssot, transport, bookText, ids, fields, forceFields, tick }) → { ssot, stats, warning, calls }
- * 查**指定的一批**实体（面板单实体 / 批量补全的分批，都走这里；与每轮前置步同一收口）。
- * 与 runEntityLookupStep 的区别：不选人（名单由调用方给定），其余口径完全一致。
+ * 查**指定的一批**实体（面板单实体 / 批量补全的分批，都走这里；名单由调用方给定）。
  */
 export async function runBatchLookup({ ssot, transport, bookText, ids = [], fields = ENTITY_LOOKUP_FIELDS, forceFields = null, tick = 0, bookEntries = null, evidencePolicy = null, onEvidence = null } = {}) {
     const out = { ssot, stats: null, warning: null, calls: 0, locationInherited: 0 };
@@ -840,61 +745,6 @@ export function deriveLocationFromBook({ world, entities = null, entries = [] } 
         return { ...e, location: hit.loc };
     });
     return { ssot: { ...world, entities: list, meta: { ...prevMeta, entityFields } }, stats };
-}
-
-// ---------- 一处收口：前置步（编排层调用它，web 只负责落盘） ----------
-/**
- * runEntityLookupStep({ ssot, transport, bookText, tick, moveFact, prevPicks })
- *   → { ssot, picks, warning, calls, stats }
- * 语义：选人失败 → 退回 prevPicks（再退兜底名单）；查书失败 → 不写痕；全部绝不阻塞调用方。
- */
-export async function runEntityLookupStep({ ssot, transport, bookText, tick = 0, moveFact = null, prevPicks = null, bookEntries = null, evidencePolicy = null, onEvidence = null } = {}) {
-    const out = { ssot, picks: prevPicks || fallbackCandidates(ssot), warning: null, calls: 0, stats: null, locationInherited: 0 };
-    if (!transport || lookupDisabled(ssot, tick)) {
-        // 查书熔断/无通道时，位置继承照样有得赚（零 token）——别把结构事实也一起停掉
-        if (Array.isArray(bookEntries) && bookEntries.length) {
-            const d = deriveLocationFromBook({ world: ssot, entries: bookEntries });
-            out.locationInherited = d.stats.inherited;
-            return { ...out, ssot: d.ssot };
-        }
-        return out;
-    }
-
-    const selected = await runSelect({ world: ssot, transport, moveFact });
-    out.calls += 1;
-    if (!selected.picks) {
-        out.warning = selected.warning;
-        const failed = noteFailure(ssot, tick);   // 选人失败：退回上轮名单 + 记失败
-        if (Array.isArray(bookEntries) && bookEntries.length) {
-            const d = deriveLocationFromBook({ world: failed, entries: bookEntries });
-            out.locationInherited = d.stats.inherited;
-            return { ...out, ssot: d.ssot };
-        }
-        return { ...out, ssot: failed };
-    }
-    out.picks = selected.picks;
-
-    const idIndex = new Map((ssot.entities || []).map((e) => [e.id, e]));
-    const need = out.picks.map((id) => idIndex.get(id)).filter(Boolean).filter((e) => missingFields(e, ssot.meta).length);
-    if (!need.length) {
-        const ok = noteSuccess(ssot);   // 全部已有字段 → 零调用
-        if (Array.isArray(bookEntries) && bookEntries.length) {
-            const d = deriveLocationFromBook({ world: ok, entries: bookEntries });
-            out.locationInherited = d.stats.inherited;
-            return { ...out, ssot: d.ssot };
-        }
-        return { ...out, ssot: ok };
-    }
-
-    // 与 runBatchLookup 同一收口（选定名单后的一切完全一致：取数一次用两次 / sources 语义 / 回写）
-    const batch = await runBatchLookup({
-        ssot, transport, bookText, ids: need.map((e) => e.id), tick, bookEntries, evidencePolicy, onEvidence,
-    });
-    out.calls += batch.calls || 1;
-    out.stats = batch.stats;
-    out.locationInherited = batch.locationInherited || 0;
-    if (batch.warning) out.warning = batch.warning;
-    return { ...out, ssot: batch.ssot };
 }
 
 // ---------- R2：单个盘算一轮内涉及的实体（属主 + 行动方 + 被波及方；逐轮算，不新增存储字段） ----------

@@ -116,9 +116,9 @@ export function stampChronicleTime(ssot, fromIndex, elapsed) {
 //
 // 口径边界（写死防将来改歪）：**只丢提议，不改写提议**。净化器做减法（丢/摘），
 //   引擎**不替模型编内容**（编事实是另一条红线，见 ANCHOR）。
-export function settleWithHealing({ ssot, step, moveFact = null, calls = 1, selfHeal = true }) {
+export function settleWithHealing({ ssot, step, moveFact = null, calls = 1, selfHeal = true, archiveEvents = true, world_view = null }) {
     // ① 原样（模型写对时，这一层的开销是一次校验，行为零变化）
-    const first = settleTick({ ssot, step, moveFact, calls });
+    const first = settleTick({ ssot, step, moveFact, calls, archiveEvents, world_view });
     if (first.ok) return { ...first, healed: { used: false, dropped: [], warnings: first.stage.warnings, errors: [] } };
 
     const rawErrors = (first.stage.warnings || []).map(String);
@@ -130,7 +130,7 @@ export function settleWithHealing({ ssot, step, moveFact = null, calls = 1, self
     const hasProposals = Object.values(clean).some(value => Array.isArray(value) && value.length > 0);
     if (pre.ok && hasProposals) {
         const back = dropped.map(reasonOf);
-        const second = settleTick({ ssot, step: clean, moveFact, calls, preWarnings: back });
+        const second = settleTick({ ssot, step: clean, moveFact, calls, preWarnings: back, archiveEvents, world_view });
         if (second.ok) {
             return {
                 ...second,
@@ -180,7 +180,7 @@ function reasonOf(d) {
 //   ★**代价也如实登记**：拔掉之后，**世界模型这一侧再没有任何"来自正文"的输入**
 //     （标签那条路是用户有意关的）⇒ 它此后**只按账自己的状态演**。这不是意外，是本棒量出来的后果。
 
-export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null }) {
+export async function runTick({ transport, ssot, dialogue, calls = 1, retryOnce = true, preStep = null, onPreStep = null, recallStore = undefined, recall = true, tagMaxActions = undefined, ledgerVolumes = null, recallVec = null }) {
     // ★★★leg198（用户令「**这个词表按道理说早应该拆了，这是很久之前的设计了，早就不适用了，
     //   这个功能要猜，没标签就不进正文的行动即可**」）：**落子只剩一条路——正文里的标签**。
     //   拆掉的老口径（那张 13 条正则的动词表）病在两处，都能指到行：
@@ -194,7 +194,7 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     //   （旧代码为此专门立过一条"保围栏"边界去救它——那条边界随消费者一起消失）。
     //   `stripBlocks` 形参**已撤**；调用方仍传着也无害（多余键，JS 直接忽略）。
     const prose = dialogue || '';
-    const tagFacts = extractTags(prose, {
+    const tagFacts = extractTags(prose, {world:ssot,
         entities: ssot?.entities || [],
         // ★★★leg89（用户拍板「模型认得出那就直接按照插件的正名来看」）：**别名从书里取**——
         //   账上实体**不带别名**（播种时只拷 id/kind/name/location/parent/实力…，别名留在书名录里）。
@@ -345,7 +345,7 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     if (dialogueStats.noop) dlgBits.push(`${dialogueStats.noop} 件没变化（没落账）`);
     const dlgNote = dlgBits.length ? `正文落账 ${dialogueStats.events} 件（${dlgBits.join(' · ')}）` : null;
     const readout = [readout0, dlgNote].filter(Boolean).join(' · ') || null;
-    const main = await runMainCall({ transport, ssot: world, pack });
+    const main = await runMainCall({ transport, ssot: world, pack, retryOnce });
     // ★★★本次修（真模型 60 轮长跑实跑抓出来的病）：**校验被拒也要能自愈，不许整轮丢**。
     //   病（实测）：60 轮里 **21 轮报废（35%）**、**白花 43.4% 的挂钟时间**、最长**连续卡 6 轮**；
     //     而 21 条归因里 **18 条是同一个**——模型把新线挂在一条**已经了结**的事上。
@@ -370,7 +370,10 @@ export async function runTick({ transport, ssot, dialogue, calls = 1, preStep = 
     // ★leg115：**先记住结算前编年有几行**——结算之后要靠它认出"本轮新落的行"（时间印记只盖新行）。
     //   ★★★leg123：这一行**已上移**到 `registerDialogueFacts` 之前（见上）——因为聊天侧那批
     //     编年行也是**本轮新落的行**，leg115 的时间印记要一并盖到它们身上。
-    const s = settleWithHealing({ ssot: world, step: stepForSettle, moveFact: move, calls });
+    // ★★★2026-10-09：主调用**自动重试**多发的那一次也要记账（`main.attempts`，见 `worldstep.js`）——
+    //   "这一次花了几次调用"是玩家看得见的读数（观测台/`simLog`），不许因为重试发生在引擎里就少记一次。
+    //   ★`attempts` 缺省 1 ⇒ 没重试时这一格**逐字节等于旧值**（既有读数零扰动）。
+    const s = settleWithHealing({ ssot: world, step: stepForSettle, moveFact: move, calls: calls + Math.max(0, (main.attempts ?? 1) - 1) });
     // ★★★leg151：结算这一次也出了一份包（`settleTick` 里那次）——它**是这一轮真递出去的东西的一部分**
     //   （模型在结算那一段同样看得到）⇒ 一并记进"递过"。
     if (s.ok) recordShownLines(s.ssot, lineRootsOfPack(s.pack?.pack));   // 同上：取外壳内层

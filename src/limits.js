@@ -125,6 +125,19 @@ export const RETRIEVAL_LITERAL_SHARE = 0.6;
 //   （用户 2026-10-05 原话：「**字额度切忌把事件截掉**」；判据见 `test/retrieval-params-live.test.js`）。
 export const LEDGER_CHARS_DEFAULT = 1600;
 
+// ★★★（2026-10-12 · 用户令：「**把当前可见状态递进对话**」＋「**当前状态注入多少字**」）：
+//   **「当前状态注入多少字」这一格的出厂值**——`web/inject.js` 按它把"当前场景里看得见的状态"
+//   递给聊天模型。★本模块是它**唯一的家**。
+//   ★它为什么住 `src/`（与上面 `LEDGER_CHARS_DEFAULT` 同一个理由，**别把两个数合并**）：
+//     渲染层要画这一格的出厂值，而 `src/` **不许反向 import `web/`**（本仓铁律）
+//     ⇒ 这个数必须有一个 `src/` 侧的真源，`render.js` 与 `web/inject.js` 同取这一份。
+//   ★★**它与「往事注入多少字」是两把尺子、两件事**（用户令：独立预算，互不吃对方的额度）：
+//     那一格管"从账上找回的往事塞多少字"，这一格管"当前场景的可见状态塞多少字"；
+//     两笔额度各自独立，调大这一格**不会**挤掉往事那一段。
+//   ★**只有浏览器本地的正式世界用得上它**：旧的服务链路读的是服务回执，不看这一格
+//     （面板上那一格也照实这么写，不假装它是全球通用的）。
+export const SCENE_STATE_CHARS_DEFAULT = 2400;
+
 /** 出厂默认（= 参数化之前的值；键名与面板一致，直接喂 `resolveLimits`）。 */
 export const LIMIT_DEFAULTS = Object.freeze({
     每轮递线: THREADS_TOP,              // pack.js：线捆递给模型几条（本棒实测：3→2.25 条/轮、6→6.00）
@@ -376,6 +389,24 @@ const isLimitKey = (k) => Object.prototype.hasOwnProperty.call(LIMIT_GEARS, k);
 //   就是这么分叉出真事故的）⇒ 口径只许住一处，调用方 import 它。
 export const isLimitKeyOf = isLimitKey;
 
+// ★★★（2026-10-12 · Task 2「运行参数」用户令：数量闸可显式选择 unlimited）：
+//   **七个数量键**（递线/事件/新生/入局/待启用名单/顶层/在飞）多认一个**显式的「不限」**。
+//   · 存档/面板：保留 canonical JSON 字符串 `'unlimited'`（`limitsOf`/`LIMIT_ROWS` 原样带回，
+//     界面据此画「不限」）——**不许把 Infinity 写进存档**（`JSON.stringify(Infinity)` 会变成 `null`）。
+//   · 引擎：由 `resolveLimits` 翻成一个**有限的安全上界**（`UNLIMITED_RUNTIME_BOUND`）。
+//     "不限"只是把闸开到实际等于没有，不是给引擎一个算不了的值。
+//   · 三个「尺」（包预算/往事轮数/往回看轮数）**不认** unlimited：它们是"看多少/看多久"，
+//     "不限字符/不限轮数"不在本轮授权范围内（其存储与归一照旧只认正数）。
+//   ★与 leg54「无上限」的区别：leg54 撤的是"白名单"，玩家仍得填一个数；
+//     本笔给的是一个**显式选项**——填 `unlimited` 时界面/存档都看得出"这一格是不限"，
+//     而不是"填了一个很大的数"（后者才是本仓骂过的"假大数"）。
+export const UNLIMITED = 'unlimited';
+const UNLIMITED_KEYS = new Set(['每轮递线', '每轮事件', '每轮新生', '每轮入局', '待启用名单', '顶层大计', '在飞大计']);
+/** 这一格是不是那七个"数量闸"之一（只有它们认 unlimited）。 */
+export const supportsUnlimited = (key) => UNLIMITED_KEYS.has(key);
+/** 「不限」在运行时的安全上界：足够大（永远大于任何合格池/名册），又是安全整数（不引入 Infinity/精度灾难）。 */
+export const UNLIMITED_RUNTIME_BOUND = Number.MAX_SAFE_INTEGER;
+
 /**
  * ★★★leg54（用户令「**能自由调数，当然也能无上限**」）：归一 = **任意 ≥1 的整数**，不再是档位白名单。
  *
@@ -406,8 +437,10 @@ export function normalizeLimit(key, value) {
     if (!isLimitKey(key)) return null;
     const raw = typeof value === 'number' ? value : String(value ?? '').trim();
     if (raw === '') return null;                       // 空 = 未定（回出厂默认），不是 0
+    // ★Task 2：七个数量键的显式「不限」——canonical 字符串落账，运行值由 `resolveLimits` 翻。
+    if (supportsUnlimited(key) && (raw === UNLIMITED || raw === '不限')) return UNLIMITED;
     const n = typeof raw === 'number' ? raw : Number(raw);
-    if (!Number.isFinite(n)) return null;              // 非数字
+    if (!Number.isFinite(n)) return null;              // 非数字（含三个「尺」上的 unlimited ⇒ 弃键）
     if (!Number.isInteger(n)) return null;             // 小数：("半件事"没有意义)
     if (n < 1) return null;                            // 0 / 负数
     return n;
@@ -424,9 +457,15 @@ export function limitsOf(world) {
     return out;
 }
 
-/** 生效值 = 代码默认 ⊕ 账上已设（**默认逐字不变**：账上没有就用 `LIMIT_DEFAULTS`）。 */
+/**
+ * 生效值 = 代码默认 ⊕ 账上已设（**默认逐字不变**：账上没有就用 `LIMIT_DEFAULTS`）。
+ * ★Task 2：七个数量键上的 canonical `'unlimited'` 在这里翻成**运行安全上界**——
+ *   `limitsOf`/`LIMIT_ROWS`（界面与存档那一侧）仍保留字符串，只有喂引擎的这一份是数。
+ */
 export function resolveLimits(world) {
-    return { ...LIMIT_DEFAULTS, ...limitsOf(world) };
+    const out = { ...LIMIT_DEFAULTS, ...limitsOf(world) };
+    for (const key of UNLIMITED_KEYS) if (out[key] === UNLIMITED) out[key] = UNLIMITED_RUNTIME_BOUND;
+    return out;
 }
 
 /**

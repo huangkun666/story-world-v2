@@ -3,6 +3,17 @@ export const EVENT_PROTOCOL = 4;
 export const actorSchema = {kind:'object',additional:false,required:['name'],props:{name:{kind:'string',minLength:1},ref:{kind:'string',minLength:1}}};
 export const scopeSchema = {kind:'object',additional:false,required:['kind','text'],props:{kind:{kind:'string',enum:['entity','members','place','text']},text:{kind:'string',minLength:1},ref:{kind:'string',minLength:1}}};
 export const storedScopeSchema = {...scopeSchema,props:{...scopeSchema.props,resolution:{kind:'object',additional:false,required:['knownIds','asOfTick'],props:{knownIds:{kind:'array',items:{kind:'string',minLength:1}},asOfTick:{kind:'number',int:true,min:0}}}}};
+// 显式观察元数据（committed state change 的可见性披露）：
+//   · 模型面 `observationSchema` = { mode:'encounter'|'known', scope:[scopeSchema] }——**没有** resolution/tick。
+//   · 存账面 `storedObservationSchema` = 同上但 scope 用 storedScopeSchema（引擎解析出的历史成员）、
+//     并带引擎盖的 `tick`。备份/迁移是可选的：老账没有这一格照常合法。
+export const observationSchema = {kind:'object',additional:false,required:['mode','scope'],props:{
+    mode:{kind:'string',enum:['encounter','known']},
+    scope:{kind:'array',minItems:1,items:scopeSchema}}};
+export const storedObservationSchema = {kind:'object',additional:false,required:['mode','scope','tick'],props:{
+    mode:{kind:'string',enum:['encounter','known']},
+    scope:{kind:'array',minItems:1,items:storedScopeSchema},
+    tick:{kind:'number',int:true,min:0}}};
 const clone = value => JSON.parse(JSON.stringify(value));
 const nonempty = value => typeof value === 'string' && value.trim().length > 0;
 const detailKeys = ['eventProtocol', 'category', 'actors', 'affected', 'audience', 'reportedContent', 'participantMode'];
@@ -66,6 +77,37 @@ export function checkScopes(scopes, world) {
         (s.kind === 'members' && !nonempty(s.ref)) || (['place','text'].includes(s.kind) && s.ref !== undefined)
         ? ['范围必须保留原文与合法引用，resolution 只能由引擎填写'] : world && s.ref && !(world.entities || []).some(e => e.id===s.ref && (s.kind!=='members' || e.kind==='faction')) ? ['范围引用未对应在册对象或组织'] : []);
 }
+/** 显式观察描述的语义校验（模型提议面）。
+ *  ★契约（与指挥约定）：它披露的是**已经提交的那份状态/值本身**，不是另编事实、不是摘要。
+ *    · `encounter`：观察者在**当下**处于范围内即可见——place 比对正式位置，entity/members 指认对象。
+ *    · `known`：已**明确传达**给列出的实体/成员、之后仍可查 ⇒ **不许**用 place/text 范围。
+ *    · 未解析的 text / 未知引用**永远不授予权限**；text 单独出现不构成观察，但**可与有效范围并存**
+ *      （这一条不许拦：模型常把"说不清的群体"整段保留 text）。
+ *    · 范围不能为空；模型不许自带 `resolution` / `tick`（引擎在落账时填）。
+ *  `undefined` = 整键省略 = 合法（可选字段）。 */
+export function observationErrors(value, world) {
+    if (value === undefined) return [];
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return ['观察描述必须是对象（或整键省略）'];
+    for (const key of Object.keys(value)) if (!['mode','scope'].includes(key)) return ['观察描述含未知字段（只认 mode/scope；resolution/tick 由引擎填写）'];
+    if (!['encounter','known'].includes(value.mode)) return ['观察 mode 必须为 encounter/known'];
+    if (!Array.isArray(value.scope) || value.scope.length === 0) return ['观察范围必须是至少一项的数组'];
+    const scopeErrors = checkScopes(value.scope, world);
+    if (scopeErrors.length) return scopeErrors;
+    if (value.mode === 'known' && value.scope.some(s => s.kind === 'place' || s.kind === 'text')) {
+        return ['known 观察只能用 entity/members（place/text 不能满足"明确传达"）'];
+    }
+    return [];
+}
+/** 把模型提议的观察描述转成存账形状（引擎落账时调用）。
+ *  · `known`：用 `resolveScopes` **在提交那一刻固化成员**（历史会员），之后新增成员不回填。
+ *  · `encounter`：**不固化**——原样存范围，投影时按当场成员/位置判定。
+ *  · 引擎盖 `tick`；缺席或非法返回 `null`（调用方据此清除/不落这一格）。 */
+export function storeObservation(value, world, tick) {
+    if (value === undefined || value === null) return null;
+    if (observationErrors(value, world).length) return null;
+    const scope = value.mode === 'known' ? resolveScopes(value.scope, world, tick) : clone(value.scope);
+    return { mode: value.mode, scope, tick };
+}
 export function checkEventContract(event, protocol, world) {
     const errors = [];
     const isNew = ['category','actors','affected','audience','reportedContent','pending'].some(k => event?.[k] !== undefined);
@@ -86,9 +128,10 @@ export function checkEventContract(event, protocol, world) {
 }
 export function conditionUpdateErrors(update, world, { resolveEventRef = ref => ref } = {}) {
     if (!update || !['create','state'].includes(update.op)) return ['条件 op 必须为 create/state'];
-    const allowed = update.op === 'create' ? ['op','localId','eventRef','statement','state','scope','effectiveFrom','effectiveUntil','supersedes'] : ['op','conditionRef','state','eventRef'];
+    const allowed = update.op === 'create' ? ['op','localId','eventRef','statement','state','scope','effectiveFrom','effectiveUntil','supersedes','observation'] : ['op','conditionRef','state','eventRef','observation'];
     const errors = [];
     if (Object.keys(update).some(k => !allowed.includes(k))) errors.push('条件含未知字段');
+    if (update.observation !== undefined) errors.push(...observationErrors(update.observation, world));
     const ref = resolveEventRef(update.eventRef);
     if (!nonempty(update.eventRef) || !ref || !(world.events || []).some(e => e.id === ref) && !(world.milestones || []).some(m => (m.ids || []).includes(ref) || (m.rows || []).some(e => e.id === ref))) errors.push('条件原因事件不存在');
     if (update.op === 'create') {
@@ -106,6 +149,12 @@ export function applyConditionUpdates(world, updates, { tick = world.meta?.tick 
     const result = { applied: [], rejected: [] };
     const locals = new Set();
     let ordinal = 1;
+    // ★观察描述随每一次 create/state 落账：带就存（known 固化成员），不带就**清除**——
+    //   状态后续变化若未续报观察，不许继承旧知识（否则"秘密变了的那份状态"会带着旧可见性漂下去）。
+    const applyObs = (c, source) => {
+        const obs = source === undefined ? null : storeObservation(source, world, tick);
+        if (obs) c.observation = obs; else delete c.observation;
+    };
     const record = c => {
         const stateText = {planned:'尚未生效',active:'有效',ended:'已结束'}[c.state];
         const text = `持续条件「${c.statement}」：${stateText}${c.scope?.length ? `；适用范围：${c.scope.map(s => s.text).join('；')}` : ''}`;
@@ -118,7 +167,9 @@ export function applyConditionUpdates(world, updates, { tick = world.meta?.tick 
         const eventRef = resolveEventRef(update.eventRef);
         const change = c => { c.state = update.op === 'create' ? 'ended' : update.state; (c.changes ||= []).push({ state: c.state, eventRef, tick }); if (c.state === 'ended') c.endCause = eventRef; record(c); };
         if (update.op === 'state') {
-            const c = world.conditions.find(c => c.id === update.conditionRef); change(c); result.applied.push(c); continue;
+            const c = world.conditions.find(c => c.id === update.conditionRef);
+            change(c); applyObs(c, update.observation);
+            result.applied.push(c); continue;
         }
         locals.add(update.localId);
         while ((world.conditions || []).some(c => c.id === `cond_${tick}_${ordinal}`)) ordinal++;
@@ -126,7 +177,14 @@ export function applyConditionUpdates(world, updates, { tick = world.meta?.tick 
             changes:[{state:update.state,eventRef,tick}] };
         for (const key of ['scope','effectiveFrom','effectiveUntil','supersedes']) if (update[key] !== undefined) c[key] = clone(update[key]);
         if (c.state === 'ended') c.endCause = eventRef;
-        if (c.supersedes) change(world.conditions.find(old => old.id === c.supersedes));
+        applyObs(c, update.observation);
+        if (c.supersedes) {
+            const old = world.conditions.find(old => old.id === c.supersedes);
+            change(old);
+            // ★替代创建结束旧条件：只有这次更新**显式带了观察**才发布旧状态的结束；否则清掉旧描述
+            //   （不能让"被替代掉的那份旧状态"继续带着旧可见性留在账上）。
+            applyObs(old, update.observation);
+        }
         (world.conditions ||= []).push(c); result.applied.push(c); record(c);
     }
     return result;

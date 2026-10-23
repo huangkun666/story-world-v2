@@ -1,7 +1,7 @@
 // story-world-v2/src/init-source.js
 // 第十八棒：初始化设定源合订（编排层助手 · 纯函数 · 零引擎状态）
 // 背景：K38 的「换源+worldBook 存储」机制被用户（正确地）判死刑——本文件不再有任何
-// worldBook 概念：设定源只有两条自动路 = 世界信息/卡内置世界书条目 + 角色卡四件套。
+// worldBook 概念：设定源只有两条自动路 = 当前挂载世界书条目 + 角色卡四件套。
 //   - 世界书：完整来源按稳定身份收集；不同来源的相同正文分别保留。
 //   - 卡件四件套：按 v1 spend() 同款逐字段预算（散文介绍，非世界书）。
 // ★★leg60 修订上面那两句（原文写"禁用标记跳过"，现在只对了一半，照旧读会读错）：
@@ -12,7 +12,7 @@
 //       （恒注入壳声明的目录 + "自成一套"的壳声明的料），零散实例（一人一条的人物档案）不进，
 //       未读取正文不从题名旁路补回；默认合法声明和自选均由统一来源入口决定。
 //   实测：三国 827 条里 563 条禁用 = 全书的 81%；旧口径下引擎只看得到 18.9%（名册只能从 JS 里捞名字）。
-// 分层归属：编排层（只组文本，不落账不结算）。防御上限提案态（铁律 2，随报批）。
+// 分层归属：编排层（只组文本，不落账不结算）。默认合订不设总字符上限；显式预算保留为内部兼容口。
 //
 // ★★★leg148：**条目原文里的酒馆宏由本文件换成真名**（`{{user}}` → 人设名、`{{char}}` → 角色名）——
 //   机制、病灶与"为什么必须在源头换"⇒ `src/macros.js` 头注。一句话：**酒馆的宏不该变成世界里的人**。
@@ -28,7 +28,7 @@ export const INIT_PIECE_CAPS = {          // 卡四件套各自上限（字符 �
     first_mes: 400,
 };
 
-export const INIT_SOURCE_HARD_CEILING = 500000; // 防御性总上限（字符 · 提案态）：世界书全量，仅超现实量级才拦
+// 默认合订不限制总字符数；每包大小和模型容量由各自通道设置。
 
 // 码点级截断（CJK 不破字；仅用于卡件 spend）
 function clip(str, n) {
@@ -53,7 +53,7 @@ function ceilingCut(parts, ceiling) {
 export function normalizeEntryKey(e) {
     // ★第二十五棒 e（五）：主键取值必须**处理数组**——ST 形状里 `e.key` 常是数组（`["九宸玄陆","世界总纲",…]`），
     //   旧法 `String(e.key ?? …)` 会把它变成一长串逗号连接 ⇒ 同一本书的"世界书侧"与"卡内置侧"行**不可能相同**
-    //   ⇒ 去重**完全失效**（实测交集 0）⇒ 同一本书被送进抽取两遍（424 条 / 499,526 字符，顶到 50 万防御上限）。
+    //   ⇒ 去重**完全失效**（实测交集 0）⇒ 同一本书被送进抽取两遍（424 条 / 499,526 字符，曾顶到旧版 50 万总上限（现已撤除））。
     return abstractEntryKey(e);
 }
 
@@ -384,7 +384,7 @@ export function probeBook(worldInfoEntries, character = null, { window = 30000 }
  * @param {object} opts
  * @param {object} [opts.character]  ST 角色卡对象（name/description/personality/scenario/first_mes/character_book）
  * @param {Array}  [opts.worldInfoEntries] ST 世界信息条目数组
- * @param {number} [opts.budget]     防御性总上限（默认 INIT_SOURCE_HARD_CEILING；测试可注入小值验证机制）
+ * @param {number} [opts.budget]     显式总预算兼容口，默认不限；普通抽取入口不传此项
  * @param {boolean} [opts.includeDeclared] ★leg60：是否补读"声明面选中的料"（默认 true）。关掉 = 退回旧口径（只读启用条目）
  * @param {{playerName?:string,charName?:string}|null} [opts.macroNames]
  *   ★★★leg148：酒馆宏的真名对（`{{user}}` → 人设名、`{{char}}` → 角色名）。
@@ -417,7 +417,7 @@ function emptyCardHint(character) {
     } catch (_) { return ''; }   // 取证失败绝不能把"报错"变成"抛错"
 }
 
-export function composeInitSource({ character = null, worldInfoEntries = [], worldSources = null, budget = INIT_SOURCE_HARD_CEILING, includeDeclared = true, macroNames = null, selection = null } = {}) {
+export function composeInitSource({ character = null, worldInfoEntries = [], worldSources = null, budget = Infinity, includeDeclared = true, macroNames = null, selection = null, completeSelectedSources = false } = {}) {
     const sources = collectAbstractSources({ worldInfoEntries, character, worldSources });
     const rawEntries = sources.filter(s => s.kind === 'world-entry').map(s => s.entry);
     const rawCatalog = includeDeclared ? probeBook(rawEntries) : null;
@@ -461,7 +461,7 @@ export function composeInitSource({ character = null, worldInfoEntries = [], wor
     let pieceCount = 0;
     const cardEntries = resolved.effectiveEntries.filter(e => e._sw2SourceKind === 'character-field');
     for (const entry of cardEntries) {
-        parts.push(clip(entry.content, INIT_PIECE_CAPS[entry._sw2Field]));
+        parts.push(completeSelectedSources ? entry.content : clip(entry.content, INIT_PIECE_CAPS[entry._sw2Field]));
         partEntries.push(entry);
         pieceCount += 1;
     }
@@ -479,7 +479,7 @@ export function composeInitSource({ character = null, worldInfoEntries = [], wor
     //        · 进了正文的来源（`acceptedWorld`）；
     //        · 题名行本身进了正文的控制器例外（它的 key 随它一起生效）。
     //        被预算挤掉的来源（普通条目或控制器）不得给出 key 与体例频次。
-    const ceiling = Number(budget) > 0 ? Number(budget) : INIT_SOURCE_HARD_CEILING;
+    const ceiling = completeSelectedSources ? Infinity : (Number(budget) > 0 ? Number(budget) : Infinity);
     const baseCut = ceilingCut(parts, ceiling);
     const baseAcceptedIds = new Set(partEntries.slice(0, baseCut.count).map(e => e._sw2SelectionId));
 
@@ -599,7 +599,7 @@ export function composeInitSource({ character = null, worldInfoEntries = [], wor
     const effectiveEntries = [];
     for (const [index, e] of partEntries.entries()) {
         if (!e) continue;
-        const content = e._sw2SourceKind === 'character-field' ? clip(e.content, INIT_PIECE_CAPS[e._sw2Field]) : e.content;
+        const content = !completeSelectedSources && e._sw2SourceKind === 'character-field' ? clip(e.content, INIT_PIECE_CAPS[e._sw2Field]) : e.content;
         const item = resolved.sourceItems.find(s => s.id === e._sw2SelectionId);
         if (index >= cut.count || droppedTitleLines.has(index)) {
             item.status = 'budget-excluded';
@@ -629,7 +629,7 @@ export function composeInitSource({ character = null, worldInfoEntries = [], wor
         //   旧法一律说「角色卡四件套全空」⇒ 用户拿着一本好书被告知"你的卡是空的"（社区用户就是这么被劝退的）。
         //   `shallow` 是 ST 自己那个键（`performance.lazyLoadCharacters`），它标着"这一份只是名册那一层"。
         else if (!pieces.length) bits.push(character.shallow === true ? '角色卡还没加载完（ST 只交回了名册那一层，正文还没取）' : `角色卡四件套全空${emptyCardHint(character)}`);
-        if (rawTotal === 0) bits.push('世界信息/内置书为空');
+        if (rawTotal === 0) bits.push('没有读到当前挂载的世界书条目');
         else if (disabled === rawTotal) bits.push('世界书条目全部标记禁用');
         return { ok: false, reason: custom && !resolved.selection.selectedIds.length ? '自选来源为空，未读取任何正文' : diagnostics.excluded.length ? '排除技术内容后没有可用设定' : bits.length ? bits.join('；') : '没有可用设定（详见浏览器控制台诊断）', ...common,
             catalog: catalog ? { entries: catalog.entries, enabled: catalog.enabled, disabled: catalog.disabled, titleRoster: [] } : null };
@@ -684,7 +684,7 @@ export function composeInitSource({ character = null, worldInfoEntries = [], wor
                     missedTitles: cc.missed.slice(0, 12).map((x) => x.title),
                 };
             })(),
-            // ★防御上限咬到时**不许静默**（三国实测：合订 50.8 万字 > 上限 50 万 ⇒ 声明面尾巴被截）。
+            // 显式预算不足时仍报告声明面遗漏；默认合订已无总字符上限。
             //   排布已按"先保要害"（启用条目 → 声明面的设定/年份档在前 → 分阶段剧本在后）⇒ 截掉的是尾巴，
             //   但"截了几条"必须报出来，否则就是"静默少给料"。
             declaredDropped: declaredLineList.length - usedDeclared,

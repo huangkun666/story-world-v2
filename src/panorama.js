@@ -982,7 +982,7 @@ function bridgeHtml(m, stats, three, world) {
         + (c.loose ? `只有一件事的线 <b>${c.loose}</b> 条，另外收在末尾那一栏；` : '')
         + `从不经过任何面的线 <b>${c.scattered}</b> 条，收在末尾「各处散落」。`
         + `面里每一条线是一段故事，点标题看它一步步怎么走的。<br><b>这里没有一个字是模型新写的</b>——全部是账上的原文与指针，只换了排法。`
-        + `<div class="sw2-pan-foot">来路取事与谋划的指针，过程取逐轮记下的原话，<b>没有一句是新写的</b>。一手账目见「大事纪·旧卷」。</div>`
+        + `<div class="sw2-pan-foot">来路取事与谋划的指针，过程取逐轮记下的原话，<b>没有一句是新写的</b>。一手账目见「世界图谱」。</div>`
         + `</details>`
         + `</div>`;
 }
@@ -1032,7 +1032,7 @@ export function renderPanoramaHtml(world, opts = {}) {
         //   随时间段那一族一起撤了：那一句说的是"换个时段看"，而换时段这件事已经不在这一页上了。
         const why = stats.windowFrom != null
             ? (stats.eventsAll
-                ? `最近 ${stats.panelTurns} 轮里没有留下可讲的事（更早的旧事在「大事纪·旧卷」里）`
+                ? `最近 ${stats.panelTurns} 轮里没有留下可讲的事（更早的旧事在「世界图谱」里）`
                 : '这本账还没长出可讲的事')
             : '世界刚开局。等它自己走过几轮，这里会把"谁在谋划什么、事情怎么滚起来、谁付出了代价"按条理讲给你听。';
         return `<div class="sw2-pan-head">说书 · 还没长出可讲的事</div>`

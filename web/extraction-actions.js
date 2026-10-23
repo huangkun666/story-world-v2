@@ -1,6 +1,7 @@
 // Extraction actions are one family: task lifetime, source, progress, commit.
 import { extractWorldSetting, applySettingToSsot, describeProgress, buildScalePrompt, sanitizeScales } from '../src/abstract.js';
-import { resolveBrowserTransport, EXTRACTION_MAX_TOKENS } from '../src/transport-config.js';
+import { resolveBrowserTransport } from '../src/transport-config.js';
+import { extractionCallLimits } from '../src/runtime-settings.js';
 import { extractChunkCharsOf } from './model-channel.js';
 import { diagEvidence, diagSettingOutcome } from './diagnostic-transport.js';
 import { extractionProgressHandler } from './extraction-progress.js';
@@ -15,6 +16,7 @@ export function bindExtractionActions(deps) {
         refreshWorld, refreshSections, getVolumes, getCtx, snapHub, logInitDiagnostics, seedAndReport, derivePositions, attachPlayerPiece, flushOutcomeText,
         saveWorld, prepareWorld, readBookCheck, publishBookCheck } = deps;
     const longTask = { wrap(action, label, handler) {
+        if (action === 'init-world') return () => taskHub.busy() ? taskHub.cancel() : taskHub.run(action, label, handler);
         return deps.longTask.wrap(action, label, () => taskHub.run(action, label, handler));
     } };
     bus['cancel-extraction'] = () => taskHub.cancel();
@@ -22,7 +24,7 @@ export function bindExtractionActions(deps) {
         const setStatus = task.setStatus;
         const settings = modelSettings() || {};
         const chunkChars = extractChunkCharsOf(settings), concurrency = extractConcurrency();
-        const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+        const resolved = resolveBrowserTransport(settings, { extraction: true, extractionLimits: extractionCallLimits(settings),presetPurpose:'abstract',getPresetSettings:modelSettings });
         if (!resolved) { setStatus('注意：模型通道未配置（设置页填写服务地址/密钥/模型）'); return; }
         task.configure(resolved, { chunkChars, concurrency });
         setStatus('正在合订设定源（角色卡 + 世界信息）…');
@@ -79,7 +81,7 @@ export function bindExtractionActions(deps) {
         if (!world) { setStatus('注意：世界还没载入——先打开/载入一个世界再重抽设定'); return; }
         const settings = modelSettings() || {};
         const chunkChars = extractChunkCharsOf(settings), concurrency = extractConcurrency();
-        const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+        const resolved = resolveBrowserTransport(settings, { extraction: true, extractionLimits: extractionCallLimits(settings),presetPurpose:'abstract',getPresetSettings:modelSettings });
         if (!resolved) { setStatus('注意：模型通道未配置（设置页填写服务地址/密钥/模型）'); return; }
         task.configure(resolved, { chunkChars, concurrency });
         const before = world.context?.setting?.frozen?.canon || {};
@@ -195,7 +197,7 @@ export function bindExtractionActions(deps) {
             const settings = modelSettings() || {};
         const chunkChars = extractChunkCharsOf(settings), concurrency = extractConcurrency();
             // leg27：抽取走**独立超时档**（extraction: true = EXTRACTION_TIMEOUT_MS），不再蹭主调用的 120s
-            const resolved = resolveBrowserTransport(settings, { maxTokens: EXTRACTION_MAX_TOKENS, extraction: true });
+            const resolved = resolveBrowserTransport(settings, { extraction: true, extractionLimits: extractionCallLimits(settings),presetPurpose:'abstract',getPresetSettings:modelSettings });
             if (!resolved) { setStatus('注意：模型通道未配置（设置页填写服务地址/密钥/模型）'); return; }
             task.configure(resolved, { chunkChars, concurrency });
             setStatus('正在合订设定源（角色卡 + 世界信息）…');

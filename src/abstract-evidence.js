@@ -110,6 +110,41 @@ function blockSpansOf(frozen, text) {
     return spans;
 }
 
+// Group the displayed rows by the real source boundaries supplied by composeInitSource.
+// Unlabelled legacy text keeps its existing line-based behavior.
+export function sourceRowGroups(frozen, { text, rows }) {
+    const spans = frozen ? blockSpansOf(frozen, text).filter(s => s.start >= 0) : [];
+    const groups = [];
+    let spanIndex = 0, previous = null;
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        while (spanIndex < spans.length && spans[spanIndex].end <= row.start) spanIndex++;
+        const span = spans[spanIndex];
+        const owner = span && row.start < span.end && row.end > span.start ? span : row;
+        if (owner === previous) groups[groups.length - 1].to = i;
+        else groups.push({ from: i, to: i });
+        previous = owner;
+    }
+    return groups;
+}
+
+export function chunkSourceRowsWithRanges(rows, maxChar, groups = rows.map((_, i) => ({ from: i, to: i }))) {
+    const chunks = [];
+    let cur = [], curLen = 0, from = 0;
+    for (const group of groups) {
+        const lines = rows.slice(group.from, group.to + 1);
+        const len = lines.reduce((n, row) => n + Array.from(row).length, 0);
+        if (cur.length && curLen + len > maxChar) {
+            chunks.push({ text: cur.join('\n'), from, to: group.from - 1 });
+            cur = []; curLen = 0; from = group.from;
+        }
+        for (const line of lines) cur.push(line);
+        curLen += len;
+    }
+    if (cur.length) chunks.push({ text: cur.join('\n'), from, to: rows.length - 1 });
+    return chunks;
+}
+
 /** 由"块 × 行"交集装配作用域对象（`fragmentOf(ref)` 是本次真正展示的那段文本；不在本次 ⇒ null）。 */
 function scopeFromParts(frozen, parts) {
     const entries = [];

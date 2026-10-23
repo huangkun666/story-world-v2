@@ -12,7 +12,9 @@ export function bindPageSubtabs(win) {
     };
 
     function apply(root, state) {
-        for (const tab of tabs(root)) {
+        const all = tabs(root);
+        if (!all.some(tab => tab.getAttribute('data-subtab') === state.key)) state.key = all[0]?.getAttribute('data-subtab');
+        for (const tab of all) {
             const selected = tab.getAttribute('data-subtab') === state.key;
             tab.setAttribute('aria-selected', String(selected));
             tab.tabIndex = selected ? 0 : -1;
@@ -41,11 +43,11 @@ export function bindPageSubtabs(win) {
     });
     win.addEventListener('keydown', (e) => {
         const tab = e.target?.closest?.('[data-subtab]');
-        if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        if (!tab || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
         const root = tab.closest('[data-subtabs]');
         if (!root || !win.contains(root)) return;
         const all = tabs(root), i = all.indexOf(tab);
-        const next = e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + all.length) % all.length;
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (['ArrowRight', 'ArrowDown'].includes(e.key) ? 1 : -1) + all.length) % all.length;
         e.preventDefault();
         select(all[next], true);
     });

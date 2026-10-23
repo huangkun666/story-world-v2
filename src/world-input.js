@@ -4,17 +4,21 @@ import { eventDetails } from './event-contract.js';
 // 重提已有事实只提供引用对象，不建新事件，也不替人物声明已经行动。
 export function referencedEventsOf(world, ids = [], rejected = []) {
     const known = new Map((world?.events || []).map(e => [e.id, e]));
+    const archived = new Set();
     for (const m of world?.milestones || []) {
-        for (const r of m.rows || []) if (!known.has(r.id)) known.set(r.id, r);
-        for (const [i, id] of (m.ids || []).entries()) if (!known.has(id)) known.set(id, { id,
-            ...(m.titles?.[i] ? { title: m.titles[i] } : {}) });
+        for (const r of m.rows || []) if (!known.has(r.id)) { known.set(r.id, r); archived.add(r.id); }
+        for (const [i, id] of (m.ids || []).entries()) if (!known.has(id)) { known.set(id, { id,
+            ...(m.titles?.[i] ? { title: m.titles[i] } : {}) }); archived.add(id); }
     }
     return [...new Set(ids || [])].flatMap(id => {
         const e = known.get(id);
         if (!e) { rejected.push({ family: 'reference', why: 'cause', ref: id }); return []; }
         return [{ id, ...(e.title ? { title: e.title } : {}), ...eventDetails(e),
             ...(e.timeMark ? { timeMark: e.timeMark } : {}), ...(e.position ? { position: e.position } : {}),
-            ...(typeof e.closed === 'boolean' ? { pending: !e.closed } : {}) }];
+            // 旧归档的补读原文可能来自更早的未结束版本，不能据此声明当前仍未决。
+            ...(archived.has(id) ? { archived: true, lifecycleKnown: e.closed === true,
+                ...(e.closed === true ? { pending: false } : {}) }
+                : typeof e.closed === 'boolean' ? { pending: !e.closed } : {}) }];
     });
 }
 

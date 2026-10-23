@@ -1,0 +1,19 @@
+{
+  "name": "flatted",
+  "version": "3.4.4",
+  "license": "ISC",
+  "commit": "e6f5ca700c4ca8104a6a83472c8219e267bd5e84",
+  "repository": "https://github.com/WebReflection/flatted",
+  "files": {
+    "index.js": {
+      "source": "https://raw.githubusercontent.com/WebReflection/flatted/e6f5ca700c4ca8104a6a83472c8219e267bd5e84/esm/index.js",
+      "sha256": "d697ad948769363b99110e1bffe84269a7e74955b42e4e74abac61b02f6c9de6",
+      "bytes": 3463
+    },
+    "LICENSE": {
+      "source": "https://raw.githubusercontent.com/WebReflection/flatted/e6f5ca700c4ca8104a6a83472c8219e267bd5e84/LICENSE",
+      "sha256": "148718606d34f467fd08a2176bb4c1ab275f999576f779368503d8d3e3642861",
+      "bytes": 770
+    }
+  }
+}

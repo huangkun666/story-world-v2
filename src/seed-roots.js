@@ -32,7 +32,7 @@ import { resolveEntityIdentityWithCanon } from './entity-identity.js';
 //     · `scopeForRows`/`verifyQuote` 把"编号"绑到**这一次调用真正展示的那一段**上——
 //       同句出现在别的条目里时不许冒领（`task-3-evidence-boundary-red` 那条病）。
 //   ⇒ 起根此前是严格面上唯一**没有编号**的一格（复审 F1：提示词形状里根本没有 `ev`），这里补齐。
-import { freezeAllowedSources, evidenceDictionary, verifyQuote, presenceIn, scopeForRows, materialRowsOf } from './abstract-evidence.js';
+import { freezeAllowedSources, evidenceDictionary, verifyQuote, presenceIn, scopeForRows, materialRowsOf, sourceRowGroups, chunkSourceRowsWithRanges } from './abstract-evidence.js';
 // ★★★leg144：起根这一遍也**并发发出去、按块号收回来**（同一个机制、同一把尺子：
 //   `src/abstract.js` 的 `EXTRACT_CONCURRENCY` 头注写了为什么是 3、以及"失败即退回串行"）。
 //   ★它读的是**同一本书**、打的是**同一条网关**——所以并发度由调用方传**同一个数**，不另立一个。
@@ -440,17 +440,10 @@ export async function seedRoots({ ssot, sourceText, extract, fingerprint = '', a
 // ★★★Task 4：**带行号**的版本是唯一实现——`chunkBookText` 只是它的薄壳。
 //   为什么：严格道要把"这一块展示了哪些行"交回来源块（`scopeForRows`），
 //   而分块与作用域**必须是同一把尺子**（与 `src/abstract.js` 的 `chunkRowsWithRanges` 同一条纪律）。
-export function chunkBookTextWithRanges(text, maxChar = SEED_CHUNK_CHAR) {
-    const rows = String(text ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
-    const chunks = [];
-    let cur = []; let len = 0; let from = 0;
-    for (let i = 0; i < rows.length; i += 1) {
-        const l = Array.from(rows[i]).length;
-        if (cur.length && len + l > maxChar) { chunks.push({ text: cur.join('\n'), from, to: i - 1 }); cur = []; len = 0; from = i; }
-        cur.push(rows[i]); len += l;
-    }
-    if (cur.length) chunks.push({ text: cur.join('\n'), from, to: rows.length - 1 });
-    return chunks;
+export function chunkBookTextWithRanges(text, maxChar = SEED_CHUNK_CHAR, allowedSources = null) {
+    const materialRows = materialRowsOf(text);
+    const groups = sourceRowGroups(freezeAllowedSources(allowedSources), { text, rows: materialRows });
+    return chunkSourceRowsWithRanges(materialRows.map(row => row.text), maxChar, groups);
 }
 
 export function chunkBookText(text, maxChar = SEED_CHUNK_CHAR) {

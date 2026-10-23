@@ -22,7 +22,7 @@
  * @param {Function} [deps.setStatus]    写状态条那一行字
  * @returns {{modalBoost:Function, dedupWindows:Function, ensureWindow:Function, openWindow:Function, closeWindow:Function, ensureWandEntry:Function}}
  */
-export function createWindowShell({ windowId, getViewState = null, setStatus = null } = {}) {
+export function createWindowShell({ windowId, getViewState = null, setStatus = null, onOpen = null } = {}) {
     const WINDOW_ID = String(windowId || '');
     const say = (m, options) => { try { setStatus?.(m, options); } catch (_) { /* 状态条不许影响收起 */ } };
 
@@ -65,11 +65,13 @@ export function createWindowShell({ windowId, getViewState = null, setStatus = n
     </header>
     <div class="sw2-actionbar" id="sw2_actionbar">
       <button class="sw2-btn sw2-primary" data-action="init-world">开始新世界</button>
+        <button type="button" class="sw2-btn sw2-primary" data-action="continue-creation" hidden>继续抽象</button>
       <button class="sw2-btn" data-action="advance-world">推进一轮</button>
-      <button class="sw2-btn" type="button" data-action="cancel-extraction" disabled aria-disabled="true">中止抽象</button>
       <span class="sw2-actionbar-state" id="sw2_advance_state"></span>
     </div>
+    <section class="sw2-storage-notice" data-storage-notice role="alert" hidden><strong>当前存档尚未读到</strong><p class="sw2-hint">此聊天绑定的世界暂未从当前浏览器数据库载入。请核对酒馆地址，或到存档与备份检查、导入备份。</p><button type="button" class="sw2-btn" data-storage-open>查看存档与备份</button></section>
     <div class="sw2-statusbar"><span class="sw2-dot"></span><span class="sw2-main" id="sw2_status_text">模板加载失败回退窗 · 完整面板需 settings.html</span></div>
+<section class="sw2-creation-progress" data-creation-progress hidden aria-label="当前阶段抽象进度"><div class="sw2-creation-progress-head"><span data-creation-stage></span><span data-creation-counts></span></div><div class="sw2-creation-progress-track"><progress data-creation-meter max="1"></progress><span data-creation-fraction></span></div></section>
     <div class="sw2-placeholder">settings.html 模板不可用（回退形态）。</div>
   </div>
 </div>`;
@@ -98,6 +100,7 @@ export function createWindowShell({ windowId, getViewState = null, setStatus = n
         const win = document.getElementById(WINDOW_ID);
         if (!win) return;
         win.classList.add('sw2-open');
+        onOpen?.();
         document.getElementById('sw2_window_close')?.focus?.();
         const menu = document.getElementById('extensionsMenu');
         if (menu) menu.style.display = 'none';

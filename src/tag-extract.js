@@ -1,3 +1,4 @@
+import {resolveWorldPropertyField,readWorldFieldSchema} from './source-field-table.js';
 // story-world-v2/src/tag-extract.js
 // ★标签提取（S3 新口径，设计见 `docs/spec-tagged-actions-extraction.md`）：
 //   聊天模型产出的**正文** → 结构化的"本轮已经发生过的事"。
@@ -98,6 +99,8 @@ function makeResolver(entities = [], canon = []) {
         idHits.set(k, bucket);
     }
     return (raw) => {
+        const exact = live.filter(e => String(e.id) === String(raw ?? '').trim());
+        if (exact.length) return exact.length === 1 ? exact[0].id : null;
         const k = normName(raw);
         if (!k) return null;
         const ids = idHits.get(k);
@@ -457,12 +460,13 @@ export function extractTags(text, ctx = {}) {
                 continue;
             }
             const isPlace = field === CHANGE_PLACE_FIELD;
-            if (!isPlace && !CHANGE_FIELDS.includes(field)) {
-                changesBad.push({ raw: raw.slice(0, 40), why: 'field' });   // 格名不在册
+            const property = isPlace ? null : resolveWorldPropertyField(ctx.world, entById.get(id), field);
+            if (!isPlace && !property) {
+                changesBad.push({ raw: raw.slice(0, 40), why: readWorldFieldSchema(ctx.world).fields.some(f=>f.name===field&&!f.kinds.includes(entById.get(id)?.kind))?'kind':'field' });
                 continue;
             }
             const kind = entById.get(id)?.kind || null;
-            if (!isPlace && kind && CHANGE_FIELD_KIND[field] && CHANGE_FIELD_KIND[field] !== kind) {
+            if (!isPlace && kind && !property.kinds.includes(kind)) {
                 changesBad.push({ raw: raw.slice(0, 40), why: 'kind' });    // 角色的格写到势力身上（反之亦然）
                 continue;
             }
@@ -471,7 +475,8 @@ export function extractTags(text, ctx = {}) {
             if (isPlace && !place) { changesBad.push({ raw: raw.slice(0, 40), why: 'place' }); continue; }
             changes.push({
                 entityId: id,
-                field,
+                field: isPlace ? field : property.storageKey,
+                ...(!isPlace ? {fieldName:property.name,fieldId:property.id,schemaRevision:property.schemaRevision} : {}),
                 value: isPlace ? place : value,
                 raw: raw.trim(),                            // ★原话（落账时当 `proseQuote` 用：逐字回执）
                 location: sceneId ?? sceneText ?? null,     // 地点继承最近场景（与行动同一条）

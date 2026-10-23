@@ -1,5 +1,5 @@
 import { freezeAllowedSources, verifyQuote, evidenceRecord, evidenceDictionary, materialRowsOf, scopeForRows } from './abstract-evidence.js';
-import { GEOGRAPHY_VERSION } from './schemas/geography.schema.js';
+import { GEOGRAPHY_VERSION, BEARING_DIRECTIONS } from './schemas/geography.schema.js';
 import { SETTING_CHUNK_CHAR } from './abstract-limits.js';
 
 const value = v => typeof v === 'string' ? v.trim() : '';
@@ -9,7 +9,7 @@ const identity = p => JSON.stringify([value(p?.name),value(p?.qualifier)]);
 // 提示词只交临时编号；最终编号由引擎生成。原话仅供核验，不落账。
 export const geographyShape = {
   places: [{ key: '本块临时编号', name: '地点原名', qualifier: '区分同名地点的原文身份说明，可省且必须原文明述', aliases: ['原文明述的同一地点叫法，可省'], ev: { s: 'S1', q: '逐字原文' } }],
-  links: [{ from: '临时编号', to: '临时编号', type: 'within|adjacent|passage', via: '通道原名，可省', direction: 'both|forward，原文明述才写', condition: '原文通行条件，可省', ev: { s: 'S1', q: '逐字原文' } }],
+  links: [{ from: '临时编号', to: '临时编号', type: 'within|adjacent|passage|bearing', bearing: `方位（from 在 to 的哪个方向），仅原文/结构明述时写，八向之一：${BEARING_DIRECTIONS.join('|')}`, via: '通道原名，可省', direction: 'both|forward，原文明述才写', condition: '原文通行条件，可省', ev: { s: 'S1', q: '逐字原文' } }],
 };
 
 export function sanitizeGeography(raw, { sourceText = '', evidence = null, previous = null } = {}) {
@@ -41,11 +41,16 @@ export function sanitizeGeography(raw, { sourceText = '', evidence = null, previ
   for (const l of raw.links) {
     const subject=`${value(l?.from)} → ${value(l?.to)}`;
     const from=keys.get(value(l?.from)),to=keys.get(value(l?.to)),type=value(l?.type);
-    if (!from || !to || from===to || !['within','adjacent','passage'].includes(type)) { reject(subject,'端点未确认或关系类型非法'); continue; }
+    if (!from || !to || from===to || !['within','adjacent','passage','bearing'].includes(type)) { reject(subject,'端点未确认或关系类型非法'); continue; }
+    // ★方位边必须带**八向之一**的明述方位；错误/缺失方位整条拒绝（不从 direction 猜）。
+    if (type==='bearing' && !BEARING_DIRECTIONS.includes(value(l.bearing))) { reject(subject,'方位缺失或非法，bearing 边已弃'); continue; }
     noteProof(l,'geography-link',subject);
     const out={from,to,type};
-    if (type==='passage') {
+    if (type==='bearing') out.bearing=value(l.bearing);
+    if (type==='passage'||type==='bearing') {
       for (const k of ['via','condition']) if (value(l[k])) out[k]=value(l[k]);
+    }
+    if (type==='passage') {
       if (['both','forward'].includes(l.direction)) out.direction=l.direction;
       else if (l.direction!==undefined) reject(subject,'方向非法，方向字段已弃');
     }
@@ -81,7 +86,7 @@ export function mergeGeography(parts, { previous = null } = {}) {
       const aliases=[...new Set([...(target.aliases||[]),...(Array.isArray(p.aliases)?p.aliases:[])].map(value).filter(a=>a&&a!==name))];
       if(aliases.length)target.aliases=aliases;remap.set(p.id,target.id);
     }
-    for(const l of part.links||[]){const from=remap.get(l.from),to=remap.get(l.to);if(!from||!to||from===to||!['within','adjacent','passage'].includes(l.type))continue;const out={from,to,type:l.type};if(l.type==='passage'){for(const k of ['via','condition'])if(value(l[k]))out[k]=value(l[k]);if(['both','forward'].includes(l.direction))out.direction=l.direction;}result.links.push(out);}
+    for(const l of part.links||[]){const from=remap.get(l.from),to=remap.get(l.to);if(!from||!to||from===to||!['within','adjacent','passage','bearing'].includes(l.type))continue;if(l.type==='bearing'&&!BEARING_DIRECTIONS.includes(l.bearing))continue;const out={from,to,type:l.type};if(l.type==='bearing')out.bearing=l.bearing;if(l.type==='passage'||l.type==='bearing'){for(const k of ['via','condition'])if(value(l[k]))out[k]=value(l[k]);}if(l.type==='passage'&&['both','forward'].includes(l.direction))out.direction=l.direction;result.links.push(out);}
   }
   const within=result.links.filter(l=>l.type==='within');
   const edges=new Map();for(const l of within){const a=edges.get(l.from)||[];a.push(l.to);edges.set(l.from,a);}
@@ -99,7 +104,7 @@ export async function extractGeography({ sourceText, allowedSources, extract, pr
   for(let i=0;i<rows.length;i++){if(chars+rows[i].text.length>SETTING_CHUNK_CHAR&&indexes.length){chunks.push(indexes);indexes=[];chars=0;}indexes.push(i);chars+=rows[i].text.length+1;}if(indexes.length)chunks.push(indexes);
   for(let i=0;i<chunks.length;i++){
     const picked=chunks[i],text=picked.map(j=>rows[j].text).join('\n'),scope=scopeForRows(frozen,{text:source,rows,indexes:picked});
-    const prompt=[{role:'system',content:'只抽取本次材料明述的地点身份、别名、包含(within)、相邻(adjacent)与通道(passage)。不猜距离、方向或道路。同名不同地点使用不同临时 key；尽量保留原文完整名称。每个地点与关系都带 ev（引擎会逐字核并把结果记进诊断；★核不过不再丢弃，但"抄不出原话的就别交"这条纪律照旧）。没有资料就返回空数组。输出严格 JSON：'+JSON.stringify({geography:geographyShape})},{role:'user',content:evidenceDictionary(frozen,{scope})+'\n'+text}];
+    const prompt=[{role:'system',content:'只抽取本次材料明述的地点身份、别名、包含(within)、相邻(adjacent)、通道(passage)与明述方位(bearing，from 在 to 的方位，八向之一：north/northeast/east/southeast/south/southwest/west/northwest)。不猜距离、道路或方向；方位只认明述，绝不从名号或通道 direction both/forward 推断。同名不同地点使用不同临时 key；尽量保留原文完整名称。每个地点与关系都带 ev（引擎会逐字核并把结果记进诊断；★核不过不再丢弃，但"抄不出原话的就别交"这条纪律照旧）。没有资料就返回空数组。输出严格 JSON：'+JSON.stringify({geography:geographyShape})},{role:'user',content:evidenceDictionary(frozen,{scope})+'\n'+text}];
     try{
       calls++;
       const output=await extract(prompt.map(m=>m.content).join('\n\n'));

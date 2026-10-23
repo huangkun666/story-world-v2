@@ -72,7 +72,7 @@ export function pulseEntropy(world, tick, chronicle) {
         id: `ev_pump_${tick}_1`,
         title: `天下安稳：已 ${tick - anchor} 轮无新事上桌`,
         source: { type: 'state' },
-        position: world.context.positions[0],   // 处境无特定驻点，落位置集首项（沿用旧口径）
+        ...(world.context.positions?.[0] ? { position: world.context.positions[0] } : {}),
         ripples: [],
         links: { up: [], down: [] },
         closed: false,

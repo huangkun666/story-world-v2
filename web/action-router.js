@@ -85,7 +85,7 @@ export function createActionRouter({ win, dispatch, toggleInject }) {
         const el2 = el.closest?.('[data-action]') || el.closest?.('.sw2-goto') || null;
         if (!el2) return null;
         if (el2.classList.contains('sw2-goto')) {
-            const view = el2.getAttribute('data-view') || 'archive';
+            const view = el2.getAttribute('data-view') || 'graph';
             win.querySelector(`.sw2-tab[data-view="${view}"]`)?.click();
             return null;
         }

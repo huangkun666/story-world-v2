@@ -48,6 +48,9 @@ function diagnosticValue(value, depth = 0, seen = new WeakSet()) {
 export function installRuntimeDiagnostics(host, { recorder = diagnostics } = {}) {
     if (!host || typeof host.addEventListener !== 'function') return null;
     if (installed.has(host)) return installed.get(host);
+    // Console/resource events cannot establish which chat started an async operation.
+    // Keep these explicitly unowned rather than attaching them to the arrival-time chat.
+    const globalRecorder = recorder.forScope ? recorder.forScope(null) : recorder;
     const consoleHost = host.console, wrappers = [];
     for (const level of ['warn', 'error']) {
         const original = consoleHost?.[level];
@@ -60,7 +63,7 @@ export function installRuntimeDiagnostics(host, { recorder = diagnostics } = {})
                     try {
                         const values = args.slice(0, 12).map(v => diagnosticValue(v));
                         const text = values.map(v => typeof v === 'string' ? v : v?.message || '').filter(Boolean).join(' · ') || `console.${level}`;
-                        recorder.record('插件控制台', level, text, { args: values });
+                        globalRecorder.record('插件控制台', level, text, { args: values });
                     } catch (_) {}
                 });
             }
@@ -74,7 +77,7 @@ export function installRuntimeDiagnostics(host, { recorder = diagnostics } = {})
             const target = event?.target, url = target?.src || target?.href;
             if (!url) return;
             if (!isPluginUrl(url)) return;
-            recorder.record('插件资源', 'error', '资源加载失败', { tag: target.tagName, url: String(url) });
+            globalRecorder.record('插件资源', 'error', '资源加载失败', { tag: target.tagName, url: String(url) });
         } catch (_) {}
     };
     host.addEventListener('error', onResourceError, true);

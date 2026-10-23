@@ -1,3 +1,5 @@
+import {relevantFieldText} from '../src/chat-tag-context.js';
+import {worldFieldWritePrompt,readWorldFieldSchema,worldWritablePropertyFields} from '../src/source-field-table.js';
 // story-world-v2/web/inject.js
 // ★★★leg89：**插件第一次"会动你的对话"**——发消息前把两段塞进聊天上下文。
 //   设计：`docs/spec-tagged-actions-extraction.md` §6。口径（逐条都有依据）：
@@ -43,6 +45,8 @@ import { CHANGE_FIELDS, CHANGE_FIELD_KIND } from '../src/tag-extract.js';
 import { createIdbVolumeStore } from './idb-backend.js';
 import { filterHistoryVolumes } from '../src/vector-history.js';
 import { diagnostics } from '../src/diagnostics.js';
+import { createServiceInjector } from './service-injector.js';
+import { SCENE_STATE_CHARS_DEFAULT } from '../src/limits.js';
 
 export const INJECT_KEY_TAGS = 'sw2_tags';       // ① 格式指令 + ② 名号对照（合成一条）
 export const INJECT_KEY_WORLD = 'sw2_world';     // ③ 世界动向（默认关）
@@ -113,12 +117,13 @@ export function liveRetrievalParams(settings = null) {
     };
     const s = settings && typeof settings === 'object' ? settings : {};
     return {
-        minScore: num(s.retrievalMinScore, RETRIEVAL_PARAMS.minScore),
-        top: num(s.retrievalTop, RETRIEVAL_PARAMS.top, true),
-        depth: num(s.retrievalDepth, RETRIEVAL_PARAMS.depth, true),
+        minScore: num(s.retrievalMinScore ?? s.minScore, RETRIEVAL_PARAMS.minScore),
+        top: num(s.retrievalTop ?? s.top, RETRIEVAL_PARAMS.top, true),
+        depth: num(s.retrievalDepth ?? s.depth, RETRIEVAL_PARAMS.depth, true),
         literalShare: RETRIEVAL_PARAMS.literalShare,
         // ★★★（2026-10-05）「往事注入多少字」——整段的字符硬上限（两路共用这一格）。
-        maxChars: num(s.retrievalMaxChars, RETRIEVAL_PARAMS.maxChars, true),
+        maxChars: num(s.retrievalMaxChars ?? s.maxChars, RETRIEVAL_PARAMS.maxChars, true),
+        ...(s.sceneStateMaxChars !== undefined ? {sceneStateMaxChars:num(s.sceneStateMaxChars,SCENE_STATE_CHARS_DEFAULT,true)} : {}),
     };
 }
 
@@ -247,89 +252,34 @@ const FENCE = '`'.repeat(3);
  *     · ⇒ 示例从过程式的「踏入元婴」改成状态式的「元婴期」
  *       （★旧示例自己就在教模型写错："踏入"是过程——这一处是同一个病的根）。
  */
-export function tagSpecText() {
-    // ★★★leg123（细案 `docs/spec-tag-granularity.md` §2.1/§2.2）：**格名表不另立一份**——
-    //   直接从 `src/tag-extract.js` 的 `CHANGE_FIELDS`（真源）按类别分出来。
-    //   口径一句话：**聊天模型看到的名单 = 引擎校验用的名单 = 实体账上真有的格**（一把尺子）。
-    const roleFields = CHANGE_FIELDS.filter((f) => CHANGE_FIELD_KIND[f] === 'character').join('／');
-    const factionFields = CHANGE_FIELDS.filter((f) => CHANGE_FIELD_KIND[f] === 'faction').join('／');
+export function tagSpecText(world=null) {
+    const fields=worldWritablePropertyFields(world);
     return [
         '【本回合必须用标签标出实际行动与重要结果】',
-        '★正文照常写；末尾标签记录会改变后续局面的事实结果、当前状态变化与仍需兑现的承诺。普通行动只用于当轮已行动者保护。',
-        '标签块必须有，但【事件】可以一条也没有。没有标签块，插件收不到本轮标记；只有日常活动时保留实际行动，不为凑事件数量编结果。',
-        '',
-        `★★把所有标签**集中放在正文最末尾的一个 ${FENCE}tags 块里**（前后各一行 ${FENCE} 围栏，照下面那样写）。`,
-        '**只有这个块里面的标签插件才看**；块外面写了也不作数（所以正文里怎么引用、怎么打比方都不会被误读）。',
-        '',
-        '先选事件，再写编号：',
-        '· 每件事件都要能指出正文已经确立的具体变化：新增了什么事实、改变了谁的处境或行动条件、确立了什么义务。只说“某人做完了某个动作”不够；没有这样的变化，就只写行动。不要为了满足这个要求给正文添加后果。',
-        '· 查看公开资料、问候、走动、清点人数、进入会场、列队集合等，若没有独立新结果，只写【行动】。把它们改称“完成查阅”“完成问候”“完成集结”“确认到场”，仍然不成为事件。',
-        '· 对照：查看公开规则不是发布新规则；普通问候不是确立新关系；按安排集合不是获得新资格。若正文确实写出新规则发布、双方约定交换证据、某人参赛资格被取消，才记录那个具体结果。例子不是要求本轮必须发生这些事。',
-        '· 认知变化要写出足以改变判断或行动条件的关键新事实，例如发现背叛的证据；仅仅看过资料、听完介绍、熟悉流程不单独登记。已有公开事实不因每个人读了一遍就各建一件事件。',
-        '· 事件不按规模大小判断，一句有效约定也可登记；同一结果的查看、交谈、办理过程不拆成多个事件。“已完成”只表示事件完成，不表示一个普通动作因此值得入账。',
-        '',
-        '例一：只有日常活动，没有事件。学生甲查看公开资料，与同学乙互致问候后进场列队，班长清点人数；没有新规则、约定或其他独立结果，标签这样写：',
-        `${FENCE}tags`,
+        '正文照常写，末尾必须有一个独立的 '+FENCE+'tags 围栏块。只有这个块里面的标签插件才看；没有标签块，插件收不到本轮标记。一个标签占一整行，行首不缩进、不加编号，行尾不并列标签。',
+        '先分行动与结果：问候、移动、集合、普通查阅若无独立新事实或义务，只记行动；不能给动作加“完成”就建事件，也不为标签补剧情。同一结果不拆成多件；零事件也合格，不写“无事件”占位。',
+        '块首写【协议】4。【此刻】填正文明确的时间点；【时长】填经过多久，两者分开，未知省略，不算日历。【场景：地点原话】放在对应事件之前；事件继承前面最近的场景和此刻，后写时间不回填，不猜地点。',
+        '【行动】谁｜做了什么｜针对谁：标当轮已行动者，主角的实际行动也标，插件不替玩家决定。后两格知道就写、不知道就不写；不要为了凑格式编一个名字。在场、被提及、比喻或夸张不算实际行动或变化。',
+        '【事件】本消息编号｜具体结果或义务｜已完成/未决｜既有原因事件ID。编号如E1，只在本消息内使用；可选第四格为账上既有因果事件ID，有可靠ID才填，多原因用顿号。已成立事实写已完成，仍待兑现的明确义务才写未决，后果未完不等于义务未履行。',
+        '【类别】事件编号｜类别原话；【当事人】事件编号｜对象名（顿号分隔）。没有依据的可选项省略。',
+        '【影响范围】事件编号｜对象/成员/地点/原文｜范围内容；【公开范围】同样三格，可重复。影响对象与公布对象分开，公布不等于每人已知或已行动。成员仅用已有组织；未知、例外、交集保留原话。',
+        fields.length?'【变化】谁｜字段｜新状态｜本消息事件编号；第四格可省。'+worldFieldWritePrompt(world):worldFieldWritePrompt(world),
+        fields.length?'第三格填变完之后那一格的值，即明确的新状态，不填过程、数字增量或夸张总结。分档字段写书里那套档位的名字，不写“获取了资源”“实力大增”；没点出那个新状态就别写这一行。':'',
+        '【承诺】谁｜具体义务｜对谁｜本消息事件编号；后两格可省，未知对象但需第四格时留空第三格。变化、承诺与同一结果关联同一事件。',
+        '【持续条件】本消息条件编号｜原因事件编号｜条件正文｜尚未生效/有效/已结束。公告完成与制度仍有效分开；【条件范围】条件编号｜对象/成员/地点/原文｜范围内容；【条件时间】条件编号｜开始原话｜结束原话，未知留空。',
+        '【条件变更】已有条件ID｜有效/已结束｜原因事件编号。修改条文或范围时新建条件并写【替代条件】新条件编号｜旧条件ID；不覆写旧文，不重新激活已结束条件。',
+        '重提或普通转发写【引用】已有事件ID，不重建旧事。日常获知留在行动缘由，不另建知情标签；重要泄密可建普通新事件并引用原因。私密背景不因模型看见就人人知情；错误公告只记录某方说法，不把内容当客观事实。',
+        '形状示例，仅抄正文确实发生的项：',
+        FENCE+'tags',
         '【协议】4',
         '【时长】半小时',
-        '【场景：校园】',
-        '【行动】学生甲｜查看公开资料并与同学乙互致问候｜同学乙',
-        '【行动】同学乙｜向学生甲问候｜学生甲',
-        '【场景：体育馆】',
-        '【行动】学生甲｜进场列队',
-        '【行动】班长｜清点人数',
+        '【场景：渡口】',
+        '【行动】角色甲｜核对交付',
+        '【事件】E1｜角色甲已收到约定物品｜已完成',
+        '【当事人】E1｜角色甲',
+        
         FENCE,
-        '',
-        '例二：正文确实发生突破、护送约定或新规则发布时，分别登记相应结果；只抄实际发生的项：',
-        `${FENCE}tags`,
-        '【协议】4',
-        '【此刻】复苏历三年 三月初七 卯时',
-        '【时长】半柱香',
-        '【场景：忘川渡口】',
-        '【行动】薛铁衣｜迎战｜黄坤',
-        '【事件】E1｜黄坤突破至元婴期｜已完成',
-        '【当事人】E1｜黄坤',
-        '【变化】黄坤｜实力｜元婴期｜E1',
-        '【事件】E2｜黄坤答应护送白小娥回江州｜未决',
-        '【当事人】E2｜黄坤、白小娥',
-        '【承诺】黄坤｜护送白小娥回江州｜白小娥｜E2',
-        '【事件】E3｜学校向全体学生公开新规则｜已完成',
-        '【类别】E3｜公示',
-        '【影响范围】E3｜原文｜全体学生',
-        '【公开范围】E3｜原文｜全体学生',
-        '【持续条件】C1｜E3｜下周起禁止携带手机入课堂｜尚未生效',
-        '【条件范围】C1｜原文｜全体学生',
-        '【条件时间】C1｜下周｜',
-        FENCE,
-        '',
-        '规则：',
-        `1. **一个 ${FENCE}tags 块**，放在正文**最末尾**；开围栏那一行**只有** ${FENCE}tags 这几个字符，别的一律不写。`,
-        '2. **一个标签占一整行**——行首不许有别的东西（不缩进、不加「-」或「*」或「1.」），行尾也不许再跟别的标签。',
-        '3. 【此刻】＝**现在是什么时候**——一个**时间点**（如「复苏历三年 三月初七 卯时」）。★**不用算、不用跟上一轮对账**；写不出时间点就**别写这一行**（空着就是空着）。',
-        '4. 【时长】＝**从这里起又过了多久**（三日后／当夜／一炷香／半晌）。★它与【此刻】**是两回事**：只会说相对时间时，**只写【时长】、【此刻】留空**。',
-        '5. 【场景：X】＝**这一场戏在哪儿**（X 用下面【本世界的名号】里列出的**地名**）。换了地方就再写一条。',
-        '6. 【行动】谁｜做了什么｜针对谁，中间用全角竖线｜分开。行动只标当轮已行动者，保护其实际落子；普通问候、移动、发资料若无新影响，不单独登记事件。后两格知道就写、不知道就不写——不要为了凑格式编一个名字。',
-        '   【事件】本消息编号｜结果摘要｜已完成或未决。编号如 E1、E2，只在本消息内使用；每件事件继承其前面最近的【场景】与【此刻】，后面的时间不回填。可选第四格为账上既有因果事件 ID（顿号分隔），有可靠 ID 才填，不编 ID。',
-        '   【类别】事件编号｜类别原话；【当事人】事件编号｜对象名（顿号分隔）；缺少当事人可省略，不为格式编发布人。',
-        '   【影响范围】事件编号｜对象/成员/地点/原文｜范围内容；【公开范围】同样三格。影响是制度或事实适用于谁，公开是向谁公布，两者分开；公开不能当成所有人已经知情或行动。多项范围重复写关联行，前后顺序均可。成员只能引用已有组织或分支，不能猜成员；未知对象、例外与交集保留完整原文。',
-        '   一件事件是一项已发生、改变后续局面的事实结果，或确立尚需兑现的承诺。结果摘要写具体新事实或义务，不能只给动作加“完成”；同一结果及其多格变化关联同一编号。已完成结果即使还会产生后果，也写已完成；明确未履行义务才写未决。',
-        `7. 【变化】谁｜哪一格｜**变成了什么**。★第二格**只能用这几个名**：**角色**＝${roleFields}；**势力**＝${factionFields}。`,
-        '   ★★第三格填的是**变完之后那一格的值**——一个**新状态**（对：「元婴期」「重伤」「边关防务总管」「剑术通神」），不是一个**过程**（错：「获取了资源」「大幅提升」——那是**怎么变的**，填进去这一格从此是句空话）。戏里怎么称呼就怎么照抄，**不要**换算成数字或等级分。',
-        '   ★★★**角色变强/突破时，第三格要写书里那套档位的名字**（境界/等级/品阶/军阶…本书怎么分就怎么写）：书里分筑基／金丹／元婴，就从筑基写**金丹**；**不许**写成「实力大增」「功力大涨」「大幅提升」这类**抽象的变强总结**——那种话填进去，这一格就再也说不出他到底什么水平了。',
-        '   ★**戏里没点出那个新档位就别写这一行**（只写"得了一枚丹药、功力大涨"而没说是哪个境界 ⇒ **留空**，不许拿过程或总结去凑）。',
-        '8. 【承诺】谁｜许了什么｜对谁。变化与承诺都可在现有三格后加第四格本消息事件编号，关联同一结果；对象未知但需填第四格时保留空第三格。没有关联事件则省略第四格。',
-        '   【持续条件】本消息条件编号｜原因事件编号｜条件正文｜尚未生效/有效/已结束；只在正文明确确立条件时写。公告已完成与制度仍有效分开，不把制度记成永久未决义务。',
-        '   【条件范围】条件编号｜对象/成员/地点/原文｜范围内容；【条件时间】条件编号｜开始时间原话｜结束时间原话，未知保留空格，可整行省略，不推算日历。',
-        '   【条件变更】已有条件ID｜有效/已结束｜原因事件编号；例如【条件变更】cond_1_1｜已结束｜E4。修改正文或范围时新建条件，并写【替代条件】本消息条件编号｜已有条件ID；旧条文不覆写，已结束条件不能重新激活。',
-        '   重提或普通转发用【引用】已有事件ID，例如【引用】ev_1_1，不重新登记原公告。日常获知可写在行动缘由，不建独立知情或传播标签，也不要求先有知情记录。',
-        '   人物获知后行动应有合理因果和途径；私密事实不能因为模型看见就让外人知道。密信截获、泄密等改变局面的重要传播写普通新事件，第四格指向原原因。错误公告只记某方发布了某说法，不把其中的灾害、死亡或胜负当成客观事实。',
-        '9. 只标**真的发生了**的：只是在场、只是被提到、只是说话，都不算；★**比喻和夸张不算**（"打得天崩地裂"不是变化）。',
-        '10. **主角（你正在扮演的那位玩家）的行动照样标**——插件只是记下来，**不会替他做决定**。',
-        '11. 写完之后自己数一遍重要结果：逐件检查是否有具体新事实或义务，把只有过程、问候、普通查阅、移动或集结的项从【事件】中删掉，保留实际【行动】。块首有【协议】4；结果、当事人、范围及关联编号与正文一致。没有重要结果时不编事件，不补“无事件”占位标签；事件为零也合格。',
-        '',
-        '★**自检（照这个查）**：正文末尾应当有**这一个块**，像上面那个例子一样。**没有这个块 = 这一轮没达标。**',
-        '',
-        '★标签是**给插件读的路标**：正文写法照旧自由（**块外**想怎么写、想怎么提这些记号都行），**不必**为了标签改你的叙事——但**这个块必须有**。',
+        '写完之后自己数一遍：具体结果、对象、范围、编号均须与正文一致，普通过程留在行动。没有这个块 = 这一轮没达标；正文风格自由，但这个块必须有。',
     ].join('\n');
 }
 
@@ -438,7 +388,7 @@ export function sw2RecallQueryText(ctx, cap = 400, depth = 2, lists = {}) {
         if (t) proseParts.push(t);
     }
     const n = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 400;
-    const tail = (s) => (s.length > n ? s.slice(-n) : s);
+    const tail = (s) => (cap === null ? s : s.length > n ? s.slice(-n) : s);
     const parts = [];
     // ★第一截照旧"原文尾巴"（leg136 实测：只取剥壳那截会掉 12 轮）
     const prevRaw = proseParts[0] || '';
@@ -448,7 +398,7 @@ export function sw2RecallQueryText(ctx, cap = 400, depth = 2, lists = {}) {
     //     ★**两个都空 ⇒ `proseOnly` 原样返回**（＝一个字都不剥）⇒ 下面那句 `prose !== raw` 自然跳过。
     for (const raw of proseParts) {
         const prose = (lists ? proseOnly(raw, lists) : raw).trim();
-        if (prose && prose !== raw) parts.push(tail(prose));
+        if (prose && (prose !== raw || raw !== prevRaw)) parts.push(tail(prose));
     }
     if (currentUser) parts.push(currentUser);
     return parts.filter(Boolean).join(' ');
@@ -627,8 +577,8 @@ export function buildInjections(world, { roster = true, spec = true, worldTide =
             + (c.effectiveUntil ? `｜结束：${c.effectiveUntil}` : '');
     });
     const tags = [
-        spec ? tagSpecText() : '',
-        roster ? rosterText(world) : '',
+        spec ? tagSpecText(world) : '',
+        '', // Name resolution stays inside the engine.
         currentConditions.length ? `【当前持续条件 · 按ID引用】\n${currentConditions.join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
     // ③ **世界动向 = 这一轮世界发生了什么**（`runTick` 结算后写进 `meta.lastInjection` 的编年条目）。
@@ -648,6 +598,24 @@ export function buildInjections(world, { roster = true, spec = true, worldTide =
 }
 
 /**
+ * ★★★本次（**注入内容预览**）：两路注入器各自记着"上一次真写出去的三段正文"，
+ *   面板要看的是**最后一次真写进对话的那一份**——而两路会互相接管（本地方案激活 / 退回旧档），
+ *   拿"现在哪条路活着"去追认上一次的结果，就是本仓「过期货冒充新检索」那条老病。
+ *   ⇒ 只有**时刻**说得清谁更晚（两条记录都在自己真写出去的那一刻打戳，ISO 同一形状，可直接比）。
+ * @param {object|null} a 旧路那一份（`web/inject.js`） @param {object|null} b 服务路那一份（`web/service-injector.js`）
+ * @returns {object|null} 更晚的那一份；两份都没有 ⇒ `null`（调用方按"没注入过"画）
+ */
+export function newerInjectTexts(a, b) {
+    if (!a) return b || null;
+    if (!b) return a;
+    const rank = (t) => (t?.at ? String(t.at) : '');
+    if (rank(a) !== rank(b)) return rank(a) > rank(b) ? a : b;
+    // 同一毫秒（撤空与写入撞在一起那种）：**有正文的那一份更该被看见**——绝不拿"空"盖掉"有"。
+    const weight = (t) => ((t?.tags || t?.scene || t?.ledger) ? 1 : 0);
+    return weight(a) >= weight(b) ? a : b;
+}
+
+/**
  * 注入器（依赖注入式工厂，照本仓 `createParamHub`/`createSnapshotHub` 的先例：**注入的是函数不是值**）。
  * deps: `{ getCtx, getWorld, isOn, setStatus }`
  *   - `getCtx()`   现取 ST 上下文（**不许抓死**：换聊天/换卡后上下文会换）
@@ -655,7 +623,7 @@ export function buildInjections(world, { roster = true, spec = true, worldTide =
  *   - `isOn(key)`  读设置开关（缺省 false = 不注入）
  *   - `setStatus(msg)` 如实出声（取不到注入口时只报一次）
  */
-export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus = () => {}, vectorRecall = null, vectorEnabled = () => true, retrievalParams = null } = {}) {
+export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus = () => {}, vectorRecall = null, vectorEnabled = () => true, retrievalParams = null, serviceSession = null, queryLists = null } = {}) {
     if (typeof getCtx !== 'function' || typeof getWorld !== 'function') {
         throw new TypeError('createInjector：`getCtx` 与 `getWorld` 必须是函数（注入的是函数不是值）');
     }
@@ -698,6 +666,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     }
     /** ★调用方（接线层）在消息进来时调它：后台把向量备好；**永不抛**。 */
     function prefetchVectors() {
+        if (serviceSession?.active) return serviceInjector.prefetchVectors();
         try {
             if (!vecDeps || !vectorEnabled() || !isOn('injectLedgerRecall')) { clearVectors(); return; }
             const scope = readVectorScope();
@@ -749,6 +718,23 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     //     "格式指令 N 字 · 世界动向 M 字 · 账上往事 K 字"。
     const runs = { count: 0, lastOk: null, lastOff: null, lastChars: 0, lastAt: null, last: null };
 
+    // ★★★本次（**注入内容预览** · 用户令「**要能直接看到这一次会注进去的全部内容**」）：
+    //   **上一次真写出去的三段正文**（参数页那个"看看会注进去什么"读它，见 `runTexts()`）。
+    //   ★为什么记在这里、而不是另拼一份：这三格就是**真的递进 `setExtensionPrompt` 的那几个字符串**
+    //     （见下面 `apply()` 的写入处与 `clear()`）——另拼一份就是本仓最忌的"第二份真相"
+    //     （预览说 A、真注进去是 B，而且没有任何东西会红）。
+    //   ★`at` = **那一次真写出去的时刻**。撤空（`clear()`）也算一次：那一刻对话里**真的**没有这几段了
+    //     ⇒ 面板按"三段都空 = 未注入"画（不许留着上一轮冒充这一轮）。
+    let lastTexts = null;
+    const textStamp = () => { try { return new Date().toISOString(); } catch (_) { return null; } };
+    /** 记下**这一次真写出去的三段**（面板的预览与它**逐字**同源）。 */
+    const recordTexts = (tags, scene, ledger) => {
+        lastTexts = {
+            tags: String(tags ?? ''), scene: String(scene ?? ''), ledger: String(ledger ?? ''),
+            at: textStamp(), path: 'legacy',
+        };
+    };
+
     const readApi = () => {
         const ctx = getCtx();
         const fn = ctx?.setExtensionPrompt;
@@ -771,6 +757,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
 
     /** 撤掉上一轮注入的两段（**先撤后写**：绝不让上一轮冒充本轮）。 */
     function clear() {
+        serviceInjector?.clear();
         clearVectors();
         const api = readApi();
         if (!api) return false;
@@ -778,6 +765,8 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
             api.fn(INJECT_KEY_TAGS, '', api.position, 0, false, api.sysRole);
             api.fn(INJECT_KEY_WORLD, '', api.position, 0, false, api.sysRole);
             api.fn(INJECT_KEY_LEDGER, '', api.position, 0, false, api.sysRole);   // ★leg115 第四段一起撤
+            // ★★★本次：撤空**也是一次真写出去**（那一刻对话里真的没有这几段了）⇒ 预览跟着归零。
+            recordTexts('', '', '');
             return true;
         } catch (_) { return false; }
     }
@@ -791,11 +780,12 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
      * @returns {object|null} 注入器还没跑过 ⇒ `null`（面板画"还没跑过"，不编数）。
      */
     function runFacts() {
+        if (serviceSession?.active) return serviceInjector._facts();
         const last = runs.last || null;
         if (!last) return null;
         const n = (v) => (v == null ? null : Number(v) || 0);
         return {
-            count: runs.count, at: runs.lastAt,
+            count: runs.count, at: runs.lastAt, path: 'legacy',
             status: last.status,
             tagsBytes: n(last.tagsBytes), rosterBytes: n(last.rosterBytes),
             roster: Boolean(last.rosterInTags),
@@ -808,10 +798,29 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     }
 
     /**
+     * ★★★本次（**注入内容预览**）：**上一次真写出去的三段正文**——参数页那个"看看会注进去什么"读它。
+     *
+     * @returns {{tags:string, scene:string, ledger:string, at:string|null, path:'legacy'|'service'|null}}
+     *   · `tags`/`scene`/`ledger`：三段正文本身（**就是那一次递进注入口的字符串**；没写过 ⇒ 空串）；
+     *   · `at`：那一次写出去的时刻（没写过 ⇒ `null`）；
+     *   · `path`：这一份是哪条路写出去的（旧档 `legacy` / 浏览器正式世界 `service`）——
+     *     面板按它选小标题（旧路那一段叫「世界动向」、服务路叫「当前可见状态」），
+     *     名字必须与上面那一行读数**同一套**，否则同一件事在页上会有两种说法。
+     * ★它是**纯读**：不写注入口、不重算、不触发任何注入（面板每次重绘都会问它一次）。
+     */
+    function runTexts() {
+        // 服务路那一份由它自己记（它才是真的写出去的那一方）；两路取**更晚**的一次，见 `newerInjectTexts`。
+        const theirs = serviceSession ? (serviceInjector?._texts?.() || null) : null;
+        return newerInjectTexts(lastTexts, theirs)
+            || { tags: '', scene: '', ledger: '', at: null, path: null };
+    }
+
+    /**
      * 按当前设置与世界**重设**注入。返回自证读数（面板/控制台都读它）：
      * `{ ok, off, tagsChars, worldChars, line, facts }`。★`off` = 玩家把开关关了（**不是失败**，别报成失败）。
      */
     function apply() {
+        if (serviceSession?.active) return serviceInjector.apply();
         const spec = Boolean(isOn('injectTagSpec'));
         const roster = Boolean(isOn('injectRoster'));
         const tide = Boolean(isOn('injectWorldTide'));
@@ -1031,6 +1040,10 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
             ledgerOn, divergenceBytes: recallFacts?.divergenceBytes ?? 0, recalledBytes: recallFacts?.bytes ?? 0,
             recall: recallFacts,
         };
+        // ★★★本次（**注入内容预览**）：把**这一次真的写出去的那三段**记下来（就是上面那三行 `api.fn` 的实参）。
+        //   ★放在这里 = 两种出口（有内容 / 一个字都没注入）都会经过 ⇒ 预览与读数行说的是同一次。
+        //   ★写入抛错那一路**不动预览**：那一路是"什么都没写进去"，预览照旧如实说上一次写出去的是什么。
+        recordTexts(tags, tideText, ledger);
         // ★leg90c：读数里**明写位置**——它是这一段能不能真进 prompt 的判据（`IN_PROMPT`=0 → ST 映射成 'end'）。
         // ★★★leg92：**开关开着、但一个字都没注入**（世界没进内存 ⇒ 名册取不到 ⇒ 两段都空）
         //   必须**明说**，否则它和"已关"在界面上长得一样（这正是 leg92 那个真缺陷被藏了这么久的原因）。
@@ -1052,6 +1065,14 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         return { ok: true, off: false, tagsChars: tags.length, worldChars: tideText.length, ledgerChars: ledger.length, ledgerNote, line: lastLine, runs: { ...runs }, facts: runFacts() };
     }
 
+    const serviceInjector = serviceSession ? createServiceInjector({getCtx,isOn,setStatus,
+        isActive:()=>serviceSession.active,getState:()=>serviceSession.readState(),
+        getQuery:()=>sw2RecallQueryText(getCtx(),400,paramsNow().depth,typeof queryLists==='function'?queryLists():{}),
+        getRelevanceText:()=>sw2RecallQueryText(getCtx(),null,paramsNow().depth,typeof queryLists==='function'?queryLists():{}),getMaxChars:()=>isOn('injectLedgerRecall')?paramsNow().maxChars:0,
+        getStateMaxChars:()=>{const value=Number(typeof retrievalParams==='function'?retrievalParams()?.sceneStateMaxChars:NaN);return Number.isSafeInteger(value)&&value>0?value:SCENE_STATE_CHARS_DEFAULT},
+        getSearchOptions:()=>({maxRecords:paramsNow().top,similarity:paramsNow().minScore}),
+        getTags:()=>{const world=serviceSession.readWorld?.(),query=sw2RecallQueryText(getCtx(),null,paramsNow().depth,typeof queryLists==='function'?queryLists():{});
+            return tagSpecText(world)+relevantFieldText(world,query);}}) : null;
     // ★★★leg115：**在"玩家把消息发出去"的那一刻再重设一次**——这是第四段能不能拿到"这一轮输入"的关键。
     //   为什么非挂不可（实读 ST 源码定的，不是猜的）：`script.js:5682` 把用户消息 push 进 `chat` **之后**才
     //   发 `MESSAGE_SENT`（`slash-commands.js:4848/4898/4936/4941` 同款）⇒ 那一刻 `ctx.chat` 末尾**就是**
@@ -1065,6 +1086,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
         if (es?.on && sentEvt && !es.__sw2LedgerHooked) {
             es.__sw2LedgerHooked = true;
             es.on(sentEvt, () => {
+                if (serviceSession?.active) return serviceInjector.prepare();
                 try {
                     if (isOn('injectLedgerRecall')) { prefetchVectors(); apply(); }
                 } catch (_) { /* 失败零阻塞：注入不成绝不许拦住发消息 */ }
@@ -1077,5 +1099,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
     //   这样 `apply()` 那一刻是**同步读缓存**（ST 的注入口是同步的，这里不许 await）。
     // ★★★（2026-10-05）：`_facts` 也交出去——参数页那一行读数直接问它（接线层**不必**再存一份，
     //   省下来的行数是硬需求：`web/index.js` 有 `<3100` 行硬锁）。
-    return { apply, clear, clearVectors, readApi, prefetchVectors, _vecNote: () => vecNote, _last: () => lastLine, _runs: () => ({ ...runs }), _facts: () => runFacts() };
+    // ★★★本次（**注入内容预览**）：`_texts` 同批交出去——"上一次真写出去的三段正文"（纯读；
+    //   措辞与画法住 `web/panel-tools.js`，本模块只报事实，**不另存第二份**）。
+    return { apply, clear, clearVectors, readApi, prefetchVectors, _vecNote: () => vecNote, _last: () => lastLine, _runs: () => ({ ...runs }), _facts: () => runFacts(), _texts: () => runTexts() };
 }

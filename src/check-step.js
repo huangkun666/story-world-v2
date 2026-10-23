@@ -1,8 +1,12 @@
+import {resolveWorldPropertyField} from './source-field-table.js';
 // story-world-v2/src/check-step.js
 // 世界步语义校验（S4）：真 schema 强制（形状）+ 身份/因果/位置/波及（语义）。
 // 事件源三类与无源拒绝（§4.2）、事件位置合法性切片版（§3.2）在此落实。
 import { validate } from './schema.js';
 import { checkEventContract, applyConditionUpdates } from './event-contract.js';
+// 显式观察描述（committed state change 的可见性披露）：语义校验的公共入口。
+//   条件那一路在 `conditionUpdateErrors` 里校验（见 `event-contract.js`）；这里覆盖四族直挂字段。
+import { observationErrors } from './state-observation.js';
 import { worldStepSchema } from './schemas/world-step.schema.js';
 import { isSettingRef } from './setting.js';   // K25：设定池保留键空间判词
 import { RIPPLE_TARGET_CAP } from './weight.js';   // leg25：波及上限唯一真源（此前该上限生产 0 强制点=纸面机制）
@@ -297,6 +301,7 @@ export function checkWorldStep(step, ssot) {
     }
     for (const [i, f] of (step.entityFates || []).entries()) {
         const ent = f.entity && ssot.entities.find((e) => e.id === f.entity);
+        if (f.observation !== undefined) errors.push(...observationErrors(f.observation, ssot).map(e => `$.entityFates[${i}].observation: ${e}`));
         // ★★★leg67 甲-余：目标存在性收进判据表（`'entityFates.entity'`）。
         //   ⚠"玩家不可灭"与"已覆灭不重复覆灭"是**别的判据**（红线 1 / dead=终局），照旧留在这里。
         if (verdictOf('entityFates.entity', { type: 'id', ref: f.entity }, { world: ssot, step })) {
@@ -344,6 +349,7 @@ export function checkWorldStep(step, ssot) {
         const seenPairs = new Set();
         for (const [i, u] of step.entityUpdates.entries()) {
             const ent = u.entity && ssot.entities.find((e) => e.id === u.entity);
+            if (u.observation !== undefined) errors.push(...observationErrors(u.observation, ssot).map(e => `$.entityUpdates[${i}].observation: ${e}`));
             // ★★★leg67 甲-余：目标存在性收进判据表（`'entityUpdates.entity'`）。
             if (verdictOf('entityUpdates.entity', { type: 'id', ref: u.entity }, { world: ssot, step })) {
                 errors.push(`$.entityUpdates[${i}].entity: 未知实体 "${u.entity || ''}"`);
@@ -352,7 +358,9 @@ export function checkWorldStep(step, ssot) {
             if (protectedRole(u.entity)) {
                 errors.push(`$.entityUpdates[${i}].entity: ${protectionText(u.entity)}；不可改写字段`);
             }
-            if ((currentTurnProtection(ssot)?.changedFields || []).some(r => r.entityId === u.entity && r.field === u.field)) {
+            const property = ['status','location'].includes(u.field) ? null : resolveWorldPropertyField(ssot,(ssot.entities||[]).find(e=>e.id===u.entity),u.field);
+            if (!['status','location'].includes(u.field) && !property) errors.push('$.entityUpdates['+i+'].field: 字段未获本世界确认许可');
+            if ((currentTurnProtection(ssot)?.changedFields || []).some(r => r.entityId === u.entity && r.field === (property?.storageKey??u.field))) {
                 errors.push(`$.entityUpdates[${i}].field: 这一格本轮已由正文落定，同一轮同一格只写一次`);
             }
             if (ENTITY_IMMUTABLE_FIELDS.includes(u.field)) {
@@ -468,6 +476,7 @@ export function checkWorldStep(step, ssot) {
                     errors.push(`$.relationUpdates[${i}]: 必须是 {from, to, type, cause} 形状的对象`);
                     continue;
                 }
+                if (ru.observation !== undefined) errors.push(...observationErrors(ru.observation, ssot).map(e => `$.relationUpdates[${i}].observation: ${e}`));
                 const fromId = typeof ru.from === 'string' ? ru.from.trim() : '';
                 const toId = typeof ru.to === 'string' ? ru.to.trim() : '';
                 const relType = typeof ru.type === 'string' ? ru.type.trim() : '';
@@ -529,6 +538,7 @@ export function checkWorldStep(step, ssot) {
                     errors.push(`$.relationClosures[${i}]: 必须是 {id, why?} 形状的对象`);
                     continue;
                 }
+                if (rc.observation !== undefined) errors.push(...observationErrors(rc.observation, ssot).map(e => `$.relationClosures[${i}].observation: ${e}`));
                 const relId = typeof rc.id === 'string' ? rc.id.trim() : '';
                 if (!relId) { errors.push(`$.relationClosures[${i}].id: 缺关系 id（照抄输入里那条边的号 rel_<轮次>_<第几条>）`); continue; }
                 if (seenRel.has(relId)) { errors.push(`$.relationClosures[${i}]: 同一条边一轮内重复了结（"${relId}"）——一条只能了结一次`); continue; }

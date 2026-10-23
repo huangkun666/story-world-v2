@@ -1,8 +1,9 @@
+import {chatIdentity, identityScope} from '../src/chat-scope.js';
 // Message identity and history guards live here; no body-based deduplication.
 export const MESSAGE_ID_KEY = 'story_world_v2_message_id';
 
 export function chatScope(ctx) {
-    return JSON.stringify([ctx?.chatId ?? ctx?.getCurrentChatId?.() ?? null, ctx?.characterId ?? null, ctx?.groupId ?? null]);
+    return identityScope(chatIdentity(ctx));
 }
 
 export function assistantMessage(message) {
@@ -74,16 +75,7 @@ export function previewConsumptionRecovery(ctx, world) {
         note: '仅预览输入副本；原文缺失或世界单独推进的轮次须人工核对，未自动重放或替换世界。' };
 }
 
-export function recordConsumption(next, { world, messageRef, result }) {
-    if (!messageRef) return;
-    const records = world?.meta?.chatConsumption || [];
-    if (records.some(r => sameVersion(r, messageRef))) return;
-    const oldIds = new Set((world?.events || []).map(e => e.id));
-    const eventIds = (next.events || []).filter(e => !oldIds.has(e.id) && e.source?.type === 'dialogue').map(e => e.id);
-    const changedFields = result?.dialogueStats?.changedFields ?? [];
-    next.meta.chatConsumption = [...records, { ...messageRef, tick: next.meta.tick, eventIds,
-        changedFields: changedFields.map(({ entityId, field }) => ({ entityId, field })) }];
-}
+export { recordConsumption } from '../src/chat-consumption.js';
 
 export function createMessageConsumptionHub({ getCtx, getWorld, getQueue, onStatus = () => {} }) {
     let lastReadout = null;
@@ -97,7 +89,7 @@ export function createMessageConsumptionHub({ getCtx, getWorld, getQueue, onStat
         advance({ manual = false } = {}) {
             const queue = getQueue();
             if (!queue) return { ok: false, skipped: 'no-queue' };
-            if (queue.busy) return queue.advance();
+            if (queue.busy) return queue.advance('', { manual });
             try {
                 historyGuard();
                 const ctx = getCtx(), world = getWorld();
@@ -108,7 +100,7 @@ export function createMessageConsumptionHub({ getCtx, getWorld, getQueue, onStat
                 const dialogue = consumed ? '' : text;
                 lastReadout = { message: ref, consumed: !!consumed, manual, dialogueChars: dialogue.length, mode: dialogue ? 'message' : 'world-only' };
                 if (!manual && !dialogue) return { ok: false, skipped: consumed ? 'same-message' : 'no-assistant-message' };
-                return queue.advance(dialogue, { messageRef: dialogue ? ref : null, saveMessages: !!dialogue && !!ref?.messageId.startsWith('extra:'),
+                return queue.advance(dialogue, { manual, messageRef: dialogue ? ref : null, saveMessages: !!dialogue && !!ref?.messageId.startsWith('extra:'),
                     validate() {
                         historyGuard();
                         if (ref && !consumed) {

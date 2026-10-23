@@ -1,0 +1,10 @@
+import {normalizeExtractChunkChars} from './abstract-limits.js';
+import {EXTRACTION_MAX_TOKENS,EXTRACTION_TIMEOUT_MS} from './transport-http.js';
+export const WORLD_RETRIEVAL_TOP_DEFAULT=32;
+export const WORLD_RETRIEVAL_DEPTH_DEFAULT=3;
+export const WORLD_RETRIEVAL_MIN_SCORE_DEFAULT=.65;
+export const positiveSetting=(raw,fallback,min=1)=>{const n=Number(raw);return Number.isSafeInteger(n)&&n>=min?n:fallback};
+export const worldSimilarity=raw=>raw===null||raw===undefined||raw===''||!Number.isFinite(Number(raw))||Number(raw)<0||Number(raw)>1?WORLD_RETRIEVAL_MIN_SCORE_DEFAULT:Number(raw);
+export const worldSearchOptions=settings=>({maxRecords:positiveSetting(settings?.worldRetrievalTop,WORLD_RETRIEVAL_TOP_DEFAULT),maxDepth:positiveSetting(settings?.worldRetrievalDepth,WORLD_RETRIEVAL_DEPTH_DEFAULT,0),similarity:worldSimilarity(settings?.worldRetrievalMinScore)});
+export const extractionCallLimits=settings=>({maxTokens:positiveSetting(settings?.extractCallMaxTokens,EXTRACTION_MAX_TOKENS),timeoutMs:positiveSetting(settings?.extractCallTimeoutSec,EXTRACTION_TIMEOUT_MS/1000)*1000});
+export const sourceTargetChars=settings=>normalizeExtractChunkChars(settings?.extractChunkChars);

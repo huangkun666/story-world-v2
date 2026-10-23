@@ -1,0 +1,2237 @@
+{
+  "format": "story-world-atlas-g6",
+  "version": 1,
+  "target": "es2020",
+  "entryPoints": {
+    "two": "index.js",
+    "three": "three.js"
+  },
+  "pins": {
+    "@antv/g6": "5.1.1",
+    "3d-force-graph": "1.80.1",
+    "three": "0.186.1",
+    "esbuild": "0.28.2"
+  },
+  "packages": [
+    {
+      "name": "3d-force-graph",
+      "version": "1.80.1",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/3d-force-graph.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/algorithm",
+      "version": "0.1.26",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/algorithm"
+      },
+      "licenseFiles": [
+        "antv-algorithm-0.1.26.txt"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/util",
+      "version": "2.0.17",
+      "license": "ISC",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/util.git"
+      },
+      "licenseFiles": [
+        "antv-util-2.0.17.txt"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/component",
+      "version": "2.1.12",
+      "license": "MIT",
+      "author": {
+        "name": "AntV",
+        "url": "https://antv.vision/"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/component"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/event-emitter",
+      "version": "0.1.3",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:antvis/event-emitter.git"
+      },
+      "licenseFiles": [
+        "antv-event-emitter-0.1.3.txt"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/g",
+      "version": "6.3.2",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/g.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/g-canvas",
+      "version": "2.2.1",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/g.git",
+        "directory": "packages/g-canvas"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/g-lite",
+      "version": "2.7.1",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/g.git",
+        "directory": "packages/g-lite"
+      },
+      "licenseFiles": [
+        "antv-g-lite-2.7.1.txt"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/g-math",
+      "version": "3.1.0",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/g.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/g-plugin-dragndrop",
+      "version": "2.1.2",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/g.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/g6",
+      "version": "5.1.1",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/g6"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/graphlib",
+      "version": "2.0.4",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/graphlib.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/hierarchy",
+      "version": "0.7.1",
+      "license": "MIT",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:antvis/hierarchy.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/layout",
+      "version": "2.0.0",
+      "license": "MIT",
+      "author": "antv",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/layout.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/scale",
+      "version": "0.4.16",
+      "license": "MIT",
+      "author": {
+        "name": "AntV",
+        "url": "https://antv.vision/"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/scale"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@antv/util",
+      "version": "3.3.11",
+      "license": "MIT",
+      "repository": "https://github.com/antvis/util.git",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@babel/runtime",
+      "version": "7.29.10",
+      "license": "MIT",
+      "author": "The Babel Team (https://babel.dev/team)",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/babel/babel.git",
+        "directory": "packages/babel-runtime"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "@tweenjs/tween.js",
+      "version": "25.0.0",
+      "license": "MIT",
+      "author": "tween.js contributors (https://github.com/tweenjs/tween.js/graphs/contributors)",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/tweenjs/tween.js.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "accessor-fn",
+      "version": "1.5.3",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/accessor-fn.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "bubblesets-js",
+      "version": "2.3.4",
+      "license": "MIT",
+      "author": {
+        "name": "Samuel Gratzl",
+        "email": "sam@sgratzl.com",
+        "url": "https://www.sgratzl.com"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/upsetjs/bubblesets-js.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "color-name",
+      "version": "1.1.4",
+      "license": "MIT",
+      "author": "DY <dfcreative@gmail.com>",
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:colorjs/color-name.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "color-string",
+      "version": "1.9.1",
+      "license": "MIT",
+      "author": "Heather Arthur <fayearthur@gmail.com>",
+      "contributors": [
+        "Maxime Thirouin",
+        "Dyma Ywanov <dfcreative@gmail.com>",
+        "Josh Junon"
+      ],
+      "repository": "Qix-/color-string",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-array",
+      "version": "3.2.4",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-array.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-binarytree",
+      "version": "1.0.2",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vasturiano/d3-binarytree.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-color",
+      "version": "3.1.0",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-color.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-dispatch",
+      "version": "3.0.1",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-dispatch.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-force-3d",
+      "version": "3.0.6",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vasturiano/d3-force-3d.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-format",
+      "version": "3.1.2",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-format.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-interpolate",
+      "version": "3.0.1",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-interpolate.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-octree",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/vasturiano/d3-octree.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-quadtree",
+      "version": "3.0.1",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-quadtree.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-scale",
+      "version": "4.0.2",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "https://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-scale.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-scale-chromatic",
+      "version": "3.1.0",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "https://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-scale-chromatic.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-selection",
+      "version": "3.0.0",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "https://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-selection.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-time",
+      "version": "3.1.0",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-time.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-time-format",
+      "version": "4.1.0",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-time-format.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "d3-timer",
+      "version": "3.0.1",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "http://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/d3/d3-timer.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "data-bind-mapper",
+      "version": "1.0.3",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/data-bind-mapper.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "eventemitter3",
+      "version": "5.0.4",
+      "license": "MIT",
+      "author": "Arnout Kazemier",
+      "repository": {
+        "type": "git",
+        "url": "git://github.com/primus/eventemitter3.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "fecha",
+      "version": "4.2.3",
+      "license": "MIT",
+      "author": "Taylor Hakes",
+      "repository": {
+        "type": "git",
+        "url": "https://taylorhakes@github.com/taylorhakes/fecha.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "float-tooltip",
+      "version": "1.7.5",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/float-tooltip.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "gl-matrix",
+      "version": "3.4.4",
+      "license": "MIT",
+      "contributors": [
+        {
+          "name": "Brandon Jones",
+          "email": "tojiro@gmail.com"
+        },
+        {
+          "name": "Colin MacKenzie IV",
+          "email": "sinisterchipmunk@gmail.com"
+        }
+      ],
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/toji/gl-matrix.git"
+      },
+      "licenseFiles": [
+        "LICENSE.md"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "html2canvas",
+      "version": "1.4.1",
+      "license": "MIT",
+      "author": {
+        "name": "Niklas von Hertzen",
+        "email": "niklasvh@gmail.com",
+        "url": "https://hertzen.com"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:niklasvh/html2canvas.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "internmap",
+      "version": "2.0.3",
+      "license": "ISC",
+      "author": {
+        "name": "Mike Bostock",
+        "url": "https://bost.ocks.org/mike"
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/mbostock/internmap.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "is-arrayish",
+      "version": "0.3.4",
+      "license": "MIT",
+      "author": "Qix (http://github.com/qix-)",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/qix-/node-is-arrayish.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "kapsule",
+      "version": "1.16.3",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/kapsule.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "lodash-es",
+      "version": "4.18.1",
+      "license": "MIT",
+      "author": "John-David Dalton <john.david.dalton@gmail.com>",
+      "contributors": [
+        "John-David Dalton <john.david.dalton@gmail.com>",
+        "Mathias Bynens <mathias@qiwi.be>"
+      ],
+      "repository": "lodash/lodash",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "ngraph.events",
+      "version": "1.4.0",
+      "license": "BSD-3-Clause",
+      "author": "Andrei Kashcha",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/anvaka/ngraph.events.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "ngraph.forcelayout",
+      "version": "3.3.1",
+      "license": "BSD-3-Clause",
+      "author": "Andrei Kashcha",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/anvaka/ngraph.forcelayout.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "ngraph.graph",
+      "version": "20.1.2",
+      "license": "BSD-3-Clause",
+      "author": "Andrei Kashcha",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/anvaka/ngraph.graph.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "ngraph.merge",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Andrei Kashcha",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/anvaka/ngraph.merge"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "ngraph.random",
+      "version": "1.2.0",
+      "license": "BSD-3-Clause",
+      "author": "Andrei Kashcha",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/anvaka/ngraph.random.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "polished",
+      "version": "4.3.1",
+      "license": "MIT",
+      "author": "Brian Hough <hello@brianhough.co> (https://polished.js.org)",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/styled-components/polished.git"
+      },
+      "licenseFiles": [
+        "LICENSE.md"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "preact",
+      "version": "10.29.8",
+      "license": "MIT",
+      "repository": "preactjs/preact",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "simple-swizzle",
+      "version": "0.2.4",
+      "license": "MIT",
+      "author": "Qix (http://github.com/qix-)",
+      "repository": "qix-/node-simple-swizzle",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "svg-path-parser",
+      "version": "1.1.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git://github.com/hughsk/svg-path-parser.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "three",
+      "version": "0.186.1",
+      "license": "MIT",
+      "author": "mrdoob",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/mrdoob/three.js"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "three-forcegraph",
+      "version": "1.43.6",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/three-forcegraph.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "three-render-objects",
+      "version": "1.43.0",
+      "license": "MIT",
+      "author": {
+        "name": "Vasco Asturiano",
+        "url": "https://github.com/vasturiano"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vasturiano/three-render-objects.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "tinycolor2",
+      "version": "1.6.0",
+      "license": "MIT",
+      "author": "Brian Grinstead <briangrinstead@gmail.com> (http://briangrinstead.com)",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/bgrins/TinyColor.git"
+      },
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "noticeFiles": []
+    },
+    {
+      "name": "tslib",
+      "version": "2.8.1",
+      "license": "0BSD",
+      "author": "Microsoft Corp.",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/Microsoft/tslib.git"
+      },
+      "licenseFiles": [
+        "LICENSE.txt"
+      ],
+      "noticeFiles": []
+    }
+  ],
+  "licenseFallbacks": [
+    {
+      "name": "@antv/algorithm",
+      "version": "0.1.26",
+      "file": "antv-algorithm-0.1.26.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
+      "basis": "published package.json license declaration; full canonical SPDX license text; upstream license file absent",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/antvis/algorithm"
+      },
+      "gitHead": "58b99ab9c937b8ec3e5e99b57624ad5a007682e5",
+      "sourceCheck": "Official GitHub recursive tree at published gitHead contains no license/copying/notice file"
+    },
+    {
+      "name": "@antv/util",
+      "version": "2.0.17",
+      "file": "antv-util-2.0.17.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/ISC.txt",
+      "basis": "published package.json license declaration; full canonical SPDX license text; upstream license file absent",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/util.git"
+      }
+    },
+    {
+      "name": "@antv/event-emitter",
+      "version": "0.1.3",
+      "file": "antv-event-emitter-0.1.3.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
+      "basis": "published package.json license declaration; full canonical SPDX license text; upstream license file absent",
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:antvis/event-emitter.git"
+      },
+      "gitHead": "f46ff7712f332ef1c8b7601eb88b5784ad4edaa1",
+      "sourceCheck": "Official GitHub recursive tree at published gitHead contains no license/copying/notice file"
+    },
+    {
+      "name": "@antv/g-lite",
+      "version": "2.7.1",
+      "file": "antv-g-lite-2.7.1.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
+      "basis": "published package.json license declaration; full canonical SPDX license text; upstream license file absent",
+      "author": "https://github.com/orgs/antvis/people",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/antvis/g.git",
+        "directory": "packages/g-lite"
+      },
+      "sourceCheck": "npm does not publish gitHead; current official repository root contains no license file"
+    }
+  ],
+  "files": [
+    {
+      "file": "LICENSES.txt",
+      "bytes": 67664,
+      "sha256": "d8f1412688f0bff6325b486238c93ef65b7ce0caa7a34de02be2a6a774da3ea8"
+    },
+    {
+      "file": "chunk-QNS27NOA.js",
+      "bytes": 1726,
+      "sha256": "e3e693d82e9e6c8e330c658813ae660047d949f406b7e8a240008f70b220b5fd"
+    },
+    {
+      "file": "index.js",
+      "bytes": 1471501,
+      "sha256": "60cf463fda96daa28c7c56884836d8a06f29c2d1a51e02a0ee92e893653cf25d"
+    },
+    {
+      "file": "three.js",
+      "bytes": 1400912,
+      "sha256": "27294ace00aa2fdb833c005527e95a46a8f6df52c4f14c2f2490cf27192ddef0"
+    }
+  ],
+  "outputs": {
+    "index.js": {
+      "imports": [
+        {
+          "path": "chunk-QNS27NOA.js",
+          "kind": "import-statement",
+          "external": false
+        }
+      ],
+      "inputs": [
+        "node_modules/eventemitter3/index.js",
+        "node_modules/html2canvas/dist/html2canvas.js",
+        "node_modules/color-name/index.js",
+        "node_modules/is-arrayish/index.js",
+        "node_modules/simple-swizzle/index.js",
+        "node_modules/color-string/index.js",
+        "node_modules/@babel/runtime/helpers/esm/typeof.js",
+        "node_modules/@babel/runtime/helpers/esm/toPrimitive.js",
+        "node_modules/@babel/runtime/helpers/esm/toPropertyKey.js",
+        "node_modules/@babel/runtime/helpers/esm/defineProperty.js",
+        "node_modules/@babel/runtime/helpers/esm/objectSpread2.js",
+        "node_modules/@babel/runtime/helpers/esm/classCallCheck.js",
+        "node_modules/@babel/runtime/helpers/esm/createClass.js",
+        "node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js",
+        "node_modules/@babel/runtime/helpers/esm/arrayWithoutHoles.js",
+        "node_modules/@babel/runtime/helpers/esm/iterableToArray.js",
+        "node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js",
+        "node_modules/@babel/runtime/helpers/esm/nonIterableSpread.js",
+        "node_modules/@babel/runtime/helpers/esm/toConsumableArray.js",
+        "node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js",
+        "node_modules/@babel/runtime/helpers/esm/callSuper.js",
+        "node_modules/@babel/runtime/helpers/esm/inherits.js",
+        "node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js",
+        "node_modules/@babel/runtime/helpers/esm/iterableToArrayLimit.js",
+        "node_modules/@babel/runtime/helpers/esm/nonIterableRest.js",
+        "node_modules/@babel/runtime/helpers/esm/slicedToArray.js",
+        "node_modules/eventemitter3/index.mjs",
+        "node_modules/gl-matrix/esm/common.js",
+        "node_modules/gl-matrix/esm/mat3.js",
+        "node_modules/gl-matrix/esm/mat4.js",
+        "node_modules/gl-matrix/esm/quat.js",
+        "node_modules/gl-matrix/esm/vec3.js",
+        "node_modules/gl-matrix/esm/vec4.js",
+        "node_modules/gl-matrix/esm/vec2.js",
+        "node_modules/@antv/util/esm/lodash/is-array-like.js",
+        "node_modules/@antv/util/esm/lodash/contains.js",
+        "node_modules/@antv/util/esm/lodash/filter.js",
+        "node_modules/@antv/util/esm/lodash/difference.js",
+        "node_modules/@antv/util/esm/lodash/index.js",
+        "node_modules/@antv/util/esm/lodash/is-function.js",
+        "node_modules/@antv/util/esm/lodash/is-nil.js",
+        "node_modules/@antv/util/esm/lodash/is-array.js",
+        "node_modules/@antv/util/esm/lodash/is-object.js",
+        "node_modules/@antv/util/esm/lodash/each.js",
+        "node_modules/@antv/util/esm/lodash/is-object-like.js",
+        "node_modules/@antv/util/esm/lodash/is-type.js",
+        "node_modules/@antv/util/esm/lodash/is-plain-object.js",
+        "node_modules/@antv/util/esm/lodash/flatten.js",
+        "node_modules/@antv/util/esm/lodash/max.js",
+        "node_modules/@antv/util/esm/lodash/min.js",
+        "node_modules/@antv/util/esm/lodash/reduce.js",
+        "node_modules/@antv/util/esm/lodash/is-string.js",
+        "node_modules/@antv/util/esm/lodash/uniq.js",
+        "node_modules/@antv/util/esm/lodash/group-by.js",
+        "node_modules/@antv/util/esm/lodash/clamp.js",
+        "node_modules/@antv/util/esm/lodash/is-number.js",
+        "node_modules/@antv/util/esm/lodash/is-number-equal.js",
+        "node_modules/@antv/util/esm/lodash/max-by.js",
+        "node_modules/@antv/util/esm/lodash/min-by.js",
+        "node_modules/@antv/util/esm/lodash/mod.js",
+        "node_modules/@antv/util/esm/lodash/to-string.js",
+        "node_modules/@antv/util/esm/lodash/lower-first.js",
+        "node_modules/@antv/util/esm/lodash/substitute.js",
+        "node_modules/@antv/util/esm/lodash/upper-first.js",
+        "node_modules/@antv/util/esm/lodash/get-type.js",
+        "node_modules/@antv/util/esm/lodash/is-boolean.js",
+        "node_modules/@antv/util/esm/lodash/is-date.js",
+        "node_modules/@antv/util/esm/lodash/is-null.js",
+        "node_modules/@antv/util/esm/lodash/is-prototype.js",
+        "node_modules/@antv/util/esm/lodash/is-undefined.js",
+        "node_modules/@antv/util/esm/lodash/is-element.js",
+        "node_modules/@antv/util/esm/lodash/mix.js",
+        "node_modules/@antv/util/esm/lodash/clone.js",
+        "node_modules/@antv/util/esm/lodash/debounce.js",
+        "node_modules/@antv/util/esm/lodash/memoize.js",
+        "node_modules/@antv/util/esm/lodash/deep-mix.js",
+        "node_modules/@antv/util/esm/lodash/is-empty.js",
+        "node_modules/@antv/util/esm/lodash/is-equal.js",
+        "node_modules/@antv/util/esm/lodash/get.js",
+        "node_modules/@antv/util/esm/lodash/set.js",
+        "node_modules/@antv/util/esm/lodash/pick.js",
+        "node_modules/@antv/util/esm/lodash/omit.js",
+        "node_modules/@antv/util/esm/lodash/throttle.js",
+        "node_modules/@antv/util/esm/lodash/unique-id.js",
+        "node_modules/@antv/util/esm/lodash/noop.js",
+        "node_modules/@antv/util/esm/lodash/identity.js",
+        "node_modules/tslib/tslib.es6.mjs",
+        "node_modules/@antv/util/esm/path/parser/params-parser.js",
+        "node_modules/@antv/util/esm/path/process/fix-arc.js",
+        "node_modules/@antv/util/esm/path/parser/params-count.js",
+        "node_modules/@antv/util/esm/path/util/is-path-array.js",
+        "node_modules/@antv/util/esm/path/util/is-absolute-array.js",
+        "node_modules/@antv/util/esm/path/util/is-normalized-array.js",
+        "node_modules/@antv/util/esm/path/parser/finalize-segment.js",
+        "node_modules/@antv/util/esm/path/parser/scan-flag.js",
+        "node_modules/@antv/util/esm/path/parser/is-digit-start.js",
+        "node_modules/@antv/util/esm/path/parser/scan-param.js",
+        "node_modules/@antv/util/esm/path/parser/is-space.js",
+        "node_modules/@antv/util/esm/path/parser/skip-spaces.js",
+        "node_modules/@antv/util/esm/path/parser/is-path-command.js",
+        "node_modules/@antv/util/esm/path/parser/is-arc-command.js",
+        "node_modules/@antv/util/esm/path/parser/scan-segment.js",
+        "node_modules/@antv/util/esm/path/parser/path-parser.js",
+        "node_modules/@antv/util/esm/path/parser/parse-path-string.js",
+        "node_modules/@antv/util/esm/path/convert/path-2-absolute.js",
+        "node_modules/@antv/util/esm/path/process/normalize-segment.js",
+        "node_modules/@antv/util/esm/path/process/normalize-path.js",
+        "node_modules/@antv/util/esm/path/util/is-curve-array.js",
+        "node_modules/@antv/util/esm/path/util/rotate-vector.js",
+        "node_modules/@antv/util/esm/path/process/arc-2-cubic.js",
+        "node_modules/@antv/util/esm/path/process/quad-2-cubic.js",
+        "node_modules/@antv/util/esm/path/util/mid-point.js",
+        "node_modules/@antv/util/esm/path/process/line-2-cubic.js",
+        "node_modules/@antv/util/esm/path/process/segment-2-cubic.js",
+        "node_modules/@antv/util/esm/path/convert/path-2-curve.js",
+        "node_modules/@antv/util/esm/path/index.js",
+        "node_modules/@antv/util/esm/path/process/clone-path.js",
+        "node_modules/@antv/util/esm/path/process/reverse-curve.js",
+        "node_modules/@antv/util/esm/path/util/distance-square-root.js",
+        "node_modules/@antv/util/esm/path/util/segment-line-factory.js",
+        "node_modules/@antv/util/esm/path/util/segment-arc-factory.js",
+        "node_modules/@antv/util/esm/path/util/segment-cubic-factory.js",
+        "node_modules/@antv/util/esm/path/util/segment-quad-factory.js",
+        "node_modules/@antv/util/esm/path/util/path-length-factory.js",
+        "node_modules/@antv/util/esm/path/util/get-total-length.js",
+        "node_modules/@antv/util/esm/path/util/get-rotated-curve.js",
+        "node_modules/@antv/util/esm/path/util/get-path-area.js",
+        "node_modules/@antv/util/esm/path/util/get-draw-direction.js",
+        "node_modules/@antv/util/esm/path/util/get-point-at-length.js",
+        "node_modules/@antv/util/esm/path/util/equalize-segments.js",
+        "node_modules/@antv/util/esm/dom/create-dom.js",
+        "node_modules/@antv/util/esm/dom/index.js",
+        "node_modules/@babel/runtime/helpers/esm/superPropBase.js",
+        "node_modules/@babel/runtime/helpers/esm/get.js",
+        "node_modules/@babel/runtime/helpers/esm/superPropGet.js",
+        "node_modules/@antv/g-math/dist/index.esm.js",
+        "node_modules/@babel/runtime/helpers/esm/OverloadYield.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorDefine.js",
+        "node_modules/@babel/runtime/helpers/esm/regenerator.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorAsyncIterator.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorAsyncGen.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorAsync.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorKeys.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorValues.js",
+        "node_modules/@babel/runtime/helpers/esm/regeneratorRuntime.js",
+        "node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js",
+        "node_modules/@babel/runtime/helpers/esm/createForOfIteratorHelper.js",
+        "node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js",
+        "node_modules/@babel/runtime/helpers/esm/objectWithoutProperties.js",
+        "node_modules/@antv/g-lite/dist/index.esm.js",
+        "node_modules/@antv/g/dist/index.esm.js",
+        "node_modules/@antv/g6/esm/constants/animation.js",
+        "node_modules/@antv/g6/esm/constants/index.js",
+        "node_modules/@antv/g6/esm/constants/change.js",
+        "node_modules/@antv/g6/esm/constants/events/animation.js",
+        "node_modules/@antv/g6/esm/constants/events/index.js",
+        "node_modules/@antv/g6/esm/constants/events/canvas.js",
+        "node_modules/@antv/g6/esm/constants/events/combo.js",
+        "node_modules/@antv/g6/esm/constants/events/common.js",
+        "node_modules/@antv/g6/esm/constants/events/container.js",
+        "node_modules/@antv/g6/esm/constants/events/edge.js",
+        "node_modules/@antv/g6/esm/constants/events/graph.js",
+        "node_modules/@antv/g6/esm/constants/events/history.js",
+        "node_modules/@antv/g6/esm/constants/events/node.js",
+        "node_modules/@antv/g6/esm/constants/graphlib.js",
+        "node_modules/@antv/g6/esm/constants/registry.js",
+        "node_modules/@antv/g6/esm/registry/store.js",
+        "node_modules/@antv/g6/esm/registry/get.js",
+        "node_modules/@antv/g6/esm/version.js",
+        "node_modules/@antv/g6/esm/utils/print.js",
+        "node_modules/@antv/g6/esm/utils/theme.js",
+        "node_modules/@antv/g6/esm/utils/animation.js",
+        "node_modules/@antv/g6/esm/utils/transform.js",
+        "node_modules/@antv/g6/esm/animations/executor.js",
+        "node_modules/@antv/g6/esm/animations/index.js",
+        "node_modules/@antv/g6/esm/utils/is.js",
+        "node_modules/@antv/g6/esm/utils/math.js",
+        "node_modules/@antv/g6/esm/utils/padding.js",
+        "node_modules/@antv/g6/esm/utils/bbox.js",
+        "node_modules/@antv/algorithm/es/structs/linked-list.js",
+        "node_modules/@antv/algorithm/es/structs/queue.js",
+        "node_modules/@antv/algorithm/es/util.js",
+        "node_modules/@antv/algorithm/es/degree.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/index.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-type.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-function.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-array.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-object.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/each.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/pull.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/pull-at.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-string.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-number.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-integer.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/to-degree.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/to-radian.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/values.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/get-type.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/is-prototype.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/clone.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/memoize.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/measure-text-width.js",
+        "node_modules/@antv/algorithm/node_modules/@antv/util/esm/cache.js",
+        "node_modules/@antv/algorithm/es/dijkstra.js",
+        "node_modules/@antv/algorithm/es/find-path.js",
+        "node_modules/@antv/algorithm/es/utils/vector.js",
+        "node_modules/@antv/algorithm/es/types.js",
+        "node_modules/@antv/algorithm/es/structs/union-find.js",
+        "node_modules/@antv/algorithm/es/structs/binary-heap.js",
+        "node_modules/@antv/algorithm/es/pageRank.js",
+        "node_modules/@antv/algorithm/es/gSpan/struct.js",
+        "node_modules/@antv/algorithm/es/gSpan/gSpan.js",
+        "node_modules/@antv/algorithm/es/structs/stack.js",
+        "node_modules/@antv/g6/esm/utils/id.js",
+        "node_modules/@antv/g6/esm/utils/centrality.js",
+        "node_modules/@antv/g6/esm/utils/diff.js",
+        "node_modules/@antv/g6/esm/utils/visibility.js",
+        "node_modules/@antv/g6/esm/utils/extension.js",
+        "node_modules/@antv/g6/esm/registry/extension/index.js",
+        "node_modules/@antv/g6/esm/behaviors/base-behavior.js",
+        "node_modules/@antv/g6/esm/behaviors/auto-adapt-label.js",
+        "node_modules/@antv/g6/esm/behaviors/index.js",
+        "node_modules/@antv/g6/esm/utils/vector.js",
+        "node_modules/@antv/g6/esm/utils/line.js",
+        "node_modules/@antv/g6/esm/utils/placement.js",
+        "node_modules/@antv/g6/esm/utils/position.js",
+        "node_modules/@antv/g6/esm/utils/point.js",
+        "node_modules/@antv/g6/esm/utils/pinch.js",
+        "node_modules/@antv/g6/esm/utils/shortcut.js",
+        "node_modules/@antv/g6/esm/behaviors/brush-select.js",
+        "node_modules/@antv/g6/esm/constants/element.js",
+        "node_modules/@antv/g6/esm/utils/traverse.js",
+        "node_modules/@antv/g6/esm/utils/relation.js",
+        "node_modules/@antv/g6/esm/utils/state.js",
+        "node_modules/@antv/g6/esm/behaviors/click-select.js",
+        "node_modules/@antv/g6/esm/utils/collapsibility.js",
+        "node_modules/@antv/g6/esm/utils/prefix.js",
+        "node_modules/@antv/g6/esm/utils/size.js",
+        "node_modules/@antv/g6/esm/utils/style.js",
+        "node_modules/@antv/g6/esm/utils/node.js",
+        "node_modules/@antv/g6/esm/utils/palette.js",
+        "node_modules/@antv/g6/esm/utils/text.js",
+        "node_modules/@antv/g6/esm/elements/shapes/base-shape.js",
+        "node_modules/@antv/g6/esm/elements/shapes/label.js",
+        "node_modules/@antv/g6/esm/elements/shapes/badge.js",
+        "node_modules/@antv/g6/esm/elements/shapes/index.js",
+        "node_modules/@antv/g6/esm/utils/path.js",
+        "node_modules/@antv/g6/esm/utils/polygon.js",
+        "node_modules/@antv/g6/esm/elements/shapes/contour.js",
+        "node_modules/@antv/g6/esm/utils/shape.js",
+        "node_modules/@antv/g6/esm/elements/shapes/image.js",
+        "node_modules/@antv/g6/esm/elements/shapes/icon.js",
+        "node_modules/@antv/g6/esm/elements/base-element.js",
+        "node_modules/@antv/g6/esm/elements/nodes/base-node.js",
+        "node_modules/@antv/g6/esm/elements/nodes/index.js",
+        "node_modules/@antv/g6/esm/elements/nodes/circle.js",
+        "node_modules/@antv/g6/esm/elements/shapes/polygon.js",
+        "node_modules/@antv/g6/esm/elements/nodes/diamond.js",
+        "node_modules/@antv/g6/esm/elements/nodes/donut.js",
+        "node_modules/@antv/g6/esm/elements/nodes/ellipse.js",
+        "node_modules/@antv/g6/esm/elements/nodes/hexagon.js",
+        "node_modules/@antv/g-canvas/dist/index.esm.js",
+        "node_modules/@babel/runtime/helpers/esm/classPrivateFieldLooseBase.js",
+        "node_modules/@babel/runtime/helpers/esm/classPrivateFieldLooseKey.js",
+        "node_modules/@antv/g6/esm/elements/nodes/html.js",
+        "node_modules/@antv/g6/esm/elements/nodes/image.js",
+        "node_modules/@antv/g6/esm/elements/nodes/rect.js",
+        "node_modules/@antv/g6/esm/elements/nodes/star.js",
+        "node_modules/@antv/g6/esm/elements/nodes/triangle.js",
+        "node_modules/@antv/g6/esm/elements/combos/base-combo.js",
+        "node_modules/@antv/g6/esm/elements/combos/index.js",
+        "node_modules/@antv/g6/esm/elements/combos/circle.js",
+        "node_modules/@antv/g6/esm/elements/combos/rect.js",
+        "node_modules/@antv/g6/esm/elements/index.js",
+        "node_modules/@antv/g6/esm/utils/router/orth.js",
+        "node_modules/@antv/g6/esm/utils/edge.js",
+        "node_modules/@antv/g6/esm/utils/symbol.js",
+        "node_modules/@antv/g6/esm/elements/edges/base-edge.js",
+        "node_modules/@antv/g6/esm/elements/edges/index.js",
+        "node_modules/@antv/g6/esm/elements/edges/cubic.js",
+        "node_modules/@antv/g6/esm/elements/edges/cubic-horizontal.js",
+        "node_modules/@antv/g6/esm/elements/edges/cubic-radial.js",
+        "node_modules/@antv/g6/esm/elements/edges/cubic-vertical.js",
+        "node_modules/@antv/g6/esm/elements/edges/line.js",
+        "node_modules/@antv/g6/esm/utils/router/shortest-path.js",
+        "node_modules/@antv/g6/esm/elements/edges/polyline.js",
+        "node_modules/@antv/g6/esm/elements/edges/quadratic.js",
+        "node_modules/@antv/g6/esm/utils/element.js",
+        "node_modules/@antv/g6/esm/behaviors/collapse-expand.js",
+        "node_modules/@antv/g6/esm/utils/data.js",
+        "node_modules/@antv/g6/esm/behaviors/create-edge.js",
+        "node_modules/@antv/g6/esm/behaviors/drag-canvas.js",
+        "node_modules/@antv/g6/esm/behaviors/drag-element.js",
+        "node_modules/@antv/event-emitter/esm/index.js",
+        "node_modules/@antv/graphlib/esm/utils/traverse.js",
+        "node_modules/@antv/graphlib/esm/graphView.js",
+        "node_modules/@antv/graphlib/esm/graph.js",
+        "node_modules/@antv/g6/esm/layouts/base-layout.js",
+        "node_modules/@antv/g6/esm/utils/layout.js",
+        "node_modules/@antv/g6/esm/behaviors/drag-element-force.js",
+        "node_modules/@antv/g6/esm/behaviors/fix-element-size.js",
+        "node_modules/@antv/g6/esm/behaviors/focus-element.js",
+        "node_modules/@antv/g6/esm/behaviors/hover-activate.js",
+        "node_modules/@antv/g6/esm/behaviors/lasso-select.js",
+        "node_modules/@antv/g6/esm/behaviors/optimize-viewport-transform.js",
+        "node_modules/@antv/g6/esm/behaviors/scroll-canvas.js",
+        "node_modules/@antv/g6/esm/behaviors/zoom-canvas.js",
+        "node_modules/@antv/hierarchy/dist/hierarchy.es.js",
+        "node_modules/@antv/g6/esm/layouts/index.js",
+        "node_modules/@antv/layout/lib/node_modules/tslib/tslib.es6.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/expr/dist/index.esm.js",
+        "node_modules/@antv/layout/lib/util/expr.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-number.js",
+        "node_modules/@antv/layout/lib/util/size.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-nil.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-string.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-function.js",
+        "node_modules/@antv/layout/lib/util/format.js",
+        "node_modules/@antv/layout/lib/util/point.js",
+        "node_modules/@antv/layout/lib/model/data.js",
+        "node_modules/@antv/layout/lib/runtime/context.js",
+        "node_modules/@antv/layout/lib/node_modules/comlink/dist/esm/comlink.js",
+        "node_modules/@antv/layout/lib/runtime/supervisor.js",
+        "node_modules/@antv/layout/lib/algorithm/base-layout.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/graph.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/data/list.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/greedy-fas.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/acyclic.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/util.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/add-border-segments.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/coordinate-system.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/nesting-graph.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/normalize.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/add-subgraph-constraints.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/build-layer-graph.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/cross-count.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/init-order.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/barycenter.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/resolve-conflicts.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/sort.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/sort-subgraph.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-array.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/clone.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/index.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/order/init-data-order.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/parent-dummy-chains.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/position/bk.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/position/index.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/rank/util.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/rank/feasible-tree.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/rank/network-simplex.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/rank/index.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/layout.js",
+        "node_modules/@antv/layout/lib/algorithm/antv-dagre/index.js",
+        "node_modules/@antv/layout/lib/index.js",
+        "node_modules/@antv/layout/lib/util/common.js",
+        "node_modules/@antv/layout/lib/util/order.js",
+        "node_modules/@antv/layout/lib/util/viewport.js",
+        "node_modules/@antv/layout/lib/algorithm/circular/index.js",
+        "node_modules/@antv/layout/lib/algorithm/concentric/index.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-object.js",
+        "node_modules/@antv/layout/lib/util/object.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/lcg.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-timer/src/timer.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-dispatch/src/dispatch.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/simulation.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/constant.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/x.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/y.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/jiggle.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/add.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/cover.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/data.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/extent.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/quad.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/find.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/remove.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/root.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/size.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/visit.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/visitAfter.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/x.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/y.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-quadtree/src/quadtree.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/collide.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/manyBody.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/link.js",
+        "node_modules/@antv/layout/lib/algorithm/d3-force/force-in-a-box.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-object-like.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-type.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-plain-object.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/deep-mix.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/center.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force/src/radial.js",
+        "node_modules/@antv/layout/lib/algorithm/d3-force/index.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/constant.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/z.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/y.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/x.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/radial.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/jiggle.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/add.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/cover.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/data.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/extent.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/half.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/find.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/remove.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/root.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/size.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/visit.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/visitAfter.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/x.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-binarytree/src/binarytree.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/add.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/cover.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/data.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/extent.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/octant.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/find.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/findAll.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/remove.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/root.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/size.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/visit.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/visitAfter.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/x.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/y.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/z.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-octree/src/octree.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/collide.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/center.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/lcg.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/simulation.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/manyBody.js",
+        "node_modules/@antv/layout/lib/node_modules/d3-force-3d/src/link.js",
+        "node_modules/@antv/layout/lib/algorithm/d3-force-3d/index.js",
+        "node_modules/@antv/layout/lib/_virtual/_commonjsHelpers.js",
+        "node_modules/@antv/layout/lib/_virtual/_commonjs-dynamic-modules.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_listCacheClear.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/eq.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_assocIndexOf.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_listCacheDelete.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_listCacheGet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_listCacheHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_listCacheSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_ListCache.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stackClear.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stackDelete.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stackGet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stackHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_freeGlobal.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_root.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Symbol.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getRawTag.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_objectToString.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseGetTag.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isFunction.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_coreJsData.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isMasked.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_toSource.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsNative.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getValue.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getNative.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Map.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_nativeCreate.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hashClear.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hashDelete.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hashGet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hashHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hashSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Hash.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_mapCacheClear.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isKeyable.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getMapData.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_mapCacheDelete.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_mapCacheGet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_mapCacheHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_mapCacheSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_MapCache.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stackSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Stack.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayEach.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_defineProperty.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseAssignValue.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_assignValue.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_copyObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseTimes.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isObjectLike.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsArguments.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isArguments.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isArray.js",
+        "node_modules/@antv/layout/lib/_virtual/isBuffer.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/stubFalse.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isBuffer.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isIndex.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isLength.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsTypedArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseUnary.js",
+        "node_modules/@antv/layout/lib/_virtual/_nodeUtil.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_nodeUtil.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isTypedArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayLikeKeys.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isPrototype.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_overArg.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_nativeKeys.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseKeys.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isArrayLike.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/keys.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseAssign.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_nativeKeysIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseKeysIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/keysIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseAssignIn.js",
+        "node_modules/@antv/layout/lib/_virtual/_cloneBuffer.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cloneBuffer.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_copyArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayFilter.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/stubArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getSymbols.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_copySymbols.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayPush.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getPrototype.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getSymbolsIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_copySymbolsIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseGetAllKeys.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getAllKeys.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getAllKeysIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_DataView.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Promise.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Set.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_WeakMap.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getTag.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_initCloneArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_Uint8Array.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cloneArrayBuffer.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cloneDataView.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cloneRegExp.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cloneSymbol.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cloneTypedArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_initCloneByTag.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseCreate.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_initCloneObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsMap.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isMap.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseClone.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/clone.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/constant.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_createBaseFor.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseFor.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseForOwn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_createBaseEach.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseEach.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/identity.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_castFunction.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/forEach.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/each.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseFilter.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_setCacheAdd.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_setCacheHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_SetCache.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arraySome.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_cacheHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_equalArrays.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_mapToArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_setToArray.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_equalByTag.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_equalObjects.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsEqualDeep.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsEqual.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsMatch.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isStrictComparable.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_getMatchData.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_matchesStrictComparable.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseMatches.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isSymbol.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isKey.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/memoize.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_memoizeCapped.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stringToPath.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayMap.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseToString.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/toString.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_castPath.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_toKey.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseGet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/get.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseHasIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hasPath.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/hasIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseMatchesProperty.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseProperty.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_basePropertyDeep.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/property.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIteratee.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/filter.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseHas.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/has.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isEmpty.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isUndefined.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseMap.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/map.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayReduce.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseReduce.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/reduce.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isString.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_asciiSize.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_hasUnicode.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_unicodeSize.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_stringSize.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/size.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/transform.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isFlattenable.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseFlatten.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_apply.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_overRest.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseSetToString.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_shortOut.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_setToString.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseRest.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseFindIndex.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIsNaN.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_strictIndexOf.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseIndexOf.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayIncludes.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_arrayIncludesWith.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/noop.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_createSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseUniq.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isArrayLikeObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/union.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseValues.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/values.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/lodash.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/graph.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/version.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/index.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/json.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/components.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/data/priority-queue.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/dijkstra.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/dijkstra-all.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/tarjan.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/find-cycles.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/floyd-warshall.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/topsort.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/is-acyclic.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/dfs.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/postorder.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/preorder.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/prim.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/lib/alg/index.js",
+        "node_modules/@antv/layout/lib/node_modules/graphlib/index.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/graphlib.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/cloneDeep.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_isIterateeCall.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/defaults.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_createFind.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_trimmedEndIndex.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseTrim.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/toNumber.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/toFinite.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/toInteger.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/findIndex.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/find.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/flatten.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/forIn.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/last.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/mapValues.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseExtremum.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseGt.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/max.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_assignMergeValue.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/isPlainObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_safeGet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/toPlainObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseMergeDeep.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseMerge.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_createAssigner.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/merge.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseLt.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/min.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/minBy.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/now.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseSet.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_basePickBy.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_basePick.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_flatRest.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/pick.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseRange.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_createRange.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/range.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseSortBy.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_compareAscending.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_compareMultiple.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseOrderBy.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/sortBy.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/uniqueId.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/_baseZipObject.js",
+        "node_modules/@antv/layout/lib/node_modules/lodash/zipObject.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/lodash.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/data/list.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/greedy-fas.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/acyclic.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/util.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/normalize.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/rank/util.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/rank/feasible-tree.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/rank/network-simplex.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/rank/index.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/parent-dummy-chains.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/nesting-graph.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/add-border-segments.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/coordinate-system.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/init-order.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/cross-count.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/barycenter.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/resolve-conflicts.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/sort.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/sort-subgraph.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/build-layer-graph.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/add-subgraph-constraints.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/order/index.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/position/bk.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/position/index.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/layout.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/debug.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/lib/version.js",
+        "node_modules/@antv/layout/lib/node_modules/dagre/index.js",
+        "node_modules/@antv/layout/lib/_virtual/index.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-boolean.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/each.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/pick.js",
+        "node_modules/@antv/layout/lib/algorithm/dagre/index.js",
+        "node_modules/@antv/layout/lib/algorithm/force/attractive.js",
+        "node_modules/@antv/layout/lib/algorithm/force/centripetal.js",
+        "node_modules/@antv/layout/lib/algorithm/force/collide.js",
+        "node_modules/@antv/layout/lib/algorithm/force/gravity.js",
+        "node_modules/@antv/layout/lib/algorithm/force/repulsive.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/event-emitter/esm/index.js",
+        "node_modules/@antv/layout/lib/algorithm/base-simulation.js",
+        "node_modules/@antv/layout/lib/algorithm/force/simulation.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-array-like.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/get-type.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-prototype.js",
+        "node_modules/@antv/layout/lib/node_modules/@antv/util/esm/lodash/is-empty.js",
+        "node_modules/@antv/layout/lib/algorithm/force/index.js",
+        "node_modules/@antv/layout/lib/algorithm/force-atlas2/body.js",
+        "node_modules/@antv/layout/lib/algorithm/force-atlas2/quad.js",
+        "node_modules/@antv/layout/lib/algorithm/force-atlas2/quad-tree.js",
+        "node_modules/@antv/layout/lib/algorithm/force-atlas2/simulation.js",
+        "node_modules/@antv/layout/lib/algorithm/force-atlas2/index.js",
+        "node_modules/@antv/layout/lib/algorithm/fruchterman/simulation.js",
+        "node_modules/@antv/layout/lib/algorithm/fruchterman/index.js",
+        "node_modules/@antv/layout/lib/algorithm/grid/index.js",
+        "node_modules/@antv/layout/lib/_virtual/matrix2.js",
+        "node_modules/@antv/layout/lib/node_modules/is-any-array/lib-esm/index.js",
+        "node_modules/@antv/layout/lib/_virtual/index2.js",
+        "node_modules/@antv/layout/lib/node_modules/ml-array-rescale/lib-es6/index.js",
+        "node_modules/@antv/layout/lib/node_modules/ml-array-max/lib-es6/index.js",
+        "node_modules/@antv/layout/lib/node_modules/ml-array-min/lib-es6/index.js",
+        "node_modules/@antv/layout/lib/_virtual/index3.js",
+        "node_modules/@antv/layout/lib/node_modules/ml-matrix/matrix2.js",
+        "node_modules/@antv/layout/lib/_virtual/matrix.js",
+        "node_modules/@antv/layout/lib/node_modules/ml-matrix/matrix.js",
+        "node_modules/@antv/layout/lib/util/math.js",
+        "node_modules/@antv/layout/lib/algorithm/mds/index.js",
+        "node_modules/@antv/layout/lib/algorithm/radial/radial-nonoverlap-force.js",
+        "node_modules/@antv/layout/lib/algorithm/radial/index.js",
+        "node_modules/@antv/layout/lib/algorithm/random/index.js",
+        "node_modules/@antv/layout/lib/registry.js",
+        "node_modules/@antv/layout/lib/algorithm/combo-combined/index.js",
+        "node_modules/@antv/g6/esm/layouts/fishbone.js",
+        "node_modules/@antv/g6/esm/layouts/snake.js",
+        "node_modules/@antv/g6/esm/palettes/index.js",
+        "node_modules/@antv/g6/esm/plugins/base-plugin.js",
+        "node_modules/@antv/g6/esm/plugins/utils/dom.js",
+        "node_modules/@antv/g6/esm/plugins/background/index.js",
+        "node_modules/@antv/g6/esm/plugins/index.js",
+        "node_modules/bubblesets-js/build/index.js",
+        "node_modules/@antv/g6/esm/plugins/bubble-sets.js",
+        "node_modules/@antv/g6/esm/plugins/contextmenu/util.js",
+        "node_modules/@antv/g6/esm/plugins/contextmenu/index.js",
+        "node_modules/@antv/g6/esm/plugins/edge-bundling/index.js",
+        "node_modules/@antv/g6/esm/plugins/edge-filter-lens/index.js",
+        "node_modules/@antv/g6/esm/plugins/fisheye/index.js",
+        "node_modules/@antv/g6/esm/plugins/fullscreen/index.js",
+        "node_modules/@antv/g6/esm/plugins/grid-line.js",
+        "node_modules/@antv/g6/esm/utils/change.js",
+        "node_modules/@antv/g6/esm/plugins/history/util.js",
+        "node_modules/@antv/g6/esm/plugins/history/index.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/format.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/grid_handle.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/two-product.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/two-sum.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/robust-scale.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/robust-subtract.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/robust-sum.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/robust-orientation.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/monotone-convex-hull-2d.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/robust-segment-intersect.js",
+        "node_modules/@antv/g6/esm/plugins/hull/hull/index.js",
+        "node_modules/@antv/g6/esm/plugins/hull/util.js",
+        "node_modules/@antv/g6/esm/plugins/hull/index.js",
+        "node_modules/@antv/component/esm/shapes/Circle.js",
+        "node_modules/@antv/component/esm/shapes/CustomElement.js",
+        "node_modules/@antv/component/esm/shapes/DisplayObject.js",
+        "node_modules/@antv/component/esm/shapes/Ellipse.js",
+        "node_modules/@antv/component/esm/shapes/Group.js",
+        "node_modules/@antv/component/esm/shapes/HTML.js",
+        "node_modules/@antv/component/esm/shapes/Image.js",
+        "node_modules/@antv/component/esm/shapes/Line.js",
+        "node_modules/@antv/component/esm/shapes/Path.js",
+        "node_modules/@antv/component/esm/shapes/Polygon.js",
+        "node_modules/@antv/component/esm/shapes/Polyline.js",
+        "node_modules/@antv/component/esm/shapes/Rect.js",
+        "node_modules/@antv/component/esm/util/traverse.js",
+        "node_modules/@antv/component/esm/util/visibility.js",
+        "node_modules/@antv/component/esm/util/offscreen.js",
+        "node_modules/@antv/component/esm/shapes/Text.js",
+        "node_modules/@antv/component/esm/util/angle-converter.js",
+        "node_modules/@antv/component/esm/util/bbox.js",
+        "node_modules/@antv/component/esm/util/callback.js",
+        "node_modules/@antv/component/esm/util/classnames.js",
+        "node_modules/@antv/component/esm/util/deep-assign.js",
+        "node_modules/@antv/component/esm/util/defined.js",
+        "node_modules/@antv/component/esm/util/text.js",
+        "node_modules/@antv/component/esm/util/ellipsis.js",
+        "node_modules/@antv/component/esm/util/wrap.js",
+        "node_modules/@antv/component/esm/util/event.js",
+        "node_modules/@antv/component/esm/util/extend-display-object.js",
+        "node_modules/@antv/component/esm/util/group-by.js",
+        "node_modules/@antv/component/esm/util/if-show.js",
+        "node_modules/@antv/component/esm/util/in-range.js",
+        "node_modules/@antv/component/esm/util/interpolate.js",
+        "node_modules/@antv/component/esm/util/keyframe-interpolate.js",
+        "node_modules/@antv/component/esm/util/matrix.js",
+        "node_modules/@antv/component/esm/util/number.js",
+        "node_modules/@antv/component/esm/util/omit.js",
+        "node_modules/@antv/component/esm/util/path.js",
+        "node_modules/@antv/component/esm/util/primitive.js",
+        "node_modules/@antv/component/esm/util/sampling.js",
+        "node_modules/@antv/component/esm/util/scale-to-pixel.js",
+        "node_modules/@antv/component/esm/util/group.js",
+        "node_modules/@antv/component/esm/util/selection.js",
+        "node_modules/@antv/component/esm/util/series.js",
+        "node_modules/@antv/component/esm/util/shape.js",
+        "node_modules/@antv/component/esm/util/string.js",
+        "node_modules/@antv/component/esm/util/style.js",
+        "node_modules/@antv/component/esm/util/time.js",
+        "node_modules/@antv/component/esm/util/transform.js",
+        "node_modules/@antv/component/esm/util/transpose.js",
+        "node_modules/@antv/component/esm/util/replace-children.js",
+        "node_modules/@antv/component/esm/util/pase-position.js",
+        "node_modules/@antv/component/esm/util/parse-height-from-html.js",
+        "node_modules/@antv/component/esm/core/component.js",
+        "node_modules/@antv/component/esm/core/index.js",
+        "node_modules/@antv/component/esm/ui/marker/symbol.js",
+        "node_modules/@antv/component/esm/ui/marker/utils.js",
+        "node_modules/@antv/component/esm/ui/marker/index.js",
+        "node_modules/@antv/scale/esm/utils/compose.js",
+        "node_modules/@antv/scale/esm/utils/index.js",
+        "node_modules/@antv/scale/esm/utils/normalize.js",
+        "node_modules/@antv/scale/esm/utils/clamp.js",
+        "node_modules/@antv/scale/esm/utils/bisect.js",
+        "node_modules/@antv/scale/esm/utils/ticks.js",
+        "node_modules/@antv/scale/esm/utils/d3-linear-nice.js",
+        "node_modules/@antv/scale/esm/utils/is-valid.js",
+        "node_modules/@antv/scale/esm/utils/color.js",
+        "node_modules/@antv/scale/esm/utils/interpolate.js",
+        "node_modules/@antv/scale/esm/utils/internMap.js",
+        "node_modules/@antv/scale/esm/scales/base.js",
+        "node_modules/@antv/scale/esm/scales/ordinal.js",
+        "node_modules/@antv/scale/esm/scales/band.js",
+        "node_modules/@antv/scale/esm/index.js",
+        "node_modules/@antv/scale/esm/tick-methods/d3-ticks.js",
+        "node_modules/@antv/scale/esm/scales/continuous.js",
+        "node_modules/@antv/scale/esm/scales/linear.js",
+        "node_modules/@antv/component/esm/ui/sparkline/columns.js",
+        "node_modules/@antv/component/esm/ui/sparkline/lines.js",
+        "node_modules/@antv/component/esm/ui/sparkline/path.js",
+        "node_modules/@antv/component/esm/ui/sparkline/utils.js",
+        "node_modules/@antv/component/esm/ui/sparkline/index.js",
+        "node_modules/@antv/component/esm/animation/utils.js",
+        "node_modules/@antv/component/esm/animation/fadeOut.js",
+        "node_modules/@antv/component/esm/animation/index.js",
+        "node_modules/@antv/component/esm/ui/slider/constant.js",
+        "node_modules/@antv/component/esm/ui/slider/handle.js",
+        "node_modules/@antv/component/esm/ui/slider/index.js",
+        "node_modules/@antv/component/esm/ui/axis/classname-map.js",
+        "node_modules/@antv/component/esm/ui/axis/constant.js",
+        "node_modules/@antv/component/esm/ui/grid/index.js",
+        "node_modules/@antv/component/esm/ui/axis/guides/utils.js",
+        "node_modules/@antv/component/esm/ui/axis/utils/classname.js",
+        "node_modules/@antv/component/esm/ui/axis/guides/line.js",
+        "node_modules/@antv/component/esm/ui/axis/guides/grid.js",
+        "node_modules/@antv/component/esm/ui/axis/utils/bounds.js",
+        "node_modules/@antv/component/esm/ui/axis/utils/contain.js",
+        "node_modules/@antv/component/esm/ui/axis/utils/intersect.js",
+        "node_modules/@antv/component/esm/ui/axis/utils/test.js",
+        "node_modules/@antv/component/esm/ui/axis/overlap/autoEllipsis.js",
+        "node_modules/@antv/component/esm/ui/axis/overlap/autoHide.js",
+        "node_modules/@antv/component/esm/ui/axis/overlap/autoRotate.js",
+        "node_modules/@antv/component/esm/ui/axis/overlap/autoWrap.js",
+        "node_modules/@antv/component/esm/ui/axis/overlap/index.js",
+        "node_modules/@antv/component/esm/ui/axis/utils/index.js",
+        "node_modules/@antv/component/esm/ui/axis/guides/labels.js",
+        "node_modules/@antv/component/esm/ui/axis/guides/ticks.js",
+        "node_modules/@antv/component/esm/ui/axis/guides/title.js",
+        "node_modules/@antv/component/esm/ui/axis/axis.js",
+        "node_modules/@antv/component/esm/ui/axis/index.js",
+        "node_modules/@antv/component/esm/ui/legend/utils/classname.js",
+        "node_modules/@antv/component/esm/ui/legend/utils.js",
+        "node_modules/@antv/component/esm/ui/legend/classname-map.js",
+        "node_modules/@antv/component/esm/ui/legend/continuous/handle.js",
+        "node_modules/@antv/component/esm/ui/legend/constant.js",
+        "node_modules/@antv/component/esm/ui/legend/title/index.js",
+        "node_modules/@antv/component/esm/ui/navigator/index.js",
+        "node_modules/@antv/component/esm/ui/poptip/constant.js",
+        "node_modules/@antv/component/esm/ui/poptip/utils.js",
+        "node_modules/@antv/component/esm/ui/poptip/index.js",
+        "node_modules/@antv/component/esm/ui/legend/category/item.js",
+        "node_modules/@antv/component/esm/ui/legend/category/items.js",
+        "node_modules/@antv/component/esm/ui/legend/category.js",
+        "node_modules/@antv/component/esm/ui/indicator/constant.js",
+        "node_modules/@antv/component/esm/ui/indicator/indicator.js",
+        "node_modules/@antv/component/esm/ui/index.js",
+        "node_modules/@antv/component/esm/ui/tooltip/constant.js",
+        "node_modules/@antv/component/esm/ui/tooltip/index.js",
+        "node_modules/@antv/component/esm/ui/select/option.js",
+        "node_modules/@antv/component/esm/ui/select/select.js",
+        "node_modules/@antv/component/esm/ui/select/index.js",
+        "node_modules/@antv/component/esm/ui/timebar/icons.js",
+        "node_modules/@antv/component/esm/ui/timebar/controller.js",
+        "node_modules/@antv/component/esm/ui/timebar/handle.js",
+        "node_modules/@antv/component/esm/ui/timebar/utils.js",
+        "node_modules/@antv/component/esm/ui/timebar/timebar.js",
+        "node_modules/@antv/component/esm/ui/timebar/index.js",
+        "node_modules/@antv/g6/esm/plugins/utils/canvas.js",
+        "node_modules/@antv/g6/esm/plugins/legend.js",
+        "node_modules/@antv/g6/esm/plugins/minimap/index.js",
+        "node_modules/@antv/g6/esm/plugins/snapline/index.js",
+        "node_modules/@antv/g6/esm/plugins/timebar.js",
+        "node_modules/@antv/g6/esm/plugins/title/index.js",
+        "node_modules/@antv/g6/esm/plugins/toolbar/util.js",
+        "node_modules/@antv/g6/esm/plugins/toolbar/index.js",
+        "node_modules/@antv/g6/esm/plugins/tooltip.js",
+        "node_modules/@antv/g6/esm/plugins/watermark/util.js",
+        "node_modules/@antv/g6/esm/plugins/watermark/index.js",
+        "node_modules/@antv/g6/esm/themes/base.js",
+        "node_modules/@antv/g6/esm/themes/dark.js",
+        "node_modules/@antv/g6/esm/themes/index.js",
+        "node_modules/@antv/g6/esm/themes/light.js",
+        "node_modules/@antv/g6/esm/transforms/base-transform.js",
+        "node_modules/@antv/g6/esm/transforms/arrange-draw-order.js",
+        "node_modules/@antv/g6/esm/transforms/index.js",
+        "node_modules/@antv/g6/esm/transforms/utils.js",
+        "node_modules/@antv/g6/esm/transforms/collapse-expand-combo.js",
+        "node_modules/@antv/g6/esm/transforms/collapse-expand-node.js",
+        "node_modules/@antv/g6/esm/exports.js",
+        "node_modules/@antv/g6/esm/registry/register.js",
+        "node_modules/@antv/g-plugin-dragndrop/dist/index.esm.js",
+        "node_modules/@antv/g6/esm/runtime/canvas.js",
+        "node_modules/@antv/g6/esm/utils/dom.js",
+        "node_modules/@antv/g6/esm/utils/event/events.js",
+        "node_modules/@antv/g6/esm/utils/event/index.js",
+        "node_modules/@antv/g6/esm/utils/z-index.js",
+        "node_modules/@antv/g6/esm/utils/cache.js",
+        "node_modules/@antv/g6/esm/runtime/animation.js",
+        "node_modules/@antv/g6/esm/runtime/batch.js",
+        "node_modules/@antv/g6/esm/runtime/behavior.js",
+        "node_modules/@antv/g6/esm/utils/graphlib.js",
+        "node_modules/@antv/g6/esm/runtime/data.js",
+        "node_modules/@antv/g6/esm/runtime/element.js",
+        "node_modules/@antv/g6/esm/runtime/layout.js",
+        "node_modules/@antv/g6/esm/runtime/options.js",
+        "node_modules/@antv/g6/esm/runtime/plugin.js",
+        "node_modules/@antv/g6/esm/runtime/transform.js",
+        "node_modules/@antv/g6/esm/runtime/viewport.js",
+        "node_modules/@antv/g6/esm/runtime/graph.js",
+        "node_modules/@antv/g6/esm/transforms/get-edge-actual-ends.js",
+        "node_modules/@antv/g6/esm/utils/scale.js",
+        "node_modules/@antv/g6/esm/transforms/map-node-size.js",
+        "node_modules/@antv/g6/esm/transforms/place-radial-labels.js",
+        "node_modules/@antv/g6/esm/transforms/process-parallel-edges.js",
+        "node_modules/@antv/g6/esm/transforms/update-related-edge.js",
+        "node_modules/@antv/g6/esm/registry/build-in.js",
+        "node_modules/@antv/g6/esm/preset.js",
+        "node_modules/@antv/g6/esm/index.js",
+        "index.js"
+      ]
+    },
+    "three.js": {
+      "imports": [
+        {
+          "path": "chunk-QNS27NOA.js",
+          "kind": "import-statement",
+          "external": false
+        }
+      ],
+      "inputs": [
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/getVariableName.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/createPatternBuilder.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/generateCreateBody.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/generateQuadTree.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/generateBounds.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/generateCreateDragForce.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/generateCreateSpringForce.js",
+        "node_modules/ngraph.forcelayout/lib/codeGenerators/generateIntegrator.js",
+        "node_modules/ngraph.forcelayout/lib/spring.js",
+        "node_modules/ngraph.merge/index.js",
+        "node_modules/ngraph.events/dist/ngraph.events.cjs",
+        "node_modules/ngraph.random/index.js",
+        "node_modules/ngraph.forcelayout/lib/createPhysicsSimulator.js",
+        "node_modules/ngraph.forcelayout/index.js",
+        "node_modules/three/build/three.core.js",
+        "node_modules/three/build/three.module.js",
+        "node_modules/three/examples/jsm/controls/DragControls.js",
+        "node_modules/d3-force-3d/src/center.js",
+        "node_modules/d3-force-3d/src/index.js",
+        "node_modules/d3-binarytree/src/add.js",
+        "node_modules/d3-binarytree/src/cover.js",
+        "node_modules/d3-binarytree/src/data.js",
+        "node_modules/d3-binarytree/src/extent.js",
+        "node_modules/d3-binarytree/src/half.js",
+        "node_modules/d3-binarytree/src/find.js",
+        "node_modules/d3-binarytree/src/remove.js",
+        "node_modules/d3-binarytree/src/root.js",
+        "node_modules/d3-binarytree/src/size.js",
+        "node_modules/d3-binarytree/src/visit.js",
+        "node_modules/d3-binarytree/src/visitAfter.js",
+        "node_modules/d3-binarytree/src/x.js",
+        "node_modules/d3-binarytree/src/binarytree.js",
+        "node_modules/d3-binarytree/src/index.js",
+        "node_modules/d3-quadtree/src/add.js",
+        "node_modules/d3-quadtree/src/cover.js",
+        "node_modules/d3-quadtree/src/data.js",
+        "node_modules/d3-quadtree/src/extent.js",
+        "node_modules/d3-quadtree/src/quad.js",
+        "node_modules/d3-quadtree/src/find.js",
+        "node_modules/d3-quadtree/src/remove.js",
+        "node_modules/d3-quadtree/src/root.js",
+        "node_modules/d3-quadtree/src/size.js",
+        "node_modules/d3-quadtree/src/visit.js",
+        "node_modules/d3-quadtree/src/visitAfter.js",
+        "node_modules/d3-quadtree/src/x.js",
+        "node_modules/d3-quadtree/src/y.js",
+        "node_modules/d3-quadtree/src/quadtree.js",
+        "node_modules/d3-quadtree/src/index.js",
+        "node_modules/d3-octree/src/add.js",
+        "node_modules/d3-octree/src/cover.js",
+        "node_modules/d3-octree/src/data.js",
+        "node_modules/d3-octree/src/extent.js",
+        "node_modules/d3-octree/src/octant.js",
+        "node_modules/d3-octree/src/find.js",
+        "node_modules/d3-octree/src/findAll.js",
+        "node_modules/d3-octree/src/remove.js",
+        "node_modules/d3-octree/src/root.js",
+        "node_modules/d3-octree/src/size.js",
+        "node_modules/d3-octree/src/visit.js",
+        "node_modules/d3-octree/src/visitAfter.js",
+        "node_modules/d3-octree/src/x.js",
+        "node_modules/d3-octree/src/y.js",
+        "node_modules/d3-octree/src/z.js",
+        "node_modules/d3-octree/src/octree.js",
+        "node_modules/d3-octree/src/index.js",
+        "node_modules/d3-force-3d/src/constant.js",
+        "node_modules/d3-force-3d/src/jiggle.js",
+        "node_modules/d3-force-3d/src/link.js",
+        "node_modules/d3-dispatch/src/dispatch.js",
+        "node_modules/d3-dispatch/src/index.js",
+        "node_modules/d3-timer/src/timer.js",
+        "node_modules/d3-timer/src/index.js",
+        "node_modules/d3-force-3d/src/lcg.js",
+        "node_modules/d3-force-3d/src/simulation.js",
+        "node_modules/d3-force-3d/src/manyBody.js",
+        "node_modules/d3-force-3d/src/radial.js",
+        "node_modules/ngraph.events/index.js",
+        "node_modules/ngraph.graph/index.js",
+        "node_modules/three-forcegraph/dist/three-forcegraph.mjs",
+        "node_modules/lodash-es/isObject.js",
+        "node_modules/lodash-es/_freeGlobal.js",
+        "node_modules/lodash-es/_root.js",
+        "node_modules/lodash-es/now.js",
+        "node_modules/lodash-es/_trimmedEndIndex.js",
+        "node_modules/lodash-es/_baseTrim.js",
+        "node_modules/lodash-es/_Symbol.js",
+        "node_modules/lodash-es/_getRawTag.js",
+        "node_modules/lodash-es/_objectToString.js",
+        "node_modules/lodash-es/_baseGetTag.js",
+        "node_modules/lodash-es/isObjectLike.js",
+        "node_modules/lodash-es/isSymbol.js",
+        "node_modules/lodash-es/toNumber.js",
+        "node_modules/lodash-es/debounce.js",
+        "node_modules/kapsule/dist/kapsule.mjs",
+        "node_modules/accessor-fn/dist/accessor-fn.mjs",
+        "node_modules/internmap/src/index.js",
+        "node_modules/d3-array/src/max.js",
+        "node_modules/d3-array/src/min.js",
+        "node_modules/d3-array/src/index.js",
+        "node_modules/data-bind-mapper/dist/data-bind-mapper.mjs",
+        "node_modules/d3-scale/src/init.js",
+        "node_modules/d3-scale/src/ordinal.js",
+        "node_modules/d3-scale/src/index.js",
+        "node_modules/d3-scale-chromatic/src/colors.js",
+        "node_modules/d3-scale-chromatic/src/categorical/Paired.js",
+        "node_modules/d3-scale-chromatic/src/index.js",
+        "node_modules/tinycolor2/esm/tinycolor.js",
+        "node_modules/three/build/three.webgpu.js",
+        "node_modules/three/examples/jsm/controls/TrackballControls.js",
+        "node_modules/three/examples/jsm/controls/OrbitControls.js",
+        "node_modules/three/examples/jsm/controls/FlyControls.js",
+        "node_modules/three/examples/jsm/shaders/CopyShader.js",
+        "node_modules/three/examples/jsm/postprocessing/Pass.js",
+        "node_modules/three/examples/jsm/postprocessing/ShaderPass.js",
+        "node_modules/three/examples/jsm/postprocessing/MaskPass.js",
+        "node_modules/three/examples/jsm/postprocessing/EffectComposer.js",
+        "node_modules/three/examples/jsm/postprocessing/RenderPass.js",
+        "node_modules/@babel/runtime/helpers/esm/extends.js",
+        "node_modules/@babel/runtime/helpers/esm/inheritsLoose.js",
+        "node_modules/@babel/runtime/helpers/esm/isNativeFunction.js",
+        "node_modules/@babel/runtime/helpers/esm/construct.js",
+        "node_modules/@babel/runtime/helpers/esm/wrapNativeSuper.js",
+        "node_modules/polished/dist/polished.esm.js",
+        "node_modules/@tweenjs/tween.js/dist/tween.esm.js",
+        "node_modules/d3-selection/src/namespaces.js",
+        "node_modules/d3-selection/src/namespace.js",
+        "node_modules/d3-selection/src/creator.js",
+        "node_modules/d3-selection/src/selector.js",
+        "node_modules/d3-selection/src/selection/select.js",
+        "node_modules/d3-selection/src/array.js",
+        "node_modules/d3-selection/src/selectorAll.js",
+        "node_modules/d3-selection/src/selection/selectAll.js",
+        "node_modules/d3-selection/src/matcher.js",
+        "node_modules/d3-selection/src/selection/selectChild.js",
+        "node_modules/d3-selection/src/selection/selectChildren.js",
+        "node_modules/d3-selection/src/selection/filter.js",
+        "node_modules/d3-selection/src/selection/sparse.js",
+        "node_modules/d3-selection/src/selection/enter.js",
+        "node_modules/d3-selection/src/constant.js",
+        "node_modules/d3-selection/src/selection/data.js",
+        "node_modules/d3-selection/src/selection/exit.js",
+        "node_modules/d3-selection/src/selection/join.js",
+        "node_modules/d3-selection/src/selection/merge.js",
+        "node_modules/d3-selection/src/selection/order.js",
+        "node_modules/d3-selection/src/selection/sort.js",
+        "node_modules/d3-selection/src/selection/call.js",
+        "node_modules/d3-selection/src/selection/nodes.js",
+        "node_modules/d3-selection/src/selection/node.js",
+        "node_modules/d3-selection/src/selection/size.js",
+        "node_modules/d3-selection/src/selection/empty.js",
+        "node_modules/d3-selection/src/selection/each.js",
+        "node_modules/d3-selection/src/selection/attr.js",
+        "node_modules/d3-selection/src/window.js",
+        "node_modules/d3-selection/src/selection/style.js",
+        "node_modules/d3-selection/src/selection/property.js",
+        "node_modules/d3-selection/src/selection/classed.js",
+        "node_modules/d3-selection/src/selection/text.js",
+        "node_modules/d3-selection/src/selection/html.js",
+        "node_modules/d3-selection/src/selection/raise.js",
+        "node_modules/d3-selection/src/selection/lower.js",
+        "node_modules/d3-selection/src/selection/append.js",
+        "node_modules/d3-selection/src/selection/insert.js",
+        "node_modules/d3-selection/src/selection/remove.js",
+        "node_modules/d3-selection/src/selection/clone.js",
+        "node_modules/d3-selection/src/selection/datum.js",
+        "node_modules/d3-selection/src/selection/on.js",
+        "node_modules/d3-selection/src/selection/dispatch.js",
+        "node_modules/d3-selection/src/selection/iterator.js",
+        "node_modules/d3-selection/src/selection/index.js",
+        "node_modules/d3-selection/src/select.js",
+        "node_modules/d3-selection/src/sourceEvent.js",
+        "node_modules/d3-selection/src/pointer.js",
+        "node_modules/d3-selection/src/index.js",
+        "node_modules/preact/dist/preact.module.js",
+        "node_modules/float-tooltip/dist/float-tooltip.mjs",
+        "node_modules/three-render-objects/dist/three-render-objects.mjs",
+        "node_modules/3d-force-graph/dist/3d-force-graph.mjs",
+        "three.js",
+        "node_modules/three/examples/jsm/renderers/CSS2DRenderer.js"
+      ]
+    },
+    "chunk-QNS27NOA.js": {
+      "imports": [],
+      "inputs": [
+        "node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js",
+        "node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js",
+        "node_modules/@babel/runtime/helpers/esm/isNativeReflectConstruct.js",
+        "node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js"
+      ]
+    }
+  }
+}

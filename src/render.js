@@ -1,6 +1,9 @@
+import {attrPairsOf} from '../web/entity-window.js';
+import { renderPromptPresets, promptPresetStateFromSettings } from './render-prompt-presets.js';
+import {WORLD_RETRIEVAL_TOP_DEFAULT,WORLD_RETRIEVAL_DEPTH_DEFAULT,WORLD_RETRIEVAL_MIN_SCORE_DEFAULT} from './runtime-settings.js';
 // story-world-v2/src/render.js
 // 渲染核心纯函数（K33/K34，渲染层；细案 A-1/A-2/A-3/A-6）：
-//   SSOT → HTML 片段（**八页签**全量：观棋/编年/大事纪·旧卷/角色与势力/设定/参数/快照/设置）。
+//   SSOT → HTML 片段（**八页签**全量：观棋/编年/世界图谱/角色与势力/设定/参数/快照/设置）。
 //   ★本体体检修正：此处旧写"六页签"——leg26 加参数页、leg27 后加快照页之后就没再对齐过。
 //   同输入 → 输出逐字节一致（纯函数锁）；引擎 id 只进 title/data-ref 悬停；
 //   全边界 escapeHtml（XSS 防线）。
@@ -12,7 +15,6 @@ import { PARAM_GEARS, PANEL_ENV_KEYS, PARAM_UNSET, SWITCH_PARAMS, dependentKeys,
 //   依赖方向：render → param-store → （params / limits），**无环**（param-store 是叶子，只依赖两张常量表）。
 import { isPlayerInputKey, normalizeStoreValue } from './param-store.js';
 import { renderSubtabs } from './render-subtabs.js';
-import { buildMapData } from './geography.js';
 import { currentScopeIds } from './event-contract.js';
 import { renderDebugConsole } from '../web/debug-console.js';
 import { renderAbstractSelection } from '../web/abstract-selection.js';
@@ -39,7 +41,7 @@ import { buildScaleAnchorWithFit } from './pack.js';
 import { LIMIT_ROWS, LIMIT_DEFAULTS, LIMIT_KEYS, LIMIT_META, LIMIT_KIND_NOTE, isLimitKeyOf, normalizeLimit, limitsOf } from './limits.js';   // leg40b 续：世界尺度四个可调上限（唯一真源，与引擎判据同源）；★leg143：＋`LIMIT_META`/`LIMIT_KIND_NOTE`（「闸 / 尺」分组的唯一真源）
 // ★★★leg161：**检索参数那三格的出厂值**（用户附 `yuzuki-Memory` 截图定的口径）。
 //   ★渲染层读它们 ⇒ 出厂值**只有一个真源**（住 `src/limits.js`；`web/inject.js` 也引同一份）。
-import { RETRIEVAL_MIN_SCORE, RETRIEVAL_TOP, RETRIEVAL_DEPTH, LEDGER_CHARS_DEFAULT } from './limits.js';
+import { RETRIEVAL_MIN_SCORE, RETRIEVAL_TOP, RETRIEVAL_DEPTH, LEDGER_CHARS_DEFAULT, SCENE_STATE_CHARS_DEFAULT } from './limits.js';
 // ★★leg53：**哪几格是引擎每轮算的**——从生产者那边取（不是面板自己另写一份名单，本仓"一处口径"）。
 import { ENGINE_DERIVED_ENV } from './unrest.js';
 // ★★★leg54（**修一个真的显示 bug**）：单轮演算上限那行原来**把数字写死**（"120 秒 / 4096 字"），
@@ -543,6 +545,7 @@ function injSwitch(key, on, label, help = '') {
 // 为什么独立一页（用户令「参数独开页签」）：它既不是"书里的设定"（设定页=只读原稿），
 //   也不是"插件设置"（设置页=通道/存储）——它是**玩家对世界的输入**，性质不同，故独立。
 export function renderParamsHtml(world, { config = {} } = {}) {
+    const localMode = config?.worldMode === 'browser';
     const cfg = config || {};   // leg27 h：开关卡要挂"上次投递"的实测事实（渲染层不持状态，一律由调用方注入）
     // ★★leg41：参数**真源**在插件配置区（`web/index.js` 的 `sw2ParamEnv()`），世界账里的
     //   `dynamic.env` 只是**镜像**。面板必须画真源——画镜像就会出现"镜像还没同步 ⇒ 玩家看到旧值"
@@ -600,9 +603,8 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //     那一格是它唯一的读数面 —— 撤了它，玩家就再也看不到乱象是多少。
         //   ★参数名那一行（`sw2-param-name`）也留着：`leg52` 那次回归（并卡后玩家分不清"这一行是天时还是时局"）
         //     正是靠它修的，撤它会把那个 bug 请回来。
-        return `<div class="sw2-row sw2-param-name"><b>${LABELS.env[r.key] || escapeHtml(r.key)}</b></div>`
-            + `<div class="sw2-row"><span>设定为</span>`
-            + `<select class="sw2-param-select" data-action="set-param" data-param="${escapeHtml(r.key)}">${opts.join('')}</select>`
+        return `<div class="sw2-row sw2-param-name"><b>${LABELS.env[r.key] || escapeHtml(r.key)}</b>`
+            + `<select class="sw2-param-select" aria-label="${escapeHtml(LABELS.env[r.key] || r.key)}" data-action="set-param" data-param="${escapeHtml(r.key)}">${opts.join('')}</select>`
             + `<em>只照抄你选的</em></div>`;
     };
     // ★★leg52（用户令「保留天时/时局的下拉，只把说明文字折叠、四键合并成一栏」）：
@@ -655,7 +657,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
             + `</span>${stateLine}</div>`;
     }).join('');
     const autoCard = `<section class="sw2-runtime-group"><h4>自动运行</h4>${switches}`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_auto_help">控制发消息后是否自动推进世界；关闭后仍可手动推进，下方开关决定递给聊天模型哪些资料，关闭自动推进不会关闭这些资料。</div></section>`;
+        + `<div class="sw2-hint sw2-runtime-help" id="sw2_auto_help">控制发消息后是否自动推进世界；关闭后仍可手动推进，聊天资料由聊天端开关控制，关闭自动推进不会关闭这些资料。</div></section>`;
 
     // ★★★leg143（用户令「**设置里的那些闸其实也可以归到参数页**」＋ 展示页
     //   `docs/spec-params-page-mockup.html` 已拍板）：**「插件对你的对话做了什么」整张卡从设置页搬到这里**。
@@ -684,61 +686,40 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //       排在提示词末尾 · position=0；插件只注入这几段…）`）与 `injectRuns` 两行 ⇒ **两行都撤了**
     //       （用户："第二段话可以删了，这是用来调试的" ＋ "那句我让你抽出重点的话也删了，毕竟已经抽出来了"）。
     // leg207：按使用顺序分组；控件仍走原写通道，说明直接贴近控件。
-    const injectCard = `<div class="sw2-inject-card sw2-runtime-stack">`
-        + `<section class="sw2-runtime-group"><h4>聊天如何影响世界</h4><div class="sw2-inject-box">`
-        + injSwitch('injectTagSpec', cfg.injectSwitches?.injectTagSpec, '让聊天模型按标签写行动',
-            '要求聊天模型用标签写行动和结果，交给世界模型处理；关闭后不再要求标签，已有标签仍会读取，其余资料照各自开关递入。')
-        + paramHint('插件只读 <code>&#96;&#96;&#96;tags</code> 块里的行动，不从普通正文猜谁做了什么；这一轮没有标签，就没有新的标签行动可递给世界模型。')
-        + `<div class="sw2-field sw2-field-inline"><div class="sw2-field-head"><label for="sw2_tag_max">一轮最多递多少条行动</label>`
-        + `<input class="sw2-input" id="sw2_tag_max" aria-describedby="sw2_tag_max_help" data-settings="tagMaxActions" type="number" min="1" max="200" step="1" value="${escapeHtml(String(cfg.tagMaxActions ?? 12))}" title="${attrText('正文里的行动超过这个数就只递前几条（截断会在读数里如实报出来）')}"></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_tag_max_help">控制一轮递给世界模型的标签行动数量；调大能递更多，调小只递前几条，它不进对话。</div>`
-        + paramHint('管的是<b>递给世界模型的行动条数</b>：从你正文里解析出"谁做了什么"，超过这个数只留前几条（截断会在读数里如实报出来）。<br><b>它不进对话</b>——不是注入的行数上限。') + `</div>`
-        + `</div></section>`
-        + `<section class="sw2-runtime-group"><h4>聊天模型能看到什么</h4><div class="sw2-inject-box">`
-        + injSwitch('injectRoster', cfg.injectSwitches?.injectRoster, '把名号表递进对话',
-            '提供本世界的名号，帮助聊天模型写对标签里的人名；关闭后不再提供名号表。')
-        + injSwitch('injectWorldTide', cfg.injectSwitches?.injectWorldTide, '把上轮世界动向递进对话',
-            '提供上轮世界发生的动向，让聊天模型接得上变化；关闭后不再提供这段动向。')
-        + injSwitch('injectLedgerRecall', cfg.injectSwitches?.injectLedgerRecall, '把账上往事递进对话',
-            '提供从账上找回的相关往事和跟书不一样的现状；关闭后不再提供这些资料。')
-        + `<div class="sw2-hint">这些开关各管一段资料，关掉即恢复原样；它们不会开关世界的自动推进。</div>`
-        + `<div class="sw2-inject-facts"><div class="sw2-runtime-facts-title">最后一次递给聊天模型的资料</div>${cfg.injectReadout || ''}</div>`
-        + `</div></section>`
-        + `<section class="sw2-runtime-group"><h4>往事怎么找</h4>`
-        + `<div class="sw2-hint">下列设置决定往事怎么找、递入多少；「把账上往事递进对话」关闭时，不会把找回的往事递入对话。</div><div class="sw2-inject-box">`
-        + `<div class="sw2-field"><div class="sw2-field-head"><label for="sw2_ret_depth">检索上下文深度</label>`
-        + `<input class="sw2-input" id="sw2_ret_depth" aria-describedby="sw2_ret_depth_help" data-settings="retrievalDepth" type="number" min="1" max="20" step="1" value="${escapeHtml(String(cfg.retrievalDepth ?? RETRIEVAL_DEPTH))}" title="${attrText('寻找往事时向前查看几条聊天正文；调大扩大查看范围，实际查询可能相同，不保证加入每条较早正文')}"></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_ret_depth_help">按名字找和按意思找共用这一个深度；调大扩大正文查看范围，调小更集中。实际查询可能相同，尤其未填正文名单时。</div>`
-        + paramHint('管的是<b>寻找往事时向前查看几条聊天正文</b>（1 就是只查看上一轮那条）。<br><b>按名字找和按意思找共用这一个深度</b>，但不保证每条较早正文都加入查询。当前查询保留最近正文的原文片段；向量通道还可按下方名单补充处理后的正文。未填名单时，调大深度可能不会改变查询。查询文字本身不递入对话。') + `</div>`
-        + `<div class="sw2-field"><div class="sw2-field-head"><label for="sw2_ret_chars">往事注入多少字</label>`
-        + `<input class="sw2-input" id="sw2_ret_chars" aria-describedby="sw2_ret_chars_help" data-settings="retrievalMaxChars" type="number" min="1" max="20000" step="100" value="${escapeHtml(String(cfg.retrievalMaxChars ?? LEDGER_CHARS_DEFAULT))}" title="${attrText('整段往事往对话里塞多少字的上限（字面找的与按意思找的两路合起来算）；装不下的往事整条不进，不会把一条切成半条')}"></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_ret_chars_help">控制两路找回的往事总共递给聊天模型多少字；调大能提供更多旧事，调小更省上下文，装不下的往事整条不进。</div>`
-        + paramHint('管的是<b>这一段总共往对话里塞多少字</b>（按名字找的＋按意思找的<b>两路合起来</b>）。<br><b>装不下的往事整条不进</b>——不会把一件事切成半截；挡下了几条会在「最后一次递给聊天模型的资料」里如实报出来。') + `</div>`
-        + `<details class="sw2-runtime-advanced"><summary>高级设置 · 向量检索与正文名单</summary><div class="sw2-inject-box">`
-        + `<div class="sw2-group-h">向量检索<em>设置页「记忆通道」开启时生效</em></div>`
-        + `<div class="sw2-field"><div class="sw2-field-head"><label for="sw2_ret_min">相似度阈值</label>`
-        + `<input class="sw2-input" id="sw2_ret_min" aria-describedby="sw2_ret_min_help" data-settings="retrievalMinScore" type="number" min="0" max="1" step="0.01" value="${escapeHtml(String(cfg.retrievalMinScore ?? RETRIEVAL_MIN_SCORE))}" title="${attrText('按意思找旧事时，多像才算像。实测分数普遍偏低（正解常常只有 0.4~0.5）——填高了会把该找回来的也挡掉，所以出厂给得很低')}"></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_ret_min_help">只管向量通道按意思找往事；调高会挡掉更多候选，调低能找回更多，通道没开时不生效。</div>`
-        + paramHint('管的是<b>按语义找旧事</b>那一路：多像才算像。<br><b>向量通道（设置页「记忆通道」）没开时这格不生效</b>——那时只按名字和词找。实测分数普遍偏低（正解常常只有 0.4~0.5）——填高了会把该找回来的也挡掉。') + `</div>`
-        + `<div class="sw2-field"><div class="sw2-field-head"><label for="sw2_ret_top">最大召回条数</label>`
-        + `<input class="sw2-input" id="sw2_ret_top" aria-describedby="sw2_ret_top_help" data-settings="retrievalTop" type="number" min="1" max="50" step="1" value="${escapeHtml(String(cfg.retrievalTop ?? RETRIEVAL_TOP))}" title="${attrText('按意思一次最多找回来几条往事（总字数上限由「往事注入多少字」控制）')}"></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_ret_top_help">只管向量通道一次最多取回几条往事；调大能取回更多，调小更少，通道没开时不生效。</div>`
-        + paramHint('管的是<b>按语义找旧事</b>那一路：一次最多取回几条最像的旧事。<br><b>向量通道没开时这格不生效</b>（那时只按名字和词找）；这一段往对话里塞多少<b>字</b>，见「往事注入多少字」。') + `</div>`
-        + `<div class="sw2-group-h">正文怎么读<em>两份名单，不填就不剥</em></div>`
-        + `<div class="sw2-hint sw2-runtime-help">两份名单处理向量检索补充使用的正文；按名字找仍使用原文，向量查询也保留最近正文的原文片段。不改变聊天正文或标签读取。</div>`
-        + paramHint('这一层只处理<b>向量检索补充使用的正文</b>；按名字找不使用这两份名单，向量查询仍保留最近正文的原文片段，因此不是把指定内容从整个查询中删掉。提取标签仍只看 <code>&#96;&#96;&#96;tags</code> 块里面。两个框都不填，就照原文检索。')
-        + `<div class="sw2-field"><div class="sw2-field-head"><label for="sw2_prose_black">黑名单 · 要剥掉的名字</label>`
-        + `<textarea class="sw2-input" id="sw2_prose_black" aria-describedby="sw2_prose_black_help" data-settings-text="proseBlackList" rows="3" placeholder="一行一条" title="${attrText('向量检索补充正文时剥掉点名的块：成对块写标签名（如 角色手机）；HTML 注释写它开头那几个字（如 抢话自查）。原文片段仍参与检索')}">${escapeHtml(String(cfg.proseLists?.black ?? ''))}</textarea></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_prose_black_help">向量检索补充正文时，剥掉点名的块；不填就不按黑名单剥除。原文片段仍会参与检索。</div>`
-        + paramHint('一行一条。<b>成对块</b>写标签名（<code>&lt;角色手机&gt;…&lt;/角色手机&gt;</code> ⇒ 写 <b>角色手机</b>）；'
-            + '<b>HTML 注释</b>没有名字 ⇒ 写它<b>开头那几个字</b>（<code>&lt;!--抢话自查: …--&gt;</code> ⇒ 写 <b>抢话自查</b>）。'
-            + '<br>补充正文时<b>只剥点名的</b>，别的块一律不碰；最近正文的原文片段仍参与查询。') + `</div>`
-        + `<div class="sw2-field"><div class="sw2-field-head"><label for="sw2_prose_white">白名单 · 只留这些</label>`
-        + `<textarea class="sw2-input" id="sw2_prose_white" aria-describedby="sw2_prose_white_help" data-settings-text="proseWhiteList" rows="3" placeholder="一行一条" title="${attrText('向量检索补充正文时只保留点名的块，其余块全剥（块外面的正文照留）；原文片段仍参与检索')}">${escapeHtml(String(cfg.proseLists?.white ?? ''))}</textarea></div>`
-        + `<div class="sw2-hint sw2-runtime-help" id="sw2_prose_white_help">向量检索补充正文时，只留点名的块，块外正文照留；不填就不按白名单过滤。两份名单都填时以白名单为准，原文片段仍会参与检索。</div>`
-        + paramHint('补充正文时<b>只留点名的块，其余块全剥</b>（块<b>外面</b>的正文照留）。'
-            + '<br>两格都填 ⇒ <b>以白名单为准</b>。最近正文的原文片段仍参与查询。') + `</div>`
-        + `</div></details></div></section></div>`;
+    const settingRow = (key,label,value,help,{min=1,step=1,text=false,max=null}={}) => {
+        const oldIds={sceneStateMaxChars:'sw2_scene_chars',retrievalDepth:'sw2_ret_depth',retrievalMinScore:'sw2_ret_min',retrievalTop:'sw2_ret_top',retrievalMaxChars:'sw2_ret_chars'};
+        const id=oldIds[key]??(key==='extractChunkChars'?'sw2_extract_chunk_chars':key==='extractConcurrency'?'sw2_extract_conc':'sw2_param_'+key);
+        return '<div class="sw2-field"><div class="sw2-field-head"><label for="'+id+'">'+escapeHtml(label)+'</label>'
+            +'<input class="sw2-input" id="'+id+'" data-settings="'+key+'" aria-describedby="'+id+'_help" type="'+(text?'text':'number')+'" '+(text?'':'min="'+min+'" step="'+step+'" ')+(max===null?'':'max="'+max+'" ')+'value="'+escapeHtml(String(value))+'"></div>'
+            +'<div class="sw2-hint sw2-runtime-help" id="'+id+'_help">'+help+'</div></div>';
+    };
+    const injectCard='<section class="sw2-runtime-group"><h4>递给聊天模型的资料</h4><div class="sw2-inject-box">'
+        +injSwitch('injectSceneState',cfg.injectSwitches?.injectSceneState,'提供当前状态与本批动向','相关当前状态完整提供；背景被模型读到，不代表人物已经知情。关闭后不提供这两部分。')
+        +settingRow('sceneStateMaxChars','本批动向最多带入多少字',cfg.sceneStateMaxChars??SCENE_STATE_CHARS_DEFAULT,'只限制动向，当前状态不占额度。装不下的记录整条省略并提示。',{step:100})
+        +injSwitch('injectLedgerRecall',cfg.injectSwitches?.injectLedgerRecall,'提供相关往事与来源','从世界库找回相关历史与来源；关闭后不提供这些资料。')
+        +settingRow('retrievalMaxChars','相关往事最多带入多少字',cfg.retrievalMaxChars??LEDGER_CHARS_DEFAULT,'全文与向量找回的往事合计使用这份额度，装不下的整条省略。',{step:100})
+        +'<div class="sw2-hint">这些开关不控制世界自动推进。完整记录始终保存在世界库。</div></div><div class="sw2-inject-facts">'+(cfg.injectReadout??'<p class="sw2-hint">尚无实际注入记录。</p>')+'</div></section>';
+    const actionCard='<section class="sw2-runtime-group"><h4>聊天如何影响世界</h4><div class="sw2-inject-box">'
+        +injSwitch('injectTagSpec',cfg.injectSwitches?.injectTagSpec,'让聊天模型按标签写行动','按行动标签将已发生的行动递给世界模型；关闭后不再要求标签，已有标签仍会读取。')
+        +'<div class="sw2-hint">只读取 tags 块，不从普通正文猜测行动。</div></div></section>';
+    const retrievalCard='<section class="sw2-runtime-group"><h4>聊天检索与正文处理</h4><div class="sw2-inject-box">'
+        +settingRow('retrievalDepth','检索时向前看几条正文',cfg.retrievalDepth??RETRIEVAL_DEPTH,'全文与向量共用此正文范围；增加深度不保证查询一定变化。')
+        +settingRow('retrievalMinScore','聊天相似度阈值',cfg.retrievalMinScore??RETRIEVAL_MIN_SCORE,'仅控制聊天向量候选；调高更严格。全文匹配不受此阈值限制。',{min:0,max:1,step:.01})
+        +settingRow('retrievalTop','聊天最大召回条数',cfg.retrievalTop??RETRIEVAL_TOP,'限制全文与向量候选数量；实际带入还受相关性及往事字数限制。')
+        +'<div class="sw2-group-h">正文怎么读<em>不填就不剥除</em></div><p class="sw2-hint">名单只处理检索补充正文；最近原文片段仍参与查询，不改聊天或标签读取。</p>'
+        +'<div class="sw2-field"><label for="sw2_prose_black">黑名单 · 要剥掉的名字</label><textarea class="sw2-input" id="sw2_prose_black" data-settings-text="proseBlackList" rows="3" placeholder="一行一条">'+escapeHtml(String(cfg.proseLists?.black??''))+'</textarea><p class="sw2-hint">成对块填写标签名；HTML 注释填写开头文字。</p></div>'
+        +'<div class="sw2-field"><label for="sw2_prose_white">白名单 · 只留这些</label><textarea class="sw2-input" id="sw2_prose_white" data-settings-text="proseWhiteList" rows="3" placeholder="一行一条">'+escapeHtml(String(cfg.proseLists?.white??''))+'</textarea><p class="sw2-hint">块外正文保留；两份都填时，以白名单为准。</p></div></div></section>';
+    const worldRecallCard='<section class="sw2-set-card sw2-world-recall-card"><h4>世界事务检索</h4><p class="sw2-hint">每项世界事务独立查找资料，与聊天检索分别设置。'+(localMode?'':'当前旧档不使用这组参数。')+'</p><div class="sw2-inject-box">'
+        +settingRow('worldRetrievalMinScore','世界事务相似度阈值',cfg.worldRetrievalMinScore??WORLD_RETRIEVAL_MIN_SCORE_DEFAULT,'只控制世界推进的向量候选，与聊天阈值互不影响。',{min:0,max:1,step:.01})
+        +settingRow('worldRetrievalTop','每项世界事务召回条数',cfg.worldRetrievalTop??WORLD_RETRIEVAL_TOP_DEFAULT,'限制候选记录数量；明确引用的原因仍保留。')
+        +settingRow('worldRetrievalDepth','世界因果追溯层数',cfg.worldRetrievalDepth??WORLD_RETRIEVAL_DEPTH_DEFAULT,'沿关系追溯的层数；0 表示不额外扩展，不是聊天正文条数。',{min:0})+'</div></section>';
+    const extractionCard='<section class="sw2-runtime-group"><h4>世界字段</h4><p class="sw2-hint">管理属性字段、适用对象和更新权限。补充说明可不填；已有值与历史保留。</p><button type="button" class="sw2-btn" data-action="review-source-fields">管理世界字段</button></section>'
+        +'<section class="sw2-runtime-group"><h4>资料合包</h4><div class="sw2-inject-box">'
+        +settingRow('extractChunkChars','每包抽取目标字符数',cfg.extractChunkChars==='unlimited'?'不限':cfg.extractChunkChars??SETTING_CHUNK_CHAR,'按正文字符数合包，不是模型 token；完整条目不截断、不拆分，超目标的单条独立完整发送。“不限”合为一包，模型与网关的容量限制仍适用。',{text:true})
+        +settingRow('extractConcurrency','抽取并发请求数',cfg.extractConcurrency??EXTRACT_CONCURRENCY,'同时处理的资料包数；429 限流时调小。确认过的结果复用，未知请求不自动重发。')+'</div></section>'
+        +'<section class="sw2-runtime-group"><h4>抽取模型容量</h4><p class="sw2-hint">新任务生效，与世界推进的容量设置独立。</p><div class="sw2-inject-box">'
+        +settingRow('extractCallMaxTokens','抽取输出上限（token）',cfg.extractCallMaxTokens??32768,'推理与正文共用额度，按模型和网关支持的容量填写。',{min:1024,step:1024})
+        +settingRow('extractCallTimeoutSec','抽取超时（秒）',cfg.extractCallTimeoutSec??300,'等待首个输出或连续无新输出的最长时间；持续输出不按总时长中止。',{min:5,step:5})+'</div></section>';
     // ★leg40b 续（**尺度上限参数化**·用户令「能不能直接把这些闸门参数直接放进参数页？」→ 拍板"甲+乙档全开"）：
     //   这一栏从**只读呈现**升级为**四个档位旋钮**（`每轮递线`/`每轮事件`/`顶层大计`/`在飞大计`）。
     //
@@ -764,28 +745,12 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //     真正的边界是"模型一次能写多长"——撤掉白名单就是**把边界还回它本来该在的地方**。
     //   ★`suggest` 那串是**建议值**（`LIMIT_GEARS` 降级为建议）：玩家不知道该填几，给他三个常用档；
     //     它**不再是白名单**（填别的照收）。
-    const limitKnob = (r) => `<div class="sw2-row" data-limit="${escapeHtml(r.key)}"><span>${escapeHtml(r.meta.label)}</span>`
-        // ★接线面**不用改**：`web/index.js` 的 `set-param` 是从 `closest('[data-action="set-param"]')` 上读
-        //   `.value` 的（`<select>` 与 `<input>` 都有 `.value`）⇒ 换控件类型不碰事件委托。
-        + `<input class="sw2-param-input" type="number" min="1" step="1" inputmode="numeric"`
-        + ` data-action="set-param" data-param="${escapeHtml(r.key)}" value="${escapeHtml(String(r.value))}"`
-        + ` title="${attrText(`填任意 ≥1 的整数；建议 ${r.options.join(' / ')}`)}">`
-        // ★★★leg99（同一条用户令）：**那一枚琥珀色数字也撤掉**——它印的就是旁边输入框里的值，
-        //   同一个数并排出现两次。撤它同时撤掉本行唯一的 `data-param-cell`（见下面那条沿革注：
-        //   leg46 续·十立"这格只显示值"是为了修"我改了值旁边直接变成未定"，而那个病根**是格与控件各问一个源**；
-        //   现在控件就是唯一那个源 ⇒ 那一格没有存在的理由了，**病根也随格一起消失**）。
-        // ★`web/param-panel.js` 的 `sw2SetParamCell` 找不到格会直接返回（它绝不自己编值）⇒ 撤格**不影响写通道**。
-        + `<em class="sw2-limit-suggest">常用：${r.options.map((g) => escapeHtml(String(g))).join(' / ')}</em></div>`;
-    // ★★★leg114（用户拍板「**30000token 预算也太少了**…做个调整的入口」→ 细案 §2.4 **丙案**：
-    //   "**先给读数、你按读数填**"）：**这一格必须带读数**，否则玩家不知道该填多少。
-    //   ★★为什么读数必须是**两个数**（细案漏了一格，本笔补的）：账上原来那个 `packTokens` 量的是
-    //     **裁完之后**的包（`pack.js` 先裁后量）⇒ 包一旦撑满，它就**贴着预算顶**、看着"刚好合适"，
-    //     玩家**永远看不出"我该填多少"**——而用户嫌 30000 小，正因为它在裁。故同批补记了
-    //     `packTokensBeforeTrim`（**裁之前有多大**，只在真裁过的那一轮才写）：两个数一比，
-    //     "裁掉了多少"当场看得见，该填多少也就有了依据。
-    //   ★leg48 那条"**别再往这一页加读数栏**"的纪律**不适用于这一行**，理由写在这里免得下一任误删：
-    //     那不是维护者仪表盘，是**这一格自己的决策依据**（玩家问"我该填多少"，这一行就是答案）；
-    //     且它**只在账上真有一轮读数时**才出现（新局/没推进过 ⇒ 一个字不印，见下面 `if`）。
+    const limitKnob = (r) => {
+        const quantity=r.meta.kind==='闸',value=r.value==='unlimited'?'不限':String(r.value);
+        return '<div class="sw2-row" data-limit="'+escapeHtml(r.key)+'"><span>'+escapeHtml(r.meta.label)+'</span>'
+            +'<input class="sw2-param-input" type="'+(quantity?'text':'number')+'" '+(quantity?'':'min="1" step="1" ')+'inputmode="numeric" data-action="set-param" data-param="'+escapeHtml(r.key)+'" value="'+escapeHtml(value)+'" title="'+attrText(quantity?'填正整数或不限':'填正整数')+'">'
+            +'</div>';
+    };
     const lastSim = (world.meta?.simLog || []).slice(-1)[0];
     const budgetRow = limitRows.find((r) => r.key === '包预算');
     let budgetReadout = '';
@@ -822,89 +787,15 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //     遇到换组就插一个组头**。理由是"谁都不可能漏掉一个框"——分组变了、`kind` 写错了，
     //     最坏也只是组头位置怪；而 filter 那种写法一旦条件写错，**会把某一格从页面上整个抹掉**，
     //     且判据只数得出"少了一个框"，指不出是谁。（本仓 leg103 §G 那条："数组里没有的词等于不存在"。）
-    let capKind = null;
-    const capKnobs = limitRows.map((r) => {
-        const kind = LIMIT_META[r.key]?.kind || '';
-        if (kind === capKind) return limitKnob(r);
-        capKind = kind;
-        return `<div class="sw2-row sw2-limit-group"><b>${escapeHtml(kind)}</b>`
-            + `<em>${escapeHtml(LIMIT_KIND_NOTE[kind] || '')}</em></div>` + limitKnob(r);
-    }).join('');
+    const capKnobs = '<div class="sw2-row sw2-limit-group"><b>生成数量</b><em>七个数量上限均可填「不限」</em></div>'
+        + limitRows.filter(r=>r.meta.kind==='闸').map(limitKnob).join('')
+        + '<div class="sw2-row sw2-limit-group"><b>上下文与展示</b><em>分别控制模型输入与观棋范围</em></div>'
+        + limitRows.filter(r=>r.meta.kind!=='闸'&&r.key!=='往回看轮数').map(limitKnob).join('');
     // ★★★leg143：**体检读数**（照展示页）——它正面回答用户那句「**闸太多了，是不是要考虑删掉一些闸**」：
     //   59 轮真账里，这九格**只有一格真拦下过东西**。★这是**一次实测的留档**（不是每轮现算的读数），
     //   所以两处措辞刻意保守：①标出来路"（59 轮真账）"；②不印"占上限百分之几"——
     //   那个百分数会随玩家改「每轮给世界模型看多少料」当场过期（本仓"UI 比代码先过期"那类病）。
-    const capFoot = `<div class="sw2-hint"><b>体检读数</b>：这${cnCount(LIMIT_KEYS.length)}格里`
-        + `只有「每轮最多入局几个新人」真的拦下过东西（1 次）；包预算峰值 19,511，<b>从未裁过</b>。</div>`;
-    //   读法（★leg52 改成"结论在外、长说明折起"）：总说明首句 + 四行旋钮 + 两条折叠说明。
-    const capCard = `<div class="sw2-set-card sw2-cap-card" style="grid-column:1/-1">`
-        + `<h4>世界尺度 · 可调上限</h4>`
-        // ★leg40c 续：这一栏也挂**构建号**（原来只有"角色与势力"页头有）。为什么必须挂在这里：
-        //   用户实机报"点了下拉值不改"时，第一件要能当场分清的事是——**页面到底是不是新代码**。
-        //   构建号不在这页上，就只能靠猜（本仓老坑：改了代码但浏览器吃旧 index.js）。
-        //   ★leg52：构建号**不折**（它是排障用的，折起来就等于没有）。
-        // ★★★leg169：**构建号那一行从这一卡搬到了页头**（`sw2-sv-cards`，页面最上面那一行）。
-        //   病（三份交接都写错、用户按它去看会找不到）：leg166/167/168 的交接都写
-        //   「硬刷新看**参数页最上面那行**是不是 `legXXX`」，而它一直住在**这一卡的卡头下面**
-        //   ——参数页最上面是标题与副标题 ⇒ 玩家照那句话去看**永远看不到**，会以为自己没更新成功。
-        //   ★判据口径没动：`test/render.test.js:3021` 要的仍是"构建号在玩家视线内、且**不许折**"，
-        //     搬到页头两条都照旧成立（它仍在 `<details>` 外面）。
-        // ★★★leg143：**结论句照展示页精简**（用户令「字太多了，简洁一下，把说明改得更精炼和专业一点，
-        //   但不要太晦涩」）——外面只留三件：两组各是什么、没有上限、什么时候生效。
-        //   ★"闸 / 尺"这两个字**第一次出现就是在这里**，所以当场给它们一句人话（§2.5 第 1 条）。
-        //   ★那个数**从键表现算**（`cnCount(LIMIT_KEYS.length)`）——它已经因为加旋钮过期两次了。
-        + foldHint(`<b>闸</b>填小了会拦下模型想做的事；<b>尺</b>一个东西都不拦，只管「看多少 / 看多久」。`
-            + `${cnCount(LIMIT_KEYS.length)}个框都能<b>直接填数</b>——没有上限，改完<b>下一轮生效</b>。`,
-            '出厂默认就是现在这几个数。'
-            // ★★★leg114：第八格（包预算）与上面七格**性质不同**，必须在页上说清——它是**尺**不是**闸**：
-            //   上面七格填小了会**拦下**模型想做的事；它填小了**一个东西都不拦**，
-            //   只是让模型看不到一些旧事与细节（这是玩家最容易误会的一处，所以说在明面上）。
-            //   ★leg143：这段**从"最后一格"改成"尺那一组"**——页上现在已经**分组**了，
-            //     再逐格说"它和上面几格不同"就与组头说重了（同一件事说两遍）。
-            + '<br>下面那一组「尺」与上面那组「闸」<b>不是一回事</b>：'
-            + '闸填小了会<b>拦下</b>模型想做的事；尺只管"一次给它看多少"「最近多久的事一定在」，'
-            + '<b>一个东西都不拦</b>——填小了只会让模型看不到一些旧事与细节。'
-            + '那几个上限之间会互相掩盖，一次只调一个才看得出是哪一个在起作用。'
-            // ★★leg63：**把"互相掩盖"讲成人话**（用户当场问「这个会相互掩盖是什么意思」）——
-            //   过去只丢一句术语，玩家没法据此行动。真正的机理是"三道盘算闸按序判、先顶住的那道说了算"。
-            + '<br>具体是这么回事：一轮里能新起几件大计，要同时过三道——'
-            + '<b>每轮最多新起几件大计</b>（先判）→ <b>同时最多几件大计</b> → <b>同时在办总数上限</b>。'
-            + '三道是<b>依次</b>判的，最先顶住的那道决定"这轮拒了几件"，后面的根本没轮到。'
-            + '所以只抬后面那道、前面那道没抬 ⇒ 数字变了但<b>看不出任何变化</b>，这就是"互相掩盖"。'
-            + '<br>举个例子：把「每轮递几条线」抬到 10、模型真提了 10 条，'
-            + '但「每轮最多新起几件大计」还是出厂 3 ⇒ 第 4 条起全被拒，'
-            + '观棋窗口只报"被拒"、不说"是哪个数拒的"，看起来就像"参数白调了"。'
-            + '⇒ 想让一轮里真的多长几件事，<b>「每轮递几条线」与「每轮最多新起几件大计」要一起抬</b>。'
-            // ★★★leg57（**由实测支撑，不是推理**——13 次真调用，见 `docs/measure-leg57-event-cap-ceiling.md`）：
-            //   · `每轮事件` 设 12 / 30 / 50，模型都只写 **3–11 件**、`finish_reason` 全是 `stop`
-            //     ⇒ **它是上限、不是产量旋钮**（设大了不会变多）；
-            //   · 固定它、只把 `每轮递线` 从 10 降到 3 ⇒ 落账从 **11 件降到 5/5/5**（三轮稳定）。
-            //   ⇒ 真正决定"一轮长几件事"的是 **每轮递线**（给模型几条线要走，它就写几件事）。
-            //   ★为什么必须告诉玩家：不写这一句，玩家会以为"每轮事件"才是那个旋钮，
-            //     于是一直拧它、一直看不出变化（正是本仓反复治的那类"静默无效"体验）。
-            + '<br>而「每轮最多几件事件」<b>不是产量旋钮</b>：把它填大（比如 30、50）也不会让事情变多，'
-            + '因为模型一轮自己只写得出那么多。'
-            + '真正决定"一轮长几件事"的是<b>「每轮递几条线」</b>——给模型几条线要走，它就写几件事。'
-            // ★★leg54：这一句是**如实告知**，不是限制（用户令「无上限」）——
-            //   真正的边界在模型那一边，玩家必须知道"填大了会以什么形式表现出来"，
-            //   否则他会以为"填 100 却只长了 3 件"是插件坏了。
-            + '<br>还有一件事得先说清：这几个数<b>不是</b>"填多少就长多少"。'
-            + '模型一轮只写得出那么多，超出的部分你看不到"被拦"，只会看到"这轮没长出新事"——'
-            + '要查就翻观棋窗口底部的「本轮裁定 N 条」。',
-            { summary: '改这些数要注意什么' })
-        + budgetReadout
-        + `<div class="sw2-cap-fields">${capKnobs}</div>`
-        + foldHint('',
-            limitRows.map((r) => `<b>${escapeHtml(r.meta.label)}</b>：${escapeHtml(r.meta.hint)}`).join('<br>'),
-            { summary: '每个上限各是什么意思' })
-        // ★★★leg63（用户令「我要把另外两个参数也设置成可调」）：原来这里还有一折
-        //   「还有两个数不给拧（每轮入局新人 ≤1 · 每轮递几张待启用名单 12）」——
-        //   那两个**已经给了旋钮**（`limits.js` 的 `每轮入局`/`待启用名单`）
-        //   ⇒ 这一折整段撤掉：**这一栏现在八个框全是可调的**（leg114 加了「每轮给世界模型看多少料」），
-        //     没有"不给拧"的数了。
-        //   （留一条空折会说反话，比不写更坏——本仓"面板替机制承诺一个它没写死的数"那类病。）
-        + capFoot
-        + `</div>`;
+    const capCard = '<section class="sw2-set-card sw2-cap-card"><h4>世界尺度与输入预算</h4><p class="sw2-hint">数量上限决定最多生成和同时在办多少；输入预算决定模型能读取多少资料。改动在下一轮生效。</p>'+budgetReadout+'<div class="sw2-cap-fields">'+capKnobs+'</div><p class="sw2-hint">数量可填「不限」，仍受模型单次输出容量限制，不保证产量。递线、新起和同时在办的上限依次起作用；拒绝原因见观棋“本轮裁定”。</p></section>';
 
     // ★★leg52（用户令「**推进和撤销不应该放到参数页吧**」→ 拍板「推进撤、撤销留并上移」）：
     //   **「推进」卡整段撤掉**（旧 `advanceCard`，原文留在 git 历史与本行记档里）。
@@ -940,24 +831,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //     ③ **民生** 已从面板撤下（它**没有生产者**，永远「未定」——见 `params.js` 的 `PANEL_ENV_KEYS`）。
     //   ★与 `capCard` 的**世界尺度**分开成两张卡，不是重复：这一卡是**世界的样子**（书/玩家给的描述
     //     性条件 + 引擎从账上派生的读数），那一卡是**世界能跑多宽**（就是引擎的闸值本身）——性质不同。
-    const atmoCard = `<div class="sw2-set-card sw2-atmo-card" style="grid-column:1/-1">`
-        + `<h4>世界气氛与条件</h4>`
-        + foldHint('这一栏是<b>世界的样子</b>，不是世界的开关。',
-            '<b>天时 / 时局</b>是你定的条件（只照抄摆放，<b>不参与任何判断</b>）。'
-            // ★★★leg55（leg54 §6.4 的第二处）：这里原写死「看近 **10** 轮里…」，而**机制本身**是
-            //   `src/unrest.js` 的「乱象档位 = 近 `TENSION_WINDOW` 轮里"出事"铺开到几个不同地点」
-            //   （`UNREST_WINDOW = TENSION_WINDOW`）⇒ 面板在**替机制承诺一个它没写死的数**：
-            //   `TENSION_WINDOW` 一改（它是"定案"值，改它要报批），这句说明就变成谎话，而**代码照旧是对的**
-            //   ——正是 leg54 那个 4096 的同一种病（**UI 比代码先过期**）。
-            //   ★同一文件里 `TENSION_WINDOW` 已被现读三处（`:649`/`:1540`/`:1541`）⇒ 本处只是漏网那处。
-            + `<b>乱象</b>是<b>每轮自动算的</b>：看近 ${TENSION_WINDOW} 轮里"出事"铺到了几个<b>不同的地点</b>——`
-            + '地点越散、档位越重；同一个地方出十件事，也只算一个地点。'
-            + '它不发明事实：只从账上已经记下的事里数，一个字都不添。'
-            + '世界变宽变窄是下面那张「世界尺度」的事，与这一栏无关。',
-            { summary: '这几格分别是什么' })
-        + indep.map(knobRow).join('')
-        + dep.map(readout).join('')
-        + `</div>`;
+    const atmoCard = `<section class="sw2-set-card sw2-atmo-card"><h4>世界气氛与条件</h4><p class="sw2-hint"><b>天时 / 时局</b>是你定的条件，只照抄摆放，不参与判断；<b>乱象</b>是<b>每轮自动算的</b>，看近 ${TENSION_WINDOW} 轮里出事的地点范围。</p>`+indep.map(knobRow).join('')+dep.map(readout).join('')+'</section>';
 
     // leg207：世界条件的原注脚跟随该子页显示，运行页只说明运行与注入。
     const conditionsFoot = `<div class="sw2-sv-sub" style="margin-top:10px"><b>天时 / 时局</b>是你定的条件，只照抄摆放、`
@@ -971,7 +845,7 @@ export function renderParamsHtml(world, { config = {} } = {}) {
     //   ⇒ 结论：**取证能力保留，但不再占这一页**——`gatherParamEvidence()/paramEvidenceText()` 与
     //     `bus['param-doctor']` 都还在（要取证时从控制台/内部动作取），界面**一个字节都不印**。
     //     ★别再往这一页加"读数栏"：这一页是**玩家调档位的地方**，不是维护者的仪表盘。
-    return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界参数</div>`
+    return `<div class="sw2-config-page sw2-config-params"><div class="sw2-sv-head"><div><div class="sw2-sv-title">世界参数</div>`
         // ★leg52：这一句原来只提"自变量/因变量"两类——而**世界尺度那些上限也是能拧的**，
         //   旧措辞会让玩家以为"能拧的只有天时/时局"（一个数两把尺子的文案版）。改成三类并列。
         //   ★leg114 勘正：这一句里的数**本来就写错了**——它写"那四个上限"，而 leg63 起
@@ -984,13 +858,10 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         // ★★★leg143 勘正（用户令「设置里的那些闸其实也可以归到参数页」）：这一句原来写"能拧的只有**两处**"，
         //   而本笔把「插件对你的对话做了什么」那一卡也搬到了这一页（四枚开关 ＋ 一个条数）⇒ **三处**。
         //   ★改的是**数**与**第三处的名字**，口径一字未变：能拧的就这几处，其余都是只读呈现。
-        + foldHint('', '能拧的有三处：<b>世界气氛与条件</b>里的<b>天时 / 时局</b>（你定的条件）、'
-            + `<b>世界尺度</b>那 ${LIMIT_KEYS.length} 个上限（这个世界允许跑多宽）、`
-            + '以及<b>运行与注入</b>（是否自动推进、聊天与世界之间递什么资料）。其余都是<b>只读呈现</b>。',
-            { summary: '这些参数分别管什么' }) + `</div>`
+        + '<p class="sw2-sv-sub">按用途分别设置；修改设置不会改写原书和已发生的事实。</p></div>'
         // ★本次（清一处面板错数）：分母 = **这一页真画出来的那几格**（`drawn`），不是 `paramsRows` 的全量
         //   （全量里含 leg53 已撤、页上根本不画的 `民生度` ⇒ 真账上印成"3/4 已定"而页上只有 3 格）。
-        + `<div class="sw2-sv-cards"><span class="sw2-hint" style="margin:0">构建 <b>${escapeHtml(PANEL_BUILD)}</b>（不是最新那串就 <b>Ctrl+F5</b>）</span>`
+        + `<div class="sw2-sv-cards"><span class="sw2-hint" style="margin:0">构建 <b>${escapeHtml(PANEL_BUILD)}</b></span>`
         + `<span class="sw2-sv-chip ${setCount ? 'ok' : 'stale'}">${setCount}/${drawn.length} 已定</span></div></div>`
         // ★★★leg143：**卡片次序照展示页**（总闸 → 搬来的那一卡 → 世界气氛与条件 → 世界尺度 → 撤销）。
         //   · 总闸排最前：它管"插件自己"（leg33d 的定案）；
@@ -1000,11 +871,12 @@ export function renderParamsHtml(world, { config = {} } = {}) {
         //     撤销管的是**这一页全部改动**（`undo-stack.js`），放在全页控件之后才收得住整页，
         //     摆在中间反而会被读成"只管上面那两张卡"。
         + renderSubtabs('params', [
-            { key: 'runtime', label: '运行与注入', html: `<div class="sw2-sv-grid sw2-params-grid">${autoCard}${injectCard}</div>` },
-            { key: 'conditions', label: '世界条件', html: atmoCard + conditionsFoot },
-            { key: 'limits', label: '尺度与上限', html: capCard },
+            {key:'runtime',label:'聊天端',html:'<div class="sw2-runtime-stack">'+injectCard+retrievalCard+'</div>'},
+            {key:'limits',label:'世界推进',html:'<div class="sw2-runtime-stack">'+autoCard+actionCard+worldRecallCard+capCard+atmoCard+'</div>'},
+            {key:'extraction',label:'抽象与字段',html:'<div class="sw2-runtime-stack">'+extractionCard+'</div>'},
+            {key:'conditions',label:'显示',html:'<section class="sw2-runtime-group"><h4>观棋显示</h4><p class="sw2-hint">只调整页面显示，不影响模型读取。</p>'+limitRows.filter(r=>r.key==='往回看轮数').map(limitKnob).join('')+'</section>'},
         ])
-        + undoCard;
+        + undoCard + `</div>`;
 }
 
 export function renderInfoBandHtml(world, { config = {} } = {}) {
@@ -1063,8 +935,8 @@ export function renderInfoBandHtml(world, { config = {} } = {}) {
         // ① 盘算：一个数（分母读引擎真源，见下）
         + `<div class="sw2-readrow"><span class="sw2-readkey">盘算</span>`
         // ★leg32：两个分母一律读引擎真源（旧版写死 `/15` `/5` ⇒ 引擎改了面板不变，见文件头 import 注释）
-        + `<span class="sw2-big-num">${counts.active}<small>/${lim.在飞大计}</small></span>`
-        + `<span class="sw2-num-sub">${counts.hidden ? `${counts.hidden} 件在暗处 · ` : ''}顶层 ${counts.top}/${lim.顶层大计}</span></div>`
+        + `<span class="sw2-big-num">${counts.active}<small>/${lim.在飞大计 === 'unlimited' ? '不限' : lim.在飞大计}</small></span>`
+        + `<span class="sw2-num-sub">${counts.hidden ? `${counts.hidden} 件在暗处 · ` : ''}顶层 ${counts.top}/${lim.顶层大计 === 'unlimited' ? '不限' : lim.顶层大计}</span></div>`
         // ② 张力：一句话（极 ＋ 方向 ＋ 可验证的事实：近 N 轮事件几件）
         + `<div class="sw2-readrow"><span class="sw2-readkey">张力</span>`
         + `<span class="sw2-clash-main">${escapeHtml(t.polarity || '未聚')}<small class="sw2-quiet-note">近${TENSION_WINDOW}轮事件 ${recentEvents} 件</small></span>`
@@ -1076,15 +948,16 @@ export function renderInfoBandHtml(world, { config = {} } = {}) {
         + `</div>`;
 }
 
+const agendaProgressLabel = a => Number.isSafeInteger(a.maxSteps) && a.maxSteps > 0 ? (a.progress ?? 0) + '/' + a.maxSteps : '已推进 ' + (a.progress ?? 0) + ' 步';
 export function renderAgendaStripHtml(world) {
     const active = (world.agendas || []).filter((a) => !a.closed);
     const cards = active.map((a) => `<div class="sw2-agenda-card${a.visibility === 'concealed' ? ' sw2-agenda-hidden' : ''}">`
         + `<div class="sw2-ahead"><span class="sw2-aowner">${escapeHtml(entityLabel(world, a.owner))}</span>`
-        + `<span class="sw2-visible ${a.visibility === 'concealed' ? 'v-hidden' : 'v-known'}">${LABELS.visibility[a.visibility] || '明'}</span></div>`
+        + (LABELS.visibility[a.visibility] ? `<span class="sw2-visible ${a.visibility === 'concealed' ? 'v-hidden' : 'v-known'}">${LABELS.visibility[a.visibility]}</span>` : '') + '</div>'
         + `<div class="sw2-agoal">${escapeHtml(a.goal)}</div>`
-        + `<div class="sw2-astage">${escapeHtml(a.stage || '谋划中')}`
+        + `<div class="sw2-astage">${escapeHtml(a.stage || '')}`
         + `<span class="sw2-aprog">${dotSteps(a.progress ?? 0, a.maxSteps)}</span>`
-        + `<span class="sw2-asteps">${a.progress ?? 0}/${a.maxSteps ?? 0}</span></div></div>`);
+        + `<span class="sw2-asteps">${agendaProgressLabel(a)}</span></div></div>`);
     if (!cards.length) {
         cards.push('<div class="sw2-agenda-empty">眼下没有在办的谋划。</div>');
     }
@@ -1115,7 +988,7 @@ export function renderFeedHtml(world, { limit = 8 } = {}) {
     if (ms.length) {
         const last = ms.reduce((a, b) => (msIdTick(b.id) > msIdTick(a.id) ? b : a));
         const titles = Array.isArray(last.titles) ? last.titles : (last.title ? [last.title] : []);
-        note = `<div class="sw2-milestone-strip">更早的 <b>第 1–${msIdTick(last.id)} 轮</b>已收进大事纪「${escapeHtml(titles.slice(0, 3).join('、'))}」<span class="sw2-goto" data-view="archive">去翻旧账 →</span></div>`;
+        note = `<div class="sw2-milestone-strip">更早的 <b>第 1–${msIdTick(last.id)} 轮</b>已归档「${escapeHtml(titles.slice(0, 3).join('、'))}」<span class="sw2-goto" data-view="graph">查看历史图谱 →</span></div>`;
     }
     return `${renderConditionsHtml(world)}<div class="sw2-col-head">动态流 · 最新在上</div>${verdictBlock}<div class="sw2-feed">${rows.join('')}${note}</div>`;
 }
@@ -1138,13 +1011,7 @@ export function renderConditionsHtml(world) {
         }).join('') + '</details>';
 }
 
-export function renderSideHtml(world) {
-    const data = buildMapData(world);
-    const known = data.places.reduce((n, p) => n + p.entities.length, 0);
-    const unknown = data.unlocated.entities.length;
-    return '<div class="sw2-map-entry"><button type="button" class="sw2-btn" data-action="open-map"><span class="sw2-map-title">地图</span></button>'
-        + `<span class="sw2-map-brief">${data.places.length} 处 · ${known} 人有处可循${unknown ? ` · 未载 ${unknown} 人` : ''}</span></div>`;
-}
+export function renderSideHtml(world) { return ''; }
 
 export function renderBoardHtml(world, opts = {}) {
     return {
@@ -1488,7 +1355,7 @@ export function renderChronicleToolbar(world, view = {}) {
         + `</div></div>`;
 }
 
-export function renderChronicleHtml(world, { oldVolumes = [], view = {} } = {}) {
+export function renderChronicleHtml(world, { view = {} } = {}) {
     const v = { ...CHRONICLE_DEFAULT_VIEW, ...(view || {}) };
     const sel = selectChroniclePage(world, v);
     // ── leg94：里程碑插行（`sw2-ch-roll`「第 1–N 轮已收进大事纪「…」」）**从编年页撤掉** ──
@@ -1521,65 +1388,13 @@ ${sel.bookGroups.map((bg) => chronicleGroupHtml(bg.key, bg.label, `共 ${bg.hit}
     // 层显示：`layer` 是"只看"（chips）管的——被筛掉的层整块不出现（★判据按"不出现 details.sw2-ch-group"咬）
     const showEvent = v.layer !== 'book';
     const showBook = v.layer !== 'event';
-    const volumes = oldVolumes.map((vol) => `<div class="sw2-cold-row"><span class="sw2-vol">${escapeHtml(vol.id)}</span>`
-        + `<span class="sw2-volinfo">${escapeHtml(vol.info)}</span><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(vol.id)}">阅卷</span></div>`);
-    const volBlock = volumes.length
-        ? `<div class="sw2-cold"><h4>旧卷（早于大事纪的编年原文 · 按需阅卷）</h4>${volumes.join('')}</div>` : '';
     return `<div class="sw2-col-head">编年 · 史卷</div>`
         + renderChronicleToolbar(world, v)
         + `<div class="sw2-chronicle">`
         + (showEvent ? `<div class="sw2-ch-layer" data-layer="event">${eventLayer}</div>` : '')
         + (showBook ? `<div class="sw2-ch-layer" data-layer="book">${bookLayer}</div>` : '')
         + (showEvent || showBook ? '' : '<div class="sw2-ch-empty">眼下这一类是空的。</div>')
-        + `</div>${volBlock}`;
-}
-
-// ============ 大事纪·旧卷页 ============
-
-// ★★leg94 修三处（用户实机截图取证）：
-//   ① **`${m.counts ?? 0} 件事` 印成了 `[object Object]`**——`counts` 是 `{events:N}` 这个对象，
-//      直接插值就把它 toString 了。同文件链视图那两处写的是 `n.counts.events ?? 0`（口径就在隔壁）
-//      ⇒ 照抄同一口径（`m.counts` 缺格/是数字的老账照样兜得住）。
-//   ② **展开那一纪要印标题，不印机器号**——`m.ids` 与 `m.titles` 是**同一个顺序、一一对应**
-//      （真账实测四条里程碑 10/10、20/20、16/16、17/17 条数完全相等）⇒ 按位配对即可，
-//      玩家从此看到「血战煞阵缺口 [链]」而不是 `ev_11_2 链`。**机器号退进 `title` 悬停**（A-3 豁免口，一字不动）。
-//      对不上的那几条**如实兜底**：没有配对标题的照旧印自己的号 + 一句"另有 N 条无名"（不编、不藏）。
-//   ③ 前两条之外，本卡一个字节没动（标题行、链按钮、旧的 `data-chain` 契约全在）。
-export function renderArchiveHtml(world, { oldVolumes = [] } = {}) {
-    const msCards = (world.milestones || []).map((m) => {
-        const titles = Array.isArray(m.titles) ? m.titles : (m.title ? [m.title] : []);
-        const ids = Array.isArray(m.ids) ? m.ids : [];
-        const count = typeof m.counts === 'number' ? m.counts : Number(m.counts?.events ?? ids.length);
-        const pairs = ids.map((id, i) => ({ id, title: typeof titles[i] === 'string' ? titles[i] : '' }));
-        const unnamed = pairs.filter((p) => !p.title).length;
-        return `<div class="sw2-milestone"><div class="sw2-milestone-head">`
-            + `<span class="sw2-milestone-id">${escapeHtml(m.id)}</span>`
-            + `<span class="sw2-mspan">第 1–${msIdTick(m.id)} 轮 · ${Number.isFinite(count) ? count : ids.length} 件事</span></div>`
-            // ★★★leg169（用户令「优化其他页的结构问题」）：**原来是 4 件事用「、」连成一句话**
-            //   （旧写法 `titles.slice(0,4).join('、')`）——四件不同的事读起来像一件，一眼分不出有几件。
-            //   ⇒ 改成**一件一项**（`.sw2-ms-item`），由样式表折行排。
-            //   ★取数一个字没动（仍是前 4 条），`<h5>` 也还在。
-            + `<h5>${titles.slice(0, 4).map((t) => `<span class="sw2-ms-item">${escapeHtml(t)}</span>`).join('')}</h5>`
-            + (pairs.length
-                ? `<details><summary>展开这一纪的条目</summary><div class="sw2-rawids">${pairs.map((p) => `<span class="sw2-rawid">`
-                    + `${p.title ? escapeHtml(p.title) : `<span class="sw2-rawid-num">${escapeHtml(p.id)}</span>`}`
-                    // ★★★leg169：**分隔符从文本改成间距**——旧写法 `join(' · ')` 把条目串成一条流式文本
-                    //   （真账一纪最多 20 条，加上 `word-break:break-all` 就是一坨断词）。
-                    //   ⇒ 改成 `join('')`，中间那条「·」交给样式表的 gap 出（同一件事不再两处表达）。
-                    + `<button class="sw2-chainbtn" data-action="open-chain" data-chain="${escapeHtml(p.id)}" title="${escapeHtml(p.id)}">链</button></span>`).join('')}`
-                    + `${unnamed ? `<div class="sw2-rawid-note">另有 ${unnamed} 条账上没留标题，只能用号认</div>` : ''}</div></details>` : '')
-            + `</div>`;
-    });
-    const volRows = oldVolumes.map((v) => `<div class="sw2-cold-row"><span class="sw2-vol">${escapeHtml(v.id)}</span>`
-        + `<span class="sw2-volinfo">${escapeHtml(v.info)}</span><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(v.id)}">阅卷</span></div>`);
-    // ★★★leg169（用户令「优化其他页的结构问题」）：**补页头**——这一页此前整页没有标题
-    //   （实测 `sw2-sv-head` = 0），而设定/参数/快照/编年都有 ⇒ 八页里就它和设置页光头。
-    //   ★副标题**不含任何数字**：本仓 leg143 那条纪律——文案里的数要跟着键表走，写死必过期
-    //     （"九"那个字已经因为加旋钮红过两次）。
-    return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">大事纪 · 旧卷</div>`
-        + `<div class="sw2-sv-sub">长出的事按纪收在这里；更早的编年原文收进旧卷，要翻再展开。</div></div></div>`
-        + `<div class="sw2-arch-grid">${msCards.join('')}</div>`
-        + `<div class="sw2-cold"><h4>旧卷（早于大事纪的编年原文 · 按需阅卷）</h4>${volRows.join('') || '<div class="sw2-cold-row" style="color:var(--sw2-text-faint)">尚未入卷——编年仍在热账。</div>'}</div>`;
+        + `</div>`;
 }
 
 // ============ 角色与势力页 ============
@@ -1722,7 +1537,7 @@ export function renderEntsToolbar(world, view, config = null) {
     //    因为行内那枚钮**只补没定的栏**，重查不在行内）。⇒ 同一件事拆成两句、并把它挪进下面那条指路句
     //   （说法不变、事实不变，判据两边都过）。
     const asksHintHtml = `<details class="sw2-ents-asks"><summary title="${attrText('这三种标记各是什么意思')}">查书说明</summary>`
-        + `<div class="sw2-ents-asks-body">账上只记查到的与玩出来的东西：<b>有值</b>=书里原话；`
+        + `<div class="sw2-ents-asks-body">账上只记查到的与玩出来的东西：<b>有值</b>=${world.meta?.sourceEdits?.entities?.length ? '当前档案（含用户修订）' : '书里原话'}；`
         + `<b>未加载到</b>=查过书但这轮模型没抽出来（下轮再补，不代表书里没有）；<b>书未明述</b>=书里确实没写。`
         + `每行的<b>查</b>=只补没定的栏（已查到的原话不动）。`
         + `<p class="sw2-ents-batch-note">已定为「书未明述」或查过没结果的栏<b>不再自动重查</b>。</p></div></details>`;
@@ -1853,10 +1668,11 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
             // ★"势力不写实力"（细案拍板）：势力的实力由**麾下成员派生**（见下 crewPowerHtml），
             //   势力自己账上即便有值也不渲染——旧版这条锁在 `test/render.test.js` 里，本笔不许丢。
             e.kind === 'character' && typeof e['实力'] === 'string' && e['实力'].trim()
-                ? `<span class="sw2-visually-hidden">实力：书里明述的原话。</span><span class="sw2-relone-pow" title="${attrText('实力：书里明述的原话（角色字段；势力不写实力）')}">${escapeHtml(e['实力'])}</span>` : '',
+                ? `<span class="sw2-visually-hidden">${(world.meta?.sourceEdits?.entities??[]).some(row=>row.id===e.id)?'实力：当前人物档案，含用户修订':'实力：书里明述的原话。'}</span><span class="sw2-relone-pow" title="${attrText((world.meta?.sourceEdits?.entities??[]).some(row=>row.id===e.id)?'实力：当前人物档案，含用户修订':'实力：书里明述的原话（角色字段；势力不写实力）')}">${escapeHtml(e['实力'])}</span>` : '',
             typeof e['规模'] === 'string' && e['规模'].trim() ? escapeHtml(e['规模']) : '',
             typeof e['性质'] === 'string' && e['性质'].trim() ? escapeHtml(e['性质']) : '',
             typeof e['倾向'] === 'string' && e['倾向'].trim() ? `<span class="sw2-relone-dim">${escapeHtml(e['倾向'])}</span>` : '',
+            ...attrPairsOf(e).filter(([key]) => !['实力','规模','性质','倾向'].includes(key)).map(([key,value]) => `<span class="sw2-relone-dim">${escapeHtml(key)}：${escapeHtml(value)}</span>`),
         ].filter(Boolean).join('<span class="sw2-relone-sep"> · </span>');
         const crew = e.kind === 'faction' ? membersOf(world, e) : null;
         const crewPower = crew
@@ -1871,7 +1687,7 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
             ? `<span class="sw2-relone-sep"> · </span><span class="sw2-relone-dim">麾下实力 ${escapeHtml(crewPower.join('、'))}</span>` : '';
         // 在办的事：**只有真在办才有字**（旧版无在办时印一句"眼下没有在办的盘算。"占主句位，真账 ~600 行都是它）
         const agendaHtml = agenda
-            ? `<span class="sw2-aggoal">${escapeHtml(agenda.goal)}</span><span class="sw2-agstage">${escapeHtml(agenda.stage || '谋划中')} · ${agenda.progress ?? 0}/${agenda.maxSteps ?? 0}</span>${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}`
+            ? `<span class="sw2-aggoal">${escapeHtml(agenda.goal)}</span><span class="sw2-agstage">${agenda.stage ? escapeHtml(agenda.stage) + ' · ' : ''}${agendaProgressLabel(agenda)}</span>${agenda.visibility === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : ''}`
             : '';
         const hot = busyOwners.has(e.id) ? ' sw2-hot' : '';
         // ★★★leg140（用户令「**点击实体就会出现，能看到这个实体的各种属性以及它的事迹**」）：
@@ -1896,7 +1712,7 @@ export function renderEntitiesHtml(world, { config = null, view = {} } = {}) {
             //   （真账 621 实体里 403 行是"无来历记载"——印什么都等于把噪声摊进主线）。
             + `<div class="sw2-cell sw2-relone">${origin}${crewHtml}${crewPowerHtml}</div>`
             + `<div class="sw2-cell sw2-agcell">${agendaHtml}</div>`
-            + `</div>`;
+        + `</div>`;
     });
     // ★Task 3：头部与工具条就位——批量补全钮与查书三态注脚**已从页眉/页底挪进工具条**
     //   （`renderEntsToolbar` 的第三个形参就是这里的 `config`：进度只由它进渲染层）。
@@ -2197,14 +2013,13 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     //   ★两条事实一个字没丢：按钮文案逐字照旧（判据锁着「只重抽设定」/「只抽刻度」），
     //     入口那句「瞄一眼书里的"尺子"（可再采用）」也逐字照旧（`test/adopt-scale-draft.test.js:191` 逐字锁着
     //     ⇒ 它是**裸文本**，不许套 `escapeHtml`/`attrText`，否则引号会变成 `&quot;` 而判据假红）。
-    const settingHeadRows = `<div class="sw2-row2"><div class="sw2-row2-main"><b>对设定不满意</b>`
-        // ★`名册/进度不动` 这六个字**逐字照旧**（`test/scales-concept-table.test.js:275` 锁着它：
-        //   "按钮旁就写明名册/进度不动"——用户要一眼看出按哪个不会把世界重开）。
-        + `<span>只覆盖设定这一块；名册/进度不动</span></div>`
-        + `<button class="sw2-btn" data-action="reextract-setting">只重抽设定</button></div>`
-        + `<div class="sw2-row2"><div class="sw2-row2-main"><b>瞄一眼书里的"尺子"（可再采用）</b>`
-        + `<span>按它本身不改任何设定；看过想用，再按下面草稿栏那枚「采用」</span></div>`
-        + `<button class="sw2-btn" data-action="extract-scales">只抽刻度</button></div>`;
+    const settingMenu = '<div class="sw2-setting-menu-wrap"><details class="sw2-setting-menu" data-setting-menu>'
+        + '<summary class="sw2-btn">设定操作 <span aria-hidden="true">⌄</span></summary><div class="sw2-setting-menu-items">'
+        + '<button type="button" data-source-edit-setting="rules">编辑设定<small>修改已有的世界设定</small></button>'
+        + '<button type="button" data-source-edit-add-setting>添加设定<small>补充自己的世界设定</small></button>'
+        + '<button type="button" data-action="reextract-setting">重新抽取设定<small>重新读取资料，调用模型；名册/进度不动</small></button>'
+        + '<button type="button" data-action="extract-scales">抽取刻度<small>从资料抽取刻度，调用模型</small></button>'
+        + '</div></details></div>';
 
     // leg171: the default view is a short directory. Raw canon stays in native disclosures;
     // search opens only matching paths. Maintenance and diagnostics share one disclosure.
@@ -2216,7 +2031,6 @@ export function renderSettingHtml(world, { config = {} } = {}) {
     return `<div class="sw2-sv-head"><div><div class="sw2-sv-title">世界设定 · ${escapeHtml(world.context?.world || '')}</div>`
         + bookChangedBannerHtml(config.bookCheck, escapeHtml)
         + `</div><span class="sw2-sv-chip ok">已冻结</span></div>`
-        + `<div class="sw2-setting-actions">${settingHeadRows}</div>`
         + (world.context?.__scaleDraft ? renderScaleDraftHtml(world.context.__scaleDraft, world) : '')
         + (cp?.declaredDropped ? `<div class="sw2-setting-warning">注意：顶到体积上限，声明面有 ${cp.declaredDropped} 条未进料</div>` : '')
         + `<details class="sw2-setting-live"><summary>世界现状<span>每轮更新</span></summary><div class="sw2-setting-live-grid"><div class="sw2-setting-tension">`
@@ -2227,6 +2041,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
         + `</div><div class="sw2-setting-env"><div class="sw2-group-h">世界环境</div><div class="sw2-env">${envRows}</div></div></div>`
         + (tideCount ? `<details class="sw2-fold sw2-setting-tides"><summary>近期动向 · ${tideCount} 条</summary><div class="sw2-fold-body">${tideHead}${tideBody}</div></details>` : '')
         + `</details><div class="sw2-setting-reader" data-setting-reader="${escapeHtml((world.context?.world || '') + ':' + (frozen.fingerprint || ''))}">`
+        + settingMenu
         + `<div class="sw2-setting-searchbar"><label class="sw2-setting-search"><span>检索设定</span><input class="sw2-input" type="search" data-setting-search aria-label="检索设定" placeholder="查找表名、档位或正文" autocomplete="off"><button class="sw2-btn" type="button" data-setting-clear aria-label="清空检索" hidden>清空</button></label><span class="sw2-setting-results" data-setting-results role="status" aria-live="polite"></span></div>`
         + section('scales', '刻度', `${scaleCards.length} 张表`, scaleBody)
         + section('rules', '法则', `${ruleTotal} 条`, ruleCard)
@@ -2234,7 +2049,7 @@ export function renderSettingHtml(world, { config = {} } = {}) {
         + section('power', '力量体系', canon.techOrMagic ? '原文' : '暂无', `<p class="sw2-sv-para" data-setting-entry>${escapeHtml(canon.techOrMagic || '（无）')}</p>`)
         + section('history', '史略', `${(canon.historyNotes || []).length} 条`, histRows || '<p class="sw2-hint">暂无史略</p>')
         + `</div><details class="sw2-fold sw2-setting-maintenance"><summary>来源与维护</summary><div class="sw2-fold-body">`
-        + `<div class="sw2-hint">书指纹 ${escapeHtml(frozen.fingerprint)} · 抽取于 ${escapeHtml(frozen.extractedAt)} · 全部条目取自原文，未增写一句（只提取不创作）</div>`
+        + `<div class="sw2-hint">书指纹 ${escapeHtml(frozen.fingerprint)} · 抽取于 ${escapeHtml(frozen.extractedAt)} · ${world.meta?.sourceEdits?.settingKeys?.length ? '含用户修订；原抽象资料与历史版本保留' : '全部条目取自原文，未增写一句（只提取不创作）'}</div>`
         + (compileLead ? `<div class="sw2-setting-audit"><h4>编译完整性</h4><div class="sw2-hint">${escapeHtml(compileLead)}</div><div class="sw2-hint">${escapeHtml(compileDetail)}</div>`
             + (cp?.missedTitles?.length ? `<div class="sw2-hint">未编译的设定类条目（前 ${cp.missedTitles.length} 个）：${escapeHtml(cp.missedTitles.join('、'))}</div>` : '') + '</div>' : '')
         + `<div class="sw2-setting-tools"><div class="sw2-row2"><div class="sw2-row2-main"><b>回到基线</b><span>只清张力强度/环境量/浪尖——设定与极性方向不动，不触发抽取调用。</span></div><button class="sw2-btn" data-action="clear-evolution">清除演化层（回基线）</button></div></div></div></details>`;
@@ -2310,158 +2125,72 @@ export function renderSettingsHtml(world, { config = {}, oldVolumes = [] } = {})
         //     按本仓"只记要用的"纪律，不为一个无人读的字段写迁移代码。
         //   · 判据（`test/retired-controls.test.js`）：登记表里已加「你的开档描述」⇒ 产物面与源码串面
         //     双面锁死，不许回潮（含 `web/index.js` 的 `sw2_player_desc` 绑定与 `SETTINGS_INPUTS` 那一项）。
-    const head = `<div class="sw2-sv-head"><div class="sw2-sv-title">插件设置</div></div>`;
-    const modelCard = `<div class="sw2-set-card sw2-settings-model"><h4>模型通道</h4>`
-        // ★★★leg169：这六个框原来**一条直线排下来、一个小标题都没有**（结构与参数页那一卡同病）
-        //   ⇒ 分两组、各给一行 `.sw2-group-h`（现成的类，形状与参数页那一卡同一套）。
-        + `<div class="sw2-group-h">连接</div>`
-        + `<div class="sw2-field sw2-field-inline"><label>服务地址</label><input class="sw2-input" id="sw2_base" value="${escapeHtml(cfg.baseUrl || '')}"></div>`
-        + `<div class="sw2-field sw2-field-inline"><label>密钥</label><input class="sw2-input sw2-key-mask" id="sw2_key" value="${escapeHtml(cfg.apiKey ? '••••••••••••••••••••' : '')}"></div>`
-        + `<div class="sw2-hint">本机读取 · 不落库 · 不打印</div>`
-        + `<div class="sw2-field sw2-field-inline"><label>世界模型</label><div class="sw2-ctl-row">`
-        + `<input class="sw2-input" id="sw2_model" value="${escapeHtml(cfg.model || '')}">`
-        + `<button class="sw2-btn" data-action="list-models">获取模型列表</button>`
-        + `<button class="sw2-btn" data-action="probe-model" title="连通成功只确认接口有响应；没有验证正式 JSON 参数">测试连通</button>`
-        + `</div></div>`
-        + `<div id="sw2_models">${renderModelListHtml(cfg)}</div>`
-        + `<div id="sw2_probe">${renderModelProbeHtml(cfg)}</div>` 
-        // ★★★leg161 立的那张「记忆通道（向量）」卡 ＋ 它的留档注释，**leg169 整段挪到**
-        //   「一次调用给多少」那三个框**后面**（见本函数下面 leg169 那一段的挪动留档）。
-        //   挪的原因一句话：它原来插在「模型通道」卡的字段**中间**，并且提前把那两个 `</div>` 用掉了
-        //   ⇒ 量出来的后果是"卡里套卡 ＋ 一条灰字漂在卡外 ＋ 末尾那张卡被挤出网格"（三处都修了）。
-        // ★★★leg87（用户令「这个也有问题，改也改不了是死的不会根据模型变化」）：**这一格从"读数"改成"控件"**。
-        //   旧形态的两个病（都在源码里）：
-        //   ① `readonly` ⇒ 玩家**根本改不了**（leg15 起它就写着"只读展示态"，一路挂到 leg86 才被人眼抓出来）；
-        //   ② 它印的是**编译期常量** `PROPOSED_CALL_LIMITS` ⇒ 换模型、换网关都**一动不动**
-        //      —— 而这恰恰是本仓付出过代价的那个坑：leg62 的截断真因是"推理与正文**共享**这一份预算"
-        //      （`transport-http.js:30-40`：同样输入 @16384 出 `finish_reason=length`，@32768 才完整）。
-        //   ⇒ 这两个数改为**可填数值输入**，写通道 = `extension_settings.story_world_v2`（与地址/密钥/模型同一条路，
-        //     `web/index.js` 的 `data-settings` 委托），**引擎真跑读的就是它们**（`resolveBrowserTransport` 透传到
-        //     `createHttpTransport` 的 `timeoutMs`/`maxTokens`）；出厂缺省仍取自 `PROPOSED_CALL_LIMITS`（一个真源）。
-        //   ★如实写在界面上（不许再出现一条"看起来能改、其实固定"的控件）：这两个数**因模型而异**，
-        //     插件无法替玩家探测某个网关/模型的上限 ⇒ 面板不猜、也不印假话。
-        // ★★★leg169：第二个分组标题——上面那三个框是"一次调用给多少"，与"连哪个网关"不是一类。
-        + `<div class="sw2-group-h">调用限制<em>手动设置</em></div>`
-        + `<div class="sw2-field sw2-field-inline"><label>单轮超时（秒）</label>`
-        + `<input class="sw2-input" id="sw2_call_timeout" data-settings="callTimeoutSec" type="number" min="5" max="600" step="5" value="${escapeHtml(String(cfg.callTimeoutSec ?? Math.round(PROPOSED_CALL_LIMITS.timeoutMs / 1000)))}" title="${attrText('模型一次回复的等待上限；自己填，插件不替你探测')}"></div>`
-        + `<div class="sw2-field sw2-field-inline"><label>单轮输出上限（token）</label>`
-        + `<input class="sw2-input" id="sw2_call_tokens" data-settings="callMaxTokens" type="number" min="1024" max="131072" step="1024" value="${escapeHtml(String(cfg.callMaxTokens ?? PROPOSED_CALL_LIMITS.maxTokens))}" title="${attrText('模型一次回复的长度上限；自己填，插件不替你探测')}"></div>`
-        // ★★★leg169：**这条说明原来排错了地方**——它讲的是上面那个「单轮输出上限」，却印在
-        //   「同时问几块」的说明**后面**（框在前、说明隔了两段才到）⇒ 现在紧跟自己的框。
-        //   ★外面只留结论（21 字），原 193 字整段进 `<details>`：**事实一条不丢**（因模型而异 /
-        //     插件不替你探测 / 填大了会报错 / 抽取走自己那份 / 世界尺度那几个框填再大也只写这么多）。
-        + foldHint('<b>填小了正文会被截断</b>。',
-            '<b>推理与正文共享这一份</b>：想得多的模型会先吃掉它'
-            + '（同一份输入，上限给小了就截断、给够了才写得完整）。'
-            + '所以这个数<b>因模型而异</b>——插件不替你探测你的模型/网关到底给到多少 ⇒ <b>由你填</b>；'
-            + '填大了网关会报错。'
-            + '<br>抽取（开局读整本书）走它自己的那份：超时 5 分钟、输出 32768（不受这里影响）。'
-            + '<b>世界尺度</b>那几个框填得再大，一轮里也只能写这么多。',
-            { summary: '这个数为什么由你填' })
-        // ★★★leg144（用户真机反馈原话）：「**每个人使用的网关不同支持的并发度上限不同**」
-        //   ⇒ **开局读整本书时同时发几个请求**做成可填的框，就住这一格（**模型通道**那张卡）。
-        //   ★为什么住这里（而不是参数页）：并发度是**网关的属性**，不是世界的属性——
-        //     参数页那些调的全是"这个世界"的东西（这本书的名号表、这本账的往事）。
-        //   ★★**不设上限**（他当场裁的「数自己填不设上限」）⇒ 这个 input **故意不写 `max`**；
-        //     下限 1 写在 `min` 上，而**真正的拦截**在 `SETTINGS_NUM_RANGE`（唯一一处，见 `web/model-channel.js`）。
-        + `<div class="sw2-field sw2-field-inline"><label>同时问几块</label>`
-        + `<input class="sw2-input" id="sw2_extract_conc" data-settings="extractConcurrency" type="number" min="1" step="1" value="${escapeHtml(String(cfg.extractConcurrency ?? EXTRACT_CONCURRENCY))}" title="${attrText('开局读整本书时，同时发几个请求；你的网关一限流（报 429）就把它调小')}"></div>`
-        // ★★★leg169：同一个治法——结论留在外面，补充说明折进 `<details>`。
-        + foldHint('<b>并发数填大了网关会报 429</b>。',
-            '<b>开局读整本书</b>时同时发出去的请求数——每条网关能同时吃几个请求都不一样。'
-            + '遇到 <b>429（请求太频繁）</b>时，本次抽取会<b>停止并保留原世界</b>；把并发调小后再重试。'
-            + '内容错误等其他失败仍可能让余下请求退回一个一个来。'
-            + '填 1 就是一块一块排队（最稳，但最慢）。'
-            + '<br>一本书抽过一次之后，只有<b>分块字符数相同</b>才会复用结果；改了就会重新抽。'
-            + '<br>拿不准就填 <b>2</b>；要是抽出来的名号与设定明显缺，就把它调小。'
-            + '名册、设定、起根三处共用这一个数。',
-            { summary: '并发设大了会怎样' })
-        + `<div class="sw2-field sw2-field-inline"><label for="sw2_extract_chunk_chars">抽取每块字符数</label>`
-        + `<input class="sw2-input" id="sw2_extract_chunk_chars" data-settings="extractChunkChars" type="number" min="1" max="${Number.MAX_SAFE_INTEGER}" step="1" value="${escapeHtml(String(cfg.extractChunkChars ?? SETTING_CHUNK_CHAR))}" title="${attrText('按字符分块，不是 token；完整行不会截断，超长行会单独成块并提示。更小的块不保证总耗时更短。只抽刻度不使用本项')}"></div>`
-        + foldHint('按<b>字符数</b>分块，不是 token。',
-            '每块最多按这个字符数切分；分块时保留完整原文行，超长行也不会截断，而会单独成块并提示。'
-            + '块设得更小不保证总耗时更短。只抽刻度时不使用本项。',
-            { summary: '这格控制什么' })
-        // ★★★leg169：**「模型通道」那张卡到这里才关**（就是这一个 `</div>`）。
-        //   原来它被下面那句长度上限的说明顺手关掉了（一处 `</div>` 用早了）⇒ 量出来的三处结构病：
-        //   「记忆通道」卡被套进「模型通道」卡里、一句灰字漂在卡外、末尾「旧卷与存储」卡被挤出网格。
-        + `</div>`
-        // ★★★leg161（用户令「**那就让聊天侧也接上向量检索呗**」）：**「记忆通道（向量）」那张卡接回来**。
-        //   ★它答的是"**按意思找回旧事**"那一路用哪个嵌入模型——与上面「模型通道」是**两条独立的通道**
-        //     （一个写正文/演算，一个只把文本变成向量）。★leg152 立、leg156 撤、leg161 接回。
-        //   ★★**只三格**（地址/密钥/模型号）——★**维度与"一批几行"故意不画**：那是"从厂商问得到的"，
-        //     用户令「**至于多少维度还有向量化多少行直接可以从厂商问到不用写到参数里懂吗？**」
-        //     ⇒ 运行时读回（点了「测试连通」它当场量出维度）。
-        //   ★★★leg172（用户令「**现在需要给记忆通道也添加一个获取模型列表**，还有把这个
-        //     **量一批几行的按钮去掉吧**，我用过这么多记忆插件没见过要用户来量一批几行的」）：
-        //     **两颗按钮改成「获取模型列表」＋「测试连通」**（与世界模型那张卡同一套交互）——
-        //     清单里点一项**只写 `embedModel`**、手动输入照旧；「量一批几行」那枚按钮连同它那条动作
-        //     （`measure-embed-rows`）**整条撤掉**：一次发多少行**由通道自己定**，装不下时
-        //     `src/embed-client.js` 会**自动减半重试**并记住学到的行数（不需要玩家来量）。
-        //   ★两枚按钮走动作总线（`list-embed-models` / `probe-embed`）——设置页那条
-        //     "画了按钮就必须有人接"的判据锁着这一页。
-        //   ★★★leg169：**位置挪到这三格之后**（见上面 leg169 那一段的挪动留档）——它现在是**网格里的
-        //     第三张卡**，与「模型通道」平级（不再是卡里套卡）；三格与两句说明一个字没改，只多了收窄与折叠。
-        ;
-    const embedCard = `<div class="sw2-set-card sw2-settings-embed"><h4>记忆通道（向量）</h4>`
-        + `<label class="sw2-vector-switch"><input type="checkbox" id="sw2_embed_enabled"${cfg.embedEnabled === true ? ' checked' : ''}>启用向量通道</label>`
-        + `<div class="sw2-field sw2-field-inline"><label>服务地址</label><input class="sw2-input" id="sw2_emb_base" value="${escapeHtml(cfg.embedBaseUrl || '')}"></div>`
-        + `<div class="sw2-field sw2-field-inline"><label>密钥</label><input class="sw2-input sw2-key-mask" id="sw2_emb_key" value="${escapeHtml(cfg.embedApiKey ? '••••••••••••••••••••' : '')}"></div>`
-        + `<div class="sw2-hint">本机读取 · 不落库 · 不打印</div>`
-        + `<div class="sw2-field sw2-field-inline"><label>向量模型</label><div class="sw2-ctl-row">`
-        + `<input class="sw2-input" id="sw2_emb_model" value="${escapeHtml(cfg.embedModel || '')}">`
-        + `<button class="sw2-btn" data-action="list-embed-models">获取模型列表</button>`
-        + `<button class="sw2-btn" data-action="probe-embed">测试连通</button>`
-        + `</div></div>`
-        + `<div id="sw2_emb_models">${renderEmbedModelListHtml(cfg)}</div>`
-        + `<div id="sw2_emb_probe">${renderEmbedProbeHtml(cfg)}</div>`
-        + `<div class="sw2-hint" id="sw2_embed_progress" role="status">${escapeHtml(String(cfg.embedEnabled === true ? cfg.embedLine || '等待补齐历史' : '关键词检索'))}</div>`
-        // ★★★leg169：结论（27 字）留在外面，原 175 字整段折进 `<details>`——三条事实一条不丢
-        //   （字面对不上但意思相关的能找回来 · 只影响递给模型看的往事 · 维度不用填）。
-        //   ★★★leg172：里面那句"点「量一批几行」当场试出上限"**必须改**——那枚按钮已经撤了，
-        //     留着就是一条"玩家读了会去找、却找不到"的指路（本仓 leg83/leg84 治过的同款病）。
-        + `</div>`;
-        // ★★★leg143（用户令「**设置里的那些闸其实也可以归到参数页**」）：**这一卡整段搬去参数页**——
-        //   它调的全是"这个世界"的东西（这本书的名号表、这本账的往事），与设置页其余四张卡
-        //   （书的来源 / 模型通道 / 操作 / 旧卷存储——全是"通道与存储"，与哪个世界无关）不是一类。
-        //   ⇒ 新家：`renderParamsHtml` 的 `injectCard`（形状、写通道、读数行**一个字都没改**）。
-        //   ★原长文（三件事：注入的是什么 / 关掉即恢复原样 / 注入了多少字）随卡一起搬走了，
-        //     **不是删掉**——去新家那一处看；判据也**改指新家、两头都咬**（老地方不许留残骸、
-        //     新家必须真有），见 `test/render.test.js` 的 leg143 那一族与 `test/param-hub.test.js` ⑪e。
-        //   ★★留档（免得下一任照旧注释去设置页找它）：上面那段 leg89 的注释讲的是**这一卡的形状**
-        //     （`.sw2-inject-box` 里那几行各自是一张卡、不许卡里套卡），它随卡一起有效，只是换了一页。
-        // ★★★leg162（用户令「**上移就是独立于设置页了，不是只有在设置页显示，而是整个窗口的上方**」）：
-        //   **「操作」那张卡整张撤掉**——里面只有两枚按钮（✨ 开始新世界 / ▶ 推进一轮）＋ 96 字解释，
-        //   而这两枚是**世界级动作**、不属于任何一页 ⇒ 已升进**窗口外壳**的动作条
-        //   （`settings.html` 的 `.sw2-actionbar`，八页常驻；细案 `docs/spec-leg162-window-actionbar.md`）。
-        //   ★这里**不许再画第二枚**（重复入口正是 leg52 撤参数页那一枚的理由）——
-        //     判据 `render.test.js` 与 `param-hub.test.js` 两头咬着"外壳有一份、渲染层一份都没有"。
-        //   ★那 96 字解释**不搬家、直接删**：三句全是"为什么这么设计"（自动推进的机理 / 设定不用手动重抽 /
-        //     失败可重试）。留下的那一条**事实**（世界是否自动推进）改由外壳动作条右端那格**读总闸真值**印出来
-        //     ——那是状态、不是解释，而且一把尺子（不许写死一句话）。
-    const storageCard = `<div class="sw2-set-card sw2-settings-storage"><h4>旧卷与存储</h4>`
-        + `<div class="sw2-cold-mgmt"><div class="sw2-row"><span>编年体积 · 当前</span><b>${(world.chronicle || []).length ? `${(JSON.stringify(world.chronicle).length / 1024).toFixed(1)}KB` : '0KB'}</b><em>每 100 轮约 21.7KB（实测）</em></div>`
-        // ★★★leg55（结掉 leg40b 体检登记、坐实 leg54 §6.4 那条纪律）：这一行原本是
-        //   `${cfg.limitsTicks ?? '500'} 轮 或 ${cfg.limitsBytesMB ?? '5'}MB`——而 `renderCfg()`
-        //   **从不注入这两个键** ⇒ 生产上永远是 `undefined`、兜底字面量恒生效，
-        //   "从 config 现读"是**死路**：它印的其实是渲染层自己抄的一份数（值与真源一致，纯属巧合维持）。
-        //   ⇒ 两件事一起做：①`web/index.js` 的 `renderCfg()` 接上 `PROPOSED_LIMITS`（真源）；
-        //     ②判据锁死"接线层真的注入了这两键"（见 `test/render.test.js` leg55 那条）。
-        //   ★为什么这正是 leg54 那个 4096 的同一种病：**面板上的数字悄悄脱离真源**，字面量看着对，
-        //     真源一改它就变成谎话（4096 那行就是这么过期了好几棒）。
-        + `<div class="sw2-row"><span>自动入卷阈值</span><b class="sw2-thr">${fmtLimitNum(cfg.limitsTicks, 500)} 轮 或 ${fmtLimitNum(cfg.limitsBytesMB, 5)}MB</b><em>提案态 · 随本阶段报批</em></div>`
-        + `<div class="sw2-row"><span>入卷去处</span><b>插件本地 · 可导出可导入</b><em>割断的是旧账，不是来龙去脉</em></div>`
-        + `${renderVolumeListHtml(oldVolumes)}<div class="sw2-actions" style="margin-top:8px">`
-        + `<button class="sw2-btn" data-action="export-world">导出整聊天</button>`
-        + `<button class="sw2-btn" data-action="import-world">导入恢复</button></div></div></div>`;
-    const pane = (html) => `<div class="sw2-settings">${html}</div>`;
-    return head + renderSubtabs('settings', [
-        { key: 'model', label: '模型通道', html: pane(modelCard) },
-        { key: 'memory', label: '记忆通道', html: pane(embedCard) },
-        { key: 'storage', label: '存储', html: pane(storageCard) },
-        { key: 'sources', label: '抽象来源', html: pane(renderAbstractSelection({ selection: cfg.abstractSelection, loading: true })) },
-        { key: 'debug', label: '调试', html: pane(renderDebugConsole({ summary: cfg.debugSummary, records: cfg.debugRecords, details: cfg.debugDetails === true })) },
-    ]);
+    const head = '<div class="sw2-sv-head"><div><div class="sw2-sv-title">插件设置</div><div class="sw2-sv-sub">管理模型通道、提示预设、资料来源与存档；提示预设需点击保存修改。</div></div></div>';
+    const field = (label,id,value,{password=false,help=''}={}) => '<div class="sw2-field"><label for="'+id+'">'+escapeHtml(label)+'</label><input class="sw2-input'+(password?' sw2-key-mask':'')+'" id="'+id+'" type="'+(password?'password':'text')+'" autocomplete="off" value="'+escapeHtml(value||'')+'">'+(help?'<div class="sw2-hint">'+help+'</div>':'')+'</div>';
+    // ★2026-10-16（用户令「把api协议的活做了」＋选定「接口类型下拉」）：设置页**第一次有下拉**。
+    //   控件样式**不新增一个类**：`<select>` 用参数页那把尺（`.sw2-param-select`），
+    //   文本域用本页早就有样式的 `.sw2-field textarea`（样式表一个字不动 ⇒ `CSS_VERSION` 不升）。
+    const picker = (label,id,value,options,help='') => '<div class="sw2-field"><label for="'+id+'">'+escapeHtml(label)+'</label>'
+        +'<select class="sw2-param-select" id="'+id+'">'
+        +options.map((o)=>'<option value="'+escapeHtml(o.value)+'"'+(String(o.value)===String(value??'')?' selected':'')+'>'+escapeHtml(o.label)+'</option>').join('')
+        +'</select>'+(help?'<div class="sw2-hint">'+help+'</div>':'')+'</div>';
+    // 协议清单：与 `src/transport-config.js` 的 `PROTOCOLS` **同一套名字**（那边是唯一真源，这里只是画出来）。
+    // ★★★2026-10-16 用户当场两条意见，逐条照办：
+    //   ①「**你就不能用市面上常见的名字吗**」——原来的「对话补全／Anthropic 消息／OpenAI 响应式」是**我自己译的**，
+    //     市面上（各家网关文档、各家 SDK）写的就是 **Chat Completions / Anthropic Messages / OpenAI Responses**
+    //     ⇒ 名字改成**市面上那套**，中文只留最短的括注（不再自造译名当主名）。
+    //   ②「**不能把协议放在最上面吗？偏要放在接口下方干嘛**」——**接口类型挪到「服务地址」上面**：
+    //     玩家是先决定"用哪种形状"，才决定"地址怎么填"（同一个网关，形状不同地址也不同）⇒ 顺序按决策顺序来。
+    const protocolOptions = [
+        { value: 'chat', label: 'Chat Completions（对话补全 · 缺省）' },
+        { value: 'anthropic', label: 'Anthropic Messages（Claude）' },
+        { value: 'responses', label: 'OpenAI Responses' },
+    ];
+    // ★★2026-10-16：**转发与非对话补全同时选** ⇒ 必须**当场说一句人话**，不许静默换协议。
+    //   依据：宿主那条通道按 `/chat/completions` 拼地址，拼不出另外两种形状（见 `src/host-relay.js` 头注）。
+    //   这一句与 `resolveBrowserTransport` 回的 `notice` 是**同一件事**——那边管行为，这边管让玩家看见。
+    const relayConflict = cfg.relayThroughHost === true && String(cfg.protocol ?? 'chat') !== 'chat';
+    const modelCard = '<div class="sw2-set-card sw2-settings-model"><h4>模型通道</h4><p class="sw2-hint">世界推进与资料抽取使用此通道。</p>'
+        +picker('接口类型','sw2_protocol',cfg.protocol??'chat',protocolOptions,'按网关文档里写的形状选；它决定下面那个地址该怎么填。')
+        +field('服务地址','sw2_base',cfg.baseUrl,{help:'填写兼容接口的服务地址。'})
+        +field('密钥','sw2_key',cfg.apiKey?'••••••••••••••••••••':'',{password:true,help:'本机读取 · 不落库 · 不打印'})
+        +field('世界模型','sw2_model',cfg.model)
+        // ★★2026-10-16 用户第四条界面令：「**如果自定义请求头为空不要显示那个 opencode 的请求头**」。
+        //   病：原来这个框挂了 `placeholder="x-opencode-session: sw2-1"` ⇒ **空的时候框里也有一行灰字**，
+        //   看着像已经填好了（玩家会以为插件替他配了 opencode go）。**占位一律撤掉**：空着就是空着。
+        //   格式怎么说清？下面那行说明已经写了「每行一条「名称: 值」」——不靠灰字占位教格式。
+        +'<div class="sw2-field"><label for="sw2_headers">自定义请求头</label><textarea id="sw2_headers" data-settings-text="extraHeaders" rows="2" spellcheck="false">'+escapeHtml(cfg.extraHeaders||'')+'</textarea><div class="sw2-hint">每行一条「名称: 值」；只用于这条通道，不写进日志。</div></div>'
+        +'<label class="sw2-vector-switch"><input type="checkbox" id="sw2_relay" data-settings-bool="relayThroughHost"'+(cfg.relayThroughHost===true?' checked':'')+'>走酒馆后端转发</label><div class="sw2-hint">防跨域</div>'
+        // ★★2026-10-16 实拍审图改：原来静态那句里已经带了"转发只走对话补全"，与这一句**撞车**（两行说同一件事）
+        //   ⇒ 把那句限制**只放在真会撞上的时候说**（下面这一句），静态那句只讲"什么时候用"。
+        +(relayConflict?'<div class="sw2-hint" id="sw2_relay_conflict">转发只走对话补全——现在选的「接口类型」在转发时不会生效。</div>':'')
+        +'<div class="sw2-actions"><button class="sw2-btn" data-action="list-models">获取模型列表</button><button class="sw2-btn" data-action="probe-model" title="连通成功只确认接口有响应；没有验证 JSON 参数">测试连通</button></div>'
+        +'<div id="sw2_models">'+renderModelListHtml(cfg)+'</div><div id="sw2_probe">'+renderModelProbeHtml(cfg)+'</div></div>'
+        +'<div class="sw2-set-card"><h4>世界推进调用</h4><p class="sw2-hint">抽取容量在参数页「资料抽取」中单独设置。</p>'
+        +'<div class="sw2-field"><label for="sw2_call_timeout">单轮超时（秒）</label><input class="sw2-input" id="sw2_call_timeout" data-settings="callTimeoutSec" type="number" min="5" step="5" value="'+escapeHtml(String(cfg.callTimeoutSec??Math.round(PROPOSED_CALL_LIMITS.timeoutMs/1000)))+'"></div>'
+        +'<div class="sw2-field"><label for="sw2_call_tokens">单轮输出上限（token）</label><input class="sw2-input" id="sw2_call_tokens" data-settings="callMaxTokens" type="number" min="1024" step="1024" value="'+escapeHtml(String(cfg.callMaxTokens??PROPOSED_CALL_LIMITS.maxTokens))+'"><div class="sw2-hint">推理与正文共享这一份额度，填小了正文会被截断；模型未声明容量时由你填写。</div></div></div>';
+    const embedCard = '<div class="sw2-set-card sw2-settings-embed"><h4>记忆通道（向量）</h4><p class="sw2-hint">用于按语义找回相关记录；关闭时仍可全文检索。</p>'
+        +'<label class="sw2-vector-switch"><input type="checkbox" id="sw2_embed_enabled"'+(cfg.embedEnabled===true?' checked':'')+'>启用向量通道</label>'
+        +field('服务地址','sw2_emb_base',cfg.embedBaseUrl)
+        +field('密钥','sw2_emb_key',cfg.embedApiKey?'••••••••••••••••••••':'',{password:true,help:'本机读取 · 不落库 · 不打印'})
+        +field('向量模型','sw2_emb_model',cfg.embedModel)
+        +'<div class="sw2-actions"><button class="sw2-btn" data-action="list-embed-models">获取模型列表</button><button class="sw2-btn" data-action="probe-embed">测试连通</button></div>'
+        +'<div id="sw2_emb_models">'+renderEmbedModelListHtml(cfg)+'</div><div id="sw2_emb_probe">'+renderEmbedProbeHtml(cfg)+'</div>'
+        +(cfg.worldMode==='browser'?'<div class="sw2-hint">'+(cfg.embedEnabled===true?'向量通道已开启；检索时按版本准备索引，复用已缓存的向量。':'全文检索；索引按版本准备。')+'</div>':'<div class="sw2-hint" id="sw2_embed_progress" role="status">'+escapeHtml(String(cfg.embedEnabled===true?cfg.embedLine||'等待补齐历史':'关键词检索'))+'</div>')+'</div>';
+    // 旧账口径（用户2026-10-16）：没搬过的聊天**照旧读得出来、继续能看**，但要反复提醒走“导出旧档 → 导入恢复”；
+    // 搬过的聊天这条提示不出现（那时旧档彻底隐身）。措辞照玩家话讲，不许把行话摆到玩家眼前。
+    const legacyHint = cfg.worldMode==='browser' ? '' : '<p class="sw2-hint">这个聊天还在旧存档上：插件此后只把进度写进浏览器里的世界。请用「导出旧档（连历史）」把这份旧档连恢复点一起导出，再用「导入恢复」搬进来继续玩。</p>';
+    const storageCard = '<div class="sw2-set-card sw2-settings-storage"><h4>存档与备份</h4><p class="sw2-hint">导出当前存档和全部快照，或选择存档导入恢复。</p>'+legacyHint+'<div class="sw2-actions"><button class="sw2-btn sw2-primary" data-action="export-world">'+(cfg.worldMode==='browser'?'导出存档（含快照）':'导出旧档（连历史）')+'</button><button class="sw2-btn" data-action="import-world">导入恢复</button></div></div>';
+    const pane = html => '<div class="sw2-settings">'+html+'</div>';
+    return '<div class="sw2-config-page sw2-config-settings">'+head+renderSubtabs('settings', [
+        { key:'model',label:'模型通道',html:pane(modelCard) },
+        { key:'presets',label:'提示预设',html:renderPromptPresets(cfg.promptPresetState ?? promptPresetStateFromSettings(cfg)) },
+        { key:'memory',label:'记忆通道',html:pane(embedCard) },
+        { key:'sources',label:'抽象来源',html:pane('<div class="sw2-set-card"><h4>抽取来源</h4><p class="sw2-hint">选择要读取的角色卡与世界书条目，勾选结果用于下一次抽取。</p>'+renderAbstractSelection({selection:cfg.abstractSelection,loading:true})+'</div>') },
+        { key:'storage',label:'存储',html:pane(storageCard) },
+        { key:'debug',label:'调试',html:pane(renderDebugConsole({summary:cfg.debugSummary,records:cfg.debugRecords,details:cfg.debugDetails===true})) },
+    ])+'</div>';
+
 }
 
 /**
@@ -2538,14 +2267,6 @@ export function renderEmbedProbeHtml(cfg = {}) {
     return modelProbeHtmlOf(cfg?.embedCatalog, cfg?.embedProbe);
 }
 
-// K35：旧卷清单（设置页/旧卷页共用行渲染；阅卷=还原前置段回编年视图）
-export function renderVolumeListHtml(oldVolumes = []) {
-    if (!oldVolumes.length) return `<div class="sw2-row"><span>入卷清单</span><b>尚未入卷——编年仍在热账</b><em></em></div>`;
-    const rows = oldVolumes.map((v) => `<div class="sw2-row"><span class="sw2-vol">${escapeHtml(v.id)}</span>`
-        + `<b>${escapeHtml(v.info)}</b><em><span class="sw2-volact" data-action="read-volume" data-vol="${escapeHtml(v.id)}">阅卷</span></em></div>`).join('');
-    return `<div class="sw2-row" style="display:block"><span>入卷清单</span>${rows}</div>`;
-}
-
 // K35：阅卷还原视图——卷段行（storage.volumeToChronicleRows 产物）→ 编年行 HTML（A-3：引擎 id 只进悬停）
 // ★★★leg104（A4）：**加一层头**（卷号 · 行数 · 只读 ＋ 一枚「收起」）——它现在住**浮层**
 //   （`web/volume-popup.js`）：旧实现把产物插进编年页，而那一页每轮整块重绘
@@ -2593,13 +2314,13 @@ const cvVerdict = (a) => {
         ? '<span class="sw2-cv-verdict stop">已终止</span>'
         : '<span class="sw2-cv-verdict done">已了结</span>';
 };
-const cvVb = (v) => (v === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : '<span class="sw2-visible v-known">明</span>');
+const cvVb = (v) => (v === 'concealed' ? '<span class="sw2-visible v-hidden">暗</span>' : v === 'known' ? '<span class="sw2-visible v-known">明</span>' : '');
 const cvDots = (p, m) => {
     const s = [];
     for (let i = 0; i < m; i += 1) s.push(`<i class="${i < p ? 'on' : ''}"></i>`);
     return `<span class="sw2-cv-dots">${s.join('')}</span>`;
 };
-const cvChip = (x) => `<span class="sw2-cv-chip${x.visibility === 'concealed' ? ' dark' : ''}">${escapeHtml(x.goal)}${x.visibility === 'concealed' ? '（暗）' : ''} · ${x.closed ? '已了结' : '在办'} ${x.progress ?? 0}/${x.maxSteps ?? 0}</span>`;
+const cvChip = (x) => `<span class="sw2-cv-chip${x.visibility === 'concealed' ? ' dark' : ''}">${escapeHtml(x.goal)}${x.visibility === 'concealed' ? '（暗）' : ''} · ${x.closed ? '已了结' : '在办'} ${agendaProgressLabel(x)}</span>`;
 const cvSrcPhrase = (n) => {
     // ★★★2026-10-08 体检修（原病：模型写的标题/盘算原样拼进 HTML ⇒ 破坏面板 DOM、甚至执行脚本）：
     //   `n.title` / `n.goal` 是**模型自由文本**（`chain.js` 从账上原样搬过来），必须过 `escapeHtml`。
@@ -2610,7 +2331,7 @@ const cvSrcPhrase = (n) => {
     if (!n) return '由世界处境而生';
     if (n.kind === 'event') return `沿「${escapeHtml(n.title)}」而来`;
     if (n.kind === 'agenda') return `由盘算「${escapeHtml(n.goal)}」而生`;
-    if (n.kind === 'milestone') return '源头已入大事纪';
+    if (n.kind === 'milestone') return '源头已归档';
     if (n.kind === 'gap') return '沿「旧事」而来（已无从检索）';
     if (n.kind === 'terminal') return '纪之源头已不可查';
     return '由世界处境而生';
@@ -2626,7 +2347,7 @@ const cvSeedPhrase = (n) => (n?.seedFrom?.quote
 //   事件那一行的状态小字。归档的事件**不许谎报"未了结"**——归档的前提是整链结清（它一定平息了），
 //   而"归大事纪"这个事实本身是玩家最该看到的（它解释"为什么这件事不在最近的账上"）。
 function cvEventState(n) {
-    if (n.archived) return `事件 · ${fmtTick(n.born)} · 已归大事纪`;
+    if (n.archived) return `事件 · ${fmtTick(n.born)} · 已归档`;
     return `事件 · ${fmtTick(n.born)} · ${n.closed ? '已了结' : '未了结'}`;
 }
 
@@ -2657,8 +2378,8 @@ function cvUpBeads(world, nodes, volumes) {
         }
         if (n.kind === 'agenda') {
             return `<div class="sw2-cv-bead ag${n.visibility === 'concealed' ? ' dark' : ''}"><span class="sw2-cv-bk">谋</span><div class="sw2-cv-bt">`
-                + `<div class="sw2-cv-nm">${escapeHtml(n.goal)}${cvVb(n.visibility)}${cvVerdict(n)}<span class="sw2-cv-src">谋划 · ${escapeHtml(entityLabel(world, n.owner))} · 阶段 ${escapeHtml(n.stage)}</span></div>`
-                + `<div class="sw2-cv-meta">${cvDots(n.progress, n.maxSteps)} ${n.progress}/${n.maxSteps}</div>`
+                + `<div class="sw2-cv-nm">${escapeHtml(n.goal)}${cvVb(n.visibility)}${cvVerdict(n)}<span class="sw2-cv-src">谋划 · ${escapeHtml(entityLabel(world, n.owner))}${n.stage ? ' · 阶段 ' + escapeHtml(n.stage) : ''}</span></div>`
+                + `<div class="sw2-cv-meta">${cvDots(n.progress, n.maxSteps)} ${agendaProgressLabel(n)}</div>`
                 + (n.doneTail ? `<div class="sw2-cv-meta dim">最近一步：${escapeHtml(n.doneTail)}</div>` : '')
                 + (n.blockedTail ? `<div class="sw2-cv-meta dim blk">受阻：${escapeHtml(n.blockedTail)}</div>` : '')
                 + (n.parents.length ? `<div class="sw2-cv-meta">委派自上：${n.parents.map(cvChip).join('')}</div>` : '')
@@ -2668,7 +2389,7 @@ function cvUpBeads(world, nodes, volumes) {
         }
         if (n.kind === 'milestone') {
             return `<div class="sw2-cv-bead ms"><span class="sw2-cv-bk">纪</span><div class="sw2-cv-bt">`
-                + `<div class="sw2-cv-nm">大事纪<span class="sw2-cv-src">第 ${n.span.from}–${n.span.to} 轮 · ${n.counts.events ?? 0} 件事</span></div>`
+                + `<div class="sw2-cv-nm">历史归档<span class="sw2-cv-src">第 ${n.span.from}–${n.span.to} 轮 · ${n.counts.events ?? 0} 件事</span></div>`
                 + `<div class="sw2-cv-meta">“${(n.titles || []).slice(0, 3).map(escapeHtml).join(' · ')}”</div>`
                 + cvMsEntries(n)
                 + cvOpenBtns(cvVols(volumes, n.span))
@@ -2750,6 +2471,20 @@ export function renderChainViewHtml(chain, { world, volumes = [] } = {}) {
 // 渲染纪律（同批量补全的先例）：**渲染层不持任务状态**——快照清单由 config 注入（web/index.js 读 IDB 后传入）。
 //   面板零第二份状态：这里只把事实画出来，一份都不缓存。
 export function renderSnapshotsHtml(world, { config = {} } = {}) {
+    if(config?.snapshots?.mode==='browser'){
+        const saved=config.snapshots,rows=saved.list||[];
+        // ★2026-10-16（用户令）：**不搞说明文字，直接标好"这是第几轮 + 时间"**。
+        //   原来那半句「第 N 次保存」用的是累计内部序号，会让玩家以为"一轮存了好几次"——
+        //   现在参数改动不再生成保存点，序号本身也不再是可信的"第几次"，故整句撤掉。
+        //   ★没有时间的行（旧数据没记保存时间）就**不画时间**：不许把 null 画成 1970 年（那是在编事实）。
+        const when=at=>{if(typeof at!=='string'||!at.trim())return '';const d=new Date(at);return Number.isFinite(d.getTime())?d.toLocaleString('zh-CN',{hour12:false}):''};
+        return '<div class="sw2-set-card"><h4>快照</h4><p>恢复只改变世界状态，对话记录不动；恢复前的状态也会保留。</p>'
+            +(saved.loading?'<p>正在读取快照…</p>':rows.map((row,i)=>'<div class="sw2-row"><span>第 '+(row.tick??'?')+' 轮'
+                +(when(row.at)?' · '+escapeHtml(when(row.at)):'')
+                +(row.imported?' · 导入快照'+(row.label?' '+escapeHtml(row.label):''):'')
+                +(row.current?' · 当前':'')+'</span>'
+                +(row.current?'':'<button class="sw2-btn" data-action="snapshot-restore" '+(row.snapshot_id?'data-snapshot-id="'+escapeHtml(row.snapshot_id)+'"':'data-revision="'+row.formal_revision+'"')+'>恢复此快照</button>')+'</div>').join(''))+'</div>';
+    }
     const snap = config?.snapshots || null;
     const rows = Array.isArray(snap?.list) ? snap.list : [];
     const seqOf = (s) => { const m = /^s(\d+)$/.exec(String(s?.id ?? '')); return m ? Number(m[1]) : -1; };
@@ -2800,7 +2535,7 @@ export function renderAll(world, { config = {}, oldVolumes = [], view = {} } = {
         //     这一页画多少只由 `panelTurns` 决定，**一个控件都不在页面上**（来路与两条理由见
         //     `src/panorama.js` 文件头那一整段）。
         panorama: renderStoryReaderHtml(world, { panelTurns }),
-        archive: renderArchiveHtml(world, { oldVolumes }),
+        graph: '',
         // ★leg49：实体页视图态随 `view.entsView` 透传（与 `view.chronicleFilter` 同款）——
         //   工具条的搜索/筛选/排序/翻页都落在这一个对象上（接线层只存状态，选数据住本层纯函数）。
         entities: renderEntitiesHtml(world, { config, view: view.entsView || {} }),

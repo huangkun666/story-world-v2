@@ -59,6 +59,8 @@
 // ★它们**沿用接线层里原本的名字** ⇒ 下面那些块里的调用点一个字都不用改（搬迁不是重写）。
 let freshCtx = null;          // () => ST 的 ctx（接线层的 `freshCtx`；每次现取，聊天切换后不过期）
 let HOT_META_KEY = null;      // 热账住在 chatMetadata 的哪一格
+let canWrite = () => true;
+const assertLegacyWrite = () => { if (!canWrite()) throw new Error('此世界由服务保存，请先核对服务世界；旧账未修改'); };
 let getSnapHub = null;        // () => 快照 hub（★迟到注入：见下面"两处迟到"①）
 
 // ---------- 热账超时档 / 重试环常量 ----------
@@ -106,6 +108,7 @@ export function readHotMeta() {
 }
 
 export function writeHotMeta(meta, { transactional = false } = {}) {
+    assertLegacyWrite();
     const ctx = freshCtx();
     if (!ctx || typeof ctx.updateChatMetadata !== 'function') return;
     // ★★leg41（本笔的核心简化）：这里原来有一层 `sw2WithParamOverlay(meta)`——它的作用是
@@ -240,6 +243,7 @@ function hotLedgerScope(ctx) {
 }
 
 export async function flushHotMeta({ strict = false, saveMessages = false } = {}) {
+    assertLegacyWrite();
     const ctx = freshCtx();
     const scope = hotLedgerScope(ctx);
     const isCurrent = () => hotLedgerScope(freshCtx()) === scope;
@@ -361,6 +365,7 @@ export async function flushHotMeta({ strict = false, saveMessages = false } = {}
 
 /** Save a candidate without publishing failed metadata or snapshots to the live world. */
 export async function commitHotMeta(meta, { guard = null, saveMessages = false } = {}) {
+    assertLegacyWrite();
     guard?.assertCurrent();
     const initialScope = hotLedgerScope(freshCtx()), deadline = Date.now() + sw2FlushTimeoutMs;
     while (sw2HotMetaFlushing && Date.now() < deadline && hotLedgerScope(freshCtx()) === initialScope) await new Promise(r => setTimeout(r, 10));
@@ -457,6 +462,7 @@ export function flushTries() {
  */
 export function createHotLedgerHub(deps) {
     freshCtx = deps.freshCtx;
+    canWrite = deps.canWrite ?? (() => true);
     HOT_META_KEY = deps.hotMetaKey;
     getSnapHub = deps.getSnapHub;
     return {
@@ -465,4 +471,23 @@ export function createHotLedgerHub(deps) {
         sw2ExplicitChatName, sw2SetFlushTimeout, resetHotLedgerState,
         flushTimeoutMs, flushTries,
     };
+}
+
+/** 服务指针用现有宿主显式保存规则，不通过热账写入或建立世界副本。 */
+export async function persistServiceMetadata(ctx,key,getCtx,{messages=false}={}) {
+    const scope=hotLedgerScope(ctx),expected=JSON.stringify(ctx?.chatMetadata?.[key]);
+    const current=()=>hotLedgerScope(getCtx())===scope && JSON.stringify(ctx?.chatMetadata?.[key])===expected;
+    for(let attempt=0;attempt<SW2_FLUSH_TRIES;attempt++){
+        if(!current())throw new Error('聊天或服务指针已改变，未发送推进');
+        let timer;
+        let saved;
+        try {
+            saved=await Promise.race([sw2CallSaveChat(ctx,{saveMessages:messages}),new Promise((_,reject)=>{
+                timer=setTimeout(()=>reject(new Error('服务指针保存超时，尚未确认，未发送推进')),sw2FlushTimeoutMs);
+            })]);
+        } finally {clearTimeout(timer)}
+        if(!current())throw new Error('聊天或服务指针已改变，保存尚未确认');
+        if(!saved.fast)return;
+    }
+    throw new Error('服务指针保存尚未确认，未发送推进');
 }

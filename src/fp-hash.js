@@ -24,7 +24,7 @@
 
 export const FNV1A_OFFSET = 0x811c9dc5;
 export const FNV1A_PRIME = 0x01000193;
-export const CACHE_VERSION = 11;       // ★leg198：**起根那一问的问法变了**（title 立时态纪律：
+export const CACHE_VERSION = 12;       // ★leg198：**起根那一问的问法变了**（title 立时态纪律：
                                      //   "只写此刻正在发生的那一步、不许写接下来会怎样" ＋ 撤掉死格 `why`）
                                      //   ⇒ 同一本书抽出来的东西不一样了 ⇒ 旧缓存必须失效。
                                      //   10（leg197）：出处那一整套"核不过就丢"全面撤销 ⇒ 抽取的问法与

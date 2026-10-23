@@ -291,6 +291,22 @@ export function sw2UndoParam() {
     return { ok: true, label: r.label };
 }
 /**
+ * ★★★2026-10-10：**纯准备口**——接线层拿"当前正式世界"来准备一次撤销。
+ *   与 `sw2UndoParam` 的分工（为什么必须分开）：
+ *     · `sw2UndoParam` 是旧公共口：它先读**旧热账**取世界、算完再 `writeHotMeta`、还顺手重画面板
+ *       ——那是聊天热账的世界，浏览器正式账那条路不能再用它当入口（会把旧世界优先、写回旧账）。
+ *     · 本口**不做**这三件事：不读旧热账、不写旧热账、不重画面板；只用调用方给的世界（≈当前 local world）
+ *       调 `paramHub.undo`，把"准备出来的世界"原样交给调用方，由调用方走 `commitWorld` 落正式版本。
+ *   保留旧公共 API（`sw2UndoParam`）不动，兼容既有调用方。
+ */
+export function prepareParamUndo(world) {
+    if (!paramHub) return { ok: false, reason: '参数真源尚未建立' };
+    if (!world || typeof world !== 'object') return { ok: false, reason: '还没有正式世界' };
+    const r = paramHub.undo(world);
+    if (!r.ok) return r;
+    return { ok: true, label: r.label, world: r.world, mirrorOk: r.mirrorOk, mirrorPending: r.mirrorPending, env: r.env };
+}
+/**
  * ★**写账 + 参数镜像**（"账本被整份换成另一份"的那些路径用它，例如快照恢复 / 导入 / 清演化层）：
  *   这些路径写下去的账可能带着**它自己那份旧的 `dynamic.env`** ⇒ 参数镜像会与真源不一致，
  *   引擎（`limits.js` 的闸 / `pack.js` 进包）就会按旧档跑。这里在写之前把真源镜像补上。
@@ -503,7 +519,7 @@ export function sw2SetParamControl(key, win = null) {
         //   面板于是去读"未名世界"那个空桶 ⇒ 按出厂默认把控件写成 3，而玩家的档位其实在"大荒z"桶里。
         //   读的桶必须与写的桶是同一个 —— 这一条被违反过九轮，是"改了回默认"的机理。
         const env = paramHub.displayEnv(sw2ParamWorldForDisplay());
-        const want = Object.prototype.hasOwnProperty.call(env, key) ? String(env[key]) : '';
+        const want = Object.prototype.hasOwnProperty.call(env, key) ? (env[key] === 'unlimited' ? '不限' : String(env[key])) : '';
         if (String(el.value ?? '') === want) return false;      // 已经一致 ⇒ 一个字节都不动
         el.value = want;
         console.info(`[story-world-v2] 参数控件按真源对齐：${key} → ${JSON.stringify(want || '未定')}`);
@@ -683,6 +699,7 @@ export function createParamApi({ freshCtx: _freshCtx, sw2ExtensionSettings: _set
         sw2ParamUndoState,
         sw2ParamDiag,
         sw2UndoParam,
+        prepareParamUndo,
         sw2WriteHotMetaEnsuringParams,
 
         // ── 面板 DOM 镜像那几口 ──

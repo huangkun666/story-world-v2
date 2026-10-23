@@ -1,10 +1,11 @@
+import {sha256Hex} from './browser-capabilities.js';
 // story-world-v2/src/storage.js
 // K35 存储层（编排层）：热账（chat metadata）+ 冷档轮转（IndexedDB 卷）+ 导出/导入（SHA-256 验签）。
 // 验收 A-9：编年超阈值 → 前置段离热账入卷（store 注入面，浏览器=IndexedDB 适配，测试=内存 mock）；
 //   里程碑与因果指针留在热态（红线 2：割断的是账本里的冗余，不是链条）；
 //   阅卷加载还原；导出/导入往返一致。
 // 纪律：本模块为纯函数 + 存储接口契约（零 DOM、零 indexedDB 直接依赖、零 Node 内建——browser-compat 扫描面）；
-//   crypto 走双端全局 webcrypto（globalThis.crypto.subtle），惰性调用 + 守卫；
+//   SHA-256 使用随插件打包的标准实现，HTTP origin 也可用；
 //   冷档阈值数字为提案态（PROPOSED_LIMITS，铁律 2：报批前不视为定案，调用方显式传参覆盖）。
 
 // ---------- 提案数字（铁律 2：提案态，标注待报批；细案 §3.6/§6） ----------
@@ -159,13 +160,7 @@ export function volumeToChronicleRows(volume) {
 export const EXPORT_FORMAT = 'story-world-v2-export';
 export const EXPORT_VERSION = 1;
 
-async function sha256hex(text) {
-    if (typeof globalThis?.crypto?.subtle === 'undefined') {
-        throw new Error('环境不支持 webcrypto（SHA-256 不可用）');
-    }
-    const buf = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const sha256hex = sha256Hex;
 
 /**
  * buildExportBundle(world, volumes, { chatId, exportedAt } = {})

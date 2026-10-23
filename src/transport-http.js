@@ -1,3 +1,4 @@
+import {createCompletionProgress,readCompletionData} from './transport-sse.js';
 // story-world-v2/src/transport-http.js
 // 主调用 HTTP 传输（S6 接线）：OpenAI 兼容 chat/completions，零依赖。
 // base 归一化：末尾去斜杠；无 /v1 自动补（gcli.ggchan.dev 网关与 deepseek 均兼容 /v1 路径）。
@@ -13,6 +14,13 @@ export function normalizeBase(base) {
     let b = String(base).trim().replace(/\/+$/, '');
     if (!/\/v1$/.test(b)) b = `${b}/v1`;
     return b;
+}
+
+/** Preserve the cause while removing configured credentials and provider addresses. */
+export function sanitizeModelErrorMessage(value,apiKey='') {
+ let text=String(value??'未取得具体异常').slice(0,1000);
+ if(typeof apiKey==='string'&&apiKey)text=text.split(apiKey).join('[密钥已隐藏]');
+ return text.replace(/https?:\/\/[^\s"'<>）)]+/gi,'[地址已隐藏]').replace(/Bearer\s+\S+/gi,'Bearer [已隐藏]').replace(/(?:api[_-]?key|token|secret)\s*[:=]\s*\S+/gi,'凭据=[已隐藏]').replace(/\s+/g,' ').slice(0,240);
 }
 
 // 提案数字（铁律 2：提案态，标注待报批；细案 §3.3/§6）
@@ -82,7 +90,8 @@ export const EXTRACTION_MAX_TOKENS = 32768;
 //            让编排层能把它与瞬时错分开（`abstract.js` 对超时不再拆半、不再重试）。
 //   数字（**提案态**，铁律 2，随长跑曲线定案）：300,000 ms = 5 分钟/次。
 //     依据：单块 ≈ 59k 字符输入 + ≤16,384 tokens 输出（reasoning 占盘）⇒ 分钟级，给 2.5 倍余量；
-//     同时它**不是无上限**——天花板 = 300 s（旧法最坏 62 分钟/块 ⇒ 现在最坏 5 分钟/块即止损跳过）。
+//     上述为历史总时长规则。leg232 流式抽取使用等待首个有效输出／连续无有效输出的期限；
+//     持续的正文或推理输出续期，心跳不续期，普通推进仍使用总时长期限。
 import { diagnostics } from './diagnostics.js';
 export const EXTRACTION_TIMEOUT_MS = 300_000;
 
@@ -161,11 +170,13 @@ function xhrSender(url, init = {}) {
                 try { xhr.setRequestHeader(k, String(v)); } catch (_) {}
             }
         } catch (err) { finish(() => reject(err)); return; }
+        xhr.onprogress = event => {try{init.onResponseProgress?.({text:String(xhr.responseText??''),loaded:event.loaded,status:xhr.status})}catch{/* Progress cannot change the response outcome. */}};
         xhr.onload = () => finish(() => {
             const text = String(xhr.responseText ?? '');
             resolve({
                 ok: xhr.status >= 200 && xhr.status < 300,
                 status: xhr.status,
+                headers: {get: name => {try{return xhr.getResponseHeader?.(name)??null}catch{return null}}},
                 text: async () => text,
                 json: async () => JSON.parse(text),
             });
@@ -173,7 +184,7 @@ function xhrSender(url, init = {}) {
         // 网络层失败（连不上 / 被 CORS 挡下）：给**人话**，并带 `network` 字样——
         //   `isTransientCallError`（`abstract.js:1576`）认这一类，与"链路断要重试"那条既有口径一致。
         xhr.onerror = () => finish(() => reject(new Error('连不上模型服务（network error）')));
-        xhr.ontimeout = () => finish(() => reject(new Error('连不上模型服务（network error）')));
+        xhr.ontimeout = () => finish(() => reject(markTimeout(new Error('模型请求等待超时'))));
         xhr.onabort = () => finish(() => reject(abortErr()));
         if (signal) {
             if (signal.aborted) { onAbort(); return; }
@@ -184,7 +195,7 @@ function xhrSender(url, init = {}) {
 }
 
 /** 缺省发送器：浏览器走 XHR（躲开别人对 fetch 的补丁），Node 走原生 fetch。 */
-function pickSender() {
+export function pickSender() {
     if (typeof globalThis.XMLHttpRequest === 'function') return xhrSender;
     return globalThis.fetch;
 }
@@ -203,12 +214,81 @@ function logChannelOnce(usedXhr) {
     } catch (_) {}
 }
 
-export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7, fetchImpl = null, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens, extraction = false }) {
+/**
+ * ★★★把「解释一份对话补全回执」抽成**唯一一处**（2026-10-16 用户令「走酒馆后端转发」那一笔）。
+ *
+ * 为什么必须抽出来：**经宿主转发**（`src/host-relay.js`）拿回来的是**上游原样**的 JSON 或 SSE，
+ * 与直连拿到的**是同一种东西** ⇒ 判据（截断／过滤／服务端报错／空正文）必须**同一套**。
+ * 抄一份到转发那边，就是本仓最贵的病：同一件事两处口径，改一处另一处悄悄分叉。
+ *
+ * 它只管"这份回执说明了什么"，不管怎么拿到它（发送通道、超时、取消都在各自那一边）。
+ * @param {object} data 上游回执（JSON 对象；流式那条已由 parseCompletionEventStream 归一成同一形状）
+ * @param {{model?: string, apiKey?: string}} [ctx] 只用于调试台记录与密钥遮蔽
+ * @returns {string} 正文（空串是合法结果——判空由调用方按自己的口径做）
+ */
+export function interpretChatCompletion(data, { model = '', apiKey = '' } = {}) {
+        if (data?.usage) diagnostics.record('模型', 'info', '用量', { usageTokens: data.usage });
+        const choice = data?.choices?.[0];
+        if (choice?.finish_reason) diagnostics.record('模型', choice.finish_reason === 'stop' ? 'info' : 'warn', '应答结束原因', { model, finishReason: choice.finish_reason, refusal: choice?.message?.refusal });
+        if (choice?.finish_reason === 'length') {
+            throw Object.assign(new Error('模型输出被截断，未能完整返回本次内容'), {
+                name: 'Sw2TruncationError', sw2Truncated: true,
+                sw2CallFailure: { type: 'truncation', finishReason: 'length' },
+            });
+        }
+        if (choice?.finish_reason === 'content_filter' || choice?.message?.refusal) {
+            const err = new Error('模型拒绝或过滤了本次请求');
+            err.sw2CallFailure = { type: 'filter', finishReason: choice?.finish_reason, refusal: choice?.message?.refusal };
+            throw err;
+        }
+        // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+        // ★★★2026-10-09（用户实机报障：**调试台只报「主调用返回空」，真因从来没进过任何地方**）。
+        //
+        // 现场（用户导出的调试报告，一局里连着两轮报废）：`status 200` → `用量 0/0/0 cost 0`
+        //   → `应答结束原因 finish_reason: "error"` → `空响应 outputChars 0` → `演算失败 主调用返回空`。
+        //
+        // 病根就在这一支：**取证点摆在了信息被丢弃之后**。
+        //   `!res.ok` 那一支会读 `body.error`；而 **200 这一支原来只读 `usage` 与 `choices`**，
+        //   `finish_reason` 只认 `length` 与 `content_filter`/`refusal` ⇒ `error` 落到底下那句
+        //   `return choice?.message?.content ?? ''` ⇒ **返回空串**。世界层只能报「主调用返回空」，
+        //   而服务端自己写下的那一句（限流？上游 5xx？审核？模型不可用？）**当场被丢掉**。
+        //   ★"上游失败但 HTTP 200"正是这类网关的标准形状（报告里那套 usage 形状
+        //     `is_byok` / `cost_details.upstream_inference_cost` 就是这一族）——它把错误塞在 body 里，
+        //     状态码仍是 200 ⇒ 光看状态码永远判不出来。
+        //
+        // 定案：**200 里带 `error`，或 `finish_reason` 是 `error`，都算"这一次没生成"**——
+        //   抛**带真因**的错（`sw2CallFailure = {type:'provider', code, message, finishReason}`），
+        //   并**把真因记进调试台**（level=error，模块=模型）。状态条上也就有了能指方向的一句话。
+        //   ★判据落在"**这一次到底有没有生成**"上，不是"有没有 error 键"（两条反面判据锁着，
+        //     见 test/transport-http.test.js）：只给 `finish_reason:'error'` 不给 error 体的网关同样要判；
+        //     反过来，正文是好的就不许因为别的原因被判成失败（白扔一整轮）。
+        //   ★它**不是**超时（超时靠 `sw2Timeout` 标志判，见上面 leg93d 那段），
+        //     也不是截断/过滤（那两条各有更具体的分支，排在前面）。
+        if (data?.error || choice?.finish_reason === 'error') {
+            const raw = data?.error && typeof data.error === 'object' ? data.error : null;
+            const code = String(raw?.code ?? raw?.type ?? '').trim();
+            const said = sanitizeModelErrorMessage(raw?.message ?? raw?.msg ?? '', apiKey).trim().slice(0, 160);
+            diagnostics.record('模型', 'error', '服务端报错（这一次没有生成内容）', {
+                model, finishReason: choice?.finish_reason ?? null, code: code || null, message: said || null,
+            });
+            const err = new Error(`模型服务报错，这一次没有生成内容${said ? `（服务端说：${said}）` : ''}`);
+            err.name = 'Sw2ProviderError';
+            err.sw2CallFailure = {
+                type: 'provider',
+                ...(choice?.finish_reason ? { finishReason: choice.finish_reason } : {}),
+                ...(code ? { code } : {}),
+                ...(said ? { message: said } : {}),
+            };
+            throw err;
+        }
+        return choice?.message?.content ?? '';
+}
+export function createHttpTransport({ baseUrl, apiKey, model, headers = [], temperature = 0.7, fetchImpl = null, timeoutMs = PROPOSED_CALL_LIMITS.timeoutMs, maxTokens = PROPOSED_CALL_LIMITS.maxTokens, extraction = false, responseFormat = null, reasoningEffort = null, stream = true }) {
     const endpoint = `${normalizeBase(baseUrl)}/chat/completions`;
     // ★发送器在**建传输那一刻**定下来（显式注入的优先，判据走这条；缺省 = pickSender）
     const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
     logChannelOnce(send === xhrSender);
-    return async (prompt, { signal = null } = {}) => {
+    return async (prompt, { signal = null, onReceipt = null, messages = undefined } = {}) => {
         if (typeof send !== 'function') throw new Error('没有可用的发送通道（这个环境里 fetch 与 XMLHttpRequest 都没有）');
         const controller = new AbortController();
         const started = Date.now();
@@ -224,22 +304,28 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
         // ★`abort(reason)` 里的 reason 在真浏览器里**到不了我们手上**（见上面 leg93d 那段），
         //   它留着只为两件事：① 本仓既有判据的假 fetch 会读它；② 调试时能在 devtools 里看见。
         //   **不要指望靠它给用户一句人话**——那句在下面的 catch 里显式组。
-        const timer = setTimeout(() => controller.abort(new Error(`模型超时（${timeoutMs}ms）`)), timeoutMs);
+        let timer;
+        const armWait = () => {clearTimeout(timer);timer = setTimeout(() => controller.abort(new Error(`模型超时（${timeoutMs}ms）`)), timeoutMs)};
+        armWait();
+        const consume=extraction?createCompletionProgress():null;let receivedChars=0;
+        const onResponseProgress=update=>{if(!consume||typeof update?.text!=='string')return;const delta=update.text.slice(receivedChars);receivedChars=update.text.length;if(consume(delta))armWait()};
         try {
             const res = await guarded(() => send(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${apiKey}`,
-                },
+                headers: chatRequestHeaders(apiKey,headers),
                 body: JSON.stringify({
                     model,
-                    messages: [{ role: 'user', content: prompt }],
+                    messages: messages ?? [{ role: 'user', content: prompt }],
                     temperature,
-                    response_format: { type: 'json_object' },
+                    ...(reasoningEffort?{reasoning_effort:reasoningEffort}:{}),
+                    // Explicit caller-supplied response format wins; default stays the historical JSON mode.
+                    // A provider that rejects json_schema surfaces as an HTTP failure — never retried or downgraded.
+                    response_format: responseFormat ?? { type: 'json_object' },
+                    ...(extraction ? { stream: stream !== false } : {}),
                     ...(maxTokens ? { max_tokens: maxTokens } : {}),
                 }),
                 signal: controller.signal,
+                ...(extraction?{onResponseProgress}:{}),
             }));
             diagnostics.record('网络', res.ok ? 'info' : 'error', '模型请求', { model, status: res.status, ms: Date.now() - started });
             if (!res.ok) {
@@ -253,23 +339,13 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
                 err.sw2CallFailure = { type: 'http', status: res.status, bodySnippet: snippet, code: refusal?.code, refusal: refusal?.message };
                 throw err;
             }
-            const data = await guarded(() => res.json());
-            if (data?.usage) diagnostics.record('模型', 'info', '用量', { usageTokens: data.usage });
-            const choice = data?.choices?.[0];
-            if (choice?.finish_reason) diagnostics.record('模型', choice.finish_reason === 'stop' ? 'info' : 'warn', '应答结束原因', { model, finishReason: choice.finish_reason, refusal: choice?.message?.refusal });
-            if (choice?.finish_reason === 'length') {
-                throw Object.assign(new Error('模型输出被截断，未能完整返回本次内容'), {
-                    name: 'Sw2TruncationError', sw2Truncated: true,
-                    sw2CallFailure: { type: 'truncation', finishReason: 'length' },
-                });
-            }
-            if (choice?.finish_reason === 'content_filter' || choice?.message?.refusal) {
-                const err = new Error('模型拒绝或过滤了本次请求');
-                err.sw2CallFailure = { type: 'filter', finishReason: choice?.finish_reason, refusal: choice?.message?.refusal };
-                throw err;
-            }
-            return choice?.message?.content ?? '';
+            const data = await guarded(()=>readCompletionData(res,onResponseProgress,{signal:controller.signal,onReceipt}));
+            return interpretChatCompletion(data, { model, apiKey });
         } catch (err) {
+            if(String(err?.message)==='连不上模型服务（network error）') {
+                err.sw2CallFailure = {type:'network'};
+                diagnostics.record('网络','error','模型请求没有可读响应',{ms:Date.now()-started,inputChars:String(prompt).length,maxTokens,timeoutMs,stream:extraction});
+            }
             // leg27：超时**如实标识**（判据 = 本控制器自己发出过中止 ⇒ fetch 因我们超时而拒）
             //   ⇒ 编排层据此把它与"网关偶发空回复"分开：**超时不重试、不拆半**（拆了也白拆，见文件头）。
             // ★★★leg93d 真因修（交接 §5.1 那行 `signal is aborted without reason` 的来源）：
@@ -287,14 +363,14 @@ export function createHttpTransport({ baseUrl, apiKey, model, temperature = 0.7,
             if (signal?.aborted) {
                 throw Object.assign(new Error('用户已中止抽取'), { name: 'AbortError', sw2Cancelled: true, sw2CallFailure: { type: 'cancelled' } });
             }
-            if (controller.signal.aborted) {
+            if (controller.signal.aborted || err?.sw2Timeout) {
                 //   ★措辞纪律（本仓 A-3）：这句**会印到状态条上**（`async-tick.js:43` 的「⚠ 演算失败：…」），
                 //     所以**说人话、零引擎术语**——不写"主调用/传输/transport"这类内部词。
                 //     `ms` 留着：它是维护者与用户对齐"到底等了多久"的唯一实数。
                 const advice = extraction
-                    ? '请核对模型服务状态或更换更快的模型，详情见调试台'
+                    ? '可在设置页调整「抽取超时」，详情见调试台'
                     : '可在参数页把「单轮超时」调大';
-                const e = new Error(`模型超时（${timeoutMs}ms）——这一轮没等到模型回话，已中止；${advice}`);
+                const e = new Error(`模型超时（${timeoutMs}ms）——${extraction ? '等待模型新输出超时' : '这一轮没等到模型回话'}，已中止；${advice}`);
                 e.name = 'Sw2TimeoutError';
                 e.cause = err;
                 e.sw2CallFailure = { type: 'timeout', timeoutMs };
@@ -441,7 +517,7 @@ export async function listModels({ baseUrl, apiKey, fetchImpl = null, timeoutMs 
  *   （正式调用那一侧才带，见 `createHttpTransport`）。
  * @returns {Promise<{ok:boolean, ms:number, status:number|null, reply:string, error:string|null}>}
  */
-export async function probeModel({ baseUrl, apiKey, model, fetchImpl = null, timeoutMs = 30000, maxTokens = 16 } = {}) {
+export async function probeModel({ baseUrl, apiKey, model, headers = [], fetchImpl = null, timeoutMs = 30000, maxTokens = 16 } = {}) {
     const send = typeof fetchImpl === 'function' ? fetchImpl : pickSender();
     const out = { ok: false, ms: 0, status: null, reply: '', error: null };
     if (typeof send !== 'function') { out.error = '没有可用的发送通道'; return out; }
@@ -453,7 +529,7 @@ export async function probeModel({ baseUrl, apiKey, model, fetchImpl = null, tim
     try {
         const res = await send(`${normalizeBase(baseUrl)}/chat/completions`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            headers: chatRequestHeaders(apiKey,headers),
             body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: maxTokens }),
             signal: controller.signal,
         });
@@ -478,4 +554,16 @@ export async function probeModel({ baseUrl, apiKey, model, fetchImpl = null, tim
     } finally {
         clearTimeout(timer);
     }
+}
+
+// Chat JSON and its configured credential keep their existing ownership.
+// Custom values never enter diagnostics; native XHR still enforces browser-forbidden headers.
+function chatRequestHeaders(apiKey,extraHeaders=[]){
+    const headers={'Content-Type':'application/json',Authorization:'Bearer '+apiKey};
+    for(const [raw,value]of extraHeaders){
+        const name=String(raw??'').trim(),text=String(value??'');
+        if(!/^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/.test(name)||/[\r\n]/.test(text)||['authorization','content-type'].includes(name.toLowerCase()))continue;
+        Object.defineProperty(headers,name,{value:text,enumerable:true,writable:true,configurable:true});
+    }
+    return headers;
 }

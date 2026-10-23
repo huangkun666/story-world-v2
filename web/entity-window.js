@@ -1,3 +1,4 @@
+import {EVENT_PROTOCOL,eventEntityIds} from '../src/event-contract.js';
 // story-world-v2/web/entity-window.js
 //
 // ★★★leg140（用户令「**点击实体就会出现，能看到这个实体的各种属性以及它的事迹**」）：
@@ -106,13 +107,13 @@ export function originOf(entity) {
  */
 export function deedsOf(world, id) {
     const evs = Array.isArray(world?.events) ? world.events : [];
-    return evs.filter((e) => Array.isArray(e?.ripples) && e.ripples[0] === id).reverse();
+    return evs.filter((e) => e.eventProtocol !== EVENT_PROTOCOL && Array.isArray(e?.ripples) && e.ripples[0] === id).reverse();
 }
 
 /** 纯函数：**被卷进来**——他在 `ripples` 里、但**不是**头一个（别人做的事牵到他）。同样新的在前。 */
 export function involvedOf(world, id) {
     const evs = Array.isArray(world?.events) ? world.events : [];
-    return evs.filter((e) => Array.isArray(e?.ripples) && e.ripples.includes(id) && e.ripples[0] !== id).reverse();
+    return evs.filter((e) => e.eventProtocol === EVENT_PROTOCOL ? eventEntityIds(e,world).includes(id) : Array.isArray(e?.ripples) && e.ripples.includes(id) && e.ripples[0] !== id).reverse();
 }
 
 /** 纯函数：**他手上的事**（在办的谋划）。 */
@@ -242,7 +243,7 @@ function eventRowHtml(e) {
         + `<div class="sw2-ew-dtitle">${escapeHtml(t)}`
         + (kind ? `<span class="sw2-chip sw2-ew-kindchip">${escapeHtml(SRC_CN[kind] || kind)}</span>` : '')
         + `</div>`
-        + (bits.length ? `<div class="sw2-ew-cmeta">${bits.join('<span class="sw2-ew-sep"> · </span>')}</div>` : '')
+        + (bits.length ? `<div class="sw2-ew-cmeta" style="overflow-wrap:anywhere">${bits.join('<span class="sw2-ew-sep"> · </span>')}</div>` : '')
         + (quote ? `<div class="sw2-ew-quote">${escapeHtml(quote)}</div>` : '')
         + `</div>`;
 }
@@ -252,7 +253,7 @@ function eventRowHtml(e) {
  *   判据直接调它（不需要 DOM、不需要浏览器）。
  * ★实体不在账上 ⇒ **如实说**（不抛错、不空白）：那一行可能是世界换过之后的旧行。
  */
-export function renderEntityWindowHtml(world, id) {
+export function renderEntityWindowHtml(world, id, {canEditSource=false}={}) {
     const ents = Array.isArray(world?.entities) ? world.entities : [];
     const e = ents.find((x) => x?.id === id) || null;
     if (!e) {
@@ -264,6 +265,7 @@ export function renderEntityWindowHtml(world, id) {
             + `关掉这扇窗口、刷新面板即可。</div></div>`;
     }
 
+    const manualProfile = (world.meta?.sourceEdits?.entities??[]).some(row=>row.id===e.id);
     const kindCn = KIND_CN[e.kind] || e.kind || '';
     const status = STATUS_CN[e.status] || null;
     const isPlayer = world?.context?.playerId === e.id;
@@ -284,8 +286,8 @@ export function renderEntityWindowHtml(world, id) {
         + `<span>位置 <b>${escapeHtml(String(e.location ?? '未明'))}</b></span>`
         + (Number.isFinite(e.lastActiveTick) ? `<span>最近动过 <b>第 ${e.lastActiveTick} 轮</b></span>` : '')
         + (status ? `<span>状态 <b>${escapeHtml(status)}</b></span>` : '')
-        + `<span>账上 id <b>${escapeHtml(String(e.id))}</b></span>`
-        + protection + `</div>`
+        + `<span>账上 id <b style="overflow-wrap:anywhere">${escapeHtml(String(e.id))}</b></span>`
+        + (manualProfile ? '<span>档案含用户修订</span>' : '') + protection + (canEditSource ? `<button type="button" class="sw2-btn" data-source-edit-entity>编辑档案</button>` : '') + `</div>`
         + (e.kind === 'character' ? `<div class="sw2-simulation-status" data-simulation-status role="status" aria-live="polite"></div>` : '')
         + `</div>`
         + `<div class="sw2-close sw2-ew-close" title="关闭（Esc）">✕</div></header>`;
@@ -310,7 +312,7 @@ export function renderEntityWindowHtml(world, id) {
         body.push(h);
     } else {
         body.push(sec('来历与身份', '0 栏')
-            + `<div class="sw2-ew-empty">书里没给这个人写过属性——账上只有他的名号与类别。</div>`);
+            + (manualProfile ? '<div class="sw2-ew-empty">当前档案没有属性；原抽象和历史版本保留。</div>' : `<div class="sw2-ew-empty">书里没给这个人写过属性——账上只有他的名号与类别。</div>`));
     }
 
     // ── ② 变过的格（玩出来的） ──
@@ -330,7 +332,7 @@ export function renderEntityWindowHtml(world, id) {
         body.push(h);
     } else {
         body.push(sec('变过的格', '0 格')
-            + `<div class="sw2-ew-empty">账上没记着这个实体的格变过——它这些栏都是书里给的，不是玩出来的。</div>`);
+            + (manualProfile ? '<div class="sw2-ew-empty">基础档案含用户修订；原抽象与推演历史保留。</div>' : `<div class="sw2-ew-empty">账上没记着这个实体的格变过——它这些栏都是书里给的，不是玩出来的。</div>`));
     }
 
     // ── ③ 事迹 · **他做的**（他是主语的那些事） ──
@@ -372,8 +374,8 @@ export function renderEntityWindowHtml(world, id) {
         let h = sec('他手上的事', `${ags.length} 条`);
         for (const a of ags) {
             h += `<div class="sw2-ew-ag"><div class="sw2-ew-aggoal">${escapeHtml(String(a.goal ?? ''))}</div>`
-                + `<div class="sw2-ew-cmeta"><span>${escapeHtml(String(a.stage || '谋划中'))}</span>`
-                + `<span>进度 ${Number(a.progress) || 0}/${Number(a.maxSteps) || 0}</span>`
+                + `<div class="sw2-ew-cmeta">` + (a.stage ? `<span>${escapeHtml(String(a.stage))}</span>` : '')
+                + (Number.isSafeInteger(a.maxSteps) && a.maxSteps > 0 ? `<span>进度 ${Number(a.progress) || 0}/${a.maxSteps}</span>` : `<span>已推进 ${Number(a.progress) || 0} 步</span>`)
                 + (a.visibility === 'concealed' ? `<span class="sw2-ew-hush">暗处</span>` : '')
                 + `</div></div>`;
         }
@@ -428,7 +430,7 @@ export function renderEntityWindowHtml(world, id) {
  * @param {{getWorld: () => object|null, getScope?: () => any, setStatus?: (s: string) => void, setSimulationBlocked?: (id: string, blocked: boolean, expected: object) => Promise, doc?: object|null}} deps
  *   ★`getWorld` 必须是**函数**（世界对象会被反复重新赋值——传成值就是"第二份真相"）。
  */
-export function createEntityWindowHub({ getWorld, getScope = () => '', setStatus = null, setSimulationBlocked = null, doc = null } = {}) {
+export function createEntityWindowHub({ getWorld, getScope = () => '', setStatus = null, setSimulationBlocked = null, editSource = null, canEditSource = () => false, doc = null } = {}) {
     if (typeof getWorld !== 'function') throw new TypeError('createEntityWindowHub：`getWorld` 必须是函数');
     const D = () => doc || (typeof document !== 'undefined' ? document : null);
     let escHandler = null;
@@ -468,7 +470,7 @@ export function createEntityWindowHub({ getWorld, getScope = () => '', setStatus
         mask.id = ENTITY_WINDOW_MASK_ID;
         const box = d.createElement('div');
         box.className = 'sw2-window sw2-ew-window';
-        box.innerHTML = renderEntityWindowHtml(world, id);
+        box.innerHTML = renderEntityWindowHtml(world, id, {canEditSource:typeof editSource==='function'&&canEditSource(world,id)});
         mask.appendChild(box);
         // ⓵ 点**窗口外的暗处**关掉（点窗口内部不关——不然想看细处一点就没了）
         mask.addEventListener('click', (ev) => { if (ev.target === mask) close(); });
@@ -482,6 +484,7 @@ export function createEntityWindowHub({ getWorld, getScope = () => '', setStatus
         //   ★`closest?.` 用可选调用：判据那份**假 DOM** 没有 `closest`（它只 stub 了本模块用到的那几口），
         //     真浏览器里一定有。★别把这一句改成"假设一定有 `closest`"——那会让假 DOM 判据当场红在错的地方。
         box.addEventListener('click', async (ev) => {
+            if(typeof editSource==='function'&&ev.target?.closest?.('[data-source-edit-entity]')){ev.preventDefault?.();try{await editSource(id)}catch(error){setStatus?.(error.message)}return;}
             const toggle = ev.target?.closest?.('[data-simulation-toggle]');
             if (toggle) {
                 ev.preventDefault?.();
@@ -518,7 +521,7 @@ export function createEntityWindowHub({ getWorld, getScope = () => '', setStatus
         // ⓷ Esc：**捕获阶段 + stopPropagation** ⇒ 面板那条"Esc 关整个窗口"不会跟着一起触发
         //   （与链浮层 `web/index.js` 的 `onEsc` 逐字同款；本监听只在窗口存在期间挂着，随它一起摘掉）
         const onEsc = (ev) => {
-            if (ev.key !== 'Escape') return;
+            if (ev.key !== 'Escape' || d.getElementById?.('sw2_source_edit')) return;
             ev.stopPropagation();
             ev.preventDefault();
             close();

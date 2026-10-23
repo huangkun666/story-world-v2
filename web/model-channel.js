@@ -17,11 +17,21 @@
 // ★零 Node 内建依赖（`browser-compat` 的扫描面）——只用 DOM 与注入进来的那几口。
 
 import { listModels, probeModel } from '../src/transport-http.js';
+import { probeModelViaRelay } from '../src/host-relay.js';
+import { parseExtraHeaders } from '../src/transport-config.js';
 import { renderModelListHtml, renderModelProbeHtml } from '../src/render.js';
 import { normalizeExtractChunkChars, SETTING_CHUNK_CHAR } from '../src/abstract-limits.js';
 
 /** 按 id 找键的那三个框（地址/密钥/模型）。★数字键**不在这张表里**（它们走 `data-settings`，见下）。 */
 export const SETTINGS_INPUTS = { baseUrl: 'sw2_base', apiKey: 'sw2_key', model: 'sw2_model' };
+
+/**
+ * ★★★2026-10-16（用户令「把api协议的活拿做了」＋选定「加一个接口类型下拉」）：**设置页第一格下拉**。
+ *   ★与上面那张表**分开**：那张表是"文本输入框"，这一格是"选一个值"——混在一张表里，
+ *     下一个改面板的人会以为它们同一种控件（本仓最贵的病是"同一件事两处口径"，不是"多一张小表"）。
+ *   ★值域的唯一真源在 `src/transport-config.js` 的 `PROTOCOLS`；这里只管"哪个 id 是它"。
+ */
+export const SETTINGS_PICKERS = { protocol: 'sw2_protocol' };
 
 /**
  * ★★★leg161：**「记忆通道（向量）」那三格**（设置页那张卡）。
@@ -67,21 +77,27 @@ export function extractChunkCharsOf(settings = {}) {
 //     ★但**下限 1 与"必须是整数"照旧拦**：那两条不是"上限"，是"别把引擎搞坏"
 //       （0 或 NaN 进去 ⇒ 一件活儿都发不出去 ⇒ 静默什么都不抽）。
 export const SETTINGS_NUM_RANGE = {
-    callTimeoutSec: [5, 600], callMaxTokens: [1024, 131072], tagMaxActions: [1, 200],
+    callTimeoutSec: [5, Number.MAX_SAFE_INTEGER], callMaxTokens: [1024, Number.MAX_SAFE_INTEGER], tagMaxActions: [1, 200],
+    extractCallMaxTokens: [1024, Number.MAX_SAFE_INTEGER], extractCallTimeoutSec: [5, Number.MAX_SAFE_INTEGER],
+    worldRetrievalTop: [1, Number.MAX_SAFE_INTEGER], worldRetrievalDepth: [0, Number.MAX_SAFE_INTEGER],
     extractConcurrency: [1, Number.POSITIVE_INFINITY],
     extractChunkChars: [1, Number.MAX_SAFE_INTEGER],
     // ★★★leg161（用户令「**这是记忆插件的向量模型参数配置，就这几个**」）：**检索参数那三格**。
     //   ★它们住**参数页**的注入卡（与"插件动不动你的对话"同一处）——因为那一段就是它们管的东西。
     //   ★★`retrievalTop` / `retrievalDepth` 是**整数**（条数）；`retrievalMinScore` 是**小数**
     //     ⇒ 它走下面那条小数通道（`/^\d+$/` 那种整数口会把它整条拒掉，本笔当场核出来的）。
-    retrievalTop: [1, 50],
-    retrievalDepth: [1, 20],
-    retrievalMinScore: [0, 1],
-    retrievalMaxChars: [1, 20000],
+    retrievalTop: [1, Number.MAX_SAFE_INTEGER],
+    retrievalDepth: [1, Number.MAX_SAFE_INTEGER],
+    retrievalMinScore: [0, 1], worldRetrievalMinScore: [0, 1],
+    retrievalMaxChars: [1, Number.MAX_SAFE_INTEGER],
+    // ★★★（2026-10-12 ·「当前状态注入多少字」）：与「往事注入多少字」**同一个数域**，
+    //   但它是**另一笔独立额度**（当前场景的可见状态），住参数页注入卡那枚新开关下面。
+    //   ★出厂值住 `src/limits.js` 的 `SCENE_STATE_CHARS_DEFAULT`（渲染层与真跑读同一份）。
+    sceneStateMaxChars: [1, Number.MAX_SAFE_INTEGER],
 };
 
 /** ★leg161：**小数**设置键（现在只有「相似度阈值」一个）——范围照 `SETTINGS_NUM_RANGE`。 */
-export const SETTINGS_FLOAT_KEYS = new Set(['retrievalMinScore']);
+export const SETTINGS_FLOAT_KEYS = new Set(['retrievalMinScore', 'worldRetrievalMinScore']);
 
 /** ★leg161：小数的归一：合法 ⇒ 保留两位；非法/越界 ⇒ null（调用方**不写盘**并如实出声）。 */
 export function sw2NormalizeFloatSetting(key, raw) {
@@ -100,14 +116,18 @@ export const SETTINGS_NUM_LABEL = {
     callMaxTokens: '单轮输出上限（token）',
     tagMaxActions: '单轮注入行动条数上限',
     extractConcurrency: '同时问几块',
-    extractChunkChars: '抽取每块字符数',
+    extractChunkChars: '每包抽取目标字符数',
+    extractCallMaxTokens: '抽取输出上限（token）', extractCallTimeoutSec: '抽取超时（秒）',
+    worldRetrievalTop: '每项世界事务召回条数', worldRetrievalDepth: '世界因果追溯层数',
     // ★leg161：检索参数那三格（名字照玩家看得懂的话说，零引擎术语）。
     //   ★2026-10-05：**名字保持原样**——玩家已经认得它们；"这一格作用在哪、管什么"
     //     改由参数页那四格各挂的一枚小问号说清（见 `src/render.js` 的 `paramHint`）。
-    retrievalMinScore: '相似度阈值',
+    retrievalMinScore: '聊天相似度阈值', worldRetrievalMinScore: '世界事务相似度阈值',
     retrievalTop: '最大召回条数',
     retrievalDepth: '检索上下文深度',
     retrievalMaxChars: '往事注入多少字',
+    // ★★★（2026-10-12）：当前可见状态那一段的字数额度（玩家认得的话，零引擎术语）。
+    sceneStateMaxChars: '当前状态注入多少字',
 };
 
 /** 数字设置的归一：合法 ⇒ 整数；非法/越界 ⇒ null（调用方**不写盘**并如实出声，绝不写 NaN）。 */
@@ -115,9 +135,10 @@ export function sw2NormalizeNumericSetting(key, raw) {
     const range = SETTINGS_NUM_RANGE[key];
     if (!range) return null;
     const s = String(raw ?? '').trim();
+    if (key === 'extractChunkChars' && ['不限','unlimited'].includes(s.toLowerCase())) return 'unlimited';
     if (!/^\d+$/.test(s)) return null;          // 空串/负号/小数/中文一律不受理（不猜、不四舍五入）
     const n = Number(s);
-    if (!Number.isFinite(n) || n < range[0] || n > range[1]) return null;
+    if (!Number.isSafeInteger(n) || n < range[0] || n > range[1]) return null;
     return n;
 }
 
@@ -206,16 +227,36 @@ export function createModelChannelHub(deps = {}) {
         return r;
     }
 
-    /** ★★★用户令：**测试连通**——发一次最小真实请求，一次验三样（地址 / 密钥 / 模型号）。 */
+    /** ★转发开着吗？与 `resolveBrowserTransport` **同一把尺**（设置里存的是布尔，历史值可能是 '1'/'true'）。 */
+    const relayOn = (s) => s?.relayThroughHost === true || s?.relayThroughHost === '1' || s?.relayThroughHost === 'true';
+
+    /** ★★★用户令：**测试连通**——发一次最小真实请求，一次验三样（地址 / 密钥 / 模型号）。
+     *  ★★★2026-10-16 实测抓出来的第一处（**用户看到的那一条**）：这一枚按钮原来**只走直连**，
+     *   而跨域被挡的网关（如 opencode go）直连**永远显示"连不上"**——哪怕「走酒馆后端转发」已经勾上。
+     *   ⇒ 转发开着时改走 `probeModelViaRelay`（请求经宿主发出），并把"走的是哪条"写进结论行，
+     *     免得"通了"与"通了但走的是另一条路"长得一模一样。 */
     async function probeModelAction() {
         const s = read() || {};
-        status('正在测试连通…');
-        const r = await probeModel({ baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model, fetchImpl });
+        const viaRelay = relayOn(s);
+        const how = viaRelay ? '经酒馆后端' : '直连';
+        status(`正在测试连通（${how}）…`);
+        const r = viaRelay
+            ? await probeModelViaRelay({
+                baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model,
+                headers: parseExtraHeaders(s.extraHeaders).headers,
+                ...(typeof fetchImpl === 'function' ? { send: fetchImpl } : {}),
+            })
+            : await probeModel({ baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model, headers: parseExtraHeaders(s.extraHeaders).headers, fetchImpl });
         // ★用户 2026-09-27 当场裁的：**不写"模型回了几个字"**（那是内部噪声，玩家要的是通没通）。
+        // ★★★2026-10-16 用户当场第五条令（逐字）：「**连通就连通你非要在后面解释一大堆干嘛**」——
+        //   上一版把"最小请求成功／被 16 token 的小额度截断属正常／正式抽取 JSON 参数未验证"全堆在行尾，
+        //   玩家只想知道通没通。⇒ **成功行只说三样**：通了（走哪条路）· 哪个模型 · 几秒。
+        //   "探针只验了最小请求、没验正式抽取参数"这句**仍在**——挂在「测试连通」那枚按钮的 title 上
+        //   （`src/render.js` 那枚 `data-action="probe-model"` 的按钮），要看的人悬停就看得到，不占玩家的眼。
         state.probe = r.ok
-            ? { ok: true, line: `通 · ${String(s.model || '')} · ${secs(r.ms)}（最小请求成功；正式抽取 JSON 参数未验证）` }
-            : { ok: false, line: `注意：${r.error}` };
-        status(r.ok ? `连通 · ${String(s.model || '')} · ${secs(r.ms)}` : `注意：连不通：${r.error}`);
+            ? { ok: true, line: `通（${how}） · ${String(s.model || '')} · ${secs(r.ms)}` }
+            : { ok: false, line: `注意：${r.error}（${how}）` };
+        status(r.ok ? `连通（${how}） · ${String(s.model || '')} · ${secs(r.ms)}` : `注意：连不通（${how}）：${r.error}`);
         paint();
         return r;
     }
@@ -246,14 +287,14 @@ export function createModelChannelHub(deps = {}) {
             write('callMaxTokens', norm);
             const ti = el?.querySelector?.('#sw2_call_tokens');
             if (ti) ti.value = String(norm);
-            status(`已填入世界模型：${id} ——「单轮输出上限」按它自己声明的 ${norm} 一并填好`);
+            status(`已填入世界模型：${id} ——「单轮输出上限」按它自己声明的 ${norm} 一并填好`, { diagnostic: false });
             paint();          // 清单那边把高亮挪到新的这一项
             return { ok: true, line: id, maxTokens: norm };
         }
         status(`已填入世界模型：${id}`
             + (Number.isFinite(declared)
                 ? '（它声明的输出上限超出了这一格能填的范围，这一格没动）'
-                : '（这个网关没报输出上限，这一格保持原样 / 按出厂值）'));
+                : '（这个网关没报输出上限，这一格保持原样 / 按出厂值）'), { diagnostic: false });
         paint();          // 清单那边把高亮挪到新的这一项
         return { ok: true, line: id, maxTokens: null };
     }
@@ -291,13 +332,18 @@ export function createModelChannelHub(deps = {}) {
                 }
                 // ★★leg108：属性那一半不再手拼 —— 与主委托共用 `readPayload`；`el` 仍是**手工加的那一个键**
                 //   （它不来自任何属性，而 `sw2ApplyParam` 靠它分「明确清空」与「手滑到空」）。
+                // 数量与预算的数字输入需要保留空值等编辑中间态；input 时提交可能校验失败并按真源回写，打断数字编辑。
+                // 只延后这些 INPUT 到 change（失焦/确认）提交，选择框、开关及其他设置仍沿用即时保存。
+                const inputType = String(hit.type || "").toLowerCase();
+                const numericEdit = inputType === "number" || (inputType === "text" && String(hit.getAttribute?.("inputmode") || "").toLowerCase() === "numeric");
+                if (e.type === "input" && tag === "INPUT" && numericEdit) return;
                 const payload = typeof readPayload === 'function' ? readPayload(hit) : {};
                 if (typeof dispatchAction === 'function') dispatchAction('set-param', { ...payload, value: payload.value ?? hit.value, el: hit }, e);
                 return;
             }
             // ★★★leg161：**记忆通道那三格也走这一条**（表分开、处理同一条）——键名各自独立，
             //   免得两条通道的地址/密钥互相覆盖（一个本地网关、一个云端是常见配法）。
-            const allInputs = { ...SETTINGS_INPUTS, ...EMBED_SETTINGS_INPUTS };
+            const allInputs = { ...SETTINGS_INPUTS, ...EMBED_SETTINGS_INPUTS, ...SETTINGS_PICKERS };
             const key = Object.keys(allInputs).find((k) => allInputs[k] === e.target?.id);
             if (key) {
                 const v = e.target.value;
@@ -319,6 +365,15 @@ export function createModelChannelHub(deps = {}) {
                 write(textKey, String(e.target.value ?? ''));
                 return;
             }
+            // ★★★2026-10-16：**开关**（`data-settings-bool="键名"`）——设置页那枚「走酒馆后端转发」。
+            //   为什么另立一格而不是复用 `data-settings`：那一格是**数字**专用（紧接着就过数字校验，
+            //   布尔进去会被判非法并弹一句看不懂的话）。存的是**布尔**（不是 '1'/'0' 字符串）——
+            //   `resolveBrowserTransport` 那一侧按 `=== true` 判，写字符串就等于这个开关永远关着。
+            const boolKey = e.target?.getAttribute?.('data-settings-bool');
+            if (boolKey) {
+                write(boolKey, e.target.checked === true);
+                return;
+            }
             // ★★★leg87：数字型设置（单轮超时/输出上限）走**声明式**这一格（`data-settings="键名"`）。
             //   为什么与上面那条分开：上面那条把值原样写盘（字符串），数字键必须过校验——
             //   非法值（空框 / 负数 / 中文）**不写盘、当场如实出声**（静默写 NaN = 每轮调用失败且看不出为什么）。
@@ -333,7 +388,7 @@ export function createModelChannelHub(deps = {}) {
                     return;
                 }
                 write(numKey, n);
-                status(`已保存 · ${SETTINGS_NUM_LABEL[numKey] || numKey} → ${n}`);
+                status(`已保存 · ${SETTINGS_NUM_LABEL[numKey] || numKey} → ${n === 'unlimited' ? '不限' : n}`, { diagnostic: false });
                 return;
             }
         };

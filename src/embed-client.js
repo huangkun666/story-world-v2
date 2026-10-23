@@ -60,7 +60,8 @@ export function createEmbedClient({
     let cap = Number.isFinite(Number(batchSize)) && Number(batchSize) > 0 ? Math.floor(Number(batchSize)) : EMBED_BATCH_FALLBACKS[0];
 
     /** 发一批（**不再重试**：减半那件事在下面 `embed` 里做一次） */
-    async function sendBatch(texts) {
+    async function sendBatch(texts, {signal, onPosted, onRejected, offset = 0} = {}) {
+        if (signal?.aborted) { const e = new Error('嵌入已停止'); e.outcome = 'cancelled'; e.retryable = false; throw e; }
         if (typeof send !== 'function') { const e = new Error('没有可用的发送通道'); e.retryable = false; throw e; }
         const body = { model, input: texts };
         // ★`Number(null) === 0` 这个坑今晚咬了两次（另一次在 `beforeNowOf`）⇒ 必须先显式排掉"没给"
@@ -68,36 +69,53 @@ export function createEmbedClient({
         if (encodingFormat) body.encoding_format = String(encodingFormat);
         let res;
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const abort = () => ctl?.abort(signal.reason);
+        signal?.addEventListener('abort', abort, {once:true});
         const timer = ctl ? setTimeout(() => ctl.abort(new Error(`嵌入超时（${timeoutMs}ms）`)), timeoutMs) : null;
+        let posted = false;
         try {
+            await onPosted?.({texts:[...texts], offset});
+            if (signal?.aborted) { const e = new Error('嵌入已停止'); e.outcome = 'cancelled'; e.retryable = false; throw e; }
+            posted = true;
             res = await send(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
                 body: JSON.stringify(body),
                 ...(ctl ? { signal: ctl.signal } : {}),
             });
+            if (!res.ok) {
+                const snippet = String(await res.text().catch(() => '')).slice(0, 240);
+                const e = new Error(`嵌入通道 HTTP ${res.status}${snippet ? `：${snippet}` : ''}`);
+                e.status = res.status;
+                e.batchTooBig = looksLikeBatchError(res.status, snippet);
+                e.retryable = e.batchTooBig ? false : isRetryableStatus(res.status);
+                e.outcome = 'rejected';
+                await onRejected?.({texts:[...texts], offset, error:e});
+                throw e;
+            }
+            const data = await res.json();
+            let rows = Array.isArray(data?.data) ? data.data : [];
+            if (rows.some(row => row?.index !== undefined)) {
+                const indices = rows.map(row => row?.index);
+                if (indices.some(i => !Number.isSafeInteger(i) || i < 0 || i >= texts.length) || new Set(indices).size !== rows.length) return [];
+                rows = [...rows].sort((a,b) => a.index-b.index);
+            }
+            return rows.map(d => d?.embedding);
         } catch (err) {
+            if (err?.outcome) throw err;
             const e = new Error(`嵌入通道失败：${err?.message || err}`);
-            e.retryable = true;                  // ★网络层的事 ⇒ 可以留着下轮补
+            e.retryable = posted;
+            e.outcome = posted ? 'unknown' : 'cancelled';
             e.cause = err;
             throw e;
         } finally {
             if (timer) clearTimeout(timer);
+            signal?.removeEventListener('abort', abort);
         }
-        if (!res.ok) {
-            const snippet = String(await res.text().catch(() => '')).slice(0, 240);
-            const e = new Error(`嵌入通道 HTTP ${res.status}${snippet ? `：${snippet}` : ''}`);
-            e.status = res.status;
-            e.batchTooBig = looksLikeBatchError(res.status, snippet);
-            e.retryable = e.batchTooBig ? false : isRetryableStatus(res.status);   // ★批太大不是"可重试"，是"该换个小批"
-            throw e;
-        }
-        const data = await res.json();
-        const vecs = Array.isArray(data?.data) ? data.data.map((d) => d?.embedding) : [];
-        return vecs;
     }
 
     return {
+        supportsBatchLifecycle: true,
         /** 现在学到的一批几行（调用方可以据此报读数） */
         batchSize: () => cap,
         endpoint,
@@ -105,7 +123,7 @@ export function createEmbedClient({
          * 把一批文本嵌成向量。
          * @returns {Promise<number[][]|null>} ★条数对不上 ⇒ **null**（绝不拿前 k 条冒充）
          */
-        async embed(texts) {
+        async embed(texts, options = {}) {
             const list = (Array.isArray(texts) ? texts : []).map((x) => String(x ?? ''));
             if (!list.length) return [];                       // ★空输入 ⇒ 零调用
             const out = [];
@@ -115,7 +133,7 @@ export function createEmbedClient({
                 // ★批太大 ⇒ 当场减半再试（只在这一层做；跨轮次的补嵌归编排层）
                 for (let attempt = 0; ; attempt += 1) {
                     try {
-                        vecs = await sendBatch(slice);
+                        vecs = await sendBatch(slice, {...options, offset:i});
                         cap = Math.max(1, Math.min(cap, slice.length));   // 记住真用得上的行数
                         break;
                     } catch (err) {
@@ -127,6 +145,7 @@ export function createEmbedClient({
                     if (attempt > EMBED_BATCH_FALLBACKS.length + 4) throw new Error('嵌入通道：批量减半重试次数用尽');
                 }
                 if (!Array.isArray(vecs) || vecs.length !== slice.length) return null;
+                await options.onBatch?.({texts:[...slice], vectors:vecs, offset:i});
                 out.push(...vecs);
             }
             return out.length === list.length ? out : null;

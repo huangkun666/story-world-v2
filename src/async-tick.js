@@ -31,9 +31,21 @@
  *   ③ 它拿得到**刚写下去的那份世界**（`hot`）与这一轮的正文（`dialogue`）——
  *      因为"这一轮发生了什么"要等结算完才知道。
  */
-export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick = null, getScope = () => '', beforeCommit = null, onOutcome = null }) {
+export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick = null, getScope = () => '', beforeCommit = null, onOutcome = null, onStateChange = null, isBlocked = () => false }) {
     let running = false;
     let generation = 0;
+    let controller = null, committed = false;
+    const cancelled = () => Object.assign(new Error('用户已停止推进'), { sw2Cancelled: true });
+    function cancel() {
+        if (!running || committed || controller.signal.aborted) return;
+        controller.abort(); onStateChange?.();
+        onStatus?.('正在停止推进 · 已发请求可能仍在服务端运行，结果将丢弃…');
+    }
+    function reportCancelled(error) {
+        onOutcome?.({ ok: false, cancelled: true });
+        onStatus?.(error && !error.sw2Cancelled ? `注意：推进已停止，原账保存状态未确认：${error.message || error}` : '推进已停止 · 本轮结果未落账，可重新推进');
+        return { ok: false, cancelled: true };
+    }
     /** ★旁路：绝不影响返回值、绝不抛出去（失败只经 `onStatus` 报一句） */
     function runAfterTick(payload) {
         if (typeof afterTick !== 'function') return;
@@ -50,18 +62,28 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
             onStatus?.('注意：上一轮还在演算，稍候再试（防重入）');
             return { ok: false, skipped: 'busy' };
         }
+        if (isBlocked()) {
+            onStatus?.('抽象还在运行，请先停止或等待完成');
+            return { ok: false, skipped: 'busy' };
+        }
         const world = load();
         if (!world) {
             onStatus?.('尚无世界：当前聊天没有世界账——可到设置页「开始新世界」一键创建（角色卡自动为源），或「导入恢复」载入备份');
             return { ok: false, skipped: 'no-world' };
         }
         running = true;
+        controller = new AbortController(); committed = false;
+        const taskController = controller;
+        let taskCommitted = false;
+        let saveError = null;
+        onStateChange?.();
         try {
             const scope = getScope();
             const epoch = generation;
             let version = JSON.stringify(world);
             const transaction = {
                 checkScope() {
+                    if (controller !== taskController || taskController.signal.aborted && !taskCommitted) throw cancelled();
                     if (scope !== getScope() || epoch !== generation) throw new Error('聊天或快照已切换，迟到结果已作废');
                 },
                 assertCurrent() {
@@ -71,9 +93,24 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
                 },
                 validateInput() { this.checkScope(); options.validate?.(); },
                 acceptCurrent() { this.checkScope(); version = JSON.stringify(load()); },
+                async save(promise) {
+                    try { return await promise; }
+                    catch (error) { saveError = error; throw error; }
+                },
+                async wait(promise) {
+                    this.assertCurrent();
+                    let abort;
+                    try {
+                        const value = await Promise.race([promise, new Promise((_, reject) => {
+                            abort = () => reject(cancelled()); taskController.signal.addEventListener('abort', abort, { once: true });
+                        })]);
+                        this.assertCurrent(); return value;
+                    } finally { if (abort) taskController.signal.removeEventListener('abort', abort); }
+                },
             };
             onStatus?.('演算中…');
-            const res = await tick({ world, dialogue: String(dialogue ?? ''), transaction, messageRef: options.messageRef });
+            const res = await tick({ world, dialogue: String(dialogue ?? ''), transaction, messageRef: options.messageRef, signal: controller.signal });
+            transaction.assertCurrent();
             if (!res.ok) {
                 onOutcome?.({ ok: false, save: false, error: res.error });
                 // 失败降级：世界原样不动（引擎不变式），状态条报错，重试路径=再点一次
@@ -90,7 +127,9 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
                 beforeCommit?.(res.ssot, { world, messageRef: options.messageRef, result: res });
                 hot = await save(res.ssot, transaction, options);
                 transaction.checkScope();
+                taskCommitted = committed = true; onStateChange?.();
             } catch (err) {
+                if (controller.signal.aborted) return reportCancelled(err);
                 onOutcome?.({ ok: false, save: true, error: String(err?.message || err) });
                 onStatus?.(`注意：落账失败：${err?.message || err}（世界已演算未保存，可重试）`);
                 return { ok: false, error: String(err?.message || err), save: true };
@@ -101,17 +140,21 @@ export function createTickQueue({ tick, load, save, refresh, onStatus, afterTick
             runAfterTick({ hot: hot ?? res.ssot, world: res.ssot, dialogue: String(dialogue ?? '') });   // ★旁路（不挡、不抛）
             return { ok: true, tick: res.ssot?.meta?.tick };
         } catch (err) {
+            if (controller.signal.aborted) return reportCancelled(saveError);
             onOutcome?.({ ok: false, error: String(err?.message || err) });
             onStatus?.(`注意：演算异常：${err?.message || err}（世界原样未动，可重试）`);
             return { ok: false, error: String(err?.message || err), thrown: true };
         } finally {
             running = false;
+            controller = null; onStateChange?.();
         }
     }
 
     return {
         advance,
+        cancel,
         invalidate() { generation++; },
         get busy() { return running; },
+        get cancellable() { return running && !committed && !controller.signal.aborted; },
     };
 }

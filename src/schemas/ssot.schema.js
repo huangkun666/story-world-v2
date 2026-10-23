@@ -1,3 +1,4 @@
+import {sourceEditsSchema} from './source-edit.schema.js';
 // story-world-v2/src/schemas/ssot.schema.js
 // SSOT（世界状态）JSON Schema —— 一份 JSON：实体 + 分量缓存 + Agenda 池 + 事件链（ANCHOR §3①）。
 // 形状规则对应 ANCHOR §4.2（事件源三类）/§4.5（盘算三必须）。语义校验（位置 ∈ 世界状态等）归引擎。
@@ -5,6 +6,8 @@
 import {geographySchema} from './geography.schema.js';
 
 import { actorSchema, scopeSchema, storedScopeSchema } from '../event-contract.js';
+// 显式观察元数据的公共入口（`state-observation → event-contract` 单向，不成环）。
+import { storedObservationSchema } from '../state-observation.js';
 export const ssotSchema = {
     kind: 'object',
     additional: false,
@@ -31,7 +34,8 @@ export const ssotSchema = {
             props: {
                 world: { kind: 'string', minLength: 1 },
                 tension: { kind: 'number' },               // 静态张力常量（切片）；已并入 setting.dynamic.tension.intensity（大势层细案 §3.7 兼容保留）
-                positions: { kind: 'array', minItems: 1, items: { kind: 'string', minLength: 1 } },
+                // ★用户新令（2026-10-12）：整个世界没有已知位置是**合法形态**（空数组；绝不补占位地点）。
+                positions: { kind: 'array', items: { kind: 'string', minLength: 1 } },
                 playerId: { kind: 'string', minLength: 1 },   // K8：玩家棋子标注（可选；缺省=旁观世界合法形态）
                 setting: {   // K24/大势层：设定池（全可选——旧世界缺省合法，A-1 兼容断言；细案 §3.1/§3.3）
                     kind: 'object',
@@ -372,7 +376,7 @@ export const ssotSchema = {
         },
         entities: {
             kind: 'array',
-            minItems: 1,
+            minItems: 0,
             items: {
                 kind: 'object',
                 // ★★leg34（用户拍板「可以。那就按你说的来」⇒ 丙′ 案）：**实体放开额外字段**（原为 `additional: false`）。
@@ -392,7 +396,9 @@ export const ssotSchema = {
                 //       `attrs`（四维浮点：兵力/权位/人脉/耳目，用户令「删」）——手拍值让"编的"看起来像"算的"。
                 additional: true,
                 denied: ['attrs'],
-                required: ['id', 'kind', 'name', 'location'],
+                // ★用户新令（2026-10-12）：位置**可省**——没有明述位置时实体不带 `location` 键
+                //   （不是空串、不是「未明」占位）。有明述/显式位置时照样是非空文本、∈ context.positions。
+                required: ['id', 'kind', 'name'],
                 props: {
                     id: { kind: 'string', minLength: 1 },
                     kind: { kind: 'string', enum: ['faction', 'character'] },
@@ -465,7 +471,7 @@ export const ssotSchema = {
             items: {
                 kind: 'object',
                 additional: false,
-                required: ['id', 'owner', 'goal', 'stage', 'visibility', 'maxSteps', 'progress', 'memory'],
+                required: ['id', 'owner', 'goal', 'progress', 'memory'],
                 props: {
                     id: { kind: 'string', minLength: 1 },
                     owner: { kind: 'string', minLength: 1 },                       // 必须有主（§4.5）
@@ -648,6 +654,8 @@ export const ssotSchema = {
                     note: { kind: 'string' },
                     endedTick: { kind: 'number', int: true, min: 0 },   // 可选：从哪一轮起不再算数
                     endedWhy: { kind: 'string', minLength: 1 },         // 可选：为什么了结
+                    // 可选：这条**已提交关系**的显式可见性披露。了结会以新观察替换或清除（不保留旧知识）。
+                    observation: storedObservationSchema,
                 },
             },
         },
@@ -656,6 +664,8 @@ export const ssotSchema = {
             state: { kind: 'string', enum: ['planned','active','ended'] }, scope: { kind: 'array', items: scopeSchema },
             effectiveFrom: { kind: 'string', minLength: 1 }, effectiveUntil: { kind: 'string', minLength: 1 },
             supersedes: { kind: 'string', minLength: 1 }, endCause: { kind: 'string', minLength: 1 },
+            // 可选：这份**已提交条件**的显式可见性披露（引擎落账时存；旧账没有这一格照常合法、不迁移）。
+            observation: storedObservationSchema,
             changes: { kind: 'array', items: { kind: 'object', additional: false, required: ['state','eventRef','tick'], props: {
                 state: { kind: 'string', enum: ['planned','active','ended'] }, eventRef: { kind: 'string', minLength: 1 }, tick: { kind: 'number', int: true, min: 0 }
             } } }
@@ -787,6 +797,23 @@ export const ssotSchema = {
             required: ['tick'],
             props: {
                 tick: { kind: 'number', int: true, min: 0 },
+                // ★★★Task 1（资料初始化）：**这个新世界是从哪一份固定资料版本长出来的**。
+                //   为什么非记不可：初始化只创建新世界，而"世界与资料版本"的绑定必须有据可查——
+                //   否则事后没人说得清这个世界对应哪一版资料、当时缺了哪些来源
+                //   （发布侧的部分发布**精确缺失名单** `omitted_source_ids` 也在这里）。
+                //   内容：发布原件**逐字**（`library_id/version/records/sources/omitted_source_ids`
+                //   ＋发布回执的其余键）＋ 本层记账 `conversion`（指纹 / 调用方时间戳 / 诊断：
+                //   哪些内容没能落成世界状态——端点非实体的边、空串格、空设定）。
+                //   ★形状只查"是对象"：内层由 `services/world-engine/source-world.mjs` 记账保证
+                //     （同 `seedRoots`/`entityFields`/`dialogueBook` 的口径——账本不在这里再抄一份发布结构）。
+                //   ★可选键 ⇒ **旧世界零扰动**：老账没有这一格照样过校验（没走资料初始化的世界本来就没有它）。
+                sourcePublication: { kind: 'object', additional: true, props: {} },
+                fieldSchema: { kind: 'object', additional: true, props: {} },
+                entityOrigins: { kind: 'object', additional: true, props: {} },
+                relationOrigins: { kind: 'object', additional: true, props: {} },
+                // 服务按完整初始化输入确认同一世界，响应丢失时回取固定初版核对。
+                sourceInitialization: { kind: 'object', additional: true, props: {} },
+                sourceEdits: sourceEditsSchema,
                 chatConsumption: { kind: 'array', items: {
                     kind: 'object', additional: false,
                     required: ['chatId', 'messageId', 'version', 'fingerprint', 'tick', 'eventIds', 'changedFields'],
