@@ -12,6 +12,7 @@ export const worldStepSchema = {
     required: ['actions', 'newEvents', 'agendaAdvances', 'newAgendas', 'agendaCancels', 'newEntities', 'entityFates'],
     props: {
         eventProtocol: { kind: 'number', enum: [4] },
+        backstagePreview: { kind: 'string', minLength: 1 },
         conditionUpdates: { kind: 'array', items: { kind: 'any' } },
         agendaCancels: {   // K18/因果链 T5：模型提议放弃盘算（带理由——提议权，裁决归引擎；与出生对称）
             kind: 'array',

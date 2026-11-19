@@ -1,6 +1,7 @@
 import {worldSourceEvidence} from './source-records.js';
 import { validateMessageReference, sameMessageVersion, recordConsumption } from './chat-consumption.js';
 import { worldTasks } from './world-schedule.js';
+import { chronicleOf } from './ledger-recall.js';
 import { extractTags } from './tag-extract.js';
 import { registerDialogueFacts } from './settle.js';
 import { settleWithHealing } from './tick.js';
@@ -14,7 +15,57 @@ import { assembleMainPrompt } from './prompts.js';
 import { sourceWorld } from './source-world.js';
 import { observableContext } from './world-visibility.js';
 
-function prepare(world, dialogue, messageRef = null) {
+function lastStoryTime(world) {
+    if (world.meta?.storyTime) return world.meta.storyTime;
+    const history = chronicleOf(world);
+    for (let index = history.length - 1; index >= 0; index--) {
+        const at = String(history[index].timeMark ?? '').trim();
+        if (at) return { at, elapsed: [] };
+    }
+    return null;
+}
+
+function storyTimeForTurn(world, facts, historyAnchor) {
+    const saved = lastStoryTime(world) ?? (historyAnchor ? { at: historyAnchor, elapsed: [] } : null);
+    const at = facts.endAt ?? facts.lastAt ?? facts.at;
+    const duration = facts.elapsedParts;
+    const usesFirstMark = facts.at && (facts.at !== at || facts.elapsedAfterAt?.length);
+    const start = !saved?.at && usesFirstMark ? { at: facts.at, elapsed: [] } : saved;
+    const newAnchor = Boolean(at && at !== start?.at);
+    const mayAdvance = duration.length > 0 || Boolean(newAnchor && start?.at);
+    let end = start;
+    if (newAnchor || (facts.endAt && mayAdvance)) {
+        end = { at, elapsed: facts.endAt ? [] : (facts.elapsedAfterAt ?? []) };
+    } else if (duration.length) {
+        end = { ...start, elapsed: [...(start?.elapsed ?? []), ...duration] };
+    }
+    return { start, end, mayAdvance };
+}
+
+function backstageCharacters(world, tasks, presentIds) {
+    const present = new Set(presentIds);
+    const entities = new Map((world.entities ?? []).map(entity => [entity.id, entity]));
+    const agendas = new Map((world.agendas ?? []).map(agenda => [agenda.id, agenda]));
+    const selected = new Map();
+    for (const task of tasks) {
+        if (task.kind !== 'agenda' || present.has(task.owner)) continue;
+        const entity = entities.get(task.owner);
+        if (entity?.kind !== 'character') continue;
+        if (!selected.has(entity.id)) {
+            selected.set(entity.id, {
+                id: entity.id,
+                name: entity.name,
+                ...(entity.location ? { location: entity.location } : {}),
+                agendas: [],
+            });
+        }
+        const agenda = agendas.get(task.id);
+        selected.get(entity.id).agendas.push({ id: agenda.id, goal: agenda.goal, ...(agenda.stage ? { stage: agenda.stage } : {}) });
+    }
+    return [...selected.values()];
+}
+
+function prepare(world, dialogue, messageRef = null, historyAnchor = null) {
     validateMessageReference(messageRef);
     if (messageRef && (world.meta?.chatConsumption || []).some(r => sameMessageVersion(r, messageRef))) {
         throw new Error('该消息已入账，请核对正式版本');
@@ -24,6 +75,7 @@ function prepare(world, dialogue, messageRef = null) {
     const facts = extractTags(dialogue, { world, entities: world.entities || [],
         canon: world.context?.setting?.frozen?.canon?.bookEntities || [],
         locations: world.context?.positions || [], playerId: world.context?.playerId || null });
+    const clock = storyTimeForTurn(world, facts, historyAnchor);
     const tick = (world.meta?.tick ?? 0) + 1;
     const stats = registerDialogueFacts(world, { facts, dialogue, tick });
     const references = referencedEventsOf(world, facts.references, stats.rejected);
@@ -42,7 +94,23 @@ function prepare(world, dialogue, messageRef = null) {
         participantIds: [...new Set(stats.resultEvents.flatMap(e => eventEntityIds(e, world)))] };
     const move = facts.player ? { verb: facts.player.verb, object: facts.player.targetText,
         location: facts.player.location, attempt: true, note: null, dropped: [], source: 'tag' } : null;
-    const tasks = worldTasks(world).map(t => priorIds.get(t.kind).has(t.id) ? t : { ...t, origin: 'dialogue' });
+    if (facts.at || facts.endAt || facts.elapsed || facts.presentIds) {
+        world.meta.storyTime = clock.end ?? { elapsed: [] };
+        if (facts.at || facts.endAt || facts.elapsed) turnFacts.storyTime = clock;
+    }
+    let tasks = worldTasks(world);
+    if (facts.presentIds) {
+        const characters = backstageCharacters(world, tasks, facts.presentIds);
+        if (characters.length) {
+            turnFacts.backstage = { ...clock, characters };
+            if (!clock.mayAdvance) {
+                const paused = new Set(characters.map(character => character.id));
+                world.meta.turnProtection.pausedBackstageIds = [...paused];
+                tasks = tasks.filter(task => !paused.has(task.owner));
+            }
+        }
+    }
+    tasks = tasks.map(t => priorIds.get(t.kind).has(t.id) ? t : { ...t, origin: 'dialogue' });
     const newRecordIds = ['agendas','events','conditions','entities'].flatMap((table,index) =>
         (world[table] || []).filter(r => !priorIds.get(['agenda','event','condition','idle'][index]).has(r.id)).map(r => r.id));
     return { world, tasks, turnFacts, move, dialogueStats: stats, fieldSchemaRevision:readWorldFieldSchema(world).revision, priorEventIds: [...priorIds.get('event')],newRecordIds };
@@ -60,7 +128,7 @@ export function handleWorldRequest(request) {
     if (request.action === 'tasks') return { tasks: worldTasks(world) };
     if (request.action === 'prepare') {
         if (request.dialogue != null && typeof request.dialogue !== 'string') throw new TypeError('dialogue must be a string');
-        return prepare(world, request.dialogue ?? '', request.message_ref ?? null);
+        return prepare(world, request.dialogue ?? '', request.message_ref ?? null, request.history_time_anchor);
     }
     if (request.action === 'settle') {
         if(request.field_schema_revision!==undefined&&request.field_schema_revision!==readWorldFieldSchema(world).revision)throw Error('任务字段表修订不匹配，拒绝旧权限写入');

@@ -439,6 +439,10 @@ export function createWorldJournal({database=null,projectSourceImport=null,sourc
         const hydrated=hydratePlayerParams(view.world,params),delta=JSON.stringify(hydrated).length-JSON.stringify(view.world).length;
         return {...envelope({...fixed,world:hydrated}),record_view:detached(view.partial),record_metrics:{...view.metrics,world_bytes:view.metrics?.world_bytes==null?null:view.metrics.world_bytes+delta,view_bytes:JSON.stringify(hydrated).length}};
     }
+    async function getLatestChronicleTime(pointer){
+        await recordDescriptor(pointer);
+        return records.latestChronicleTime(pointer);
+    }
     async function getRecordChanges(pointer,{after_revision=-1}={}){
         scope(pointer);revision(pointer.revision);if(!Number.isSafeInteger(after_revision)||after_revision< -1||after_revision>pointer.revision)fail('Invalid change range',400);
         const selected=await recordDescriptor(pointer),changes=await records.getChanges(pointer,{after_revision});
@@ -933,6 +937,6 @@ export function createWorldJournal({database=null,projectSourceImport=null,sourc
         if(copy.checkpoints&&typeof copy.checkpoints==='object')copy.checkpoints=await unpackWorld(copy.checkpoints,copy.world_id);
         return copy;
     }
-    return {db,recordTables,recordStore:records,recordDescriptor,initialize,getWorld,getWorkingWorld,getRecordChanges,getRecordsAtPositions,saveSnapshots,getSavedSnapshot,listSnapshotMetadata,readSnapshot,startOperation,getOperation:(p,i)=>operationFor(p,i),checkpoint,setPhase,markModelPosted,claimModel,saveResponse,markModelUnknown,failOperation,resumeOperation,allowLimited,saveProposal,commitOperation,cancelOperation,restoreBranch,listIndexTasks,beginIndexMaintenance,reserveIndexVectors,settleIndexVectors,completeIndex,getMovements,readChatCursor,saveChatCursor,getRecords,exportWorld,previewImport,importWorld,readBody,paramsOf,saveParams,close:()=>db.close()};
+    return {db,recordTables,recordStore:records,recordDescriptor,initialize,getWorld,getWorkingWorld,getLatestChronicleTime,getRecordChanges,getRecordsAtPositions,saveSnapshots,getSavedSnapshot,listSnapshotMetadata,readSnapshot,startOperation,getOperation:(p,i)=>operationFor(p,i),checkpoint,setPhase,markModelPosted,claimModel,saveResponse,markModelUnknown,failOperation,resumeOperation,allowLimited,saveProposal,commitOperation,cancelOperation,restoreBranch,listIndexTasks,beginIndexMaintenance,reserveIndexVectors,settleIndexVectors,completeIndex,getMovements,readChatCursor,saveChatCursor,getRecords,exportWorld,previewImport,importWorld,readBody,paramsOf,saveParams,close:()=>db.close()};
 }
 import {isFinalizedPublication,finalizedEvidenceRecords} from '../src/finalized-source.js';

@@ -139,6 +139,7 @@ export function createServiceSession({ getCtx, getClient, getConnectionId, rules
         //   所以另给一个只说"此刻真在跑"的读数。只读一个布尔，不参与任何提交／落账判断。
         get running(){return running},
         get resumable(){return !running&&pendingBackground()},
+        waitForWorldTurn(){return running ? runDone : null},
         readWorld(){if(!cache)return null;try{return cache.key===signature() && cache.client===getClient() && binding()?.connection_id===getConnectionId()?copy(cache.world):null}catch{return null}},
         readState(){
             if (!active()) return null;

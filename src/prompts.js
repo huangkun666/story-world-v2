@@ -526,5 +526,9 @@ export function assembleMainPrompt(pack) {
     const prompt = MAIN_PROMPT
         .replaceAll('TH_CN', cnNum(nThreads))
         .replaceAll('TH_N', String(nThreads));
-    return `${prompt}\n\n${ENTITY_TABLE_LEGEND}\n\n【世界状态与落子事实】\n${pack.text}${pack.fieldPrompt?'\n\n'+pack.fieldPrompt:''}`;
+    const backstage = pack.pack?.turnFacts?.backstage;
+    const backstageRule = !backstage ? '' : backstage.mayAdvance
+        ? '\n\n【后台角色】turnFacts.backstage.characters 是本楼已确认离场且有未结束盘算的角色。按同一段 start 到 end 及前台给出的时长推进，结束时刻归同一份世界时间。角色从已有地点和目标继续行动。两人行程确实在本段重合时才可能相遇，是否交谈、作出约定或改变关系按各自目标与行动决定。将有依据的互动预演放在 JSON 的 backstagePreview 字符串中，以 <后台角色交互预演> 和 </后台角色交互预演> 包裹。没有互动候选时省略该字段。实际发生的事用现有 newEvents 记录具体时间和当事人，位置和关系变化用现有 entityUpdates、relationUpdates 落账，引用账上已有的相关盘算或事件作为原因。预演只保留可能发生的事。'
+        : '\n\n【后台角色】本楼未给出明确经过的时间，后台名单沿用已有时刻与状态，等待明确时间再推进。';
+    return `${prompt}${backstageRule}\n\n${ENTITY_TABLE_LEGEND}\n\n【世界状态与落子事实】\n${pack.text}${pack.fieldPrompt?'\n\n'+pack.fieldPrompt:''}`;
 }

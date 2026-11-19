@@ -170,7 +170,13 @@ export function checkWorldStep(step, ssot) {
     // ① 形状：真 schema 强制
     const r = validate(step, worldStepSchema);
     if (!r.ok) return { ok: false, errors: r.errors, warnings: [] };
-    for (const [i, ev] of step.newEvents.entries()) errors.push(...checkEventContract(ev, step.eventProtocol, ssot).map(e => `$.newEvents[${i}]: ${e}`));
+    const paused = new Set(currentTurnProtection(ssot)?.pausedBackstageIds);
+    for (const [i, ev] of step.newEvents.entries()) {
+        errors.push(...checkEventContract(ev, step.eventProtocol, ssot).map(e => `$.newEvents[${i}]: ${e}`));
+        if (paused.size && Array.isArray(ev.actors) && ev.actors.some(actor => paused.has(actor?.ref))) {
+            errors.push(`$.newEvents[${i}].actors: 后台角色正在等待明确的时间，不能作为本轮事件的行动者`);
+        }
+    }
     if (step.conditionUpdates !== undefined) {
         if (step.eventProtocol !== 4) errors.push('$.conditionUpdates: 必须声明 eventProtocol:4');
         else {

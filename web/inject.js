@@ -254,11 +254,18 @@ const FENCE = '`'.repeat(3);
  */
 export function tagSpecText(world=null) {
     const fields=worldWritablePropertyFields(world);
+    const storyTime=world?.meta?.storyTime;
+    const timeParts=[
+        storyTime?.at ? '已知时点为 '+storyTime.at : '',
+        storyTime?.elapsed?.length ? '此后明确经过 '+storyTime.elapsed.join('、') : '',
+    ].filter(Boolean);
     return [
         '【本回合必须用标签标出实际行动与重要结果】',
+        timeParts.length ? '从已入账的世界时间接着写，'+timeParts.join('，')+'。' : '',
         '正文照常写，末尾必须有一个独立的 '+FENCE+'tags 围栏块。只有这个块里面的标签插件才看；没有标签块，插件收不到本轮标记。一个标签占一整行，行首不缩进、不加编号，行尾不并列标签。',
         '先分行动与结果：问候、移动、集合、普通查阅若无独立新事实或义务，只记行动；不能给动作加“完成”就建事件，也不为标签补剧情。同一结果不拆成多件；零事件也合格，不写“无事件”占位。',
-        '块首写【协议】4。【此刻】填正文明确的时间点；【时长】填经过多久，两者分开，未知省略，不算日历。【场景：地点原话】放在对应事件之前；事件继承前面最近的场景和此刻，后写时间不回填，不猜地点。',
+        '块首写【协议】4。【此刻】填正文明确的时间点；【时长】填经过多久，两者分开，未知省略，不算日历。【本楼结束】只填正文明确的当前剧情结束时点。时点或时长属于主线这楼的推进时才写，回忆不改变当前时间。没有明确结束时点时，已知从某个【此刻】之后经过多久，就把对应的【时长】紧跟该时点。【场景：地点原话】放在对应事件之前；事件继承前面最近的场景和此刻，后写时间不回填，不猜地点。',
+        '【在场】后写一个 JSON 名字或正式 ID 数组，列出本楼前台场景中所有明确在场的在册角色，也包括没行动的人。确知名单为空时写 []，名单不完整或无法确认时省略。',
         '【行动】谁｜做了什么｜针对谁：标当轮已行动者，主角的实际行动也标，插件不替玩家决定。后两格知道就写、不知道就不写；不要为了凑格式编一个名字。在场、被提及、比喻或夸张不算实际行动或变化。',
         '【事件】本消息编号｜具体结果或义务｜已完成/未决｜既有原因事件ID。编号如E1，只在本消息内使用；可选第四格为账上既有因果事件ID，有可靠ID才填，多原因用顿号。已成立事实写已完成，仍待兑现的明确义务才写未决，后果未完不等于义务未履行。',
         '【类别】事件编号｜类别原话；【当事人】事件编号｜对象名（顿号分隔）。没有依据的可选项省略。',
@@ -1067,6 +1074,7 @@ export function createInjector({ getCtx, getWorld, isOn = () => false, setStatus
 
     const serviceInjector = serviceSession ? createServiceInjector({getCtx,isOn,setStatus,
         isActive:()=>serviceSession.active,getState:()=>serviceSession.readState(),
+        waitForWorldTurn:()=>serviceSession.waitForWorldTurn?.(),
         getQuery:()=>sw2RecallQueryText(getCtx(),400,paramsNow().depth,typeof queryLists==='function'?queryLists():{}),
         getRelevanceText:()=>sw2RecallQueryText(getCtx(),null,paramsNow().depth,typeof queryLists==='function'?queryLists():{}),getMaxChars:()=>isOn('injectLedgerRecall')?paramsNow().maxChars:0,
         getStateMaxChars:()=>{const value=Number(typeof retrievalParams==='function'?retrievalParams()?.sceneStateMaxChars:NaN);return Number.isSafeInteger(value)&&value>0?value:SCENE_STATE_CHARS_DEFAULT},

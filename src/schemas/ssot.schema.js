@@ -825,7 +825,12 @@ export const ssotSchema = {
                             props: { entityId: { kind: 'string', minLength: 1 }, field: { kind: 'string', minLength: 1 } } } },
                     },
                 } },
+                storyTime: { kind: 'object', additional: false, required: ['elapsed'], props: {
+                    at: { kind: 'string', minLength: 1 },
+                    elapsed: { kind: 'array', items: { kind: 'string', minLength: 1 } },
+                } },
                 turnProtection: { kind: 'object', additional: false, required: ['tick', 'actedIds', 'changedFields'], props: {
+                    pausedBackstageIds: { kind: 'array', items: { kind: 'string', minLength: 1 } },
                     tick: { kind: 'number', int: true, min: 0 }, actedIds: { kind: 'array', items: { kind: 'string' } },
                     participantIds: { kind: 'array', items: { kind: 'string' } },
                     changedFields: { kind: 'array', items: { kind: 'object', additional: false, required: ['entityId', 'field'],

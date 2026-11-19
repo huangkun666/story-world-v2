@@ -14,8 +14,9 @@ export function currentTurnProtection(world) {
 }
 
 export function isProtectedForStep(world, id) {
+    const turn = currentTurnProtection(world);
     return isSimulationBlocked(world, id)
-        || Boolean(id && currentTurnProtection(world)?.actedIds?.includes(id));
+        || Boolean(id && (turn?.actedIds?.includes(id) || turn?.pausedBackstageIds?.includes(id)));
 }
 
 /** 完整当前资料独立于镜头裁剪；也包含本轮实际行动的势力，别名使用既有身份解析。 */

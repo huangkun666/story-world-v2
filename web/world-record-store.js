@@ -142,6 +142,18 @@ export function createWorldRecordStore(db){
   const commit=await db.recordCommits.get(key(p));
   return {world,partial,metrics:{...(commit.metrics??{counts:{},world_bytes:null}),loaded:Object.fromEntries(d.tables.map(t=>[t,(world[t]||[]).length])),view_bytes:canonical(world).length}};
  }
+ // Older snapshots may put the last time mark outside the working history window.
+ async function latestChronicleTime(pointer){
+  const rows=(await byKind(ptr(pointer),'chronicle')).sort((a,b)=>b.position-a.position);
+  for(let offset=0;offset<rows.length;offset+=32){
+   const batch=rows.slice(offset,offset+32),bodies=await bodiesFor(batch);
+   for(const row of batch){
+    const at=unpack(row,bodies).timeMark?.trim();
+    if(at)return at;
+   }
+  }
+  return null;
+ }
  async function recordsAtPositions(pointer,positions){
   await descriptor(pointer);const rs=[];for(const kind of ['event','legacy-event'])for(const position of new Set(positions))rs.push(...await filtered(pointer,kind,'record_position',position));
   return getRecords(pointer,[...new Set(rs.map(r=>r.id))]);
@@ -227,7 +239,7 @@ export function createWorldRecordStore(db){
   }
   return {records,range:{after_revision,through_revision:pointer.revision}};
  }
- return {tables,putVersion,isRecordWorld,readWorld,readWorkingWorld,recordsAtPositions,getDescriptor:descriptor,getRecords,getChanges,getMovements};
+ return {tables,putVersion,isRecordWorld,readWorld,readWorkingWorld,latestChronicleTime,recordsAtPositions,getDescriptor:descriptor,getRecords,getChanges,getMovements};
 }
 
 

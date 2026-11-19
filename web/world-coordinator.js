@@ -100,8 +100,12 @@ export function createWorldCoordinator({journal,memory,model,onStatus=()=>{},get
     const current=await (journal.getWorkingWorld??journal.getWorld).call(journal,p,{revision:row.expected_revision});
     const facts=extractTags(row.inputs.dialogue,{world:current.world,entities:current.world.entities||[],canon:current.world.context?.setting?.frozen?.canon?.bookEntities||[],locations:current.world.context?.positions||[],playerId:current.world.context?.playerId??null});
     const loaded=await loadEvidence(journal,{...p,revision:row.expected_revision},{world:current.world,...(current.record_view?{record_view:current.record_view}:{}),...(current.record_metrics?{world_view:current.record_metrics}:{})},facts.references||[],[],evidenceUnavailable(p,id,'prepare'));
+    const needsTime=(facts.at||facts.endAt||facts.elapsed||facts.presentIds)&&!loaded.world.meta?.storyTime
+        &&!(loaded.world.chronicle??[]).some(row=>row.timeMark);
+    const historyTime=needsTime&&loaded.record_view?.chronicle
+        ? await journal.getLatestChronicleTime?.({...p,revision:row.expected_revision}) : null;
     row=await read(p,id);if(terminal(row))return row;
-    prepared={...engine({action:'prepare',world:loaded.world,dialogue:row.inputs.dialogue,message_ref:row.inputs.message_ref??null}),...(loaded.record_view?{record_view:loaded.record_view}:{}),...(loaded.world_view?{world_view:loaded.world_view}:{})};await journal.checkpoint(p,id,'prepared',prepared)}
+    prepared={...engine({action:'prepare',world:loaded.world,dialogue:row.inputs.dialogue,message_ref:row.inputs.message_ref??null,...(historyTime?{history_time_anchor:historyTime}:{})}),...(loaded.record_view?{record_view:loaded.record_view}:{}),...(loaded.world_view?{world_view:loaded.world_view}:{})};await journal.checkpoint(p,id,'prepared',prepared)}
    row=await read(p,id);if(terminal(row))return row;
    assertPreparedSchema(prepared,row.call?.response);
    if(!row.call) {

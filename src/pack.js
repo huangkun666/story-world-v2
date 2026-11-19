@@ -827,15 +827,22 @@ function timeBaseOf(ssot, { turnFacts = null, volumes = null } = {}) {
     // ① **上一件事发生在什么时候**：从账上（含卷）往回找最近的一个已知时间点。
     //    ★为什么要"含卷"：轮转之后最旧的编年进了冷档，不接卷就会在轮转之后**悄悄读不到**
     //      （本仓 leg119 为这个形状付过账：那一栏实测从 237 条掉到 118 条而**不报错**）。
-    const rows = chronicleOf(ssot, volumes);
-    for (let i = rows.length - 1; i >= 0; i -= 1) {
-        const t = String(rows[i]?.timeMark ?? '').trim();
-        if (t) { out.此刻 = t; break; }
+    const turnClock = turnFacts?.storyTime;
+    const storedClock = turnClock ? turnClock.start : ssot.meta?.storyTime;
+    if (turnClock || storedClock) {
+        if (storedClock?.at) out.此刻 = storedClock.at;
+        if (storedClock?.elapsed.length) out.从该时点已经过 = storedClock.elapsed;
+    } else {
+        const rows = chronicleOf(ssot, volumes);
+        for (let i = rows.length - 1; i >= 0; i -= 1) {
+            const t = String(rows[i]?.timeMark ?? '').trim();
+            if (t) { out.此刻 = t; break; }
+        }
     }
     // ② **此后又过了多久**：本轮的【时长】（`turnFacts.elapsed`，leg115 那条老通路）。
     const span = String(turnFacts?.elapsed ?? '').trim();
     if (span) out.此后又过了 = span;
-    return (out.此刻 || out.此后又过了) ? out : null;
+    return Object.keys(out).length ? out : null;
 }
 
 /**

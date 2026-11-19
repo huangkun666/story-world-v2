@@ -267,6 +267,9 @@ export function extractTags(text, ctx = {}) {
     const eventsBad = [];
     const references = [], conditionUpdates = [], conditionsBad = [], associations = [];
     let recentAt = null;
+    let presentIds;
+    let endAt = null;
+    let elapsedIndexAt = 0;
     let protocol = null;
     const entById = new Map((entities || []).filter((e) => e?.id).map((e) => [e.id, e]));   // 类别校验用（角色的格 ≠ 势力的格）
     let at = null;                         // 【此刻】的时间点原文（★**先到先得**：点不是一个可以累加的量）
@@ -312,6 +315,26 @@ export function extractTags(text, ctx = {}) {
             const bad = tag.includes('条件') ? conditionsBad : eventsBad;
             if (invalidProtocol || protocol !== 4) bad.push({raw, why:'protocol'});
             else associations.push({tag, cells, raw});
+            continue;
+        }
+
+        if (raw.startsWith('【本楼结束】')) {
+            endAt ??= normPlace(raw.slice('【本楼结束】'.length)) || null;
+            continue;
+        }
+        if (raw.startsWith('【在场】')) {
+            const payload = raw.slice('【在场】'.length).trim();
+            if (presentIds !== undefined) {
+                presentIds = null;
+                continue;
+            }
+            try {
+                const names = JSON.parse(payload);
+                const ids = Array.isArray(names) ? names.map(name => typeof name === 'string' ? resolveEntity(name) : null) : null;
+                presentIds = ids?.every(Boolean) ? [...new Set(ids)] : null;
+            } catch {
+                presentIds = null;
+            }
             continue;
         }
 
@@ -437,6 +460,7 @@ export function extractTags(text, ctx = {}) {
             if (!v) { malformed.push(raw.slice(0, 40)); continue; }
             if (at === null) at = v;           // ★先到先得（不取最后、不拼接：点不是一个可累加的量）
             recentAt = v;
+            elapsedIndexAt = elapsedParts.length;
             continue;
         }
         // ⑤ 【变化】——谁｜哪一格｜变成什么（格名对齐实体账；值**照抄不换算**）
@@ -601,6 +625,7 @@ export function extractTags(text, ctx = {}) {
 
     return {
         protocol, events, eventsBad,
+        ...(Array.isArray(presentIds) ? { presentIds } : {}),
         ...(protocol === 4 || conditionsBad.length ? {references,conditionUpdates,conditionsBad}:{}),
         actedIds: [...new Set([...actions, ...playerSeen].map(a => a.actorId))],
         actions: kept,
@@ -609,6 +634,10 @@ export function extractTags(text, ctx = {}) {
         elapsedParts,
         // ★★★leg123：`【此刻】`——本轮"现在是什么时候"（点，逐字照抄；没写 ⇒ null ⇒ 那一格不出现）
         at,
+        ...(recentAt && recentAt !== at ? { lastAt: recentAt } : {}),
+        ...(endAt ? { endAt } : {}),
+        ...(Array.isArray(presentIds) && recentAt && elapsedParts.length > elapsedIndexAt
+            ? { elapsedAfterAt: elapsedParts.slice(elapsedIndexAt) } : {}),
         // ★★★leg123：三族新料的收料面（★**只增键**：老聊天没有这三族 ⇒ 既有断言逐字节不变）
         changes,
         changesBad,

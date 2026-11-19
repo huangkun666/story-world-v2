@@ -2,7 +2,7 @@ import {createChatContextCursor} from './chat-context-cursor.js';
 import { createServiceObservation } from './service-observation.js';
 
 // 服务模式的动态正文只取固定版本观察；模板独立于全局名册和世界账。
-export function createServiceInjector({ getCtx, isActive, getState, getQuery, getRelevanceText = getQuery, getMaxChars, getStateMaxChars = () => 0, getSearchOptions = () => null, isOn, getTags, setStatus }) {
+export function createServiceInjector({ getCtx, isActive, getState, getQuery, getRelevanceText = getQuery, getMaxChars, getStateMaxChars = () => 0, getSearchOptions = () => null, isOn, getTags, setStatus, waitForWorldTurn }) {
     let runs=0,last=null;
     // ★★★本次（**注入内容预览**）：**上一次真写出去的三段正文**（参数页"看看会注进去什么"读它）。
     //   ★记的必须是**真的递进 `output.write` 的那几个字符串**（见下面 `apply()` 与 `clear()`）；
@@ -50,7 +50,19 @@ export function createServiceInjector({ getCtx, isActive, getState, getQuery, ge
         return {ok:true,tagsChars:tags.length,worldChars:scene.length,ledgerChars:text.length,facts:last};
     }
     async function prepare({forGeneration=false}={}){
-        if(forGeneration)cursor.invalidate();
+        if(forGeneration){
+            cursor.invalidate();
+            const before=getState();
+            const pending=(isOn('injectSceneState')||isOn('injectTagSpec')||isOn('injectLedgerRecall')) ? waitForWorldTurn?.() : null;
+            if(pending){
+                await pending;
+                const after=getState();
+                if(before?.scope!==after?.scope||before?.client!==after?.client||
+                    before?.pointer?.world_id!==after?.pointer?.world_id||before?.pointer?.branch_id!==after?.pointer?.branch_id){
+                    throw Error('当前世界版本已改变，请重试聊天生成');
+                }
+            }
+        }
         apply();
         if(!isOn('injectLedgerRecall')&&!(getState()?.client?.supportsSceneState&&isOn('injectSceneState'))){observation.invalidate();return apply()}
         const initial=getState(), pinned=initial?{scope:initial.scope,client:initial.client,...initial.pointer}:null;
